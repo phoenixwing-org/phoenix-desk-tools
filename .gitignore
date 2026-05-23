@@ -1,0 +1,11 @@
+obsidian/
+*.db
+.obsidian
+*.FCBak
+__pycache__
+# temp/
+.venv-desktop/
+.venv/
+
+# 本机工作台路径（自动生成；可复制 workspace.custom.json.example）
+workspace.custom.json

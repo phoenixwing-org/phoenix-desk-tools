@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "phoenix-freecad-desktop"
+version = "0.1.0"
+description = "FreeCAD 辅助小工具：CustomTkinter 外壳与 FCStd/XLink 相关脚本。"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+authors = [{ name = "Phoenix Wing" }]
+keywords = ["FreeCAD", "FCStd", "CustomTkinter", "desktop"]
+
+dependencies = [
+  "customtkinter>=5.2.0",
+  "darkdetect>=0.8.0",
+]
+
+[project.optional-dependencies]
+dev = []
+windows-solidworks = ["pywin32>=307"]
+
+[project.urls]
+Repository = "https://gitee.com/PhoenixWing321/phoenix-freecad-desktop"
+
+[project.scripts]
+phoenix-fcdesktop = "fcdesk.shell.app:run_app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["fcdesk*"]
+
+[tool.setuptools.package-data]
+fcdesk = ["config/app_config.json", "config/workspace.custom.json.example"]
