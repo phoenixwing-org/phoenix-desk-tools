@@ -32,4 +32,8 @@ where = ["."]
 include = ["fcdesk*"]
 
 [tool.setuptools.package-data]
-fcdesk = ["config/app_config.json", "config/workspace.custom.json.example"]
+fcdesk = [
+    "config/app_config.json",
+    "config/workspace.custom.json.example",
+    "config/workspace.dotfile.example",
+]

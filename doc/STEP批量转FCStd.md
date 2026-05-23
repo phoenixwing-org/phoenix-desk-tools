@@ -9,7 +9,7 @@
 **macOS：** 在 **配置** 页中选 **`/Applications/FreeCAD.app`**（整个 App 文件夹）即可，程序会自动在 **`Contents/Resources/bin/freecadcmd`** 下查找。
 
 **桥接（类似「连着已开的 CAD」）**：在页面勾选 **通过已打开的 FreeCAD**，并先在 FreeCAD 里执行一次 **`scripts/freecad_fcdesk_inbox_listener.py`** 启动收件箱监听；说明见 **`doc/FreeCAD-fcdesk桥接.md`**（此模式**不要求**再走 freecadcmd 子进程）。
-偏好保存在 `fcdesk/config/workspace.custom.json` 的 **`step_batch`** 小节。
+偏好保存在当前工作空间根下的 **`.phoenix-freecad-desktop.json`** 的 **`step_batch`** 小节。
 
 ## 目录约定（与数据仓库对齐）
 

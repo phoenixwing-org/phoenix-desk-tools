@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fc_linkfix": {
+    "cad_search_root": null,
+    "freecad_batch_dir": null,
+    "dry_run": true,
+    "all_in_dir": true
+  },
+  "fcstd_map": {
+    "scan_root": null
+  },
+  "step_batch": {
+    "project_relative": null,
+    "step_dir": "step",
+    "out_dir": "FreeCAD",
+    "skip_existing": true,
+    "view_fit": "none",
+    "use_inbox_bridge": false,
+    "step_recursive": false
+  },
+  "sw_step_export": {
+    "source_dir": null,
+    "out_step_dir": null,
+    "recursive_scan": false
+  }
+}

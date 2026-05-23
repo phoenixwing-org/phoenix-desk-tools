@@ -140,7 +140,7 @@ class StepBatchPage(BasePage):
         return self.state.repo_root.expanduser().resolve()
 
     def _pv(self) -> dict:
-        return load_workspace_prefs().get("step_batch") or {}
+        return load_workspace_prefs(self.state.repo_root).get("step_batch") or {}
 
     def on_show(self) -> None:
         pv = self._pv()
@@ -240,6 +240,7 @@ class StepBatchPage(BasePage):
                 "use_inbox_bridge": self._use_inbox_bridge.get(),
                 "step_recursive": self._step_recursive.get(),
             },
+            self.state.repo_root,
         )
         if not quiet:
             self._log_line("已保存偏好 → step_batch。")

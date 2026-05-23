@@ -12,9 +12,11 @@ import customtkinter as ctk
 
 from fcdesk.config.loader import load_app_config
 from fcdesk.config.user_prefs import (
-    apply_toolbar_prefs_to_state,
-    load_workspace_prefs,
-    merge_workspace_section,
+    WORKSPACE_DOTFILE_NAME,
+    apply_launcher_prefs_to_state,
+    migrate_legacy_workspace_prefs,
+    save_launcher_freecad_dir,
+    set_active_workspace,
 )
 from fcdesk.shell.native_dialog import pick_workspace_directory
 from fcdesk.pages import (
@@ -44,7 +46,8 @@ class AppShell(ctk.CTk):
         super().__init__()
         # 勿用 self.state：会遮蔽 Tk/CTk 根窗口的 state()，Windows 下设置标题栏颜色时会崩溃。
         self.app_state = AppState()
-        apply_toolbar_prefs_to_state(self.app_state, load_workspace_prefs())
+        migrate_legacy_workspace_prefs()
+        apply_launcher_prefs_to_state(self.app_state)
 
         self._app_title_base = str(app_cfg.get("title") or "FreeCAD 管理工具")
 
@@ -165,8 +168,7 @@ class AppShell(ctk.CTk):
         )
         if path:
             rp = Path(path).resolve()
-            self.app_state.repo_root = rp
-            merge_workspace_section("toolbar", {"repo_root": str(rp)})
+            set_active_workspace(rp, self.app_state)
             self.status_bar.configure(text=f"工作空间: {self.app_state.repo_root}")
             self._refresh_window_title()
 
@@ -179,7 +181,7 @@ class AppShell(ctk.CTk):
         if path:
             p = Path(path).resolve()
             self.app_state.freecad_dir = p
-            merge_workspace_section("toolbar", {"freecad_dir": str(p)})
+            save_launcher_freecad_dir(p)
             self.status_bar.configure(text=f"FreeCAD 目录: {path}")
             self._refresh_window_title()
 
@@ -206,7 +208,8 @@ class AppShell(ctk.CTk):
             f"{self._app_title_base}\n"
             "UI: CustomTkinter\n"
             "配置: fcdesk/config/app_config.json\n"
-            "偏好: fcdesk/config/workspace.custom.json\n"
+            f"工作区偏好: {WORKSPACE_DOTFILE_NAME}（工作空间根目录）\n"
+            "最近工作空间: fcdesk/config/workspace.custom.json\n"
             "文档: doc/文档索引.md",
             parent=self,
         )

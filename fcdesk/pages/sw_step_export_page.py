@@ -108,7 +108,7 @@ class SwStepExportPage(BasePage):
         self.grid_columnconfigure(1, weight=1)
 
     def _pv(self) -> dict:
-        return load_workspace_prefs().get("sw_step_export") or {}
+        return load_workspace_prefs(self.state.repo_root).get("sw_step_export") or {}
 
     def _repo(self) -> Path:
         return self.state.repo_root.expanduser().resolve()
@@ -160,6 +160,7 @@ class SwStepExportPage(BasePage):
                 "out_step_dir": se(self._dst),
                 "recursive_scan": self._recursive.get(),
             },
+            self.state.repo_root,
         )
         if not quiet and self._log is not None:
             self._log_line("已保存偏好 → sw_step_export。")

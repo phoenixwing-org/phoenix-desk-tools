@@ -51,7 +51,7 @@ class FcstdMapPage(BasePage):
         self.grid_columnconfigure(1, weight=1)
 
     def on_show(self) -> None:
-        pref = load_workspace_prefs().get("fcstd_map") or {}
+        pref = load_workspace_prefs(self.state.repo_root).get("fcstd_map") or {}
         sr = pref.get("scan_root") or ""
         root_path = Path(sr).expanduser() if sr else self.state.repo_root
         if not root_path.is_dir():
@@ -61,7 +61,7 @@ class FcstdMapPage(BasePage):
 
     def _persist(self) -> None:
         s = self._scan_root_entry.get().strip()
-        merge_workspace_section("fcstd_map", {"scan_root": s or None})
+        merge_workspace_section("fcstd_map", {"scan_root": s or None}, self.state.repo_root)
 
     def _browse(self) -> None:
         path = pick_workspace_directory(

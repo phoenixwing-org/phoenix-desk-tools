@@ -93,7 +93,7 @@ class XLinkFixPage(BasePage):
         return self.state.repo_root.expanduser().resolve()
 
     def _pv(self) -> dict:
-        return load_workspace_prefs().get("fc_linkfix") or {}
+        return load_workspace_prefs(self.state.repo_root).get("fc_linkfix") or {}
 
     def _canon(self, text: str, *, fb: Path) -> Path:
         raw = (text or "").strip()
@@ -146,7 +146,7 @@ class XLinkFixPage(BasePage):
                 store_path_under_repo(self._canon(bd, fb=rr), rr) if bd.strip() else None
             ),
         }
-        merge_workspace_section("fc_linkfix", patch)
+        merge_workspace_section("fc_linkfix", patch, self.state.repo_root)
 
     def _browse_search_root(self) -> None:
         path = pick_workspace_directory(

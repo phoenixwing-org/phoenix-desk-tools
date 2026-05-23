@@ -1,30 +1,7 @@
 {
-  "version": 1,
-  "toolbar": {
-    "repo_root": "/path/to/your/repo",
-    "freecad_dir": "/path/to/your/repo/cad/Asm/FreeCAD"
-  },
-  "fc_linkfix": {
-    "cad_search_root": null,
-    "freecad_batch_dir": null,
-    "dry_run": true,
-    "all_in_dir": true
-  },
-  "fcstd_map": {
-    "scan_root": "/path/to/your/repo"
-  },
-  "step_batch": {
-    "project_relative": null,
-    "step_dir": null,
-    "out_dir": null,
-    "skip_existing": true,
-    "view_fit": "none",
-    "use_inbox_bridge": false,
-    "step_recursive": false
-  },
-  "sw_step_export": {
-    "source_dir": null,
-    "out_step_dir": null,
-    "recursive_scan": false
-  }
+  "version": 2,
+  "recent_workspaces": [
+    "/path/to/your/repo"
+  ],
+  "freecad_dir": "/Applications/FreeCAD.app"
 }
