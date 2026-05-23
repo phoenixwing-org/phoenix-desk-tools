@@ -42,8 +42,9 @@ class AppShell(ctk.CTk):
         app_cfg = self.config.get("app", {})
 
         super().__init__()
-        self.state = AppState()
-        apply_toolbar_prefs_to_state(self.state, load_workspace_prefs())
+        # 勿用 self.state：会遮蔽 Tk/CTk 根窗口的 state()，Windows 下设置标题栏颜色时会崩溃。
+        self.app_state = AppState()
+        apply_toolbar_prefs_to_state(self.app_state, load_workspace_prefs())
 
         self._app_title_base = str(app_cfg.get("title") or "FreeCAD 管理工具")
 
@@ -94,7 +95,7 @@ class AppShell(ctk.CTk):
         status_row = content_row + 1
         self.status_bar = ctk.CTkLabel(
             self,
-            text=f"工作空间: {self.state.repo_root}",
+            text=f"工作空间: {self.app_state.repo_root}",
             anchor="w",
             height=24,
             font=ctk.CTkFont(size=12),
@@ -115,7 +116,7 @@ class AppShell(ctk.CTk):
         }
 
     def _refresh_window_title(self) -> None:
-        self.title(f"{self._app_title_base} - 【{self.state.repo_root}】")
+        self.title(f"{self._app_title_base} - 【{self.app_state.repo_root}】")
 
     def _register_pages(self, nav_items: list[dict[str, Any]]) -> None:
         descriptions = {item["page"]: item.get("description", "") for item in nav_items}
@@ -125,19 +126,19 @@ class AppShell(ctk.CTk):
             "home",
             HomePage(
                 self._stack,
-                self.state,
+                self.app_state,
                 nav_items,
                 on_reload_config=self._reload_config,
                 on_about=self._about,
                 refresh_window_title=self._refresh_window_title,
             ),
         )
-        self._stack.register("xlink_fix", XLinkFixPage(self._stack, self.state))
-        self._stack.register("fcstd_map", FcstdMapPage(self._stack, self.state))
-        self._stack.register("step_batch", StepBatchPage(self._stack, self.state))
+        self._stack.register("xlink_fix", XLinkFixPage(self._stack, self.app_state))
+        self._stack.register("fcstd_map", FcstdMapPage(self._stack, self.app_state))
+        self._stack.register("step_batch", StepBatchPage(self._stack, self.app_state))
         self._stack.register(
             "sw_step_export",
-            SwStepExportPage(self._stack, self.state),
+            SwStepExportPage(self._stack, self.app_state),
         )
 
         for page_id in ("bom_export", "bom_apply", "part_dedup"):
@@ -145,7 +146,7 @@ class AppShell(ctk.CTk):
                 page_id,
                 PlaceholderPage(
                     self._stack,
-                    self.state,
+                    self.app_state,
                     page_id=page_id,
                     title=labels.get(page_id, page_id),
                     hint=descriptions.get(page_id, ""),
@@ -154,30 +155,30 @@ class AppShell(ctk.CTk):
 
     def _show_page(self, page_id: str) -> None:
         self._stack.show(page_id)
-        self.status_bar.configure(text=f"当前: {page_id}  |  工作空间: {self.state.repo_root}")
+        self.status_bar.configure(text=f"当前: {page_id}  |  工作空间: {self.app_state.repo_root}")
 
     def _pick_repo(self) -> None:
         path = pick_workspace_directory(
             self,
             title="选择工作空间根目录",
-            repo_root=self.state.repo_root,
+            repo_root=self.app_state.repo_root,
         )
         if path:
             rp = Path(path).resolve()
-            self.state.repo_root = rp
+            self.app_state.repo_root = rp
             merge_workspace_section("toolbar", {"repo_root": str(rp)})
-            self.status_bar.configure(text=f"工作空间: {self.state.repo_root}")
+            self.status_bar.configure(text=f"工作空间: {self.app_state.repo_root}")
             self._refresh_window_title()
 
     def _pick_freecad_dir(self) -> None:
         path = pick_workspace_directory(
             self,
             title="选择 FreeCAD 目录",
-            repo_root=self.state.repo_root,
+            repo_root=self.app_state.repo_root,
         )
         if path:
             p = Path(path).resolve()
-            self.state.freecad_dir = p
+            self.app_state.freecad_dir = p
             merge_workspace_section("toolbar", {"freecad_dir": str(p)})
             self.status_bar.configure(text=f"FreeCAD 目录: {path}")
             self._refresh_window_title()
