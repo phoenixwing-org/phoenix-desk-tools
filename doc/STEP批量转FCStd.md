@@ -4,7 +4,7 @@
 
 ## 桌面「STEP 批量」页
 
-已在主界面 **导航 → STEP 批量** 中接入：填写 **STEP 目录** 与 **输出目录**（或填写 **工程相对路径** 后点 **套用约定**），并在 **导航 → 配置** 中设置 **FreeCAD 目录**，即可通过子进程调用 **命令行批次解释器**（macOS dmg 常为 `FreeCAD.app/Contents/Resources/bin/freecadcmd`，旧版偶有 `Contents/MacOS/FreeCADCmd`）执行 `scripts/freecad_batch_step_runner.py`。
+已在主界面 **导航 → STEP 批量** 中接入：**STEP 目录** 与 **FCStd 输出目录**（可「浏览…」填入相对工作空间的子路径），并在 **导航 → 配置** 中设置 **FreeCAD 目录**，即可通过子进程调用 **命令行批次解释器**（macOS dmg 常为 `FreeCAD.app/Contents/Resources/bin/freecadcmd`，旧版偶有 `Contents/MacOS/FreeCADCmd`）执行 `scripts/freecad_batch_step_runner.py`。
 
 **macOS：** 在 **配置** 页中选 **`/Applications/FreeCAD.app`**（整个 App 文件夹）即可，程序会自动在 **`Contents/Resources/bin/freecadcmd`** 下查找。
 
@@ -17,9 +17,9 @@
 | --- | --- |
 | 工作空间根（配置页） | 桌面壳中选定的项目根，`Sample…/step` 等相对路径以此为基准 |
 | `{工程}/{step}` | STEP 来源目录 |
-| `{工程}/FreeCAD` | 输出的 `.FCStd` 目录（可改为任意输出目录输入框）。 |
+| `{工程}/FreeCAD` | 常见的 `.FCStd` 输出目录（可在页面上填任意输出路径）。 |
 
-桌面页中的「工程相对路径」即 `{工程}`，`step`/`FreeCAD` 子路径固定。
+数据仓库可按「工程文件夹」归档；桌面页已不再提供单独的「工程相对路径」一键套用，直接选择上述两个目录即可。
 
 ## 纯算法模块（可被测试与共用）
 

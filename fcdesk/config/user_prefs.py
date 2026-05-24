@@ -16,14 +16,12 @@ _WORKSPACE_SECTIONS = ("fc_linkfix", "fcstd_map", "step_batch", "sw_step_export"
 _WORKSPACE_DEFAULT: dict[str, Any] = {
     "version": 1,
     "fc_linkfix": {
-        "cad_search_root": None,
         "freecad_batch_dir": None,
         "dry_run": True,
         "all_in_dir": True,
     },
     "fcstd_map": {"scan_root": None},
     "step_batch": {
-        "project_relative": None,
         "step_dir": None,
         "out_dir": None,
         "skip_existing": True,
@@ -155,7 +153,7 @@ def resolve_workspace_path_entry(text: str, repo_root: Path) -> Path:
 
 
 def normalize_workspace_subpath(rel: str) -> str:
-    """「工程路径」等与工作空间根拼接的片断：统一到无前导 './' / 斜杠 的 posix 式样。"""
+    """与工作空间根拼接用的 **相对片断**：统一到无前导 './' / 冗余斜杠 的 posix 式样。"""
     t = (rel or "").strip().replace("\\", "/")
     if not t:
         return ""

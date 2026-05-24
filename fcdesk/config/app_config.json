@@ -18,16 +18,16 @@
       "description": "工作空间、FreeCAD 目录与偏好"
     },
     {
-      "id": "xlink_fix",
-      "label": "链接路径修正",
-      "page": "xlink_fix",
-      "description": "修正 Document.xml / FCStd 内 XLink"
-    },
-    {
       "id": "fcstd_map",
       "label": "FCStd 索引",
       "page": "fcstd_map",
       "description": "遍历工作空间生成文件名映射"
+    },
+    {
+      "id": "xlink_fix",
+      "label": "链接路径修正",
+      "page": "xlink_fix",
+      "description": "修正 Document.xml / FCStd 内 XLink"
     },
     {
       "id": "step_batch",

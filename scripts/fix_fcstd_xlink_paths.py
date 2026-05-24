@@ -8,12 +8,11 @@
   python scripts/fix_fcstd_xlink_paths.py myproject/FreeCAD/Document.xml
   python scripts/fix_fcstd_xlink_paths.py ./models/Asm.A.FCStd
   python scripts/fix_fcstd_xlink_paths.py --all-in-dir myproject/FreeCAD \\
-      --map-json myrepo/fc_linkfix_fcstd_map.json --map-anchor myrepo
+      --map-json myrepo/fcstd_map.json --map-anchor myrepo
   python scripts/fix_fcstd_xlink_paths.py --dry-run --all-in-dir myproject/FreeCAD
-  （默认若未指定 --map-json 则在 --map-anchor 目录下找 fc_linkfix_fcstd_map.json；
-  桌面流程：映射写在 CAD 搜索根，`fcstd_map` 生成时 `--root` 与 `--relative-to` 均设为该目录，
-  `--json` 指向同目录下的 fc_linkfix_fcstd_map.json；`fix_fcstd_xlink_paths` 的 `--map-anchor`
-  也须为该目录（与 JSON 所在一致）。条目 repo_rel_path 形如 ./子目录/…。也可用 --live-scan。）
+  （默认若未指定 --map-json 则在 --map-anchor 目录下找 fcstd_map.json；
+  桌面 shell：工作空间根的 fcstd_map.json 由「FCStd 索引」生成，`fcstd_map.py` 的 `--relative-to`
+  必须为工作空间根（即 JSON 所在目录），`--map-anchor` 与之相同。条目 repo_rel_path 形如 ./…。也可用 --live-scan。）
 """
 
 from __future__ import annotations
@@ -345,7 +344,7 @@ def write_report_md(
         "",
         f"- 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
         f"- 模式: {'dry-run（未写回）' if dry_run else '已写回 FCStd/Document.xml'}",
-        f"- 索引基准: `{search_root}`（repo_rel_path 相对于此目录，通常即映射 JSON / CAD 搜索根所在目录）",
+        f"- 索引基准: `{search_root}`（repo_rel_path 相对于此目录，应与生成映射时 `--relative-to` / JSON 所在目录一致）",
     ]
     if map_source is not None:
         lines.append(f"- 映射文件: `{map_source}`")
@@ -458,7 +457,7 @@ def main() -> None:
         "--map-json",
         metavar="FILE",
         default=None,
-        help="文件名→路径列表映射 JSON（缺省：<map-anchor>/fc_linkfix_fcstd_map.json）",
+        help="文件名→路径列表映射 JSON（缺省：<map-anchor>/fcstd_map.json）",
     )
     parser.add_argument(
         "--map-anchor",
@@ -466,7 +465,7 @@ def main() -> None:
         default=None,
         help=(
             "解析映射里 repo_rel_path 的基准目录；必须与 fcstd_map 写入时的 --relative-to 相同"
-            "（桌面一般为 搜索根目录，即 fc_linkfix_fcstd_map.json 所在目录）。"
+            "（桌面一般为工作空间根，即 fcstd_map.json 所在目录）。"
             "省略时默认为当前工作目录。"
         ),
     )
@@ -490,7 +489,15 @@ def main() -> None:
         action="store_true",
         help="不生成 Markdown 报告",
     )
+    parser.add_argument(
+        "--desktop-json-results",
+        metavar="PATH",
+        default=None,
+        help="将本次运行结构化结果写入 JSON（桌面壳 Treeview）；同时省略逐条控制台日志以便阅读摘要。",
+    )
     args = parser.parse_args()
+
+    desktop_json = args.desktop_json_results is not None
 
     cwd = Path.cwd().resolve()
 
@@ -519,7 +526,7 @@ def main() -> None:
     else:
         map_path_arg = Path(args.map_json).expanduser() if args.map_json else None
         if map_path_arg is None:
-            map_path = (anchor / "fc_linkfix_fcstd_map.json").resolve(strict=False)
+            map_path = (anchor / "fcstd_map.json").resolve(strict=False)
         else:
             map_path = (
                 map_path_arg.resolve(strict=False)
@@ -531,10 +538,10 @@ def main() -> None:
             print(
                 "\n错误：未找到映射文件：\n  "
                 f"{map_path}\n\n"
-                "请先在桌面「链接路径修正」页点击「建立/更新映射」，或执行例如：\n"
-                '  python scripts/fcstd_map.py --root "<CAD 搜索根>" '
-                f'--relative-to "<同一 CAD 搜索根>" '
-                f'--json "<同一 CAD 搜索根>/fc_linkfix_fcstd_map.json"\n\n'
+                "请先在桌面「FCStd 索引」页生成工作空间根的 fcstd_map.json，或执行例如：\n"
+                '  python scripts/fcstd_map.py --root "<遍历根>" '
+                f'--relative-to "<工作空间根（fcstd_map.json 所在目录）>" '
+                f'--json "<工作空间根>/fcstd_map.json"\n\n'
                 "若确需不写 JSON（旧行为），请添加： --live-scan",
                 file=sys.stderr,
             )
@@ -584,18 +591,32 @@ def main() -> None:
 
     for doc_path in unique_paths:
         if not doc_path.is_file():
-            print(f"跳过（不存在）: {doc_path}")
+            if not desktop_json:
+                print(f"跳过（不存在）: {doc_path}")
             skipped.append(str(doc_path))
             continue
-        print(f"\n{'[dry-run] ' if args.dry_run else ''}{doc_path}")
+        if desktop_json:
+            hdr = "[dry-run] " if args.dry_run else ""
+            print(f"{hdr}{doc_path}")
+        else:
+            print(f"\n{'[dry-run] ' if args.dry_run else ''}{doc_path}")
         n, logs, records = fix_path(doc_path, fcstd_map, dry_run=args.dry_run)
-        for line in logs:
-            print(line)
-        print(f"  修改 XLink 条数: {n}")
+        if desktop_json:
+            if n > 0:
+                suf = " (dry-run)" if args.dry_run else ""
+                print(f"  → {n} 条 XLink 待改{suf}")
+        else:
+            for line in logs:
+                print(line)
+            print(f"  修改 XLink 条数: {n}")
         total_changes += n
         per_file.append((doc_path, n, records))
 
     print(f"\n合计修改: {total_changes}")
+    if skipped and desktop_json:
+        print(f"跳过（不存在）: {len(skipped)} 个路径")
+
+    report_path_out: Path | None = None
 
     if not args.no_report:
         if args.report_out:
@@ -615,6 +636,47 @@ def main() -> None:
             map_source=map_loaded_from,
         )
         print(f"报告已写入: {report_path}")
+        report_path_out = report_path
+
+    if args.desktop_json_results:
+        outp = Path(args.desktop_json_results).expanduser()
+        if not outp.is_absolute():
+            outp = (cwd / outp).resolve()
+        sr = map_source_for_report
+        try:
+            sr_disp = str(sr.expanduser().resolve())
+        except OSError:
+            sr_disp = str(sr)
+        payload = {
+            "schema": 1,
+            "dry_run": bool(args.dry_run),
+            "total_changes": int(total_changes),
+            "search_root": sr_disp,
+            "map_path": str(map_loaded_from.resolve()) if map_loaded_from else None,
+            "report_path": str(report_path_out.resolve()) if report_path_out else None,
+            "skipped": list(skipped),
+            "files": [
+                {
+                    "path": str(p.resolve()),
+                    "change_count": int(n),
+                    "records": [
+                        {
+                            "source": r.source,
+                            "old_path": r.old_path,
+                            "new_path": r.new_path,
+                            "target_file": r.target_file,
+                            "verdict": r.verdict,
+                            "note": r.note,
+                            "count": int(r.count),
+                        }
+                        for r in recs
+                    ],
+                }
+                for p, n, recs in per_file
+            ],
+        }
+        outp.parent.mkdir(parents=True, exist_ok=True)
+        outp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 if __name__ == "__main__":

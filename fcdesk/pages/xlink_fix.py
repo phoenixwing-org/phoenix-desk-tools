@@ -1,29 +1,34 @@
 from __future__ import annotations
 
+import itertools
+import json
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 from pathlib import Path
 
 import customtkinter as ctk
+import tkinter as tk
 from tkinter import messagebox
+from tkinter import ttk
 
 from fcdesk.config.user_prefs import (
     format_resolved_under_workspace,
     format_stored_path_for_display,
     load_workspace_prefs,
     merge_workspace_section,
-    resolve_workspace_path_entry,
     shorten_workspace_relative_display,
     store_path_under_repo,
 )
 from fcdesk.pages.base import BasePage
+from fcdesk.pages import form_widgets as fw
 from fcdesk.shell.native_dialog import pick_workspace_directory
 from fcdesk.shell.state import AppState
 
 _SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
-FC_LINKFIX_MAP_NAME = "fc_linkfix_fcstd_map.json"
+FCSTD_WORKSPACE_MAP_NAME = "fcstd_map.json"
 
 
 class XLinkFixPage(BasePage):
@@ -34,62 +39,193 @@ class XLinkFixPage(BasePage):
         self._dry_run = ctk.BooleanVar(value=True)
         self._all_in_dir = ctk.BooleanVar(value=True)
 
-        ctk.CTkLabel(
-            self, text="链接路径修正", font=ctk.CTkFont(size=20, weight="bold"), anchor="w"
-        ).grid(row=0, column=0, columnspan=4, padx=24, pady=(20, 4), sticky="w")
-
-        ctk.CTkLabel(
-            self,
-            text=(
-                "映射 JSON（fc_linkfix_fcstd_map.json）写在「CAD / FCStd 搜索根」目录下；"
-                "条目内 repo_rel_path 相对于该目录（形如 ./Sample…/零件.FCStd）。"
-                "搜索根留空时等于工作空间。先「建立/更新映射」再运行。偏好 → fc_linkfix"
-            ),
-            anchor="w",
-            font=ctk.CTkFont(size=12),
-            text_color=("gray30", "gray70"),
-            wraplength=920,
-        ).grid(row=1, column=0, columnspan=4, padx=24, pady=(0, 10), sticky="w")
-
-        ctk.CTkLabel(self, text="搜索根目录", anchor="w").grid(
-            row=2, column=0, padx=(24, 8), pady=6, sticky="w"
-        )
-        self._search_root_entry = ctk.CTkEntry(self, width=420)
-        self._search_root_entry.grid(row=2, column=1, columnspan=2, padx=4, pady=6, sticky="ew")
-        ctk.CTkButton(self, text="浏览…", width=80, command=self._browse_search_root).grid(
-            row=2, column=3, padx=(4, 24), pady=6
+        fw.page_title(self, text="链接路径修正").grid(
+            row=0, column=0, columnspan=4, padx=24, pady=(20, 8), sticky="w"
         )
 
-        ctk.CTkLabel(self, text="FreeCAD 批量目录", anchor="w").grid(
-            row=3, column=0, padx=(24, 8), pady=6, sticky="w"
+        hint = (
+            "映射与工作空间根的 fcstd_map.json 共用（由「FCStd 索引」页生成；条目路径相对工作空间根）。"
+            "本页只需选择修正目录与脚本选项（偏好 fc_linkfix）。"
         )
-        self._batch_dir_entry = ctk.CTkEntry(self, width=420)
-        self._batch_dir_entry.grid(row=3, column=1, columnspan=2, padx=4, pady=6, sticky="ew")
-        ctk.CTkButton(self, text="浏览…", width=80, command=self._browse_batch_dir).grid(
-            row=3, column=3, padx=(4, 24), pady=6
+        fw.page_hint_label(self, hint, wraplength=920).grid(
+            row=1, column=0, columnspan=4, padx=24, pady=(0, 14), sticky="w"
+        )
+
+        dir_row = ctk.CTkFrame(self, fg_color="transparent")
+        dir_row.grid(row=2, column=0, columnspan=4, padx=24, pady=6, sticky="ew")
+        dir_row.grid_columnconfigure(1, weight=1)
+        fw.form_row_label(dir_row, text="修正目录").grid(row=0, column=0, padx=(0, 12), sticky="nw")
+        self._batch_dir_entry = ctk.CTkEntry(
+            dir_row,
+            placeholder_text="如 ./型号/FreeCAD（留空则用工作空间根）",
+        )
+        self._batch_dir_entry.grid(row=0, column=1, padx=0, pady=0, sticky="ew")
+        ctk.CTkButton(dir_row, text="浏览…", width=80, command=self._browse_batch_dir).grid(
+            row=0, column=2, padx=(12, 0), pady=0, sticky="e"
         )
 
         opts = ctk.CTkFrame(self, fg_color="transparent")
-        opts.grid(row=4, column=0, columnspan=4, padx=24, sticky="w", pady=(4, 0))
+        opts.grid(row=3, column=0, columnspan=4, padx=24, sticky="w", pady=(4, 0))
         ctk.CTkCheckBox(opts, text="dry-run", variable=self._dry_run).pack(side="left", padx=(0, 14))
         ctk.CTkCheckBox(opts, text="all-in-dir", variable=self._all_in_dir).pack(side="left")
 
         btns = ctk.CTkFrame(self, fg_color="transparent")
-        btns.grid(row=5, column=0, columnspan=4, padx=24, pady=8, sticky="w")
+        btns.grid(row=4, column=0, columnspan=4, padx=24, pady=8, sticky="w")
         ctk.CTkButton(btns, text="保存偏好", fg_color=("gray65", "gray35"), command=self._persist_xlink_fields).pack(
-            side="left", padx=(0, 8)
-        )
-        ctk.CTkButton(btns, text="建立/更新映射", fg_color="gray45", command=self._build_map).pack(
             side="left", padx=(0, 8)
         )
         ctk.CTkButton(btns, text="运行", command=self._run).pack(side="left", padx=(0, 8))
         ctk.CTkButton(btns, text="打开报告目录", fg_color="gray40", command=self._open_report_dir).pack(side="left")
 
-        self._log = ctk.CTkTextbox(self, font=ctk.CTkFont(family="Menlo", size=12))
-        self._log.grid(row=6, column=0, columnspan=4, padx=24, pady=(8, 24), sticky="nsew")
+        self._log = ctk.CTkTextbox(self, height=112, font=ctk.CTkFont(family="Menlo", size=12))
+        self._log.grid(row=5, column=0, columnspan=4, padx=24, pady=(8, 6), sticky="nsew")
+
+        tree_wrap = ctk.CTkFrame(self, fg_color="transparent")
+        tree_wrap.grid(row=6, column=0, columnspan=4, padx=(24, 24), pady=(0, 24), sticky="nsew")
+        tree_wrap.grid_rowconfigure(0, weight=1)
+        tree_wrap.grid_columnconfigure(0, weight=1)
+        self._tree_host = tk.Frame(tree_wrap, highlightthickness=0)
+        self._tree_host.grid(row=0, column=0, sticky="nsew")
+        self._tree_scroll = ttk.Scrollbar(self._tree_host)
+        self._tree = ttk.Treeview(
+            self._tree_host,
+            columns=("detail",),
+            show="tree headings",
+            yscrollcommand=self._tree_scroll.set,
+            height=14,
+            selectmode="browse",
+        )
+        self._tree_scroll.config(command=self._tree.yview)
+        self._tree.heading("#0", text="XLink / 文件")
+        self._tree.heading("detail", text="说明 · 路径")
+        self._tree.column("#0", width=360, stretch=True)
+        self._tree.column("detail", width=440, stretch=True)
+        self._tree.grid(row=0, column=0, sticky="nsew")
+        self._tree_scroll.grid(row=0, column=1, sticky="ns")
+        self._tree_host.grid_rowconfigure(0, weight=1)
+        self._tree_host.grid_columnconfigure(0, weight=1)
 
         self.grid_rowconfigure(6, weight=1)
         self.grid_columnconfigure(1, weight=1)
+
+        self._apply_xlink_fix_tree_style()
+        self._results_tree_placeholder("点击「运行」后在此查看分组结果", "")
+
+    def _apply_xlink_fix_tree_style(self) -> None:
+        """ttk.Treeview 大致贴近 CTk 亮/深色（与编号查重页一致思路）。"""
+        mode = ctk.get_appearance_mode()
+        if mode == "Dark":
+            dark = True
+        elif mode == "Light":
+            dark = False
+        else:
+            try:
+                from customtkinter import AppearanceModeTracker
+
+                dark = AppearanceModeTracker.detect_appearance_mode() == 1
+            except Exception:
+                dark = False
+
+        bg = "#2b2b2b" if dark else "#f0f0f0"
+        fg = "#e8e8e8" if dark else "#202020"
+        sel_bg = "#1f538d" if dark else "#3b8ed0"
+        sel_fg = "#ffffff"
+        style = ttk.Style()
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+        style.configure(
+            "XLinkFix.Treeview",
+            background=bg,
+            fieldbackground=bg,
+            foreground=fg,
+            rowheight=22,
+            borderwidth=0,
+        )
+        style.map(
+            "XLinkFix.Treeview",
+            background=[("selected", sel_bg)],
+            foreground=[("selected", sel_fg)],
+        )
+        style.configure(
+            "XLinkFix.Treeview.Heading",
+            background=("#3d3d3d" if dark else "#d9d9d9"),
+            foreground=fg,
+            relief="flat",
+            borderwidth=0,
+        )
+        self._tree.configure(style="XLinkFix.Treeview")
+        try:
+            self._tree_host.configure(bg=bg)
+        except tk.TclError:
+            pass
+
+    def _results_tree_placeholder(self, title: str, detail: str = "") -> None:
+        self._tree.delete(*self._tree.get_children(""))
+        self._tree.insert("", "end", text=title, values=(detail,))
+
+    def _populate_xlink_tree_from_json(self, data: dict) -> None:
+        """由 fix_fcstd_xlink_paths.py --desktop-json-results 载入。"""
+        rr = self._repo()
+        nid = itertools.count()
+        ni = lambda: f"xl_{next(nid)}"
+        self._tree.delete(*self._tree.get_children(""))
+
+        total = int(data.get("total_changes") or 0)
+        dry = bool(data.get("dry_run"))
+        mode = "dry-run（未写回）" if dry else "已写回 FCStd"
+        rp = data.get("report_path") or ""
+        top_line = f"{mode} · 合计 {total} 条变更"
+        self._tree.insert("", "end", iid=ni(), text=top_line, values=(rp,))
+        skipped = list(data.get("skipped") or [])
+        files = list(data.get("files") or [])
+
+        if skipped:
+            sk = self._tree.insert("", "end", iid=ni(), text=f"跳过（不存在）· {len(skipped)} 个", open=True, values=("",))
+            for s in sorted(skipped):
+                p = Path(s)
+                self._tree.insert(sk, "end", iid=ni(), text=p.name, values=(format_resolved_under_workspace(p, rr),))
+
+        if files:
+            sec = self._tree.insert("", "end", iid=ni(), text=f"已处理文档（{len(files)} 个）", open=True, values=("",))
+            for fi in files:
+                p = Path(str(fi.get("path", ""))).expanduser()
+                cnt = int(fi.get("change_count") or 0)
+                recs = list(fi.get("records") or [])
+                loc = format_resolved_under_workspace(p.resolve(), rr) if p.parts else ""
+                grp = self._tree.insert(
+                    sec,
+                    "end",
+                    iid=ni(),
+                    text=f"{p.name}（{cnt} 处）",
+                    values=(loc,),
+                    open=bool(recs),
+                )
+                for r in recs:
+                    old_p = str(r.get("old_path", ""))
+                    new_p = str(r.get("new_path", ""))
+                    c_ct = int(r.get("count") or 1)
+                    verdict = str(r.get("verdict", ""))
+                    note = str(r.get("note", ""))
+                    line0 = f"{old_p} → {new_p}"
+                    if c_ct > 1:
+                        line0 += f"  ×{c_ct}"
+                    det = verdict
+                    if note:
+                        det = f"{verdict} — {note}" if verdict else note
+                    tf = str(r.get("target_file", "")).strip()
+                    if tf:
+                        tp = Path(tf).expanduser()
+                        try:
+                            t_disp = format_resolved_under_workspace(tp.resolve(), rr)
+                        except OSError:
+                            t_disp = tf
+                        det = f"目标：{t_disp}" + (f"；{det}" if det else "")
+                    self._tree.insert(grp, "end", iid=ni(), text=line0, values=(det,))
+
+        if total == 0 and not skipped and not files:
+            self._tree.insert("", "end", iid=ni(), text="（无条目）", values=("",))
 
     def _repo(self) -> Path:
         """当前工作空间根（工具条所选项目根）；相对路径以此为基准拼接。"""
@@ -109,12 +245,6 @@ class XLinkFixPage(BasePage):
         pv = self._pv()
         rr = self._repo()
 
-        self._search_root_entry.delete(0, "end")
-        disp_sr = shorten_workspace_relative_display(
-            format_stored_path_for_display(pv.get("cad_search_root"), self.state.repo_root) or ""
-        )
-        self._search_root_entry.insert(0, disp_sr)
-
         self._batch_dir_entry.delete(0, "end")
         disp_bd = shorten_workspace_relative_display(
             format_stored_path_for_display(pv.get("freecad_batch_dir"), self.state.repo_root) or ""
@@ -125,18 +255,13 @@ class XLinkFixPage(BasePage):
             self._dry_run.set(bool(pv["dry_run"]))
         if "all_in_dir" in pv:
             self._all_in_dir.set(bool(pv["all_in_dir"]))
+        self._apply_xlink_fix_tree_style()
 
     def _persist_xlink_fields(self) -> None:
         rr = self._repo()
-        sr, bd = self._search_root_entry.get(), self._batch_dir_entry.get()
+        bd = self._batch_dir_entry.get()
 
-        sr_eff = self._canon(sr, fb=rr)
         bd_eff = self._canon(bd, fb=rr)
-        cad_sv = (
-            None
-            if sr_eff.resolve() == rr.resolve()
-            else store_path_under_repo(sr_eff, rr)
-        )
         bd_sv = (
             None
             if bd_eff.resolve() == rr.resolve()
@@ -145,33 +270,16 @@ class XLinkFixPage(BasePage):
         patch: dict = {
             "dry_run": self._dry_run.get(),
             "all_in_dir": self._all_in_dir.get(),
-            "cad_search_root": cad_sv,
+            # 已废弃：与 FCStd 索引共用 fcstd_map.json，不再需要单独 CAD 搜索根
+            "cad_search_root": None,
             "freecad_batch_dir": bd_sv,
         }
         merge_workspace_section("fc_linkfix", patch, self.state.repo_root)
 
-    def _browse_search_root(self) -> None:
-        path = pick_workspace_directory(
-            self,
-            title="搜索根目录",
-            repo_root=self.state.repo_root,
-            path_hint=self._search_root_entry.get(),
-        )
-        if path:
-            rr = self._repo()
-            self._search_root_entry.delete(0, "end")
-            self._search_root_entry.insert(
-                0,
-                shorten_workspace_relative_display(
-                    format_resolved_under_workspace(Path(path).expanduser(), rr)
-                ),
-            )
-            self._persist_xlink_fields()
-
     def _browse_batch_dir(self) -> None:
         path = pick_workspace_directory(
             self,
-            title="批量目录",
+            title="修正目录",
             repo_root=self.state.repo_root,
             path_hint=self._batch_dir_entry.get(),
         )
@@ -194,75 +302,34 @@ class XLinkFixPage(BasePage):
         self._log.insert("end", text + "\n")
         self._log.see("end")
 
-    def _map_json_path(self, *, search_root: Path) -> Path:
-        """与扫描根一致：`cad_search_root` 目录内的映射文件名。"""
-        return Path(search_root).resolve() / FC_LINKFIX_MAP_NAME
-
-    def _effective_cad_search_root(self) -> Path:
-        """未填或与工作空间等价时退回工作空间根。"""
-        rr = self._repo()
-        return self._canon(self._search_root_entry.get(), fb=rr)
-
-    def _build_map(self) -> None:
-        search_root = self._effective_cad_search_root()
-        if not search_root.is_dir():
-            msg = f"请先填写可用的 搜索根目录。\n当前解析为：\n{search_root}"
-            self._log.delete("1.0", "end")
-            self._log_line(msg.replace("\n", " "))
-            messagebox.showwarning("建立映射", msg, parent=self.winfo_toplevel())
-            return
-
-        dest = self._map_json_path(search_root=search_root)
-        self._persist_xlink_fields()
-        cmd = [
-            sys.executable,
-            str(_SCRIPTS_DIR / "fcstd_map.py"),
-            "--root",
-            str(search_root),
-            "--relative-to",
-            str(search_root.resolve()),
-            "--json",
-            str(dest),
-        ]
-        self._log.delete("1.0", "end")
-        self._log_line("$ " + " ".join(cmd))
-
-        def worker() -> None:
-            try:
-                proc = subprocess.run(
-                    cmd, cwd=str(_SCRIPTS_DIR), capture_output=True, text=True, encoding="utf-8"
-                )
-                out = (proc.stdout or "") + (proc.stderr or "")
-                self.after(0, lambda: self._log_line(out or "(无输出)"))
-                self.after(0, lambda: self._log_line(f"退出码: {proc.returncode}"))
-            except Exception as e:
-                self.after(0, lambda: self._log_line(f"异常: {e}"))
-
-        threading.Thread(target=worker, daemon=True).start()
+    def _workspace_fcstd_map_path(self) -> Path:
+        """与「FCStd 索引」页一致：工作空间根下的映射文件。"""
+        return self._repo() / FCSTD_WORKSPACE_MAP_NAME
 
     def _run(self) -> None:
         rr = self._repo()
         batch_dir = self._canon(self._batch_dir_entry.get(), fb=rr)
         if not batch_dir.is_dir():
-            self._log_line(f"错误：批量目录不存在 {batch_dir}")
-            return
-
-        search_root = self._effective_cad_search_root()
-        if not search_root.is_dir():
-            self._log_line(f"错误：搜索根不存在 {search_root}")
-            return
-
-        map_path = self._map_json_path(search_root=search_root)
-        if not map_path.is_file():
-            self._log_line(f"错误：缺少映射列表 {map_path}")
-            self._log_line(
-                f'请先在本页「CAD 搜索根」（{search_root}）下建立映射文件'
-                + ("（当前与工作空间一致）" if search_root.resolve() == rr.resolve() else "")
-                + '，或点「建立/更新映射」（JSON 内路径相对 CAD 搜索根 / JSON 目录）。'
+            self._log.delete("1.0", "end")
+            self._log_line(f"错误：修正目录不存在 {batch_dir}")
+            self._results_tree_placeholder(
+                "错误：修正目录不存在",
+                format_resolved_under_workspace(batch_dir, rr),
             )
+            return
+
+        map_path = self._workspace_fcstd_map_path()
+        map_disp = format_resolved_under_workspace(map_path.resolve(strict=False), rr)
+        if not map_path.is_file():
+            self._log.delete("1.0", "end")
+            self._log_line(f"错误：缺少映射文件\n{map_path}")
+            self._log_line(
+                "请先到「FCStd 索引」页创建索引（路径相对工作空间根写入 fcstd_map.json）。"
+            )
+            self._results_tree_placeholder("错误：缺少 fcstd_map.json", map_disp)
             messagebox.showwarning(
                 "链接路径修正",
-                f'请先点击「建立/更新映射」生成索引文件：\n\n"{map_path}"',
+                f"请先到「FCStd 索引」页点击「创建索引」，在工作空间根得到：\n\n{map_path}",
                 parent=self.winfo_toplevel(),
             )
             return
@@ -273,7 +340,7 @@ class XLinkFixPage(BasePage):
             sys.executable,
             str(_SCRIPTS_DIR / "fix_fcstd_xlink_paths.py"),
             "--map-anchor",
-            str(search_root.resolve()),
+            str(rr.resolve()),
             "--map-json",
             str(map_path.resolve()),
         ]
@@ -284,22 +351,65 @@ class XLinkFixPage(BasePage):
         else:
             doc_xml = batch_dir / "Document.xml"
             if not doc_xml.is_file():
-                self._log_line("错误：未找到 Document.xml（请先选 FreeCAD 批量目录，或勾选 all-in-dir）")
+                self._log.delete("1.0", "end")
+                self._log_line("错误：未找到 Document.xml（请先选择修正目录，或勾选 all-in-dir）")
+                self._results_tree_placeholder("错误：未找到 Document.xml", "")
                 return
             cmd.append(str(doc_xml))
 
+        fd_tmp, json_out = tempfile.mkstemp(prefix="fcdesk_xlink_", suffix=".json")
+        os.close(fd_tmp)
+        cmd += ["--desktop-json-results", json_out]
+
         self._log.delete("1.0", "end")
+        self._results_tree_placeholder("正在运行脚本…", "")
         self._log_line("$ " + " ".join(cmd))
 
-        def worker() -> None:
+        def worker(json_path: str = json_out) -> None:
             try:
                 proc = subprocess.run(
-                    cmd, cwd=str(_SCRIPTS_DIR), capture_output=True, text=True, encoding="utf-8"
+                    cmd,
+                    cwd=str(_SCRIPTS_DIR),
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
                 )
                 out = (proc.stdout or "") + (proc.stderr or "")
-                self.after(0, lambda: self._log_line(out or "(无输出)"))
-                self.after(0, lambda: self._log_line(f"退出码: {proc.returncode}"))
+                self.after(
+                    0,
+                    lambda p=json_path, t=out, rc=proc.returncode: self._finish_xlink_fix_run(p, t, rc),
+                )
             except Exception as e:
-                self.after(0, lambda: self._log_line(f"异常: {e}"))
+                self.after(
+                    0,
+                    lambda p=json_path, err=str(e): self._finish_xlink_fix_run_failed(p, err),
+                )
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _finish_xlink_fix_run(self, json_path: str, captured: str, returncode: int) -> None:
+        data = None
+        jp = Path(json_path)
+        try:
+            if jp.is_file():
+                data = json.loads(jp.read_text(encoding="utf-8"))
+        except Exception:
+            data = None
+        finally:
+            jp.unlink(missing_ok=True)
+
+        self._log.insert("end", captured or "(无输出)")
+        self._log_line(f"退出码: {returncode}")
+
+        if isinstance(data, dict) and data.get("schema") == 1:
+            self._populate_xlink_tree_from_json(data)
+        elif returncode != 0:
+            self._results_tree_placeholder("脚本未成功退出（详见日志）", f"exit {returncode}")
+        else:
+            self._results_tree_placeholder("未能解析结构化结果（请查看日志）", "")
+
+    def _finish_xlink_fix_run_failed(self, json_path: str, err: str) -> None:
+        Path(json_path).unlink(missing_ok=True)
+        self._log_line(err)
+        self._results_tree_placeholder("运行异常", err)
+

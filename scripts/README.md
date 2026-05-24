@@ -1,7 +1,7 @@
 命令行脚本（可被桌面壳的子进程调用，也可单独运行）：
 
 - **`fcstd_map.py`**：扫描生成映射。默认 **`--json`** 写出 **schema≥2** 的结构化文档（`entries[]`：`repo_rel_path`、`filename`、推断字段 **`model_series`**（如 **ABC**）、`part_no`、`version`、`type_code`、`label`、`extra`）；**`--legacy-json`** 仍可写旧扁平字典。字段推断见 **`fcdesk/fcstd_mapping.py`**。
-- **`fix_fcstd_xlink_paths.py`**：按 **`--map-json`** 所指映射重写 XLink；**`--map-anchor`** 必须与生成映射时 **`fcstd_map --relative-to`** 相同（一般为 **CAD 扫描根**，即放置 `fc_linkfix_fcstd_map.json` 的目录）。未提供映射时需 **`--live-scan`**。
+- **`fix_fcstd_xlink_paths.py`**：按 **`--map-json`**（默认可省略，则使用 `<map-anchor>/fcstd_map.json`）解析映射重写 XLink；**`--map-anchor`** 须与 **`fcstd_map --relative-to` / JSON 所在目录**一致。桌面壳下即 **工作空间根**。旧名 `fc_linkfix_fcstd_map.json` 已由单一 `fcstd_map.json` 取代。未提供映射时可 **`--live-scan`**。
 - **`setup_desktop_venv.sh`**（macOS）：一键创建 `.venv-desktop` 并以可编辑方式安装本项目（读取 `pyproject.toml` 依赖）。
 
 **FreeCADCmd（须在 FreeCAD 安装内执行，不要用系统 Python 跑）：**
@@ -16,9 +16,10 @@
 
 ```bash
 python -m unittest discover -s tests -v
-python scripts/fcstd_map.py --root /path/to/cad --relative-to /path/to/cad \\
-  --json /path/to/cad/fc_linkfix_fcstd_map.json
-python scripts/fix_fcstd_xlink_paths.py --map-anchor /path/to/cad --map-json /path/to/cad/fc_linkfix_fcstd_map.json \\
+python scripts/fcstd_map.py --root /path/to/workspace/cad \\
+  --relative-to /path/to/workspace \\
+  --json /path/to/workspace/fcstd_map.json
+python scripts/fix_fcstd_xlink_paths.py --map-anchor /path/to/workspace --map-json /path/to/workspace/fcstd_map.json \\
   --dry-run --all-in-dir /path/to/your/FreeCAD
 python scripts/fix_fcstd_xlink_paths.py --dry-run --live-scan --search-root /path/to/cad --all-in-dir /path/to/your/FreeCAD
 ```

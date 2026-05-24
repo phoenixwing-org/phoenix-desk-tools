@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import csv
+import itertools
 from collections import defaultdict
 from pathlib import Path
+import tkinter as tk
+from tkinter import ttk
 
 import customtkinter as ctk
 
@@ -18,6 +21,7 @@ from fcdesk.config.user_prefs import (
     store_path_under_repo,
 )
 from fcdesk.pages.base import BasePage
+from fcdesk.pages import form_widgets as fw
 from fcdesk.shell.native_dialog import pick_workspace_directory
 from fcdesk.shell.state import AppState
 
@@ -80,6 +84,31 @@ def _fcstd_dup_csv_suffix(tag: str) -> str:
     return ""
 
 
+def _pretty_code_dup_row_title(number_field: str) -> str:
+    """将结果里存的「编号|FCStd类别」转成树节点可读标题。"""
+    d_sfx = _fcstd_dup_csv_suffix(_FCSTD_DUP_TAG_DRAWING)
+    m_sfx = _fcstd_dup_csv_suffix(_FCSTD_DUP_TAG_MODEL)
+    if number_field.endswith(d_sfx):
+        b = number_field[: -len(d_sfx)]
+        note = _fcstd_dup_human_note(_FCSTD_DUP_TAG_DRAWING)
+    elif number_field.endswith(m_sfx):
+        b = number_field[: -len(m_sfx)]
+        note = _fcstd_dup_human_note(_FCSTD_DUP_TAG_MODEL)
+    else:
+        return f"编号：{number_field}"
+    if note:
+        return f"编号：{b} {note}"
+    return f"编号：{b}"
+
+
+def _csv_suffix_to_fcstd_dup_tag(csv_fc: str) -> str:
+    if csv_fc == _fcstd_dup_csv_suffix(_FCSTD_DUP_TAG_DRAWING):
+        return _FCSTD_DUP_TAG_DRAWING
+    if csv_fc == _fcstd_dup_csv_suffix(_FCSTD_DUP_TAG_MODEL):
+        return _FCSTD_DUP_TAG_MODEL
+    return ""
+
+
 class PartDedupPage(BasePage):
     """编号查重页：文件名重复 + 编号+版本重复（可选）。"""
 
@@ -96,15 +125,13 @@ class PartDedupPage(BasePage):
         self._scan_dir = ""
 
         row = 0
-        ctk.CTkLabel(
-            self, text="编号查重", font=ctk.CTkFont(size=20, weight="bold"), anchor="w"
-        ).grid(row=row, column=0, columnspan=4, padx=24, pady=(20, 4), sticky="w")
+        fw.page_title(self, text="编号查重").grid(row=row, column=0, columnspan=4, padx=24, pady=(20, 8), sticky="w")
 
         row += 1
         opts_row = ctk.CTkFrame(self, fg_color="transparent")
         opts_row.grid(row=row, column=0, columnspan=4, padx=24, sticky="w", pady=(0, 8))
 
-        ctk.CTkLabel(opts_row, text="扩展名：", anchor="w").pack(side="left", padx=(0, 4))
+        fw.inline_field_label(opts_row, text="扩展名：").pack(side="left", padx=(0, 6))
         ext_menu = ctk.CTkOptionMenu(
             opts_row,
             variable=self._ext_var,
@@ -113,10 +140,10 @@ class PartDedupPage(BasePage):
         )
         ext_menu.pack(side="left", padx=(0, 16))
 
-        ctk.CTkLabel(opts_row, text="编号位数：", anchor="w").pack(side="left", padx=(0, 4))
+        fw.inline_field_label(opts_row, text="编号位数：").pack(side="left", padx=(0, 6))
         ctk.CTkEntry(opts_row, textvariable=self._code_len_var, width=50).pack(side="left", padx=(0, 12))
 
-        ctk.CTkLabel(opts_row, text="版本位数：", anchor="w").pack(side="left", padx=(0, 4))
+        fw.inline_field_label(opts_row, text="版本位数：").pack(side="left", padx=(0, 6))
         ctk.CTkEntry(opts_row, textvariable=self._ver_len_var, width=50).pack(side="left")
 
         row += 1
@@ -127,9 +154,7 @@ class PartDedupPage(BasePage):
         ctk.CTkCheckBox(check_row, text="零件号必须为数字", variable=self._code_must_be_digit).pack(side="left")
 
         row += 1
-        ctk.CTkLabel(self, text="扫描目录", width=70, anchor="w").grid(
-            row=row, column=0, padx=(24, 8), pady=6, sticky="w"
-        )
+        fw.form_row_label(self, text="扫描目录").grid(row=row, column=0, padx=(24, 12), pady=8, sticky="nw")
         self._dir_entry = ctk.CTkEntry(self, placeholder_text="留空则扫描工作空间根", width=320)
         self._dir_entry.grid(row=row, column=1, columnspan=2, padx=4, pady=6, sticky="ew")
         ctk.CTkButton(self, text="浏览…", width=70, command=self._browse_dir).grid(
@@ -144,32 +169,179 @@ class PartDedupPage(BasePage):
         ctk.CTkButton(btns, text="导出 CSV", fg_color="gray45", command=self._export_csv).pack(side="left")
 
         row += 1
-        self._log = ctk.CTkTextbox(self, font=ctk.CTkFont(family="Menlo", size=12))
-        self._log.grid(row=row, column=0, columnspan=4, padx=24, pady=(8, 24), sticky="nsew")
+        self._log = ctk.CTkTextbox(self, height=120, font=ctk.CTkFont(family="Menlo", size=12))
+        self._log.grid(row=row, column=0, columnspan=4, padx=24, pady=(8, 6), sticky="nsew")
+        row += 1
+
+        tree_wrap = ctk.CTkFrame(self, fg_color="transparent")
+        tree_wrap.grid(row=row, column=0, columnspan=4, padx=(24, 24), pady=(0, 12), sticky="nsew")
+        tree_wrap.grid_rowconfigure(0, weight=1)
+        tree_wrap.grid_columnconfigure(0, weight=1)
+        self._tree_host = tk.Frame(tree_wrap, highlightthickness=0)
+        self._tree_host.grid(row=0, column=0, sticky="nsew")
+        self._tree_scroll = ttk.Scrollbar(self._tree_host)
+        self._tree = ttk.Treeview(
+            self._tree_host,
+            columns=("path",),
+            show="tree headings",
+            yscrollcommand=self._tree_scroll.set,
+            height=14,
+            selectmode="browse",
+        )
+        self._tree_scroll.config(command=self._tree.yview)
+        self._tree.heading("#0", text="项")
+        self._tree.heading("path", text="路径（相对工作空间或绝对）")
+        self._tree.column("#0", width=320, stretch=True)
+        self._tree.column("path", width=420, stretch=True)
+        self._tree.grid(row=0, column=0, sticky="nsew")
+        self._tree_scroll.grid(row=0, column=1, sticky="ns")
+        self._tree_host.grid_rowconfigure(0, weight=1)
+        self._tree_host.grid_columnconfigure(0, weight=1)
 
         row += 1
-        ctk.CTkLabel(
-            self,
-            text=(
-                "文件名格式：零件号(6位)_版本(3位)_描述.ext\n"
-                "零件号=前N位，版本=第N+2位起，中间为分隔符(_.-)\n"
-                "勾选「版本检查」且文件名能解析出版本时，只参与编号+版本查重，不计入编号重复。\n"
-                "零件号必须为数字」时，只检查纯数字零件号（如100001），\n"
-                "中文/字母零件号（如排气管）将跳过编号查重。\n"
-                "扩展名为 FCStd 时：`.Drawing.FCStd`（图纸档）与普通 `.FCStd`（构件）在编号/版本分组中分列，不会互判重复。"
-            ),
-            anchor="w",
-            font=ctk.CTkFont(size=12),
-            text_color=("gray30", "gray70"),
-            wraplength=600,
-            justify="left",
-        ).grid(row=row, column=0, columnspan=4, padx=24, pady=(8, 24), sticky="w")
+        footer_text = (
+            "文件名格式：零件号(6位)_版本(3位)_描述.ext\n"
+            "零件号=前N位，版本=第N+2位起，中间为分隔符(_.-)\n"
+            "勾选「版本检查」且文件名能解析出版本时，只参与编号+版本查重，不计入编号重复。\n"
+            "「零件号必须为数字」时，只检查纯数字零件号（如100001），\n"
+            "中文/字母零件号（如排气管）将跳过编号查重。\n"
+            "扩展名为 FCStd 时：`.Drawing.FCStd`（图纸档）与普通 `.FCStd`（构件）在编号/版本分组中分列，不会互判重复。"
+        )
+        fw.footer_hint_label(self, footer_text, wraplength=920).grid(
+            row=row, column=0, columnspan=4, padx=24, pady=(8, 24), sticky="w"
+        )
 
-        self.grid_rowconfigure(row - 1, weight=1)
+        self.grid_rowconfigure(row - 2, weight=1)
         self.grid_columnconfigure(0, minsize=80)
         self.grid_columnconfigure(1, weight=1)
 
         self._last_results: dict = {}
+        self._apply_part_dedup_tree_style()
+
+    def _apply_part_dedup_tree_style(self) -> None:
+        """让 ttk.Treeview 大致贴近当前 CTk 亮/深色。"""
+        mode = ctk.get_appearance_mode()
+        dark = False
+        if mode == "Dark":
+            dark = True
+        elif mode == "Light":
+            dark = False
+        else:
+
+            try:
+                from customtkinter import AppearanceModeTracker
+
+                dark = AppearanceModeTracker.detect_appearance_mode() == 1
+            except Exception:
+                dark = False
+
+        bg = "#2b2b2b" if dark else "#f0f0f0"
+        fg = "#e8e8e8" if dark else "#202020"
+        sel_bg = "#1f538d" if dark else "#3b8ed0"
+        sel_fg = "#ffffff"
+        host_bg = bg
+        style = ttk.Style()
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+        style.configure(
+            "PartDedup.Treeview",
+            background=bg,
+            fieldbackground=bg,
+            foreground=fg,
+            rowheight=22,
+            borderwidth=0,
+        )
+        style.map(
+            "PartDedup.Treeview",
+            background=[("selected", sel_bg)],
+            foreground=[("selected", sel_fg)],
+        )
+        style.configure(
+            "PartDedup.Treeview.Heading",
+            background=("#3d3d3d" if dark else "#d9d9d9"),
+            foreground=fg,
+            relief="flat",
+            borderwidth=0,
+        )
+        self._tree.configure(style="PartDedup.Treeview")
+        try:
+            self._tree_host.configure(bg=host_bg)
+        except tk.TclError:
+            pass
+
+    def _results_tree_placeholder(self, title: str, path_hint: str = "") -> None:
+        """清空结果树并显示单行提示（错误或未扫描等）。"""
+        self._tree.delete(*self._tree.get_children(""))
+        self._tree.insert("", "end", text=title, values=(path_hint,))
+
+    def _populate_results_tree(self, results: dict, repo_root: Path) -> None:
+        """根据扫描结果填满树：大类 → 分组 → 各行路径。"""
+        rr = repo_root.expanduser().resolve()
+        self._tree.delete(*self._tree.get_children(""))
+        nid = itertools.count()
+        ni = lambda: f"pd_{next(nid)}"
+
+        nc = len(results.get("name_dup") or [])
+        cc = len(results.get("code_dup") or [])
+        vc = len(results.get("ver_dup") or [])
+        total = nc + cc + vc
+
+        def add_paths(parent: str, paths: list[str]) -> None:
+            for ps in sorted(paths):
+                p = Path(ps)
+                disp = format_resolved_under_workspace(p.expanduser(), rr)
+                self._tree.insert(parent, "end", iid=ni(), text=p.name, values=(disp,))
+
+        if total == 0:
+            self._tree.insert("", "end", iid=ni(), text="（本次扫描未发现重复）", values=("",))
+            return
+
+        if nc:
+            sec = self._tree.insert("", "end", iid=ni(), text=f"文件名重复（{nc} 组）", open=True, values=("",))
+            for item in results["name_dup"]:
+                grp = self._tree.insert(
+                    sec,
+                    "end",
+                    iid=ni(),
+                    text=f"{item['文件名']}（{len(item['路径'])} 个）",
+                    values=("",),
+                    open=False,
+                )
+                add_paths(grp, item["路径"])
+
+        if cc:
+            sec = self._tree.insert("", "end", iid=ni(), text=f"编号重复（{cc} 组）", open=True, values=("",))
+            for item in results["code_dup"]:
+                grp = self._tree.insert(
+                    sec,
+                    "end",
+                    iid=ni(),
+                    text=_pretty_code_dup_row_title(item["编号"]),
+                    values=("",),
+                    open=False,
+                )
+                add_paths(grp, item["路径"])
+
+        if vc:
+            sec = self._tree.insert("", "end", iid=ni(), text=f"编号+版本重复（{vc} 组）", open=True, values=("",))
+            for item in results["ver_dup"]:
+                csv_sfx = item.get("_csv_fc") or ""
+                note_h = _fcstd_dup_human_note(_csv_suffix_to_fcstd_dup_tag(csv_sfx))
+                key = f"{item['编号']}_{item['版本']}"
+                label = f"编号+版本：{key}"
+                if note_h:
+                    label = f"{label} {note_h}"
+                grp = self._tree.insert(
+                    sec,
+                    "end",
+                    iid=ni(),
+                    text=label,
+                    values=("",),
+                    open=False,
+                )
+                add_paths(grp, item["路径"])
 
     def _pv(self) -> dict:
         return load_workspace_prefs(self.state.repo_root).get("part_dedup") or {}
@@ -200,6 +372,7 @@ class PartDedupPage(BasePage):
         txt = shorten_workspace_relative_display(disp if disp is not None else "")
         self._scan_dir = txt
         self._dir_entry.insert(0, txt)
+        self._apply_part_dedup_tree_style()
 
     def _persist(self, *, quiet: bool = False) -> None:
         rr = self._repo()
@@ -277,15 +450,17 @@ class PartDedupPage(BasePage):
     def _scan(self) -> None:
         self._persist(quiet=True)  # 扫描前自动保存当前配置
         self._log.delete("1.0", "end")
-        
+        self._last_results = {}
+        self._tree.delete(*self._tree.get_children(""))
+
         ext = self._ext_var.get()
         repo_root = self.state.repo_root.expanduser().resolve()
 
         scan_path = resolve_workspace_path_entry(self._dir_entry.get(), repo_root)
         if not scan_path.is_dir():
-            self._log_line(
-                f"错误：目录不存在：{format_resolved_under_workspace(scan_path, repo_root)}"
-            )
+            hint = format_resolved_under_workspace(scan_path, repo_root)
+            self._log_line(f"错误：目录不存在：{hint}")
+            self._results_tree_placeholder("错误：扫描目录不存在", hint)
             return
 
         scan_disp = format_resolved_under_workspace(scan_path, repo_root)
@@ -308,11 +483,13 @@ class PartDedupPage(BasePage):
                     continue
         except OSError as e:
             self._log_line(f"扫描失败：{e}")
+            self._results_tree_placeholder("错误：遍历目录失败", str(e))
             return
-        
+
         files = sorted(files, key=lambda p: str(p.resolve()))
         if not files:
             self._log_line(f"未找到 {ext} 文件")
+            self._results_tree_placeholder("未发现匹配扩展名的文件", scan_disp)
             return
 
         self._log_line(f"共找到 {len(files)} 个文件（已去重）")
@@ -348,65 +525,27 @@ class PartDedupPage(BasePage):
             "ver_dup": [],
         }
 
-        self._log_line("=" * 50)
-        self._log_line("【文件名重复】")
-        self._log_line("=" * 50)
-        name_dup_count = 0
         for name, paths in sorted(name_groups.items()):
             if len(paths) > 1:
-                name_dup_count += 1
                 results["name_dup"].append({"文件名": name, "路径": [str(p) for p in paths]})
-                self._log_line(f"\n文件名：{name}")
-                for p in paths:
-                    self._log_line(f"  {p}")
-        
-        if name_dup_count == 0:
-            self._log_line("无重复")
-        else:
-            self._log_line(f"\n共 {name_dup_count} 组文件名重复")
 
         if self._check_code.get():
-            self._log_line("")
-            self._log_line("=" * 50)
-            self._log_line("【编号重复】")
-            self._log_line("=" * 50)
-            code_dup_count = 0
             for grp_key, paths in sorted(code_groups.items()):
                 if len(paths) > 1:
-                    code_dup_count += 1
                     base, suf = _split_fcstd_group_key(grp_key)
-                    note_h = _fcstd_dup_human_note(suf)
                     csv_suf = _fcstd_dup_csv_suffix(suf)
                     results["code_dup"].append(
                         {"编号": f"{base}{csv_suf}", "路径": [str(p) for p in paths]}
                     )
-                    ln = f"\n编号：{base}"
-                    if note_h:
-                        ln += f" {note_h}"
-                    self._log_line(ln)
-                    for p in paths:
-                        self._log_line(f"  {p}")
-            
-            if code_dup_count == 0:
-                self._log_line("无重复")
-            else:
-                self._log_line(f"\n共 {code_dup_count} 组编号重复")
 
         if self._check_code.get() and self._check_version.get():
-            self._log_line("")
-            self._log_line("=" * 50)
-            self._log_line("【编号+版本重复】")
-            self._log_line("=" * 50)
-            ver_dup_count = 0
             for ver_key, paths in sorted(ver_groups.items()):
                 if len(paths) > 1:
-                    ver_dup_count += 1
                     stripped, suf = _split_fcstd_group_key(ver_key)
                     parts_g = stripped.split("_", 1)
                     cod = parts_g[0]
                     ver_part = parts_g[1] if len(parts_g) > 1 else ""
                     csv_suf = _fcstd_dup_csv_suffix(suf)
-                    note_h = _fcstd_dup_human_note(suf)
                     results["ver_dup"].append(
                         {
                             "编号": cod,
@@ -415,22 +554,33 @@ class PartDedupPage(BasePage):
                             "路径": [str(p) for p in paths],
                         }
                     )
-                    ln = f"\n编号+版本：{cod}_{ver_part}"
-                    if note_h:
-                        ln += f" {note_h}"
-                    self._log_line(ln)
-                    for p in paths:
-                        self._log_line(f"  {p}")
-            
-            if ver_dup_count == 0:
-                self._log_line("无重复")
-            else:
-                self._log_line(f"\n共 {ver_dup_count} 组编号+版本重复")
 
         self._last_results = results
-        total_dup = len(results["name_dup"]) + len(results["code_dup"]) + len(results["ver_dup"])
-        self._log_line(f"\n{'=' * 50}")
-        self._log_line(f"扫描完成：{total_dup} 组重复")
+
+        nc = len(results["name_dup"])
+        cc = len(results["code_dup"])
+        vc = len(results["ver_dup"])
+        total_dup = nc + cc + vc
+
+        self._log_line("─" * 42)
+        self._log_line("重复项概要（路径明细见下方树形表）")
+        self._log_line(f"文件名重复：{nc} 组")
+
+        code_on = self._check_code.get()
+        ver_on = self._check_version.get()
+        if code_on:
+            self._log_line(f"编号重复：{cc} 组")
+        else:
+            self._log_line("编号重复：（未勾选编号检查）")
+        if code_on and ver_on:
+            self._log_line(f"编号+版本重复：{vc} 组")
+        elif code_on:
+            self._log_line("编号+版本重复：（未勾选版本检查）")
+
+        self._log_line("")
+        self._log_line(f"扫描完成：共 {total_dup} 组重复（树中可按 ▶ 折叠/展开分组）")
+
+        self._populate_results_tree(results, repo_root)
 
     def _export_csv(self) -> None:
         if not self._last_results:

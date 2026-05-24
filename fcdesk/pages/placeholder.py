@@ -21,6 +21,7 @@ class PlaceholderPage(BasePage):
 
         box = ctk.CTkFrame(self)
         box.grid(row=0, column=0, padx=32, pady=32, sticky="nsew")
+        self.grid_columnconfigure(0, weight=1)
         box.grid_columnconfigure(0, weight=1)
 
         ctk.CTkLabel(box, text=title, font=ctk.CTkFont(size=20, weight="bold")).grid(

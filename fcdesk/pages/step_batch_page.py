@@ -11,21 +11,19 @@ import customtkinter as ctk
 from fcdesk.batch_step.job import StepBatchJob
 from fcdesk.batch_step.step_paths import (
     list_step_paths_for_batch,
-    sample_step_fcstd_dirs,
     step_tree_stats,
 )
 from fcdesk.config.user_prefs import (
-    format_relative_workspace_for_ui,
     format_resolved_under_workspace,
     format_stored_path_for_display,
     load_workspace_prefs,
     merge_workspace_section,
-    normalize_workspace_subpath,
     resolve_workspace_path_entry,
     shorten_workspace_relative_display,
     store_path_under_repo,
 )
 from fcdesk.pages.base import BasePage
+from fcdesk.pages import form_widgets as fw
 from fcdesk.shell.freecad_exec import resolve_freecad_cmd
 from fcdesk.shell.native_dialog import pick_workspace_directory
 from fcdesk.shell.state import AppState
@@ -46,9 +44,7 @@ class StepBatchPage(BasePage):
         self._step_recursive = ctk.BooleanVar(value=False)
 
         row = 0
-        ctk.CTkLabel(
-            self, text="STEP 批量", font=ctk.CTkFont(size=20, weight="bold"), anchor="w"
-        ).grid(row=row, column=0, columnspan=4, padx=24, pady=(20, 4), sticky="w")
+        fw.page_title(self, text="STEP 批量").grid(row=row, column=0, columnspan=4, padx=24, pady=(20, 4), sticky="w")
 
         row += 1
         bridge_row = ctk.CTkFrame(self, fg_color="transparent")
@@ -60,19 +56,7 @@ class StepBatchPage(BasePage):
         ).pack(side="left")
 
         row += 1
-        ctk.CTkLabel(self, text="工程路径", width=70, anchor="w").grid(
-            row=row, column=0, padx=(24, 8), pady=6, sticky="w"
-        )
-        self._project_rel = ctk.CTkEntry(self, placeholder_text="例: ./Sample2TA002", width=320)
-        self._project_rel.grid(row=row, column=1, columnspan=2, padx=4, pady=6, sticky="ew")
-        ctk.CTkButton(self, text="套用", width=70, command=self._fill_sample_dirs).grid(
-            row=row, column=3, padx=(4, 24), pady=6
-        )
-
-        row += 1
-        ctk.CTkLabel(self, text="STEP 目录", width=70, anchor="w").grid(
-            row=row, column=0, padx=(24, 8), pady=6, sticky="w"
-        )
+        fw.form_row_label(self, text="STEP 目录").grid(row=row, column=0, padx=(24, 12), pady=8, sticky="nw")
         self._step_dir_entry = ctk.CTkEntry(self, width=320)
         self._step_dir_entry.grid(row=row, column=1, columnspan=2, padx=4, pady=6, sticky="ew")
         ctk.CTkButton(self, text="浏览…", width=70, command=self._browse_step).grid(
@@ -80,9 +64,7 @@ class StepBatchPage(BasePage):
         )
 
         row += 1
-        ctk.CTkLabel(self, text="输出目录", width=70, anchor="w").grid(
-            row=row, column=0, padx=(24, 8), pady=6, sticky="w"
-        )
+        fw.form_row_label(self, text="输出目录").grid(row=row, column=0, padx=(24, 12), pady=8, sticky="nw")
         self._out_dir_entry = ctk.CTkEntry(self, width=320)
         self._out_dir_entry.grid(row=row, column=1, columnspan=2, padx=4, pady=6, sticky="ew")
         ctk.CTkButton(self, text="浏览…", width=70, command=self._browse_out).grid(
@@ -100,7 +82,7 @@ class StepBatchPage(BasePage):
         
         opts_right = ctk.CTkFrame(opts_frame, fg_color="transparent")
         opts_right.pack(side="left", fill="y", padx=(16, 0))
-        ctk.CTkLabel(opts_right, text="视角：", anchor="w").pack(side="left", padx=(0, 6))
+        fw.inline_field_label(opts_right, text="视角：").pack(side="left", padx=(0, 6))
         vf_frame = ctk.CTkFrame(opts_right, fg_color="transparent")
         vf_frame.pack(side="left")
         for val, lbl in (
@@ -128,18 +110,14 @@ class StepBatchPage(BasePage):
         self._log.grid(row=row, column=0, columnspan=4, padx=24, pady=(8, 24), sticky="nsew")
 
         row += 1
-        ctk.CTkLabel(
+        fw.footer_hint_label(
             self,
-            text=(
+            (
                 "A：freecadcmd（需在「配置」选 FreeCAD 目录）\n"
                 "B：已开的 FreeCAD（需先执行监听宏）\n"
                 "偏好 → step_batch"
             ),
-            anchor="w",
-            font=ctk.CTkFont(size=12),
-            text_color=("gray30", "gray70"),
             wraplength=600,
-            justify="left",
         ).grid(row=row, column=0, columnspan=4, padx=24, pady=(8, 24), sticky="w")
 
         self.grid_rowconfigure(row - 1, weight=1)
@@ -155,13 +133,6 @@ class StepBatchPage(BasePage):
     def on_show(self) -> None:
         pv = self._pv()
         rr = self.state.repo_root
-        rel = pv.get("project_relative")
-        self._project_rel.delete(0, "end")
-        if rel:
-            pr = normalize_workspace_subpath(str(rel))
-            if pr:
-                self._project_rel.insert(0, format_relative_workspace_for_ui(pr))
-
         self._step_dir_entry.delete(0, "end")
         self._step_dir_entry.insert(
             0,
@@ -186,26 +157,6 @@ class StepBatchPage(BasePage):
             self._use_inbox_bridge.set(bool(pv["use_inbox_bridge"]))
         if "step_recursive" in pv:
             self._step_recursive.set(bool(pv["step_recursive"]))
-
-    def _fill_sample_dirs(self) -> None:
-        rel = (self._project_rel.get() or "").strip()
-        if not rel:
-            self._log_line("请先填写「工程相对路径」。")
-            return
-        try:
-            step_d, fc_d = sample_step_fcstd_dirs(self._repo(), rel)
-        except ValueError as e:
-            self._log_line(f"错误：{e}")
-            return
-        rr = self._repo()
-        self._step_dir_entry.delete(0, "end")
-        self._step_dir_entry.insert(0, format_resolved_under_workspace(step_d, rr))
-        self._out_dir_entry.delete(0, "end")
-        self._out_dir_entry.insert(0, format_resolved_under_workspace(fc_d, rr))
-        self._log_line(
-            f"已按约定填入 STEP：{format_resolved_under_workspace(step_d, rr)}\n"
-            f"FCStd：{format_resolved_under_workspace(fc_d, rr)}"
-        )
 
     def _browse_step(self) -> None:
         path = pick_workspace_directory(
@@ -249,7 +200,6 @@ class StepBatchPage(BasePage):
 
     def _persist(self, *, quiet: bool = False) -> None:
         rr = self._repo()
-        rel = normalize_workspace_subpath(self._project_rel.get())
         vf_last, vf_all = self._vf_flags()
         vf_key = "all" if vf_all else "last" if vf_last else "none"
 
@@ -264,7 +214,8 @@ class StepBatchPage(BasePage):
         merge_workspace_section(
             "step_batch",
             {
-                "project_relative": rel or None,
+                # 已废弃：曾与「套用约定」一齐使用；移除 UI 后以 None 清除旧键
+                "project_relative": None,
                 "step_dir": store_entry(self._step_dir_entry),
                 "out_dir": store_entry(self._out_dir_entry),
                 "skip_existing": self._skip_existing.get(),
@@ -281,7 +232,7 @@ class StepBatchPage(BasePage):
         step_s = self._step_dir_entry.get().strip()
         out_s = self._out_dir_entry.get().strip()
         if not step_s or not out_s:
-            self._log_line("错误：请填写 STEP 目录与 FCStd 输出目录（或套用约定）。")
+            self._log_line("错误：请填写 STEP 目录与 FCStd 输出目录。")
             return None
         rr = self._repo()
         step_dir = resolve_workspace_path_entry(step_s, rr)
@@ -290,14 +241,13 @@ class StepBatchPage(BasePage):
             self._log_line(f"错误：STEP 目录不存在：{step_dir}")
             return None
         vf_last, vf_all = self._vf_flags()
-        rel = (self._project_rel.get() or "").strip()
         return StepBatchJob(
             step_dir=step_dir,
             out_dir=out_dir,
             skip_existing=self._skip_existing.get(),
             view_fit_last=vf_last,
             view_fit_all=vf_all,
-            project_tag=rel,
+            project_tag="",
             step_recursive=self._step_recursive.get(),
         )
 

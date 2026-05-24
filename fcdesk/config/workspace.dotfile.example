@@ -1,7 +1,6 @@
 {
   "version": 1,
   "fc_linkfix": {
-    "cad_search_root": null,
     "freecad_batch_dir": null,
     "dry_run": true,
     "all_in_dir": true
@@ -10,7 +9,6 @@
     "scan_root": null
   },
   "step_batch": {
-    "project_relative": null,
     "step_dir": "step",
     "out_dir": "FreeCAD",
     "skip_existing": true,

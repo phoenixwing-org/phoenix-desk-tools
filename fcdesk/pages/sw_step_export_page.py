@@ -19,6 +19,7 @@ from fcdesk.config.user_prefs import (
 from fcdesk.integration.solidworks_com import attach_solidworks, batch_export_models_to_step, windows_only
 from fcdesk.integration.solidworks_models import iter_sw_model_paths
 from fcdesk.pages.base import BasePage
+from fcdesk.pages import form_widgets as fw
 from fcdesk.shell.native_dialog import pick_workspace_directory
 from fcdesk.shell.state import AppState
 
@@ -36,12 +37,9 @@ class SwStepExportPage(BasePage):
         self._recursive = ctk.BooleanVar(value=False)
 
         row = 0
-        ctk.CTkLabel(
-            self,
-            text="SolidWorks → STEP（批量）",
-            font=ctk.CTkFont(size=20, weight="bold"),
-            anchor="w",
-        ).grid(row=row, column=0, columnspan=4, padx=24, pady=(20, 8), sticky="w")
+        fw.page_title(self, text="SolidWorks → STEP（批量）").grid(
+            row=row, column=0, columnspan=4, padx=24, pady=(20, 8), sticky="w"
+        )
 
         row += 1
         if _com_export_available_here():
@@ -50,7 +48,7 @@ class SwStepExportPage(BasePage):
                 "另存为同名 `.step`。\n依赖：`pip install pywin32`。"
                 "若 Open/SaveAs 参数与装机版本不匹配，请参阅文档。"
             )
-            hint_color = ("gray30", "gray70")
+            hint = fw.page_hint_label(self, hint_lines, wraplength=920)
         else:
             hint_lines = (
                 "【Mac／Linux · 仅为界面与设计】控件与偏好与 Windows 版一致；"
@@ -58,21 +56,19 @@ class SwStepExportPage(BasePage):
                 "此处可填写路径、「保存偏好」、用「预览」统计 `.sldprt`/`.sldasm`。"
                 "\n详情请读 `doc/SolidWorks批量STEP导出.md`。当前系统：" + sys.platform
             )
-            hint_color = ("#8B4513", "#D2691E")
-        ctk.CTkLabel(
-            self,
-            text=hint_lines,
-            anchor="w",
-            justify="left",
-            font=ctk.CTkFont(size=12),
-            text_color=hint_color,
-            wraplength=920,
-        ).grid(row=row, column=0, columnspan=4, padx=24, pady=(0, 14), sticky="w")
+            hint = ctk.CTkLabel(
+                self,
+                text=hint_lines,
+                anchor="w",
+                justify="left",
+                font=ctk.CTkFont(size=12),
+                text_color=("#8B4513", "#D2691E"),
+                wraplength=920,
+            )
+        hint.grid(row=row, column=0, columnspan=4, padx=24, pady=(0, 14), sticky="w")
 
         row += 1
-        ctk.CTkLabel(self, text="模型目录", anchor="w").grid(
-            row=row, column=0, padx=(24, 8), pady=6, sticky="w"
-        )
+        fw.form_row_label(self, text="模型目录").grid(row=row, column=0, padx=(24, 12), pady=8, sticky="nw")
         self._src = ctk.CTkEntry(self, width=420)
         self._src.grid(row=row, column=1, columnspan=2, padx=4, pady=6, sticky="ew")
         ctk.CTkButton(self, text="浏览…", width=80, command=self._browse_src).grid(
@@ -80,7 +76,7 @@ class SwStepExportPage(BasePage):
         )
 
         row += 1
-        ctk.CTkLabel(self, text="输出目录", anchor="w").grid(row=row, column=0, padx=(24, 8), pady=6, sticky="w")
+        fw.form_row_label(self, text="输出目录").grid(row=row, column=0, padx=(24, 12), pady=8, sticky="nw")
         self._dst = ctk.CTkEntry(self, width=420)
         self._dst.grid(row=row, column=1, columnspan=2, padx=4, pady=6, sticky="ew")
         ctk.CTkButton(self, text="浏览…", width=80, command=self._browse_dst).grid(

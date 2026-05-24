@@ -15,6 +15,7 @@ from fcdesk.config.user_prefs import (
     set_active_workspace,
 )
 from fcdesk.pages.base import BasePage
+from fcdesk.pages import form_widgets as fw
 from fcdesk.shell.native_dialog import pick_workspace_directory
 from fcdesk.shell.state import AppState
 
@@ -60,11 +61,12 @@ class HomePage(BasePage):
 
         outer = ctk.CTkScrollableFrame(self, label_text="配置")
         outer.grid(row=0, column=0, sticky="nsew", padx=24, pady=24)
+        self.grid_columnconfigure(0, weight=1)
         outer.grid_columnconfigure(1, weight=1)
 
         r = 0
-        ctk.CTkLabel(outer, text="当前工作空间", width=108, anchor="w").grid(
-            row=r, column=0, sticky="nw", padx=(0, 8)
+        fw.sidebar_label(outer, text="当前工作空间", anchor="nw").grid(
+            row=r, column=0, sticky="nw", padx=(0, 8), pady=(0, 0)
         )
         self._current_repo_label = ctk.CTkLabel(
             outer,
@@ -78,9 +80,7 @@ class HomePage(BasePage):
         self._current_repo_label.grid(row=r, column=1, columnspan=3, sticky="ew", pady=(0, 8))
         r += 1
 
-        ctk.CTkLabel(outer, text="工作空间根", width=108, anchor="w").grid(
-            row=r, column=0, sticky="w", padx=(0, 8)
-        )
+        fw.sidebar_label(outer, text="工作空间根").grid(row=r, column=0, sticky="w", padx=(0, 8))
         self._repo_entry = ctk.CTkEntry(outer, placeholder_text="项目 / CAD 根目录")
         self._repo_entry.grid(row=r, column=1, sticky="ew", padx=(0, 8))
         ctk.CTkButton(
@@ -91,7 +91,9 @@ class HomePage(BasePage):
         ).grid(row=r, column=2, padx=(0, 4))
         r += 1
 
-        ctk.CTkLabel(outer, text="FreeCAD 目录", anchor="w").grid(row=r, column=0, sticky="w")
+        fw.sidebar_label(outer, text="FreeCAD 目录").grid(
+            row=r, column=0, sticky="w", padx=(0, 8), pady=(8, 0)
+        )
         self._fc_entry = ctk.CTkEntry(outer, placeholder_text="可选：FreeCADCmd 所在目录")
         self._fc_entry.grid(row=r, column=1, sticky="ew", padx=(0, 8), pady=(8, 0))
         ctk.CTkButton(
@@ -119,7 +121,7 @@ class HomePage(BasePage):
             row=0, column=2
         )
 
-        ctk.CTkLabel(outer, text="最近打开", width=108, anchor="nw").grid(
+        fw.sidebar_label(outer, text="最近打开", anchor="nw").grid(
             row=r, column=0, sticky="nw", padx=(0, 8), pady=(20, 4)
         )
         recent_col = ctk.CTkFrame(outer, fg_color="transparent")
@@ -151,16 +153,13 @@ class HomePage(BasePage):
             )
             r += 1
 
-        ctk.CTkLabel(
+        fw.footer_hint_label(
             outer,
-            text=(
+            (
                 f"各功能页路径与选项写入当前工作空间根下的 {WORKSPACE_DOTFILE_NAME}；"
                 "最近打开的工作空间列表保存在 fcdesk/config/workspace.custom.json。\n"
                 "本页工作空间根与 FreeCAD 目录始终显示为绝对路径；其他功能页的目录在项目树内时以相对路径显示与保存。"
             ),
-            anchor="w",
-            justify="left",
-            text_color=("gray30", "gray70"),
             wraplength=680,
         ).grid(row=r, column=0, columnspan=4, sticky="w", pady=(20, 0))
 

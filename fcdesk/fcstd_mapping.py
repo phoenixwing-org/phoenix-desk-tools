@@ -6,7 +6,7 @@ JSON 分为两种形态：
 - **结构化（默认）**：``schema_version`` + ``entries``，每条含零件号、**型号（如 ``ABC``）**、版本、类型 / label 等可扩展字段。
 - **遗留扁平**：``{ "某.FCStd": ["repo/relative/path.FCStd", ...], ... }``（仍可读）。
 
-路径字符串解释为相对调用方传入的「锚点目录」：链接修正映射中通常为 **JSON 所在目录**（CAD 扫描根），与桌面「建立映射」写入的 `--relative-to` 一致。
+路径字符串解释为相对调用方传入的「锚点目录」：桌面 Shell 下与 **工作空间根** 一致（`fcstd_map.json` 写入该目录；`fcstd_map --relative-to` 与 **`fix_fcstd_xlink_paths --map-anchor`** 均指向该根）。
 """
 
 from __future__ import annotations

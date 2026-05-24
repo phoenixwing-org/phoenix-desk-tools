@@ -14,7 +14,6 @@ class BasePage(ctk.CTkFrame):
         super().__init__(master, corner_radius=0, fg_color="transparent", **kwargs)
         self.state = state
         self.grid_rowconfigure(0, weight=1)
-        self.grid_columnconfigure(0, weight=1)
 
     def on_show(self) -> None:
         """切换到本页时调用。"""
