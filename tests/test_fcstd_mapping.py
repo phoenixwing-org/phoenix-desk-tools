@@ -34,7 +34,7 @@ class TestModelSeries(unittest.TestCase):
             "100337.001-H-ABC-PULL-GEAR-RING.FCStd",
             "./SampleABC001/z.FCStd",
         )
-        self.assertEqual(h.get("model_series"), "ABC")
+        self.assertEqual(h.get("ModelSeries"), "ABC")
 
     def test_no_series_empty(self) -> None:
         self.assertIsNone(infer_model_series(stem="Simple.FCStd", rel_posix="./a/b.FCStd"))
@@ -52,9 +52,9 @@ class TestNormalizeRepoRel(unittest.TestCase):
 class TestHints(unittest.TestCase):
     def test_typical_sample_like_name(self) -> None:
         h = hints_from_fcstd_filename("100082.002-R-FooBar.FCStd")
-        self.assertEqual(h["part_no"], "100082")
-        self.assertEqual(h["version"], "002")
-        self.assertEqual(h["type_code"], "R")
+        self.assertEqual(h["PartNumber"], "100082")
+        self.assertEqual(h["PartVersion"], "002")
+        self.assertEqual(h["TypeCode"], "R")
 
 
 class TestDocument(unittest.TestCase):
@@ -64,10 +64,10 @@ class TestDocument(unittest.TestCase):
                 FcstdMapEntry(
                     repo_rel_path="cad/a.FCStd",
                     filename="a.FCStd",
-                    part_no="1",
-                    version="002",
-                    type_code="S",
-                    model_series="ABC",
+                    PartNumber="1",
+                    PartVersion="002",
+                    TypeCode="S",
+                    ModelSeries="ABC",
                     label=None,
                     extra={"source": "test"},
                 )
@@ -78,8 +78,9 @@ class TestDocument(unittest.TestCase):
         doc2 = FcstdMapDocument.from_json_mapping(blob)
         self.assertEqual(len(doc2.entries), 1)
         self.assertEqual(doc2.entries[0].repo_rel_path, "cad/a.FCStd")
-        self.assertEqual(doc2.entries[0].type_code, "S")
-        self.assertEqual(doc2.entries[0].model_series, "ABC")
+        self.assertEqual(doc2.entries[0].PartNumber, "1")
+        self.assertEqual(doc2.entries[0].PartVersion, "002")
+        self.assertEqual(doc2.entries[0].ModelSeries, "ABC")
         self.assertEqual(doc2.entries[0].extra.get("source"), "test")
 
     def test_legacy_flat_upgrade(self) -> None:

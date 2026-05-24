@@ -22,16 +22,16 @@ class EmbeddedBomAttrsTest(unittest.TestCase):
 
         write_embedded_bom_attrs(
             fc,
-            {"part_no": "100346", "version": "001", "type_code": "H", "model_series": "3TB", "label": "灯座"},
+            {"PartNumber": "100346", "PartVersion": "001", "TypeCode": "H", "ModelSeries": "3TB", "label": "灯座"},
         )
         got = read_embedded_bom_attrs(fc)
-        self.assertEqual(got["part_no"], "100346")
-        self.assertEqual(got["version"], "001")
-        self.assertEqual(got["type_code"], "H")
-        self.assertEqual(got["model_series"], "3TB")
+        self.assertEqual(got["PartNumber"], "100346")
+        self.assertEqual(got["PartVersion"], "001")
+        self.assertEqual(got["TypeCode"], "H")
+        self.assertEqual(got["ModelSeries"], "3TB")
         self.assertEqual(got["label"], "灯座")
 
-        write_embedded_bom_attrs(fc, {k: "" for k in ("part_no", "version", "type_code", "model_series", "label")})
+        write_embedded_bom_attrs(fc, {k: "" for k in ("PartNumber", "PartVersion", "TypeCode", "ModelSeries", "label")})
         with zipfile.ZipFile(fc, "r") as z:
             self.assertNotIn(EMBEDDED_BOM_XML, z.namelist())
 

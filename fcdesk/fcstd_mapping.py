@@ -46,12 +46,12 @@ class FcstdMapEntry:
 
     repo_rel_path: str
     filename: str
-    part_no: str | None = None
-    version: str | None = None
-    type_code: str | None = None
+    PartNumber: str | None = None
+    PartVersion: str | None = None
+    TypeCode: str | None = None
     """零件类型/层级记号，如 H/S/R（从文件名推断，可手工扩展）"""
 
-    model_series: str | None = None
+    ModelSeries: str | None = None
     """产品/平台型号片段，如 ``ABC``；无法从路径或文件名识别时省略（JSON 不出现该键）"""
 
     label: str | None = None
@@ -73,7 +73,7 @@ class FcstdMapEntry:
         """从相对工作空间根的路径构建一条预览/推断记录（不写盘）。
 
         字段与 ``fcstd_map.json`` / ``hints_from_fcstd_location`` 对齐；``.fcstd`` 走完整推断，
-        ``.sldprt`` 复用语义相近的文件名推断 + ``model_series``；其余后缀仅填充路径与文件名。
+        ``.sldprt`` 复用语义相近的文件名推断 + ``ModelSeries``；其余后缀仅填充路径与文件名。
         ``label`` 由映射或外部 BOM 填入，此处推断阶段一般为 ``None``。
         """
 
@@ -90,17 +90,17 @@ class FcstdMapEntry:
             stem = Path(name).stem
             ms = infer_model_series(stem=stem, rel_posix=rr.replace("\\", "/"))
             if ms:
-                hints["model_series"] = ms
+                hints["ModelSeries"] = ms
         else:
             hints = {}
 
         return cls(
             repo_rel_path=rr,
             filename=name,
-            part_no=hints.get("part_no"),
-            version=hints.get("version"),
-            type_code=_opt_str_upper(hints.get("type_code")),
-            model_series=_opt_str_upper(hints.get("model_series")),
+            PartNumber=hints.get("PartNumber"),
+            PartVersion=hints.get("PartVersion"),
+            TypeCode=_opt_str_upper(hints.get("TypeCode")),
+            ModelSeries=_opt_str_upper(hints.get("ModelSeries")),
             label=_opt_str(hints.get("label")),
         )
 
@@ -150,10 +150,10 @@ class FcstdMapDocument:
                 FcstdMapEntry(
                     repo_rel_path=rr,
                     filename=fn,
-                    part_no=_opt_str(row.get("part_no")),
-                    version=_opt_str(row.get("version")),
-                    type_code=_opt_str_upper(row.get("type_code")),
-                    model_series=_opt_str_upper(row.get("model_series")),
+                    PartNumber=_opt_str(row.get("PartNumber")),
+                    PartVersion=_opt_str(row.get("PartVersion")),
+                    TypeCode=_opt_str_upper(row.get("TypeCode")),
+                    ModelSeries=_opt_str_upper(row.get("ModelSeries")),
                     label=_opt_str(row.get("label")),
                     extra=dict(ex),
                 )
@@ -185,34 +185,35 @@ class FcstdMapDocument:
 def hints_from_fcstd_filename(filename: str) -> dict[str, Any]:
     """从文件名做轻量推断（不访问磁盘）；推断失败字段省略。
 
-    - ``part_no``：主干若数字开头 ``^\\d+``
-    - ``version``：与 ``fix_fcstd_xlink_paths`` 一致 ``.NNN[-.]``
-    - ``type_code``：``-X-`` /``.X.`` /``_X_`` 且 X∈HSR（大小写忽略）
+    - ``PartNumber``：主干若数字开头 ``^\\d+``
+    - ``PartVersion``：与 ``fix_fcstd_xlink_paths`` 一致 ``.NNN[-.]``
+    - ``TypeCode``：``-X-`` /``.X.`` /``_X_`` 且 X∈HSR（大小写忽略）
     """
     stem = Path(filename).stem
     out: dict[str, Any] = {}
 
     mp = re.match(r"^(\d+)", stem)
     if mp:
-        out["part_no"] = mp.group(1)
+        out["PartNumber"] = mp.group(1)
 
     m_ver = re.search(r"\.(\d{3})[-.]", stem)
     if m_ver:
-        out["version"] = m_ver.group(1)
+        out["PartVersion"] = m_ver.group(1)
 
     mt = _INFIX_TYPE.search(stem)
     if mt:
         t = (mt.group(1) or "").upper()
         if t in frozenset("HSR"):
-            out["type_code"] = t
+            out["TypeCode"] = t
 
     return out
 
 
 def infer_model_series(*, stem: str, rel_posix: str) -> str | None:
-    """从产品命名中抽取 ``\\d+TB`` 型号（如 ``ABC``）；无则返回 ``None``.
+    """从产品命名中推断型号片段（如 ``ABC``、``3TB``）；无则 ``None``.
 
-    优先匹配路径段 ``SampleABC…``，再匹配任意片段中的孤立 ``(\\d+)TB`` 记号。
+    优先 ``Sample\\d+TB`` / 片段中的 ``\\d+TB``；再匹配 ``Sample[A-Za-z]+\\d+`` 路径；
+    再匹配 ``-H-ABC-…`` 中类型码后的字母型号段。
     """
     rp = rel_posix.replace("\\", "/")
 
@@ -237,17 +238,28 @@ def infer_model_series(*, stem: str, rel_posix: str) -> str | None:
         x = from_fragment(part)
         if x:
             return x
+
+    hay = f"{stem}/{rp}"
+    m_sample_lett = re.search(r"Sample([A-Za-z]{2,15})\d+", hay, re.IGNORECASE)
+    if m_sample_lett:
+        return (m_sample_lett.group(1) or "").upper()
+
+    m_mid = re.search(r"[-._]([HSR])[-._]([A-Za-z0-9]{2,24})(?=([-._]|$))", stem, re.IGNORECASE)
+    if m_mid:
+        tok = (m_mid.group(2) or "").upper()
+        return tok if len(tok) >= 2 else None
+
     return None
 
 
 def hints_from_fcstd_location(filename: str, repo_rel_path: str) -> dict[str, Any]:
-    """结合文件名与 ``repo_rel_path`` 推断（比仅看文件名多出 ``model_series`` 等）。"""
+    """结合文件名与 ``repo_rel_path`` 推断（比仅看文件名多出 ``ModelSeries`` 等）。"""
     h = hints_from_fcstd_filename(filename)
     rp = repo_rel_path.replace("\\", "/")
     stem = Path(filename).stem
     ms = infer_model_series(stem=stem, rel_posix=rp)
     if ms:
-        h["model_series"] = ms
+        h["ModelSeries"] = ms
     return h
 
 
@@ -285,10 +297,10 @@ def legacy_flat_dict_to_document(
                 FcstdMapEntry(
                     repo_rel_path=rp,
                     filename=basename,
-                    part_no=hints.get("part_no"),
-                    version=hints.get("version"),
-                    type_code=hints.get("type_code"),
-                    model_series=hints.get("model_series"),
+                    PartNumber=hints.get("PartNumber"),
+                    PartVersion=hints.get("PartVersion"),
+                    TypeCode=hints.get("TypeCode"),
+                    ModelSeries=hints.get("ModelSeries"),
                     label=hints.get("label"),
                 )
             )

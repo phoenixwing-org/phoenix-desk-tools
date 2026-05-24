@@ -14,7 +14,7 @@ MAX_RECENT_WORKSPACES = 10
 _WORKSPACE_SECTIONS = ("fc_linkfix", "fcstd_map", "step_batch", "sw_step_export", "part_dedup")
 
 _WORKSPACE_DEFAULT: dict[str, Any] = {
-    "version": 1,
+    "PartVersion": 1,
     "fc_linkfix": {
         "freecad_batch_dir": None,
         "dry_run": True,

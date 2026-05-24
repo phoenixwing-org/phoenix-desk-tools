@@ -1,6 +1,6 @@
 """属性回写：侧栏选中文件后可编辑 BOM 字段，并写入 FCStd ZIP 内 ``FcdeskBomAttrs.xml``。
 
-字段英文名与优先级见仓库文档 ``doc/Fcdesk嵌入式BOM属性约定.md``（FreeCAD 不自带侧车字段，由外层约定）。
+``PartNumber`` / ``PartVersion`` / ``TypeCode`` 等与序列化、`fcstd_map.json` / ``FcdeskBomAttrs.xml`` 键名一致；其余路径类字段仍为 snake_case。约定见 ``doc/Fcdesk嵌入式BOM属性约定.md``。
 """
 
 from __future__ import annotations
@@ -23,19 +23,19 @@ from fcdesk.pages.base import BasePage
 from fcdesk.pages import form_widgets as fw
 from fcdesk.shell.state import AppState
 
-# (attr_key, 中文标签, 是否可写入 ZIP/FcdeskBomAttrs)
-_ATTR_ROWS: tuple[tuple[str, str, bool], ...] = (
-    ("repo_rel_path", "仓库相对路径", False),
-    ("filename", "文件名", False),
-    ("part_no", "零件号", True),
-    ("version", "版本", True),
-    ("type_code", "类型码 (H/S/R)", True),
-    ("model_series", "型号系列", True),
-    ("label", "标签", True),
+# (wire 键 snake_case ↔ JSON/XML；界面第二行英文名用大驼峰，与 FreeCAD Property 展示习惯一致)
+_ATTR_ROWS: tuple[tuple[str, str, str, bool], ...] = (
+    ("repo_rel_path", "仓库相对路径", "RepoRelativePath", False),
+    ("filename", "文件名", "Filename", False),
+    ("PartNumber", "零件号", "PartNumber", True),
+    ("PartVersion", "版本", "PartVersion", True),
+    ("TypeCode", "类型码 (H/S/R)", "TypeCode", True),
+    ("ModelSeries", "型号系列", "ModelSeries", True),
+    ("label", "标签", "Label", True),
 )
 
-_EDIT_KEYS = frozenset(k for k, _cn, editable in _ATTR_ROWS if editable)
-_READONLY_KEYS = frozenset(k for k, _cn, editable in _ATTR_ROWS if not editable)
+_EDIT_KEYS = frozenset(k for k, _cn, _pascal_en, editable in _ATTR_ROWS if editable)
+_READONLY_KEYS = frozenset(k for k, _cn, _pascal_en, editable in _ATTR_ROWS if not editable)
 
 
 def _context_menu_sequences() -> tuple[str, ...]:
@@ -128,7 +128,7 @@ class BomApplyPage(BasePage):
         hdr = ctk.CTkFrame(self._attrs_panel, fg_color="transparent")
         hdr.grid(row=0, column=0, columnspan=4, sticky="ew", padx=0, pady=(0, 6))
         ctk.CTkLabel(hdr, text="", width=8).grid(row=0, column=0, padx=(0, 8))
-        ctk.CTkLabel(hdr, text="说明 / 英文字段名", anchor="w", font=ctk.CTkFont(size=11, weight="bold")).grid(
+        ctk.CTkLabel(hdr, text="说明 / 英文名（大驼峰）", anchor="w", font=ctk.CTkFont(size=11, weight="bold")).grid(
             row=0,
             column=1,
             sticky="w",
@@ -140,7 +140,7 @@ class BomApplyPage(BasePage):
         )
 
         grid_row_start = 1
-        for j, (attr_key, caption_cn, editable_) in enumerate(_ATTR_ROWS):
+        for j, (attr_key, caption_cn, pascal_en, editable_) in enumerate(_ATTR_ROWS):
             i = grid_row_start + j
             marker = ctk.CTkLabel(self._attrs_panel, text="", width=18, anchor="center", font=("Arial", 16))
             marker.grid(row=i, column=0, sticky="n", padx=(0, 4), pady=(6, 0))
@@ -149,7 +149,7 @@ class BomApplyPage(BasePage):
             meta = ctk.CTkFrame(self._attrs_panel, fg_color="transparent")
             meta.grid(row=i, column=1, sticky="nw", padx=(0, 12), pady=(4, 6))
             ctk.CTkLabel(meta, text=caption_cn, anchor="w", font=ctk.CTkFont(size=13)).pack(anchor="w")
-            ctk.CTkLabel(meta, text=attr_key, anchor="w", font=mono, text_color=sub_gray).pack(anchor="w")
+            ctk.CTkLabel(meta, text=pascal_en, anchor="w", font=mono, text_color=sub_gray).pack(anchor="w")
 
             widget = ctk.CTkEntry(self._attrs_panel, height=28)
             widget.grid(row=i, column=2, columnspan=2, sticky="ew", padx=(0, 6), pady=(4, 6))
@@ -165,7 +165,9 @@ class BomApplyPage(BasePage):
         fw.page_hint_label(
             root_scroll,
             (
-                "在右侧栏选中 ``.FCStd`` 后可编辑零件号 / 版本 / 类型码 / 型号系列 / 标签。\n"
+                "表格第二列为 PartNumber / PartVersion …（大驼峰），与 FreeCAD 属性面板可读名一致；"
+                "`fcstd_map.json` 与 ``FcdeskBomAttrs.xml`` 中可写字段键名为 ``PartNumber``、``PartVersion``、``TypeCode`` 等（与大驼峰列一致；``label`` 为小写）。\n"
+                "在右侧栏选中 ``.FCStd`` 后可编辑 PartNumber / PartVersion / TypeCode / ModelSeries / Label。\n"
                 "各字段值可为文本框；「仓库相对路径」「文件名」为只读。\n"
                 "可复制：拖选后用快捷键，或在框内右键点「复制」；若无选区则复制整框内容。\n"
                 "保存将把属性写入 ZIP 内的 ``FcdeskBomAttrs.xml``（不修改 Document.xml）。"
@@ -268,10 +270,10 @@ class BomApplyPage(BasePage):
         return {
             "repo_rel_path": str(e.repo_rel_path or ""),
             "filename": str(e.filename or ""),
-            "part_no": str(e.part_no or ""),
-            "version": str(e.version or ""),
-            "type_code": str(e.type_code or ""),
-            "model_series": str(e.model_series or ""),
+            "PartNumber": str(e.PartNumber or ""),
+            "PartVersion": str(e.PartVersion or ""),
+            "TypeCode": str(e.TypeCode or ""),
+            "ModelSeries": str(e.ModelSeries or ""),
             "label": str(e.label or ""),
         }
 
@@ -359,7 +361,7 @@ class BomApplyPage(BasePage):
             text="在右侧栏选中文件结点（目录结点不触发）。",
             text_color=("gray35", "gray72"),
         )
-        for ak, _cn, editable in _ATTR_ROWS:
+        for ak, _cn, _pascal_en, editable in _ATTR_ROWS:
             self._dirty_labels[ak].configure(text="", text_color=("gray60", "gray65"))
             w = self._value_widgets[ak]
             if editable:

@@ -164,7 +164,7 @@ class FcstdMapPage(BasePage):
     @staticmethod
     def _fmt_meta_cell(row: dict) -> str:
         bits: list[str] = []
-        for k in ("part_no", "version", "type_code", "model_series", "label"):
+        for k in ("PartNumber", "PartVersion", "TypeCode", "ModelSeries", "label"):
             v = str(row.get(k) or "").strip()
             if v:
                 bits.append(v)
@@ -181,10 +181,10 @@ class FcstdMapPage(BasePage):
                     {
                         "filename": e.filename,
                         "repo_rel_path": e.repo_rel_path,
-                        "part_no": e.part_no or "",
-                        "version": e.version or "",
-                        "type_code": (e.type_code or "").upper(),
-                        "model_series": e.model_series or "",
+                        "PartNumber": e.PartNumber or "",
+                        "PartVersion": e.PartVersion or "",
+                        "TypeCode": (e.TypeCode or "").upper(),
+                        "ModelSeries": e.ModelSeries or "",
                         "label": e.label or "",
                     }
                     for e in doc.entries
@@ -197,15 +197,15 @@ class FcstdMapPage(BasePage):
         for name in sorted(flat.keys()):
             for rp in flat[name]:
                 h = hints_from_fcstd_location(name, rp)
-                tc = str(h.get("type_code") or "").strip().upper()
+                tc = str(h.get("TypeCode") or "").strip().upper()
                 rows.append(
                     {
                         "filename": name,
                         "repo_rel_path": rp,
-                        "part_no": str(h.get("part_no") or "").strip(),
-                        "version": str(h.get("version") or "").strip(),
-                        "type_code": tc,
-                        "model_series": str(h.get("model_series") or "").strip(),
+                        "PartNumber": str(h.get("PartNumber") or "").strip(),
+                        "PartVersion": str(h.get("PartVersion") or "").strip(),
+                        "TypeCode": tc,
+                        "ModelSeries": str(h.get("ModelSeries") or "").strip(),
                         "label": str(h.get("label") or "").strip(),
                     }
                 )

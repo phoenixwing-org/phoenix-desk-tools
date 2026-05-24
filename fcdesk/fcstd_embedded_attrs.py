@@ -19,10 +19,10 @@ from xml.etree import ElementTree as ET
 EMBEDDED_BOM_XML = "FcdeskBomAttrs.xml"
 
 EDITABLE_ENTRY_ATTRS: tuple[str, ...] = (
-    "part_no",
-    "version",
-    "type_code",
-    "model_series",
+    "PartNumber",
+    "PartVersion",
+    "TypeCode",
+    "ModelSeries",
     "label",
 )
 
@@ -58,7 +58,7 @@ def read_embedded_bom_attrs(fcstd_path: Path) -> dict[str, str]:
 
 def _attrs_to_xml(data: Mapping[str, str]) -> bytes:
     root = ET.Element("FcdeskBomAttrs")
-    root.set("version", "1")
+    root.set("PartVersion", "1")
     for k in EDITABLE_ENTRY_ATTRS:
         s = (data.get(k) or "").strip()
         if not s:
