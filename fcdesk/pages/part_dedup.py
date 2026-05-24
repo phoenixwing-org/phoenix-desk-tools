@@ -13,6 +13,7 @@ from fcdesk.config.user_prefs import (
     format_stored_path_for_display,
     load_workspace_prefs,
     merge_workspace_section,
+    resolve_workspace_path_entry,
     shorten_workspace_relative_display,
     store_path_under_repo,
 )
@@ -37,6 +38,46 @@ def _coerce_known_extension_display(stored: str | None) -> str:
         if opt.casefold() == rk:
             return opt
     return raw
+
+
+# FreeCAD：`.Drawing.FCStd`（图纸档）与普通 `.FCStd` 共用同一 pathlib 后缀名 `.FCStd`，
+# 编号维度需拆开，否则会误判「同名不同档」编号重复。
+_FCSTD_DUP_TAG_DRAWING = "::fcd_draw"
+_FCSTD_DUP_TAG_MODEL = "::fcd_model"
+
+
+def _freecad_fcstd_dup_tag(filename: str) -> str:
+    """扩展名已为 .FCStd 族时使用；先于「是否 .drawing.fcstd」再判普通构件。"""
+    n = Path(filename).name.casefold()
+    if not n.endswith(".fcstd"):
+        return ""
+    if n.endswith(".drawing.fcstd"):
+        return _FCSTD_DUP_TAG_DRAWING
+    return _FCSTD_DUP_TAG_MODEL
+
+
+def _split_fcstd_group_key(full: str) -> tuple[str, str]:
+    if full.endswith(_FCSTD_DUP_TAG_DRAWING):
+        return full[: -len(_FCSTD_DUP_TAG_DRAWING)], _FCSTD_DUP_TAG_DRAWING
+    if full.endswith(_FCSTD_DUP_TAG_MODEL):
+        return full[: -len(_FCSTD_DUP_TAG_MODEL)], _FCSTD_DUP_TAG_MODEL
+    return full, ""
+
+
+def _fcstd_dup_human_note(tag: str) -> str:
+    if tag == _FCSTD_DUP_TAG_DRAWING:
+        return "（图纸 · .Drawing.FCStd）"
+    if tag == _FCSTD_DUP_TAG_MODEL:
+        return "（构件 · .FCStd）"
+    return ""
+
+
+def _fcstd_dup_csv_suffix(tag: str) -> str:
+    if tag == _FCSTD_DUP_TAG_DRAWING:
+        return "|图纸.DrawingFCStd"
+    if tag == _FCSTD_DUP_TAG_MODEL:
+        return "|构件.FCStd"
+    return ""
 
 
 class PartDedupPage(BasePage):
@@ -113,8 +154,9 @@ class PartDedupPage(BasePage):
                 "文件名格式：零件号(6位)_版本(3位)_描述.ext\n"
                 "零件号=前N位，版本=第N+2位起，中间为分隔符(_.-)\n"
                 "勾选「版本检查」且文件名能解析出版本时，只参与编号+版本查重，不计入编号重复。\n"
-                "勾选「零件号必须为数字」时，只检查纯数字零件号（如100001），\n"
-                "中文/字母零件号（如排气管）将跳过编号查重"
+                "零件号必须为数字」时，只检查纯数字零件号（如100001），\n"
+                "中文/字母零件号（如排气管）将跳过编号查重。\n"
+                "扩展名为 FCStd 时：`.Drawing.FCStd`（图纸档）与普通 `.FCStd`（构件）在编号/版本分组中分列，不会互判重复。"
             ),
             anchor="w",
             font=ctk.CTkFont(size=12),
@@ -152,22 +194,19 @@ class PartDedupPage(BasePage):
         self._check_version.set(bool(pv.get("check_version", True)))
         self._code_must_be_digit.set(bool(pv.get("code_must_be_digit", True)))
         
-        # 恢复扫描目录
+        # 恢复扫描目录（未配置或等价根 → 「.」）
         self._dir_entry.delete(0, "end")
-        self._scan_dir = ""
         disp = format_stored_path_for_display(pv.get("scan_dir"), rr)
-        if disp is not None:
-            txt = shorten_workspace_relative_display(disp)
-            self._scan_dir = txt
-            if txt:
-                self._dir_entry.insert(0, txt)
+        txt = shorten_workspace_relative_display(disp if disp is not None else "")
+        self._scan_dir = txt
+        self._dir_entry.insert(0, txt)
 
     def _persist(self, *, quiet: bool = False) -> None:
         rr = self._repo()
 
         def se(box: ctk.CTkEntry) -> str | None:
             t = box.get().strip()
-            if not t:
+            if not t or t == ".":
                 return None
             q = Path(t).expanduser()
             qp = q.resolve(strict=False) if q.is_absolute() else (rr / q).resolve(strict=False)
@@ -241,17 +280,16 @@ class PartDedupPage(BasePage):
         
         ext = self._ext_var.get()
         repo_root = self.state.repo_root.expanduser().resolve()
-        
-        scan_dir = self._dir_entry.get().strip()
-        if scan_dir:
-            scan_path = Path(scan_dir).expanduser().resolve()
-            if not scan_path.is_dir():
-                self._log_line(f"错误：目录不存在：{scan_path}")
-                return
-        else:
-            scan_path = repo_root
 
-        self._log_line(f"扫描目录：{scan_path}")
+        scan_path = resolve_workspace_path_entry(self._dir_entry.get(), repo_root)
+        if not scan_path.is_dir():
+            self._log_line(
+                f"错误：目录不存在：{format_resolved_under_workspace(scan_path, repo_root)}"
+            )
+            return
+
+        scan_disp = format_resolved_under_workspace(scan_path, repo_root)
+        self._log_line(f"扫描目录：{scan_disp}")
         self._log_line(f"扩展名：{ext}（大小写无关匹配）")
 
         # 后缀按 Unicode casefold 比较：覆盖 .FcStd / .FCSTD 等，避免仅用 rglob "*.fcstd"
@@ -277,7 +315,11 @@ class PartDedupPage(BasePage):
             self._log_line(f"未找到 {ext} 文件")
             return
 
-        self._log_line(f"共找到 {len(files)} 个文件（已去重）\n")
+        self._log_line(f"共找到 {len(files)} 个文件（已去重）")
+        if ext_cf == ".fcstd":
+            self._log_line(
+                "说明：`.Drawing.FCStd`（图纸）与 `.FCStd`（一般构件）在编号查重中会分开计数。\n"
+            )
 
         name_groups: dict[str, list[Path]] = defaultdict(list)
         code_groups: dict[str, list[Path]] = defaultdict(list)
@@ -287,16 +329,18 @@ class PartDedupPage(BasePage):
             name_key = fp.name
             name_groups[name_key].append(fp)
 
+            # FreeCAD FCStd：图纸与普通构件分桶，编号/编号+版本不混组
+            fcstd_tag = _freecad_fcstd_dup_tag(fp.name) if ext_cf == ".fcstd" else ""
+
             if self._check_code.get():
                 code, ver = self._parse_filename(fp.name)
                 if code:
                     # 能解析出版本号的文件只做「编号+版本」维度查重，不计入裸「编号重复」
                     if not ver:
-                        code_groups[f"{code}"].append(fp)
+                        code_groups[f"{code}{fcstd_tag}"].append(fp)
 
                     if ver and self._check_version.get():
-                        ver_key = f"{code}_{ver}"
-                        ver_groups[ver_key].append(fp)
+                        ver_groups[f"{code}_{ver}{fcstd_tag}"].append(fp)
 
         results = {
             "name_dup": [],
@@ -327,11 +371,19 @@ class PartDedupPage(BasePage):
             self._log_line("【编号重复】")
             self._log_line("=" * 50)
             code_dup_count = 0
-            for code, paths in sorted(code_groups.items()):
+            for grp_key, paths in sorted(code_groups.items()):
                 if len(paths) > 1:
                     code_dup_count += 1
-                    results["code_dup"].append({"编号": code, "路径": [str(p) for p in paths]})
-                    self._log_line(f"\n编号：{code}")
+                    base, suf = _split_fcstd_group_key(grp_key)
+                    note_h = _fcstd_dup_human_note(suf)
+                    csv_suf = _fcstd_dup_csv_suffix(suf)
+                    results["code_dup"].append(
+                        {"编号": f"{base}{csv_suf}", "路径": [str(p) for p in paths]}
+                    )
+                    ln = f"\n编号：{base}"
+                    if note_h:
+                        ln += f" {note_h}"
+                    self._log_line(ln)
                     for p in paths:
                         self._log_line(f"  {p}")
             
@@ -349,13 +401,24 @@ class PartDedupPage(BasePage):
             for ver_key, paths in sorted(ver_groups.items()):
                 if len(paths) > 1:
                     ver_dup_count += 1
-                    parts = ver_key.split("_")
-                    results["ver_dup"].append({
-                        "编号": parts[0],
-                        "版本": parts[1] if len(parts) > 1 else "",
-                        "路径": [str(p) for p in paths]
-                    })
-                    self._log_line(f"\n编号+版本：{ver_key}")
+                    stripped, suf = _split_fcstd_group_key(ver_key)
+                    parts_g = stripped.split("_", 1)
+                    cod = parts_g[0]
+                    ver_part = parts_g[1] if len(parts_g) > 1 else ""
+                    csv_suf = _fcstd_dup_csv_suffix(suf)
+                    note_h = _fcstd_dup_human_note(suf)
+                    results["ver_dup"].append(
+                        {
+                            "编号": cod,
+                            "版本": ver_part,
+                            "_csv_fc": csv_suf,
+                            "路径": [str(p) for p in paths],
+                        }
+                    )
+                    ln = f"\n编号+版本：{cod}_{ver_part}"
+                    if note_h:
+                        ln += f" {note_h}"
+                    self._log_line(ln)
                     for p in paths:
                         self._log_line(f"  {p}")
             
@@ -391,11 +454,12 @@ class PartDedupPage(BasePage):
                         writer.writerow(["编号重复", item["编号"], path])
 
                 for item in self._last_results.get("ver_dup", []):
+                    tag = item.get("_csv_fc") or ""
                     for path in item["路径"]:
                         writer.writerow([
                             "编号+版本重复",
-                            f"{item['编号']}_{item['版本']}",
-                            path
+                            f"{item['编号']}_{item['版本']}{tag}",
+                            path,
                         ])
 
             self._log_line(f"\nCSV 已导出：{csv_path}")

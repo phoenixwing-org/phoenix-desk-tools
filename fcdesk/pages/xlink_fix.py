@@ -131,18 +131,22 @@ class XLinkFixPage(BasePage):
         sr, bd = self._search_root_entry.get(), self._batch_dir_entry.get()
 
         sr_eff = self._canon(sr, fb=rr)
+        bd_eff = self._canon(bd, fb=rr)
         cad_sv = (
             None
             if sr_eff.resolve() == rr.resolve()
             else store_path_under_repo(sr_eff, rr)
         )
+        bd_sv = (
+            None
+            if bd_eff.resolve() == rr.resolve()
+            else store_path_under_repo(bd_eff, rr)
+        )
         patch: dict = {
             "dry_run": self._dry_run.get(),
             "all_in_dir": self._all_in_dir.get(),
             "cad_search_root": cad_sv,
-            "freecad_batch_dir": (
-                store_path_under_repo(self._canon(bd, fb=rr), rr) if bd.strip() else None
-            ),
+            "freecad_batch_dir": bd_sv,
         }
         merge_workspace_section("fc_linkfix", patch, self.state.repo_root)
 

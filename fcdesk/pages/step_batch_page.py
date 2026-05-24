@@ -22,6 +22,7 @@ from fcdesk.config.user_prefs import (
     merge_workspace_section,
     normalize_workspace_subpath,
     resolve_workspace_path_entry,
+    shorten_workspace_relative_display,
     store_path_under_repo,
 )
 from fcdesk.pages.base import BasePage
@@ -162,14 +163,20 @@ class StepBatchPage(BasePage):
                 self._project_rel.insert(0, format_relative_workspace_for_ui(pr))
 
         self._step_dir_entry.delete(0, "end")
-        disp_step = format_stored_path_for_display(pv.get("step_dir"), rr)
-        if disp_step is not None:
-            self._step_dir_entry.insert(0, disp_step)
+        self._step_dir_entry.insert(
+            0,
+            shorten_workspace_relative_display(
+                format_stored_path_for_display(pv.get("step_dir"), rr) or ""
+            ),
+        )
 
         self._out_dir_entry.delete(0, "end")
-        disp_out = format_stored_path_for_display(pv.get("out_dir"), rr)
-        if disp_out is not None:
-            self._out_dir_entry.insert(0, disp_out)
+        self._out_dir_entry.insert(
+            0,
+            shorten_workspace_relative_display(
+                format_stored_path_for_display(pv.get("out_dir"), rr) or ""
+            ),
+        )
 
         if "skip_existing" in pv:
             self._skip_existing.set(bool(pv["skip_existing"]))
@@ -210,7 +217,10 @@ class StepBatchPage(BasePage):
         if path:
             self._step_dir_entry.delete(0, "end")
             self._step_dir_entry.insert(
-                0, format_resolved_under_workspace(Path(path).expanduser(), self._repo())
+                0,
+                shorten_workspace_relative_display(
+                    format_resolved_under_workspace(Path(path).expanduser(), self._repo())
+                ),
             )
 
     def _browse_out(self) -> None:
@@ -223,7 +233,10 @@ class StepBatchPage(BasePage):
         if path:
             self._out_dir_entry.delete(0, "end")
             self._out_dir_entry.insert(
-                0, format_resolved_under_workspace(Path(path).expanduser(), self._repo())
+                0,
+                shorten_workspace_relative_display(
+                    format_resolved_under_workspace(Path(path).expanduser(), self._repo())
+                ),
             )
 
     def _vf_flags(self) -> tuple[bool, bool]:
@@ -242,7 +255,7 @@ class StepBatchPage(BasePage):
 
         def store_entry(box: ctk.CTkEntry) -> str | None:
             raw = box.get().strip()
-            if not raw:
+            if not raw or raw == ".":
                 return None
             q = Path(raw).expanduser()
             qp = q.resolve(strict=False) if q.is_absolute() else (rr / q).resolve(strict=False)

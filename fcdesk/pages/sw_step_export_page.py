@@ -13,6 +13,7 @@ from fcdesk.config.user_prefs import (
     format_stored_path_for_display,
     load_workspace_prefs,
     merge_workspace_section,
+    shorten_workspace_relative_display,
     store_path_under_repo,
 )
 from fcdesk.integration.solidworks_com import attach_solidworks, batch_export_models_to_step, windows_only
@@ -118,14 +119,20 @@ class SwStepExportPage(BasePage):
         pv = self._pv()
         rr = self.state.repo_root
         self._src.delete(0, "end")
-        sd_disp = format_stored_path_for_display(pv.get("source_dir"), rr)
-        if sd_disp is not None:
-            self._src.insert(0, sd_disp)
+        self._src.insert(
+            0,
+            shorten_workspace_relative_display(
+                format_stored_path_for_display(pv.get("source_dir"), rr) or ""
+            ),
+        )
 
         self._dst.delete(0, "end")
-        od_disp = format_stored_path_for_display(pv.get("out_step_dir"), rr)
-        if od_disp is not None:
-            self._dst.insert(0, od_disp)
+        self._dst.insert(
+            0,
+            shorten_workspace_relative_display(
+                format_stored_path_for_display(pv.get("out_step_dir"), rr) or ""
+            ),
+        )
         self._recursive.set(bool(pv.get("recursive_scan", False)))
         
         if _com_export_available_here() and not self._check_pywin32():
@@ -138,7 +145,12 @@ class SwStepExportPage(BasePage):
         if p:
             rr = self._repo()
             self._src.delete(0, "end")
-            self._src.insert(0, format_resolved_under_workspace(Path(p).expanduser(), rr))
+            self._src.insert(
+                0,
+                shorten_workspace_relative_display(
+                    format_resolved_under_workspace(Path(p).expanduser(), rr)
+                ),
+            )
 
     def _browse_dst(self) -> None:
         p = pick_workspace_directory(
@@ -147,14 +159,19 @@ class SwStepExportPage(BasePage):
         if p:
             rr = self._repo()
             self._dst.delete(0, "end")
-            self._dst.insert(0, format_resolved_under_workspace(Path(p).expanduser(), rr))
+            self._dst.insert(
+                0,
+                shorten_workspace_relative_display(
+                    format_resolved_under_workspace(Path(p).expanduser(), rr)
+                ),
+            )
 
     def _persist(self, *, quiet: bool = False) -> None:
         rr = self._repo()
 
         def se(box: ctk.CTkEntry) -> str | None:
             t = box.get().strip()
-            if not t:
+            if not t or t == ".":
                 return None
             q = Path(t).expanduser()
             qp = q.resolve(strict=False) if q.is_absolute() else (rr / q).resolve(strict=False)

@@ -126,12 +126,9 @@ def format_stored_path_for_display(stored: str | None, repo_root: Path) -> str |
 
 
 def shorten_workspace_relative_display(text: str) -> str:
-    """工作空间根 canonical 相对路径为 '.' 时改为留空显示（占位提示「留空=根」）。
-
-    STEP 等对「必须填路径」页仍可直接显示 '.'，勿调用此函数。
-    """
+    """工作空间树下路径的占位展示：等价于 roots 或未填相对目录 → 输入框固定为 ``'.'``。"""
     s = (text or "").strip()
-    return "" if s == "." else s
+    return "." if not s or s == "." else s
 
 
 def format_absolute_config_path(path: Path | str | None) -> str:
