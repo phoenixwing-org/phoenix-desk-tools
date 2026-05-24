@@ -68,7 +68,7 @@ class SwStepExportPage(BasePage):
         ).grid(row=row, column=0, columnspan=4, padx=24, pady=(0, 14), sticky="w")
 
         row += 1
-        ctk.CTkLabel(self, text="模型来源目录（.sldprt / .sldasm）", anchor="w").grid(
+        ctk.CTkLabel(self, text="模型目录", anchor="w").grid(
             row=row, column=0, padx=(24, 8), pady=6, sticky="w"
         )
         self._src = ctk.CTkEntry(self, width=420)
@@ -78,7 +78,7 @@ class SwStepExportPage(BasePage):
         )
 
         row += 1
-        ctk.CTkLabel(self, text="STEP 输出目录", anchor="w").grid(row=row, column=0, padx=(24, 8), pady=6, sticky="w")
+        ctk.CTkLabel(self, text="输出目录", anchor="w").grid(row=row, column=0, padx=(24, 8), pady=6, sticky="w")
         self._dst = ctk.CTkEntry(self, width=420)
         self._dst.grid(row=row, column=1, columnspan=2, padx=4, pady=6, sticky="ew")
         ctk.CTkButton(self, text="浏览…", width=80, command=self._browse_dst).grid(
@@ -88,7 +88,7 @@ class SwStepExportPage(BasePage):
         row += 1
         ox = ctk.CTkFrame(self, fg_color="transparent")
         ox.grid(row=row, column=0, columnspan=4, padx=24, sticky="w", pady=4)
-        ctk.CTkCheckBox(ox, text="包含子文件夹（递归）", variable=self._recursive).pack(side="left")
+        ctk.CTkCheckBox(ox, text="递归扫描", variable=self._recursive).pack(side="left")
 
         row += 1
         btns = ctk.CTkFrame(self, fg_color="transparent")
@@ -96,10 +96,10 @@ class SwStepExportPage(BasePage):
         ctk.CTkButton(btns, text="保存偏好", fg_color=("gray65", "gray35"), command=self._persist).pack(
             side="left", padx=(0, 8)
         )
-        ctk.CTkButton(btns, text="预览三维模型数目", fg_color="gray45", command=self._preview_count).pack(
+        ctk.CTkButton(btns, text="预览数目", fg_color="gray45", command=self._preview_count).pack(
             side="left", padx=(0, 8)
         )
-        ctk.CTkButton(btns, text="批量导出 STEP", command=self._run).pack(side="left")
+        ctk.CTkButton(btns, text="导出 STEP", command=self._run).pack(side="left")
 
         row += 1
         self._log = ctk.CTkTextbox(self, font=ctk.CTkFont(family="Menlo", size=12))
@@ -125,6 +125,9 @@ class SwStepExportPage(BasePage):
         if od:
             self._dst.insert(0, str(od.expanduser()))
         self._recursive.set(bool(pv.get("recursive_scan", False)))
+        
+        if _com_export_available_here() and not self._check_pywin32():
+            self._log_line("提示：未检测到 pywin32。批量导出 STEP 需要先安装：`pip install pywin32`")
 
     def _browse_src(self) -> None:
         p = pick_workspace_directory(
@@ -198,6 +201,15 @@ class SwStepExportPage(BasePage):
         self._log.insert("end", text + "\n")
         self._log.see("end")
 
+    def _check_pywin32(self) -> bool:
+        """检查 pywin32 是否可用，返回 True 表示可用。"""
+        try:
+            import pythoncom
+            import win32com.client
+            return True
+        except ImportError:
+            return False
+
     def _run(self) -> None:
         if not _com_export_available_here():
             self._log_line(
@@ -205,10 +217,8 @@ class SwStepExportPage(BasePage):
                 "在 macOS/Linux 本页仅供布局与预览，请到 Windows 上再点导出。"
             )
             return
-        try:
-            import pythoncom
-            import win32com.client
-        except ImportError:
+        
+        if not self._check_pywin32():
             self._log_line(
                 "未检测到 pywin32。请先：`pip install pywin32`（与此处启动 fcdesk 相同的 Python）。"
             )
@@ -233,7 +243,14 @@ class SwStepExportPage(BasePage):
         self._log_line(f"SolidWorks COM 导出：\n来源 {src}\nSTEP 目录 {dst}\n模型数 {len(paths)}")
 
         def worker() -> None:
-            pythoncom.CoInitialize()
+            co_initialized = False
+            try:
+                import pythoncom
+                pythoncom.CoInitialize()
+                co_initialized = True
+            except Exception as e:
+                self.after(0, lambda: self._log_line(f"COM 初始化失败: {e}"))
+                return
 
             def clog(m: str) -> None:
                 self.after(0, lambda s=m: self._log_line(s))
@@ -261,6 +278,10 @@ class SwStepExportPage(BasePage):
                 msg = repr(e)
                 self.after(0, lambda m=msg: self._log_line("\n异常: " + m))
             finally:
-                pythoncom.CoUninitialize()
+                if co_initialized:
+                    try:
+                        pythoncom.CoUninitialize()
+                    except Exception:
+                        pass
 
         threading.Thread(target=worker, daemon=True).start()

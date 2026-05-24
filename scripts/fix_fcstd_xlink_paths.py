@@ -466,7 +466,7 @@ def main() -> None:
         default=None,
         help=(
             "解析映射里 repo_rel_path 的基准目录；必须与 fcstd_map 写入时的 --relative-to 相同"
-            "（桌面一般为 CAD / FCStd 搜索根，即 fc_linkfix_fcstd_map.json 所在目录）。"
+            "（桌面一般为 搜索根目录，即 fc_linkfix_fcstd_map.json 所在目录）。"
             "省略时默认为当前工作目录。"
         ),
     )

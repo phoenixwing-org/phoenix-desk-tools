@@ -22,6 +22,7 @@ from fcdesk.shell.native_dialog import pick_workspace_directory
 from fcdesk.pages import (
     FcstdMapPage,
     HomePage,
+    PartDedupPage,
     PlaceholderPage,
     StepBatchPage,
     SwStepExportPage,
@@ -143,8 +144,9 @@ class AppShell(ctk.CTk):
             "sw_step_export",
             SwStepExportPage(self._stack, self.app_state),
         )
+        self._stack.register("part_dedup", PartDedupPage(self._stack, self.app_state))
 
-        for page_id in ("bom_export", "bom_apply", "part_dedup"):
+        for page_id in ("bom_export", "bom_apply"):
             self._stack.register(
                 page_id,
                 PlaceholderPage(

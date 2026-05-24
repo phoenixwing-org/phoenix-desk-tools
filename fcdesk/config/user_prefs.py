@@ -10,7 +10,7 @@ from typing import Any
 WORKSPACE_DOTFILE_NAME = ".phoenix-freecad-desktop.json"
 MAX_RECENT_WORKSPACES = 10
 
-_WORKSPACE_SECTIONS = ("fc_linkfix", "fcstd_map", "step_batch", "sw_step_export")
+_WORKSPACE_SECTIONS = ("fc_linkfix", "fcstd_map", "step_batch", "sw_step_export", "part_dedup")
 
 _WORKSPACE_DEFAULT: dict[str, Any] = {
     "version": 1,
@@ -34,6 +34,15 @@ _WORKSPACE_DEFAULT: dict[str, Any] = {
         "source_dir": None,
         "out_step_dir": None,
         "recursive_scan": False,
+    },
+    "part_dedup": {
+        "extension": ".sldprt",
+        "code_len": 6,
+        "ver_len": 3,
+        "check_code": True,
+        "check_version": True,
+        "code_must_be_digit": True,
+        "scan_dir": None,
     },
 }
 

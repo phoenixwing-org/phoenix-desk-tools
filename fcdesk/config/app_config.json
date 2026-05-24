@@ -1,9 +1,9 @@
 {
   "app": {
     "title": "FreeCAD 管理工具",
-    "geometry": "1280x760",
-    "min_width": 960,
-    "min_height": 560,
+    "geometry": "800x500",
+    "min_width": 400,
+    "min_height": 300,
     "appearance_mode": "system",
     "color_theme": "blue"
   },
@@ -57,7 +57,7 @@
       "id": "part_dedup",
       "label": "编号查重",
       "page": "part_dedup",
-      "description": "文件编号 + 版本查重（规划中）"
+      "description": "文件名和编号+版本查重"
     }
   ]
 }

@@ -45,19 +45,6 @@ class HomePage(BasePage):
         outer.grid_columnconfigure(1, weight=1)
 
         r = 0
-        ctk.CTkLabel(
-            outer,
-            text=(
-                f"各功能页路径与选项写入当前工作空间根下的 {WORKSPACE_DOTFILE_NAME}；"
-                "最近打开的工作空间列表保存在 fcdesk/config/workspace.custom.json。"
-            ),
-            anchor="w",
-            justify="left",
-            text_color=("gray30", "gray70"),
-            wraplength=680,
-        ).grid(row=r, column=0, columnspan=4, sticky="w", pady=(0, 16))
-        r += 1
-
         ctk.CTkLabel(outer, text="当前工作空间", width=108, anchor="w").grid(
             row=r, column=0, sticky="nw", padx=(0, 8)
         )
@@ -70,24 +57,6 @@ class HomePage(BasePage):
             font=ctk.CTkFont(size=13, weight="bold"),
         )
         self._current_repo_label.grid(row=r, column=1, columnspan=3, sticky="ew", pady=(0, 8))
-        r += 1
-
-        ctk.CTkLabel(outer, text="最近打开", width=108, anchor="nw").grid(
-            row=r, column=0, sticky="nw", padx=(0, 8), pady=(0, 4)
-        )
-        recent_col = ctk.CTkFrame(outer, fg_color="transparent")
-        recent_col.grid(row=r, column=1, columnspan=3, sticky="ew", pady=(0, 8))
-        recent_col.grid_columnconfigure(0, weight=1)
-        self._recent_list = ctk.CTkScrollableFrame(
-            recent_col,
-            height=120,
-            label_text="点击路径可切换（将询问确认）",
-        )
-        self._recent_list.grid(row=0, column=0, sticky="ew")
-        self._recent_list.grid_columnconfigure(0, weight=1)
-        ctk.CTkButton(recent_col, text="刷新列表", width=88, command=self._refresh_recent_list).grid(
-            row=1, column=0, sticky="w", pady=(6, 0)
-        )
         r += 1
 
         ctk.CTkLabel(outer, text="工作空间根", width=108, anchor="w").grid(
@@ -104,7 +73,7 @@ class HomePage(BasePage):
         r += 1
 
         ctk.CTkLabel(outer, text="FreeCAD 目录", anchor="w").grid(row=r, column=0, sticky="w")
-        self._fc_entry = ctk.CTkEntry(outer, placeholder_text="可选：FreeCADCmd 所在安装目录")
+        self._fc_entry = ctk.CTkEntry(outer, placeholder_text="可选：FreeCADCmd 所在目录")
         self._fc_entry.grid(row=r, column=1, sticky="ew", padx=(0, 8), pady=(8, 0))
         ctk.CTkButton(
             outer,
@@ -115,7 +84,7 @@ class HomePage(BasePage):
         r += 1
 
         btn_bar = ctk.CTkFrame(outer, fg_color="transparent")
-        btn_bar.grid(row=r, column=0, columnspan=4, sticky="w", pady=(20, 0))
+        btn_bar.grid(row=r, column=0, columnspan=4, sticky="w", pady=(12, 0))
         r += 1
 
         ctk.CTkButton(btn_bar, text="保存偏好", width=112, command=self._save_prefs).grid(
@@ -123,16 +92,34 @@ class HomePage(BasePage):
         )
         ctk.CTkButton(
             btn_bar,
-            text="重载 JSON 配置",
-            width=138,
+            text="重载 JSON",
+            width=100,
             command=self._reload_clicked,
         ).grid(row=0, column=1, padx=(0, 10))
         ctk.CTkButton(btn_bar, text="关于", width=80, command=self._about_clicked).grid(
             row=0, column=2
         )
 
+        ctk.CTkLabel(outer, text="最近打开", width=108, anchor="nw").grid(
+            row=r, column=0, sticky="nw", padx=(0, 8), pady=(20, 4)
+        )
+        recent_col = ctk.CTkFrame(outer, fg_color="transparent")
+        recent_col.grid(row=r, column=1, columnspan=3, sticky="ew", pady=(20, 8))
+        recent_col.grid_columnconfigure(0, weight=1)
+        self._recent_list = ctk.CTkScrollableFrame(
+            recent_col,
+            height=120,
+            label_text="点击路径可切换（将询问确认）",
+        )
+        self._recent_list.grid(row=0, column=0, sticky="ew")
+        self._recent_list.grid_columnconfigure(0, weight=1)
+        ctk.CTkButton(recent_col, text="刷新", width=70, command=self._refresh_recent_list).grid(
+            row=1, column=0, sticky="w", pady=(6, 0)
+        )
+        r += 1
+
         ctk.CTkLabel(outer, text="功能一览", font=ctk.CTkFont(weight="bold"), anchor="w").grid(
-            row=r, column=0, columnspan=4, sticky="w", pady=(28, 8)
+            row=r, column=0, columnspan=4, sticky="w", pady=(20, 8)
         )
         r += 1
         for item in self._nav_items:
@@ -143,6 +130,18 @@ class HomePage(BasePage):
                 row=r, column=0, columnspan=4, sticky="w", pady=2
             )
             r += 1
+
+        ctk.CTkLabel(
+            outer,
+            text=(
+                f"各功能页路径与选项写入当前工作空间根下的 {WORKSPACE_DOTFILE_NAME}；"
+                "最近打开的工作空间列表保存在 fcdesk/config/workspace.custom.json。"
+            ),
+            anchor="w",
+            justify="left",
+            text_color=("gray30", "gray70"),
+            wraplength=680,
+        ).grid(row=r, column=0, columnspan=4, sticky="w", pady=(20, 0))
 
         self._sync_fields_from_state()
 

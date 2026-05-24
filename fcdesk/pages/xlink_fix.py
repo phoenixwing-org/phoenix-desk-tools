@@ -48,7 +48,7 @@ class XLinkFixPage(BasePage):
             wraplength=920,
         ).grid(row=1, column=0, columnspan=4, padx=24, pady=(0, 10), sticky="w")
 
-        ctk.CTkLabel(self, text="CAD / FCStd 搜索根（默认同工作空间）", anchor="w").grid(
+        ctk.CTkLabel(self, text="搜索根目录", anchor="w").grid(
             row=2, column=0, padx=(24, 8), pady=6, sticky="w"
         )
         self._search_root_entry = ctk.CTkEntry(self, width=420)
@@ -151,7 +151,7 @@ class XLinkFixPage(BasePage):
     def _browse_search_root(self) -> None:
         path = pick_workspace_directory(
             self,
-            title="CAD / FCStd 搜索根",
+            title="搜索根目录",
             repo_root=self.state.repo_root,
             path_hint=self._search_root_entry.get(),
         )
@@ -194,7 +194,7 @@ class XLinkFixPage(BasePage):
     def _build_map(self) -> None:
         search_root = self._effective_cad_search_root()
         if not search_root.is_dir():
-            msg = f"请先填写可用的 CAD / FCStd 搜索根。\n当前解析为：\n{search_root}"
+            msg = f"请先填写可用的 搜索根目录。\n当前解析为：\n{search_root}"
             self._log.delete("1.0", "end")
             self._log_line(msg.replace("\n", " "))
             messagebox.showwarning("建立映射", msg, parent=self.winfo_toplevel())

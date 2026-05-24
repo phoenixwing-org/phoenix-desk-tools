@@ -16,7 +16,7 @@ class NavSidebar(ctk.CTkFrame):
         on_select: Callable[[str], None],
         **kwargs,
     ) -> None:
-        super().__init__(master, width=200, corner_radius=0, **kwargs)
+        super().__init__(master, width=120, corner_radius=0, **kwargs)
         self.grid_propagate(False)
         self._on_select = on_select
         self._buttons: dict[str, ctk.CTkButton] = {}

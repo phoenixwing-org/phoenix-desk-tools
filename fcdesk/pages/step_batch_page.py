@@ -42,90 +42,79 @@ class StepBatchPage(BasePage):
 
         row = 0
         ctk.CTkLabel(
-            self, text="STEP 批量 → FCStd", font=ctk.CTkFont(size=20, weight="bold"), anchor="w"
+            self, text="STEP 批量", font=ctk.CTkFont(size=20, weight="bold"), anchor="w"
         ).grid(row=row, column=0, columnspan=4, padx=24, pady=(20, 4), sticky="w")
-
-        row += 1
-        ctk.CTkLabel(
-            self,
-            text=(
-                "方式 A：子进程调用 freecadcmd（须在「配置」页选择 FreeCAD 安装目录）。"
-                "方式 B：勾选「已开的 FreeCAD」后，先到 FreeCAD 里执行宏 scripts/freecad_fcdesk_inbox_listener.py。"
-                "偏好 → step_batch"
-            ),
-            anchor="w",
-            font=ctk.CTkFont(size=12),
-            text_color=("gray30", "gray70"),
-        ).grid(row=row, column=0, columnspan=4, padx=24, pady=(0, 8), sticky="w")
 
         row += 1
         bridge_row = ctk.CTkFrame(self, fg_color="transparent")
         bridge_row.grid(row=row, column=0, columnspan=4, padx=24, pady=(0, 10), sticky="w")
         ctk.CTkCheckBox(
             bridge_row,
-            text="通过已打开的 FreeCAD（fcdesk 收件箱桥接，类「连到已启动的 CAD」）",
+            text="通过已开的 FreeCAD（需先执行监听宏）",
             variable=self._use_inbox_bridge,
         ).pack(side="left")
 
         row += 1
-        ctk.CTkLabel(self, text="工程相对路径（约定 step/FreeCAD）", anchor="w").grid(
+        ctk.CTkLabel(self, text="工程路径", width=70, anchor="w").grid(
             row=row, column=0, padx=(24, 8), pady=6, sticky="w"
         )
-        self._project_rel = ctk.CTkEntry(self, placeholder_text="例如 Sample2TA002", width=320)
+        self._project_rel = ctk.CTkEntry(self, placeholder_text="例: Sample2TA002", width=320)
         self._project_rel.grid(row=row, column=1, columnspan=2, padx=4, pady=6, sticky="ew")
-        ctk.CTkButton(self, text="套用约定", width=90, command=self._fill_sample_dirs).grid(
+        ctk.CTkButton(self, text="套用", width=70, command=self._fill_sample_dirs).grid(
             row=row, column=3, padx=(4, 24), pady=6
         )
 
         row += 1
-        ctk.CTkLabel(self, text="STEP 目录", anchor="w").grid(
+        ctk.CTkLabel(self, text="STEP 目录", width=70, anchor="w").grid(
             row=row, column=0, padx=(24, 8), pady=6, sticky="w"
         )
-        self._step_dir_entry = ctk.CTkEntry(self, width=420)
+        self._step_dir_entry = ctk.CTkEntry(self, width=320)
         self._step_dir_entry.grid(row=row, column=1, columnspan=2, padx=4, pady=6, sticky="ew")
-        ctk.CTkButton(self, text="浏览…", width=80, command=self._browse_step).grid(
+        ctk.CTkButton(self, text="浏览…", width=70, command=self._browse_step).grid(
             row=row, column=3, padx=(4, 24), pady=6
         )
 
         row += 1
-        ctk.CTkLabel(self, text="FCStd 输出目录", anchor="w").grid(
+        ctk.CTkLabel(self, text="输出目录", width=70, anchor="w").grid(
             row=row, column=0, padx=(24, 8), pady=6, sticky="w"
         )
-        self._out_dir_entry = ctk.CTkEntry(self, width=420)
+        self._out_dir_entry = ctk.CTkEntry(self, width=320)
         self._out_dir_entry.grid(row=row, column=1, columnspan=2, padx=4, pady=6, sticky="ew")
-        ctk.CTkButton(self, text="浏览…", width=80, command=self._browse_out).grid(
+        ctk.CTkButton(self, text="浏览…", width=70, command=self._browse_out).grid(
             row=row, column=3, padx=(4, 24), pady=6
         )
 
         row += 1
-        opts = ctk.CTkFrame(self, fg_color="transparent")
-        opts.grid(row=row, column=0, columnspan=4, padx=24, sticky="w", pady=(4, 0))
-        ctk.CTkCheckBox(opts, text="已存在 FCStd 则跳过", variable=self._skip_existing).pack(side="left", padx=(0, 24))
-
-        ctk.CTkCheckBox(
-            opts,
-            text="包含子文件夹中的 STEP",
-            variable=self._step_recursive,
-        ).pack(side="left", padx=(0, 24))
-
-        ctk.CTkLabel(opts, text="视角适配（会话内）：", anchor="w").pack(side="left", padx=(0, 6))
+        opts_frame = ctk.CTkFrame(self, fg_color="transparent")
+        opts_frame.grid(row=row, column=0, columnspan=4, padx=24, sticky="w", pady=(8, 0))
+        
+        opts_left = ctk.CTkFrame(opts_frame, fg_color="transparent")
+        opts_left.pack(side="left", fill="y")
+        ctk.CTkCheckBox(opts_left, text="跳过已有", variable=self._skip_existing).pack(side="left", padx=(0, 16))
+        ctk.CTkCheckBox(opts_left, text="递归", variable=self._step_recursive).pack(side="left")
+        
+        opts_right = ctk.CTkFrame(opts_frame, fg_color="transparent")
+        opts_right.pack(side="left", fill="y", padx=(16, 0))
+        ctk.CTkLabel(opts_right, text="视角：", anchor="w").pack(side="left", padx=(0, 6))
+        vf_frame = ctk.CTkFrame(opts_right, fg_color="transparent")
+        vf_frame.pack(side="left")
         for val, lbl in (
-            ("none", "不做"),
-            ("last", "仅最后一个"),
-            ("all", "每个文件"),
+            ("none", "无"),
+            ("last", "末"),
+            ("all", "全"),
         ):
-            ctk.CTkRadioButton(opts, text=lbl, variable=self._vf_mode, value=val).pack(
-                side="left", padx=(0, 12)
+            ctk.CTkRadioButton(vf_frame, text=lbl, variable=self._vf_mode, value=val).pack(
+                side="left", padx=(0, 8)
             )
 
         row += 1
         btns = ctk.CTkFrame(self, fg_color="transparent")
-        btns.grid(row=row, column=0, columnspan=4, padx=24, pady=8, sticky="w")
-        ctk.CTkButton(btns, text="保存偏好", fg_color=("gray65", "gray35"), command=self._persist).pack(
+        btns.grid(row=row, column=0, columnspan=4, padx=24, pady=10, sticky="w")
+        ctk.CTkButton(btns, text="保存", fg_color=("gray65", "gray35"), command=self._persist).pack(
             side="left", padx=(0, 8)
         )
-        ctk.CTkButton(btns, text="运行 STEP 批量", command=self._run).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(btns, text="预览文件数（仅本地）", fg_color="gray45", command=self._preview_count).pack(
+        ctk.CTkButton(btns, text="运行", command=self._run).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(btns, text="预览", fg_color="gray45", command=self._preview_count).pack(
             side="left"
         )
 
@@ -133,7 +122,23 @@ class StepBatchPage(BasePage):
         self._log = ctk.CTkTextbox(self, font=ctk.CTkFont(family="Menlo", size=12))
         self._log.grid(row=row, column=0, columnspan=4, padx=24, pady=(8, 24), sticky="nsew")
 
-        self.grid_rowconfigure(row, weight=1)
+        row += 1
+        ctk.CTkLabel(
+            self,
+            text=(
+                "A：freecadcmd（需在「配置」选 FreeCAD 目录）\n"
+                "B：已开的 FreeCAD（需先执行监听宏）\n"
+                "偏好 → step_batch"
+            ),
+            anchor="w",
+            font=ctk.CTkFont(size=12),
+            text_color=("gray30", "gray70"),
+            wraplength=600,
+            justify="left",
+        ).grid(row=row, column=0, columnspan=4, padx=24, pady=(8, 24), sticky="w")
+
+        self.grid_rowconfigure(row - 1, weight=1)
+        self.grid_columnconfigure(0, minsize=80)
         self.grid_columnconfigure(1, weight=1)
 
     def _repo(self) -> Path:

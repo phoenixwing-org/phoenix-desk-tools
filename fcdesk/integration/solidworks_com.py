@@ -31,15 +31,25 @@ def attach_solidworks():
         import pythoncom
 
         pythoncom.CoInitialize()
-    except Exception:
+    except Exception as e:
         pass
 
     import win32com.client
 
     try:
-        return win32com.client.GetActiveObject("SldWorks.Application")
+        sw_app = win32com.client.GetActiveObject("SldWorks.Application")
+        if sw_app is not None:
+            return sw_app
     except Exception:
-        return win32com.client.Dispatch("SldWorks.Application")
+        pass
+
+    try:
+        sw_app = win32com.client.Dispatch("SldWorks.Application")
+        if sw_app is None:
+            raise RuntimeError("Dispatch SldWorks.Application 返回 None")
+        return sw_app
+    except Exception as e:
+        raise RuntimeError(f"无法连接或启动 SolidWorks: {e}")
 
 
 def _parsed_save_pair(default_a: int, default_b: int) -> tuple[int, int]:
@@ -72,25 +82,49 @@ def _extension_save_step(model, dest: Path, log: LogFn) -> tuple[bool, str]:
 
     sv, silent = _parsed_save_pair(128, 8)
 
+    success = False
+    last_error = ""
+
     if hasattr(ext, "SaveAs3"):
         try:
-            ext.SaveAs3(ds, sv, silent, pythoncom.Missing, errs, warns)
-            return True, ""
+            result = ext.SaveAs3(ds, sv, silent, pythoncom.Missing, errs, warns)
+            if result:
+                success = True
+            else:
+                last_error = f"SaveAs3 返回 {result}, errs={errs.value}, warns={warns.value}"
+                log(f"[SaveAs3] {last_error}")
         except Exception as exc:
+            last_error = str(exc)
             log(f"[SaveAs3] {exc}")
 
-    if hasattr(ext, "SaveAs2"):
+    if not success and hasattr(ext, "SaveAs2"):
         try:
-            ext.SaveAs2(ds, sv, silent)
-            return True, ""
+            result = ext.SaveAs2(ds, sv, silent)
+            if result:
+                success = True
+            else:
+                last_error = f"SaveAs2 返回 {result}"
+                log(f"[SaveAs2] {last_error}")
         except Exception as exc2:
+            last_error = str(exc2)
             log(f"[SaveAs2] {exc2}")
 
-    try:
-        model.SaveAs(ds)
+    if not success:
+        try:
+            result = model.SaveAs(ds)
+            if result:
+                success = True
+            else:
+                last_error = f"SaveAs 返回 {result}"
+        except Exception as exc3:
+            last_error = repr(exc3)
+
+    if success and outp.is_file():
         return True, ""
-    except Exception as exc3:
-        return False, repr(exc3)
+    elif success:
+        return False, "SaveAs 无异常但未生成 STEP 文件"
+    else:
+        return False, last_error or "STEP 导出失败"
 
 
 def _close_doc(sw_app, title: str) -> None:
@@ -147,7 +181,7 @@ def batch_export_models_to_step(
 
         try:
             log(f"打开: {fp}")
-            sw_app.OpenDoc6(
+            open_result = sw_app.OpenDoc6(
                 str(fp),
                 dt,
                 open_opts,
@@ -155,21 +189,28 @@ def batch_export_models_to_step(
                 errs,
                 warns,
             )
-            doc = sw_app.ActiveDoc
+            
+            doc = None
+            if open_result is not None:
+                doc = open_result
+            else:
+                doc = sw_app.ActiveDoc
+            
             if doc is None:
                 ev = getattr(errs, "value", repr(errs))
-                raise RuntimeError(f"OpenDoc 后 ActiveDoc=None (errs={ev})")
+                wv = getattr(warns, "value", repr(warns))
+                raise RuntimeError(f"OpenDoc6 返回 {open_result}, ActiveDoc=None (errs={ev}, warns={wv})")
 
             title = ""
             gt = getattr(doc, "GetTitle", None)
             if callable(gt):
                 title = gt() or ""
+            if not title:
+                title = getattr(doc, "Title", "") or fp.name
 
             good, errmsg = _extension_save_step(doc, outp, log)
             if good and outp.is_file():
                 outs.ok.append(outp)
-            elif good:
-                outs.failed.append((fp, "SaveAs 无异常但未生成 STEP 文件；请调高 SW 常量或改用宏录制参数"))
             else:
                 outs.failed.append((fp, errmsg or "STEP 导出失败"))
         except Exception as e:
