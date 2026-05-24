@@ -62,6 +62,7 @@ class HomePage(BasePage):
         outer = ctk.CTkScrollableFrame(self, label_text="配置")
         outer.grid(row=0, column=0, sticky="nsew", padx=24, pady=24)
         self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=1)
         outer.grid_columnconfigure(1, weight=1)
 
         r = 0
@@ -161,7 +162,7 @@ class HomePage(BasePage):
                 "本页工作空间根与 FreeCAD 目录始终显示为绝对路径；其他功能页的目录在项目树内时以相对路径显示与保存。"
             ),
             wraplength=680,
-        ).grid(row=r, column=0, columnspan=4, sticky="w", pady=(20, 0))
+        ).grid(row=r, column=0, columnspan=4, sticky="nw", pady=(20, 0))
 
         self._sync_fields_from_state()
 

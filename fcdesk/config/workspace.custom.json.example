@@ -3,5 +3,11 @@
   "recent_workspaces": [
     "/path/to/your/repo"
   ],
-  "freecad_dir": "/Applications/FreeCAD.app"
+  "freecad_dir": "/Applications/FreeCAD.app",
+  "window_geometry": null,
+  "shell_layout": {
+    "nav_rail_mode": 0,
+    "right_panel_open": true,
+    "mid_right_sash_px": null
+  }
 }

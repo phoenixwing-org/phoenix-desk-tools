@@ -15,7 +15,7 @@ _FIELD_TEXT_COLOR = ("gray38", "gray72")
 
 
 def page_title(master, *, text: str) -> ctk.CTkLabel:
-    """页面主标题。"""
+    """页面主标题。（放入 grid 时建议 ``sticky='nw'``，避免随行高扩展而垂直居中。）"""
     return ctk.CTkLabel(
         master,
         text=text,
@@ -30,7 +30,7 @@ def page_hint_label(
     *,
     wraplength: int = 900,
 ) -> ctk.CTkLabel:
-    """灰色说明段落（紧贴标题下方）。"""
+    """灰色说明段落（紧贴标题下方）。放入 grid 时建议 ``sticky='nw'``。"""
     return ctk.CTkLabel(
         master,
         text=text,

@@ -40,7 +40,7 @@ class XLinkFixPage(BasePage):
         self._all_in_dir = ctk.BooleanVar(value=True)
 
         fw.page_title(self, text="链接路径修正").grid(
-            row=0, column=0, columnspan=4, padx=24, pady=(20, 8), sticky="w"
+            row=0, column=0, columnspan=4, padx=24, pady=(20, 8), sticky="nw"
         )
 
         hint = (
@@ -48,7 +48,7 @@ class XLinkFixPage(BasePage):
             "本页只需选择修正目录与脚本选项（偏好 fc_linkfix）。"
         )
         fw.page_hint_label(self, hint, wraplength=920).grid(
-            row=1, column=0, columnspan=4, padx=24, pady=(0, 14), sticky="w"
+            row=1, column=0, columnspan=4, padx=24, pady=(0, 14), sticky="nw"
         )
 
         dir_row = ctk.CTkFrame(self, fg_color="transparent")
@@ -77,7 +77,7 @@ class XLinkFixPage(BasePage):
         ctk.CTkButton(btns, text="运行", command=self._run).pack(side="left", padx=(0, 8))
         ctk.CTkButton(btns, text="打开报告目录", fg_color="gray40", command=self._open_report_dir).pack(side="left")
 
-        self._log = ctk.CTkTextbox(self, height=112, font=ctk.CTkFont(family="Menlo", size=12))
+        self._log = ctk.CTkTextbox(self, font=ctk.CTkFont(family="Menlo", size=12))
         self._log.grid(row=5, column=0, columnspan=4, padx=24, pady=(8, 6), sticky="nsew")
 
         tree_wrap = ctk.CTkFrame(self, fg_color="transparent")
@@ -105,7 +105,8 @@ class XLinkFixPage(BasePage):
         self._tree_host.grid_rowconfigure(0, weight=1)
         self._tree_host.grid_columnconfigure(0, weight=1)
 
-        self.grid_rowconfigure(6, weight=1)
+        self.grid_rowconfigure(5, weight=1)
+        self.grid_rowconfigure(6, weight=2)
         self.grid_columnconfigure(1, weight=1)
 
         self._apply_xlink_fix_tree_style()

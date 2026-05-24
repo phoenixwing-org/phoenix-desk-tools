@@ -11,6 +11,7 @@ JSON 分为两种形态：
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -66,6 +67,42 @@ class FcstdMapEntry:
             d.pop("extra", None)
         keep_keys = frozenset({"repo_rel_path", "filename"})
         return {k: v for k, v in d.items() if k in keep_keys or v not in ("", None)}
+
+    @classmethod
+    def preview_from_workspace_relative(cls, rel_workspace: Path) -> FcstdMapEntry:
+        """从相对工作空间根的路径构建一条预览/推断记录（不写盘）。
+
+        字段与 ``fcstd_map.json`` / ``hints_from_fcstd_location`` 对齐；``.fcstd`` 走完整推断，
+        ``.sldprt`` 复用语义相近的文件名推断 + ``model_series``；其余后缀仅填充路径与文件名。
+        ``label`` 由映射或外部 BOM 填入，此处推断阶段一般为 ``None``。
+        """
+
+        rr = normalize_repo_rel_path_for_map(rel_workspace.as_posix())
+        name = rel_workspace.name
+
+        suf = Path(name).suffix.casefold()
+
+        hints: dict[str, Any]
+        if suf == ".fcstd":
+            hints = dict(hints_from_fcstd_location(name, rr))
+        elif suf == ".sldprt":
+            hints = dict(hints_from_fcstd_filename(name))
+            stem = Path(name).stem
+            ms = infer_model_series(stem=stem, rel_posix=rr.replace("\\", "/"))
+            if ms:
+                hints["model_series"] = ms
+        else:
+            hints = {}
+
+        return cls(
+            repo_rel_path=rr,
+            filename=name,
+            part_no=hints.get("part_no"),
+            version=hints.get("version"),
+            type_code=_opt_str_upper(hints.get("type_code")),
+            model_series=_opt_str_upper(hints.get("model_series")),
+            label=_opt_str(hints.get("label")),
+        )
 
 
 @dataclass
@@ -316,3 +353,29 @@ def map_json_payload_to_abs(payload: Mapping[str, Any], anchor: Path | str) -> d
     """从顶层 JSON dict 载入（结构化或遗留），产出 xlink 可用的 basename→绝对路径列表。"""
     flat = coerce_payload_to_basename_rel_paths(payload)
     return basename_pathstrings_to_abs(flat, anchor)
+
+
+def try_load_fcstd_entry_from_workspace_map(
+    *,
+    repo_root: Path,
+    rel_workspace: Path,
+) -> FcstdMapEntry | None:
+    """若工作空间根存在 ``fcstd_map.json``，按 ``repo_rel_path`` 查找与当前选中文件匹配的条目。"""
+    root = repo_root.expanduser().resolve(strict=False)
+    jp = root / "fcstd_map.json"
+    if not jp.is_file():
+        return None
+    try:
+        raw = json.loads(jp.read_text(encoding="utf-8"))
+        if not isinstance(raw, Mapping):
+            return None
+        doc = FcstdMapDocument.from_json_mapping(raw)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+        return None
+
+    want = normalize_repo_rel_path_for_map(rel_workspace.as_posix())
+    for e in doc.entries:
+        cand = normalize_repo_rel_path_for_map(Path(str(e.repo_rel_path)).as_posix())
+        if cand == want:
+            return e
+    return None

@@ -125,7 +125,7 @@ class PartDedupPage(BasePage):
         self._scan_dir = ""
 
         row = 0
-        fw.page_title(self, text="编号查重").grid(row=row, column=0, columnspan=4, padx=24, pady=(20, 8), sticky="w")
+        fw.page_title(self, text="编号查重").grid(row=row, column=0, columnspan=4, padx=24, pady=(20, 8), sticky="nw")
 
         row += 1
         opts_row = ctk.CTkFrame(self, fg_color="transparent")
@@ -169,7 +169,7 @@ class PartDedupPage(BasePage):
         ctk.CTkButton(btns, text="导出 CSV", fg_color="gray45", command=self._export_csv).pack(side="left")
 
         row += 1
-        self._log = ctk.CTkTextbox(self, height=120, font=ctk.CTkFont(family="Menlo", size=12))
+        self._log = ctk.CTkTextbox(self, font=ctk.CTkFont(family="Menlo", size=12))
         self._log.grid(row=row, column=0, columnspan=4, padx=24, pady=(8, 6), sticky="nsew")
         row += 1
 
@@ -208,10 +208,13 @@ class PartDedupPage(BasePage):
             "扩展名为 FCStd 时：`.Drawing.FCStd`（图纸档）与普通 `.FCStd`（构件）在编号/版本分组中分列，不会互判重复。"
         )
         fw.footer_hint_label(self, footer_text, wraplength=920).grid(
-            row=row, column=0, columnspan=4, padx=24, pady=(8, 24), sticky="w"
+            row=row, column=0, columnspan=4, padx=24, pady=(8, 24), sticky="nw"
         )
 
-        self.grid_rowconfigure(row - 2, weight=1)
+        log_row = row - 2
+        tree_row = row - 1
+        self.grid_rowconfigure(log_row, weight=1)
+        self.grid_rowconfigure(tree_row, weight=2)
         self.grid_columnconfigure(0, minsize=80)
         self.grid_columnconfigure(1, weight=1)
 

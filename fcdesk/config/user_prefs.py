@@ -45,11 +45,37 @@ _WORKSPACE_DEFAULT: dict[str, Any] = {
     },
 }
 
+_LAUNCHER_SHELL_LAYOUT_DEFAULT: dict[str, Any] = {
+    "nav_rail_mode": 0,  # 0 窄仅图标 · 1 宽图标+文字
+    "right_panel_open": True,
+    "mid_right_sash_px": None,  # Panedwindow 首根 sash 距左侧像素；None 表示由窗口宽度推导默认
+}
+
+
+def _normalized_shell_layout(raw: Any) -> dict[str, Any]:
+    merged = dict(_LAUNCHER_SHELL_LAYOUT_DEFAULT)
+    if not isinstance(raw, dict):
+        return merged
+    nm = raw.get("nav_rail_mode")
+    if nm in (0, 1):
+        merged["nav_rail_mode"] = int(nm)
+    ro = raw.get("right_panel_open")
+    if isinstance(ro, bool):
+        merged["right_panel_open"] = ro
+    spx = raw.get("mid_right_sash_px")
+    if isinstance(spx, int) and spx > 0:
+        merged["mid_right_sash_px"] = int(spx)
+    elif raw.get("mid_right_sash_px") is None:
+        merged["mid_right_sash_px"] = None
+    return merged
+
+
 _LAUNCHER_DEFAULT: dict[str, Any] = {
     "version": 2,
     "recent_workspaces": [],
     "freecad_dir": None,
     "window_geometry": None,
+    "shell_layout": dict(_LAUNCHER_SHELL_LAYOUT_DEFAULT),
 }
 
 
@@ -213,6 +239,7 @@ def load_launcher_prefs() -> dict[str, Any]:
     wg = raw.get("window_geometry")
     if isinstance(wg, str) and wg.strip():
         data["window_geometry"] = wg.strip()
+    data["shell_layout"] = _normalized_shell_layout(raw.get("shell_layout"))
     return data
 
 
@@ -220,6 +247,25 @@ def save_launcher_window_geometry(geom: str) -> None:
     """主窗口 WxH+X+Y，写入 launcher JSON（仅存尺寸位置，与各工作空间无关）。"""
     launcher = load_launcher_prefs()
     launcher["window_geometry"] = geom.strip()
+    save_launcher_prefs(launcher)
+
+
+def save_launcher_shell_layout(
+    *,
+    nav_rail_mode: int | None = None,
+    right_panel_open: bool | None = None,
+    mid_right_sash_px: int | None = None,
+) -> None:
+    """将左侧导航宽窄 / 右栏开合 / 中右分割 sash 写入 ``workspace.custom.json``（与其它启动器字段合并）。"""
+    launcher = load_launcher_prefs()
+    cur = _normalized_shell_layout(launcher.get("shell_layout"))
+    if nav_rail_mode is not None and int(nav_rail_mode) in (0, 1):
+        cur["nav_rail_mode"] = int(nav_rail_mode)
+    if right_panel_open is not None:
+        cur["right_panel_open"] = bool(right_panel_open)
+    if mid_right_sash_px is not None:
+        cur["mid_right_sash_px"] = int(mid_right_sash_px)
+    launcher["shell_layout"] = cur
     save_launcher_prefs(launcher)
 
 

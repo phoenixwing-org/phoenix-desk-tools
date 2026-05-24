@@ -41,7 +41,7 @@ class FcstdMapPage(BasePage):
     def __init__(self, master, state: AppState, **kwargs) -> None:
         super().__init__(master, state, **kwargs)
 
-        fw.page_title(self, text="FCStd 索引").grid(row=0, column=0, columnspan=3, padx=24, pady=(20, 4), sticky="w")
+        fw.page_title(self, text="FCStd 索引").grid(row=0, column=0, columnspan=3, padx=24, pady=(20, 4), sticky="nw")
 
         fw.page_hint_label(
             self,
@@ -50,7 +50,7 @@ class FcstdMapPage(BasePage):
                 "条目路径相对工作空间根（供「链接路径修正」与同文件共用）。"
             ),
             wraplength=880,
-        ).grid(row=1, column=0, columnspan=3, padx=24, pady=(0, 10), sticky="w")
+        ).grid(row=1, column=0, columnspan=3, padx=24, pady=(0, 10), sticky="nw")
 
         fw.form_row_label(self, text="扫描根目录").grid(
             row=2, column=0, padx=(24, 12), pady=8, sticky="nw"
@@ -71,7 +71,7 @@ class FcstdMapPage(BasePage):
             side="left"
         )
 
-        self._log = ctk.CTkTextbox(self, height=112, font=ctk.CTkFont(family="Menlo", size=12))
+        self._log = ctk.CTkTextbox(self, font=ctk.CTkFont(family="Menlo", size=12))
         self._log.grid(row=4, column=0, columnspan=3, padx=24, pady=(8, 6), sticky="nsew")
 
         tree_wrap = ctk.CTkFrame(self, fg_color="transparent")
@@ -101,7 +101,8 @@ class FcstdMapPage(BasePage):
         self._tree_host.grid_rowconfigure(0, weight=1)
         self._tree_host.grid_columnconfigure(0, weight=1)
 
-        self.grid_rowconfigure(5, weight=1)
+        self.grid_rowconfigure(4, weight=1)
+        self.grid_rowconfigure(5, weight=2)
         self.grid_columnconfigure(1, weight=1)
 
         self._apply_fcstd_map_tree_style()

@@ -38,7 +38,7 @@ class SwStepExportPage(BasePage):
 
         row = 0
         fw.page_title(self, text="SolidWorks → STEP（批量）").grid(
-            row=row, column=0, columnspan=4, padx=24, pady=(20, 8), sticky="w"
+            row=row, column=0, columnspan=4, padx=24, pady=(20, 8), sticky="nw"
         )
 
         row += 1
@@ -65,7 +65,7 @@ class SwStepExportPage(BasePage):
                 text_color=("#8B4513", "#D2691E"),
                 wraplength=920,
             )
-        hint.grid(row=row, column=0, columnspan=4, padx=24, pady=(0, 14), sticky="w")
+        hint.grid(row=row, column=0, columnspan=4, padx=24, pady=(0, 14), sticky="nw")
 
         row += 1
         fw.form_row_label(self, text="模型目录").grid(row=row, column=0, padx=(24, 12), pady=8, sticky="nw")

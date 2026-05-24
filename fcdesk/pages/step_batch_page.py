@@ -44,7 +44,7 @@ class StepBatchPage(BasePage):
         self._step_recursive = ctk.BooleanVar(value=False)
 
         row = 0
-        fw.page_title(self, text="STEP 批量").grid(row=row, column=0, columnspan=4, padx=24, pady=(20, 4), sticky="w")
+        fw.page_title(self, text="STEP 批量").grid(row=row, column=0, columnspan=4, padx=24, pady=(20, 4), sticky="nw")
 
         row += 1
         bridge_row = ctk.CTkFrame(self, fg_color="transparent")
@@ -118,7 +118,7 @@ class StepBatchPage(BasePage):
                 "偏好 → step_batch"
             ),
             wraplength=600,
-        ).grid(row=row, column=0, columnspan=4, padx=24, pady=(8, 24), sticky="w")
+        ).grid(row=row, column=0, columnspan=4, padx=24, pady=(8, 24), sticky="nw")
 
         self.grid_rowconfigure(row - 1, weight=1)
         self.grid_columnconfigure(0, minsize=80)

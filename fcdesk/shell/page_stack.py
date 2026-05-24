@@ -15,6 +15,17 @@ class PageStack(ctk.CTkFrame):
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
+    @property
+    def current_id(self) -> str | None:
+        """当前展示的 page_id。"""
+        return self._current
+
+    def get_current_page(self) -> BasePage | None:
+        """当前页实例（无当前页时为 ``None``）。"""
+        if self._current is None:
+            return None
+        return self._pages.get(self._current)
+
     def register(self, page_id: str, page: BasePage) -> None:
         self._pages[page_id] = page
         page.grid(row=0, column=0, sticky="nsew")
