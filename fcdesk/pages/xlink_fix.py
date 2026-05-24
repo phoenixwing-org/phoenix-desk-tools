@@ -10,9 +10,12 @@ import customtkinter as ctk
 from tkinter import messagebox
 
 from fcdesk.config.user_prefs import (
+    format_resolved_under_workspace,
+    format_stored_path_for_display,
     load_workspace_prefs,
     merge_workspace_section,
-    resolve_pref_path,
+    resolve_workspace_path_entry,
+    shorten_workspace_relative_display,
     store_path_under_repo,
 )
 from fcdesk.pages.base import BasePage
@@ -97,7 +100,7 @@ class XLinkFixPage(BasePage):
 
     def _canon(self, text: str, *, fb: Path) -> Path:
         raw = (text or "").strip()
-        if not raw:
+        if not raw or raw == ".":
             return fb
         q = Path(raw).expanduser()
         return q.resolve() if q.is_absolute() else (self._repo() / q).resolve()
@@ -106,22 +109,17 @@ class XLinkFixPage(BasePage):
         pv = self._pv()
         rr = self._repo()
 
-        cad = resolve_pref_path(pv.get("cad_search_root"), self.state.repo_root)
-        bat = resolve_pref_path(pv.get("freecad_batch_dir"), self.state.repo_root)
-
         self._search_root_entry.delete(0, "end")
-        if cad and cad.is_dir() and cad.resolve() != rr.resolve():
-            self._search_root_entry.insert(0, str(cad.resolve()))
-        else:
-            self._search_root_entry.insert(0, str(rr))
+        disp_sr = shorten_workspace_relative_display(
+            format_stored_path_for_display(pv.get("cad_search_root"), self.state.repo_root) or ""
+        )
+        self._search_root_entry.insert(0, disp_sr)
 
         self._batch_dir_entry.delete(0, "end")
-
-        def _eff(p: Path | None, root: Path) -> Path:
-            return p if p and p.is_dir() else root
-
-        if _eff(bat, rr).resolve() != rr.resolve():
-            self._batch_dir_entry.insert(0, str(_eff(bat, rr)))
+        disp_bd = shorten_workspace_relative_display(
+            format_stored_path_for_display(pv.get("freecad_batch_dir"), self.state.repo_root) or ""
+        )
+        self._batch_dir_entry.insert(0, disp_bd)
 
         if "dry_run" in pv:
             self._dry_run.set(bool(pv["dry_run"]))
@@ -156,8 +154,14 @@ class XLinkFixPage(BasePage):
             path_hint=self._search_root_entry.get(),
         )
         if path:
+            rr = self._repo()
             self._search_root_entry.delete(0, "end")
-            self._search_root_entry.insert(0, str(Path(path).resolve()))
+            self._search_root_entry.insert(
+                0,
+                shorten_workspace_relative_display(
+                    format_resolved_under_workspace(Path(path).expanduser(), rr)
+                ),
+            )
             self._persist_xlink_fields()
 
     def _browse_batch_dir(self) -> None:
@@ -168,9 +172,13 @@ class XLinkFixPage(BasePage):
             path_hint=self._batch_dir_entry.get(),
         )
         if path:
-            p = Path(path).resolve()
+            rr = self._repo()
+            p = Path(path).expanduser()
             self._batch_dir_entry.delete(0, "end")
-            self._batch_dir_entry.insert(0, str(p))
+            self._batch_dir_entry.insert(
+                0,
+                shorten_workspace_relative_display(format_resolved_under_workspace(p, rr)),
+            )
             self._persist_xlink_fields()
 
     def _open_report_dir(self) -> None:

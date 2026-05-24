@@ -15,9 +15,13 @@ from fcdesk.batch_step.step_paths import (
     step_tree_stats,
 )
 from fcdesk.config.user_prefs import (
+    format_relative_workspace_for_ui,
+    format_resolved_under_workspace,
+    format_stored_path_for_display,
     load_workspace_prefs,
     merge_workspace_section,
-    resolve_pref_path,
+    normalize_workspace_subpath,
+    resolve_workspace_path_entry,
     store_path_under_repo,
 )
 from fcdesk.pages.base import BasePage
@@ -58,7 +62,7 @@ class StepBatchPage(BasePage):
         ctk.CTkLabel(self, text="工程路径", width=70, anchor="w").grid(
             row=row, column=0, padx=(24, 8), pady=6, sticky="w"
         )
-        self._project_rel = ctk.CTkEntry(self, placeholder_text="例: Sample2TA002", width=320)
+        self._project_rel = ctk.CTkEntry(self, placeholder_text="例: ./Sample2TA002", width=320)
         self._project_rel.grid(row=row, column=1, columnspan=2, padx=4, pady=6, sticky="ew")
         ctk.CTkButton(self, text="套用", width=70, command=self._fill_sample_dirs).grid(
             row=row, column=3, padx=(4, 24), pady=6
@@ -153,17 +157,19 @@ class StepBatchPage(BasePage):
         rel = pv.get("project_relative")
         self._project_rel.delete(0, "end")
         if rel:
-            self._project_rel.insert(0, str(rel))
+            pr = normalize_workspace_subpath(str(rel))
+            if pr:
+                self._project_rel.insert(0, format_relative_workspace_for_ui(pr))
 
         self._step_dir_entry.delete(0, "end")
-        sd = resolve_pref_path(pv.get("step_dir"), rr)
-        if sd and sd.is_dir():
-            self._step_dir_entry.insert(0, str(sd.resolve()))
+        disp_step = format_stored_path_for_display(pv.get("step_dir"), rr)
+        if disp_step is not None:
+            self._step_dir_entry.insert(0, disp_step)
 
         self._out_dir_entry.delete(0, "end")
-        od = resolve_pref_path(pv.get("out_dir"), rr)
-        if od:
-            self._out_dir_entry.insert(0, str(od.expanduser()))
+        disp_out = format_stored_path_for_display(pv.get("out_dir"), rr)
+        if disp_out is not None:
+            self._out_dir_entry.insert(0, disp_out)
 
         if "skip_existing" in pv:
             self._skip_existing.set(bool(pv["skip_existing"]))
@@ -184,11 +190,15 @@ class StepBatchPage(BasePage):
         except ValueError as e:
             self._log_line(f"错误：{e}")
             return
+        rr = self._repo()
         self._step_dir_entry.delete(0, "end")
-        self._step_dir_entry.insert(0, str(step_d))
+        self._step_dir_entry.insert(0, format_resolved_under_workspace(step_d, rr))
         self._out_dir_entry.delete(0, "end")
-        self._out_dir_entry.insert(0, str(fc_d))
-        self._log_line(f"已按约定填入 STEP：{step_d}\nFCStd：{fc_d}")
+        self._out_dir_entry.insert(0, format_resolved_under_workspace(fc_d, rr))
+        self._log_line(
+            f"已按约定填入 STEP：{format_resolved_under_workspace(step_d, rr)}\n"
+            f"FCStd：{format_resolved_under_workspace(fc_d, rr)}"
+        )
 
     def _browse_step(self) -> None:
         path = pick_workspace_directory(
@@ -199,7 +209,9 @@ class StepBatchPage(BasePage):
         )
         if path:
             self._step_dir_entry.delete(0, "end")
-            self._step_dir_entry.insert(0, path)
+            self._step_dir_entry.insert(
+                0, format_resolved_under_workspace(Path(path).expanduser(), self._repo())
+            )
 
     def _browse_out(self) -> None:
         path = pick_workspace_directory(
@@ -210,7 +222,9 @@ class StepBatchPage(BasePage):
         )
         if path:
             self._out_dir_entry.delete(0, "end")
-            self._out_dir_entry.insert(0, path)
+            self._out_dir_entry.insert(
+                0, format_resolved_under_workspace(Path(path).expanduser(), self._repo())
+            )
 
     def _vf_flags(self) -> tuple[bool, bool]:
         mode = self._vf_mode.get()
@@ -222,7 +236,7 @@ class StepBatchPage(BasePage):
 
     def _persist(self, *, quiet: bool = False) -> None:
         rr = self._repo()
-        rel = (self._project_rel.get() or "").strip()
+        rel = normalize_workspace_subpath(self._project_rel.get())
         vf_last, vf_all = self._vf_flags()
         vf_key = "all" if vf_all else "last" if vf_last else "none"
 
@@ -257,10 +271,8 @@ class StepBatchPage(BasePage):
             self._log_line("错误：请填写 STEP 目录与 FCStd 输出目录（或套用约定）。")
             return None
         rr = self._repo()
-        step_dir = rr / Path(step_s) if not Path(step_s).is_absolute() else Path(step_s)
-        step_dir = step_dir.expanduser().resolve()
-        out_dir = rr / Path(out_s) if not Path(out_s).is_absolute() else Path(out_s)
-        out_dir = out_dir.expanduser().resolve()
+        step_dir = resolve_workspace_path_entry(step_s, rr)
+        out_dir = resolve_workspace_path_entry(out_s, rr)
         if not step_dir.is_dir():
             self._log_line(f"错误：STEP 目录不存在：{step_dir}")
             return None
@@ -282,8 +294,7 @@ class StepBatchPage(BasePage):
             self._log_line("请先填写 STEP 目录。")
             return
         rr = self._repo()
-        step_dir = rr / Path(step_s) if not Path(step_s).is_absolute() else Path(step_s)
-        step_dir = step_dir.expanduser().resolve()
+        step_dir = resolve_workspace_path_entry(step_s, rr)
         try:
             top, deep = step_tree_stats(step_dir)
             rec = self._step_recursive.get()

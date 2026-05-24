@@ -10,31 +10,32 @@ def resolve_directory_dialog_initialdir(
 ) -> str:
     """选目录对话框的初始位置（与各处「浏览…」、工具条选目录保持一致）。
 
-    - ``path_hint`` 为空：用户「文档」目录（如 ~/Documents），避免落在程序 cwd。
-    - 非空：在 ``repo_root``（工作空间根）语境下解析路径，从自身向上找第一个已存在的目录。
+    - ``path_hint`` 为空或解析后不存在：定为当前 **工作空间根** ``repo_root``（便于去重页等扫描目录空缺时先入工作空间）。
+    - 若非空且路径存在：若为目录则用该目录；若为文件则用其父目录。
+    - 若工作空间根本身不是有效目录（极少见），退回用户「文档」目录。
     """
-    docs = str((Path.home() / "Documents").expanduser().resolve())
+    rr = Path(repo_root).expanduser().resolve()
+    fallback_ws = (
+        str(rr)
+        if rr.is_dir()
+        else str((Path.home() / "Documents").expanduser().resolve())
+    )
     raw = (path_hint or "").strip()
     if not raw:
-        return docs
+        return fallback_ws
 
-    rr = Path(repo_root).expanduser().resolve()
     q = Path(raw).expanduser()
     cand = q.resolve(strict=False) if q.is_absolute() else (rr / q).resolve(strict=False)
 
-    p = cand
-    while True:
-        try:
-            if p.is_dir():
-                return str(p)
-            if p.is_file():
-                return str(p.parent)
-        except OSError:
-            pass
-        parent = p.parent
-        if parent == p:
-            return docs
-        p = parent
+    try:
+        if cand.is_dir():
+            return str(cand)
+        if cand.is_file():
+            parent = cand.parent
+            return str(parent) if parent.is_dir() else fallback_ws
+    except OSError:
+        pass
+    return fallback_ws
 
 
 def _shorten_path_for_dialog_title(path: Path | str, max_len: int = 96) -> str:

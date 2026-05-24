@@ -13,7 +13,6 @@
 | `fcdesk/` | Python 包：界面壳、页面、配置 JSON |
 | `scripts/` | 命令行：`fcstd_map.py`、`fix_fcstd_xlink_paths.py`；**FreeCADCmd** 用：`freecad_batch_step_runner.py`（见 doc/STEP批量转FCStd.md） |
 | `doc/` | [文档索引](doc/文档索引.md) |
-| `requirements-desktop.txt` | 轻量依赖（与 `pyproject.toml` 一致，便于手写 `pip install`） |
 
 安装与使用：**[doc/桌面工具-安装说明.md](doc/桌面工具-安装说明.md)** · **[doc/桌面工具-使用说明.md](doc/桌面工具-使用说明.md)**
 
@@ -24,14 +23,14 @@ cd /path/to/phoenix-freecad-desktop   # 默认工作空间为终端当前目录�
 python3 -m venv .venv-desktop
 source .venv-desktop/bin/activate   # Windows: .venv-desktop\Scripts\activate
 pip install -U pip
-pip install -r requirements-desktop.txt
+pip install -e .
 
 python -m fcdesk
-# 或使用安装后的入口命令（editable 安装 pip install -e . 后）：
+# 或使用同一安装带来的入口命令：
 # phoenix-fcdesktop
 ```
 
-**说明：** `mainloop()` 会一直占着终端直到关窗口；全屏时用 Mission Control / Cmd+Tab 找 Python 窗口。
+**说明：** 依赖以 `pyproject.toml` 为准；仅在 Windows 且需要 SolidWorks/pywin32 集成时可：`pip install -e ".[windows-solidworks]"`。`mainloop()` 会一直占着终端直到关窗口；全屏时用 Mission Control / Cmd+Tab 找 Python 窗口。
 
 ## 发行名与包名的关系
 

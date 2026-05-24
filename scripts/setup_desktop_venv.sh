@@ -34,7 +34,7 @@ echo "路径: $(command -v "$PY" || echo "$PY")"
 # shellcheck source=/dev/null
 source "$VENV/bin/activate"
 pip install -U pip
-pip install -r "$REPO_ROOT/requirements-desktop.txt"
+pip install -e "$REPO_ROOT"
 python -c "import tkinter, customtkinter; print('tkinter + customtkinter OK')"
 echo ""
 echo "完成。启动:"

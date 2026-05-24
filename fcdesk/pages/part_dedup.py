@@ -9,14 +9,34 @@ from pathlib import Path
 import customtkinter as ctk
 
 from fcdesk.config.user_prefs import (
+    format_resolved_under_workspace,
+    format_stored_path_for_display,
     load_workspace_prefs,
     merge_workspace_section,
-    resolve_pref_path,
+    shorten_workspace_relative_display,
     store_path_under_repo,
 )
 from fcdesk.pages.base import BasePage
 from fcdesk.shell.native_dialog import pick_workspace_directory
 from fcdesk.shell.state import AppState
+
+# 下拉展示常用大小写习惯；扫描仍用 suffix.casefold() 与实际文件匹配。
+_PART_DEDUP_EXT_OPTIONS = (".FCStd", ".SLDPRT", ".SLDASM", ".SLDDRW", ".step", ".stp")
+_DEFAULT_PART_DEDUP_EXT = ".SLDPRT"
+
+
+def _coerce_known_extension_display(stored: str | None) -> str:
+    """把偏好里存的任意大小写后缀映射到下拉约定的显示串。"""
+    raw = (stored or "").strip()
+    if not raw:
+        return _DEFAULT_PART_DEDUP_EXT
+    if raw[0] != ".":
+        raw = "." + raw
+    rk = raw.casefold()
+    for opt in _PART_DEDUP_EXT_OPTIONS:
+        if opt.casefold() == rk:
+            return opt
+    return raw
 
 
 class PartDedupPage(BasePage):
@@ -26,7 +46,7 @@ class PartDedupPage(BasePage):
 
     def __init__(self, master, state: AppState, **kwargs) -> None:
         super().__init__(master, state, **kwargs)
-        self._ext_var = ctk.StringVar(value=".sldprt")
+        self._ext_var = ctk.StringVar(value=_DEFAULT_PART_DEDUP_EXT)
         self._code_len_var = ctk.IntVar(value=6)
         self._ver_len_var = ctk.IntVar(value=3)
         self._check_code = ctk.BooleanVar(value=True)
@@ -47,8 +67,8 @@ class PartDedupPage(BasePage):
         ext_menu = ctk.CTkOptionMenu(
             opts_row,
             variable=self._ext_var,
-            values=[".sldprt", ".sldasm", ".slddrw", ".fcstd", ".step", ".stp"],
-            width=100,
+            values=list(_PART_DEDUP_EXT_OPTIONS),
+            width=118,
         )
         ext_menu.pack(side="left", padx=(0, 16))
 
@@ -92,6 +112,7 @@ class PartDedupPage(BasePage):
             text=(
                 "文件名格式：零件号(6位)_版本(3位)_描述.ext\n"
                 "零件号=前N位，版本=第N+2位起，中间为分隔符(_.-)\n"
+                "勾选「版本检查」且文件名能解析出版本时，只参与编号+版本查重，不计入编号重复。\n"
                 "勾选「零件号必须为数字」时，只检查纯数字零件号（如100001），\n"
                 "中文/字母零件号（如排气管）将跳过编号查重"
             ),
@@ -119,7 +140,7 @@ class PartDedupPage(BasePage):
         rr = self.state.repo_root
         
         # 恢复扩展名
-        ext = pv.get("extension", ".sldprt")
+        ext = _coerce_known_extension_display(pv.get("extension", _DEFAULT_PART_DEDUP_EXT))
         self._ext_var.set(ext)
         
         # 恢复位数设置
@@ -132,11 +153,14 @@ class PartDedupPage(BasePage):
         self._code_must_be_digit.set(bool(pv.get("code_must_be_digit", True)))
         
         # 恢复扫描目录
-        scan_dir = resolve_pref_path(pv.get("scan_dir"), rr)
         self._dir_entry.delete(0, "end")
-        if scan_dir:
-            self._dir_entry.insert(0, str(scan_dir))
-            self._scan_dir = str(scan_dir)
+        self._scan_dir = ""
+        disp = format_stored_path_for_display(pv.get("scan_dir"), rr)
+        if disp is not None:
+            txt = shorten_workspace_relative_display(disp)
+            self._scan_dir = txt
+            if txt:
+                self._dir_entry.insert(0, txt)
 
     def _persist(self, *, quiet: bool = False) -> None:
         rr = self._repo()
@@ -170,11 +194,16 @@ class PartDedupPage(BasePage):
             self,
             title="选择扫描目录",
             repo_root=self.state.repo_root,
+            path_hint=self._dir_entry.get(),
         )
         if p:
+            rr = self._repo()
+            shown = shorten_workspace_relative_display(
+                format_resolved_under_workspace(Path(p).expanduser(), rr)
+            )
             self._dir_entry.delete(0, "end")
-            self._dir_entry.insert(0, p)
-            self._scan_dir = p
+            self._dir_entry.insert(0, shown)
+            self._scan_dir = shown
 
     def _parse_filename(self, name: str) -> tuple[str | None, str | None]:
         """从文件名解析编号和版本。
@@ -223,24 +252,27 @@ class PartDedupPage(BasePage):
             scan_path = repo_root
 
         self._log_line(f"扫描目录：{scan_path}")
-        self._log_line(f"扩展名：{ext}")
-        self._log_line("")
+        self._log_line(f"扩展名：{ext}（大小写无关匹配）")
 
-        # Windows 文件系统不区分大小写，避免重复搜索
-        files_lower = list(scan_path.rglob(f"*{ext.lower()}"))
-        files_upper = list(scan_path.rglob(f"*{ext.upper()}"))
+        # 后缀按 Unicode casefold 比较：覆盖 .FcStd / .FCSTD 等，避免仅用 rglob "*.fcstd"
+        # "*.FCSTD" 在区分大小写的卷（常见 macOS/APFS）上找不到混合大小写扩展名。
+        raw_ext = (ext or "").strip()
+        if not raw_ext.startswith("."):
+            raw_ext = "." + raw_ext.lstrip(".")
+        ext_cf = raw_ext.casefold()
+        files: list[Path] = []
+        try:
+            for fp in scan_path.rglob("*"):
+                try:
+                    if fp.is_file() and fp.suffix.casefold() == ext_cf:
+                        files.append(fp)
+                except OSError:
+                    continue
+        except OSError as e:
+            self._log_line(f"扫描失败：{e}")
+            return
         
-        # 合并并去重（使用 resolve() 后的路径作为 key）
-        seen: set[Path] = set()
-        all_files: list[Path] = []
-        for fp in files_lower + files_upper:
-            resolved = fp.resolve()
-            if resolved not in seen:
-                seen.add(resolved)
-                all_files.append(fp)
-        
-        files = all_files
-        
+        files = sorted(files, key=lambda p: str(p.resolve()))
         if not files:
             self._log_line(f"未找到 {ext} 文件")
             return
@@ -258,9 +290,10 @@ class PartDedupPage(BasePage):
             if self._check_code.get():
                 code, ver = self._parse_filename(fp.name)
                 if code:
-                    key = f"{code}"
-                    code_groups[key].append(fp)
-                    
+                    # 能解析出版本号的文件只做「编号+版本」维度查重，不计入裸「编号重复」
+                    if not ver:
+                        code_groups[f"{code}"].append(fp)
+
                     if ver and self._check_version.get():
                         ver_key = f"{code}_{ver}"
                         ver_groups[ver_key].append(fp)

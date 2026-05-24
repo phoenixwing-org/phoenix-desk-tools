@@ -9,6 +9,7 @@ from tkinter import messagebox
 
 from fcdesk.config.user_prefs import (
     WORKSPACE_DOTFILE_NAME,
+    format_absolute_config_path,
     get_recent_workspaces,
     save_launcher_freecad_dir,
     set_active_workspace,
@@ -16,6 +17,23 @@ from fcdesk.config.user_prefs import (
 from fcdesk.pages.base import BasePage
 from fcdesk.shell.native_dialog import pick_workspace_directory
 from fcdesk.shell.state import AppState
+
+
+# 「最近打开」列表：必须为明亮/暗夜分别指定字色与底色，否则会出现在浅底上使用浅色字而不可读。
+_RECENT_SCROLL_LABEL = dict(
+    label_fg_color=("#cdd5e2", "#2d2f36"),
+    label_text_color=("#111827", "#f8fafc"),
+)
+_RECENT_BTN_CURRENT = dict(
+    fg_color=("#1668c4", "#2b61c9"),
+    hover_color=("#1558a8", "#1f4faa"),
+    text_color=("#ffffff", "#ffffff"),
+)
+_RECENT_BTN_OTHER = dict(
+    fg_color=("#dae4f2", "#3f3f43"),
+    hover_color=("#c7d6ec", "#4f535a"),
+    text_color=("#0f172a", "#f1f5f9"),
+)
 
 
 class HomePage(BasePage):
@@ -55,6 +73,7 @@ class HomePage(BasePage):
             justify="left",
             wraplength=560,
             font=ctk.CTkFont(size=13, weight="bold"),
+            text_color=("#111827", "#f1f5f9"),
         )
         self._current_repo_label.grid(row=r, column=1, columnspan=3, sticky="ew", pady=(0, 8))
         r += 1
@@ -110,6 +129,7 @@ class HomePage(BasePage):
             recent_col,
             height=120,
             label_text="点击路径可切换（将询问确认）",
+            **_RECENT_SCROLL_LABEL,
         )
         self._recent_list.grid(row=0, column=0, sticky="ew")
         self._recent_list.grid_columnconfigure(0, weight=1)
@@ -135,7 +155,8 @@ class HomePage(BasePage):
             outer,
             text=(
                 f"各功能页路径与选项写入当前工作空间根下的 {WORKSPACE_DOTFILE_NAME}；"
-                "最近打开的工作空间列表保存在 fcdesk/config/workspace.custom.json。"
+                "最近打开的工作空间列表保存在 fcdesk/config/workspace.custom.json。\n"
+                "本页工作空间根与 FreeCAD 目录始终显示为绝对路径；其他功能页的目录在项目树内时以相对路径显示与保存。"
             ),
             anchor="w",
             justify="left",
@@ -162,7 +183,7 @@ class HomePage(BasePage):
                 self._recent_list,
                 text="（尚无记录，浏览或保存工作空间根后会出现在此）",
                 anchor="w",
-                text_color=("gray40", "gray60"),
+                text_color=("#334155", "#cbd5e1"),
             ).grid(row=0, column=0, sticky="ew", pady=4)
             return
 
@@ -170,13 +191,13 @@ class HomePage(BasePage):
             resolved = p.resolve()
             is_current = resolved == current
             prefix = "● 当前 · " if is_current else ""
+            palette = _RECENT_BTN_CURRENT if is_current else _RECENT_BTN_OTHER
             btn = ctk.CTkButton(
                 self._recent_list,
                 text=f"{prefix}{resolved}",
                 anchor="w",
                 height=32,
-                fg_color=("gray78", "gray28") if is_current else ("gray88", "gray22"),
-                hover_color=("gray70", "gray32"),
+                **palette,
                 command=lambda path=resolved: self._ask_switch_workspace(path),
             )
             btn.grid(row=i, column=0, sticky="ew", pady=2)
@@ -221,21 +242,22 @@ class HomePage(BasePage):
 
     def _sync_fields_from_state(self) -> None:
         self._repo_entry.delete(0, "end")
-        self._repo_entry.insert(0, str(self.state.repo_root))
+        self._repo_entry.insert(0, format_absolute_config_path(self.state.repo_root))
         self._fc_entry.delete(0, "end")
         if self.state.freecad_dir:
-            self._fc_entry.insert(0, str(self.state.freecad_dir))
-        self._current_repo_label.configure(text=str(self.state.repo_root.expanduser().resolve()))
+            self._fc_entry.insert(0, format_absolute_config_path(self.state.freecad_dir))
+        self._current_repo_label.configure(text=format_absolute_config_path(self.state.repo_root))
 
     def _browse_repo(self) -> None:
         path = pick_workspace_directory(
             self,
             title="选择工作空间根目录",
             repo_root=self.state.repo_root,
+            path_hint=self._repo_entry.get(),
         )
         if not path:
             return
-        rp = Path(path).resolve()
+        rp = Path(path).expanduser().resolve(strict=False)
         set_active_workspace(rp, self.state)
         self._sync_fields_from_state()
         self._refresh_recent_list()
@@ -246,13 +268,14 @@ class HomePage(BasePage):
             self,
             title="选择 FreeCAD 目录",
             repo_root=self.state.repo_root,
+            path_hint=self._fc_entry.get(),
         )
         if not path:
             return
-        p = Path(path).resolve()
+        p = Path(path).expanduser().resolve(strict=False)
         self.state.freecad_dir = p
         self._fc_entry.delete(0, "end")
-        self._fc_entry.insert(0, str(p))
+        self._fc_entry.insert(0, format_absolute_config_path(p))
         save_launcher_freecad_dir(p)
         self._refresh_window_title()
 

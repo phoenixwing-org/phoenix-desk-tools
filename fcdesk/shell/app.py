@@ -14,10 +14,14 @@ from fcdesk.config.loader import load_app_config
 from fcdesk.config.user_prefs import (
     WORKSPACE_DOTFILE_NAME,
     apply_launcher_prefs_to_state,
+    format_absolute_config_path,
+    load_launcher_prefs,
     migrate_legacy_workspace_prefs,
     save_launcher_freecad_dir,
+    save_launcher_window_geometry,
     set_active_workspace,
 )
+from fcdesk.shell.window_geometry import clamp_window_geometry_for_screen
 from fcdesk.shell.native_dialog import pick_workspace_directory
 from fcdesk.pages import (
     FcstdMapPage,
@@ -76,11 +80,29 @@ class AppShell(ctk.CTk):
 
         self.grid_columnconfigure(1, weight=1)
 
-        self.geometry(app_cfg.get("geometry", "1280x760"))
-        self.minsize(
-            app_cfg.get("min_width", 960),
-            app_cfg.get("min_height", 560),
+        min_width = int(app_cfg.get("min_width", 960))
+        min_height = int(app_cfg.get("min_height", 560))
+        self.minsize(min_width, min_height)
+
+        fallback_geo = str(app_cfg.get("geometry", "1280x760"))
+        wg_save = load_launcher_prefs().get("window_geometry")
+        candidate_geo = wg_save if isinstance(wg_save, str) and wg_save.strip() else fallback_geo
+
+        self.update_idletasks()
+        sw = int(self.winfo_screenwidth())
+        sh = int(self.winfo_screenheight())
+        self.geometry(
+            clamp_window_geometry_for_screen(
+                candidate_geo,
+                screen_w=sw,
+                screen_h=sh,
+                min_w=min_width,
+                min_h=min_height,
+                fallback=fallback_geo,
+            )
         )
+
+        self.protocol("WM_DELETE_WINDOW", self._quit_with_saved_geometry)
 
         self._nav = NavSidebar(
             self,
@@ -99,7 +121,7 @@ class AppShell(ctk.CTk):
         status_row = content_row + 1
         self.status_bar = ctk.CTkLabel(
             self,
-            text=f"工作空间: {self.app_state.repo_root}",
+            text=f"工作空间: {format_absolute_config_path(self.app_state.repo_root)}",
             anchor="w",
             height=24,
             font=ctk.CTkFont(size=12),
@@ -111,6 +133,14 @@ class AppShell(ctk.CTk):
         first_page = nav_items[0]["page"] if nav_items else "home"
         self.after_idle(lambda p=first_page: self._nav.select(p))
 
+    def _quit_with_saved_geometry(self) -> None:
+        try:
+            if self.wm_state() == "normal":
+                save_launcher_window_geometry(self.winfo_geometry())
+        except tk.TclError:
+            pass
+        self.destroy()
+
     def _toolbar_actions(self) -> dict:
         return {
             "pick_repo": self._pick_repo,
@@ -120,7 +150,9 @@ class AppShell(ctk.CTk):
         }
 
     def _refresh_window_title(self) -> None:
-        self.title(f"{self._app_title_base} - 【{self.app_state.repo_root}】")
+        self.title(
+            f"{self._app_title_base} - 【{format_absolute_config_path(self.app_state.repo_root)}】"
+        )
 
     def _register_pages(self, nav_items: list[dict[str, Any]]) -> None:
         descriptions = {item["page"]: item.get("description", "") for item in nav_items}
@@ -160,31 +192,41 @@ class AppShell(ctk.CTk):
 
     def _show_page(self, page_id: str) -> None:
         self._stack.show(page_id)
-        self.status_bar.configure(text=f"当前: {page_id}  |  工作空间: {self.app_state.repo_root}")
+        self.status_bar.configure(
+            text=(
+                f"当前: {page_id}  |  工作空间: "
+                f"{format_absolute_config_path(self.app_state.repo_root)}"
+            )
+        )
 
     def _pick_repo(self) -> None:
         path = pick_workspace_directory(
             self,
             title="选择工作空间根目录",
             repo_root=self.app_state.repo_root,
+            path_hint=format_absolute_config_path(self.app_state.repo_root),
         )
         if path:
-            rp = Path(path).resolve()
+            rp = Path(path).expanduser().resolve(strict=False)
             set_active_workspace(rp, self.app_state)
-            self.status_bar.configure(text=f"工作空间: {self.app_state.repo_root}")
+            self.status_bar.configure(
+                text=f"工作空间: {format_absolute_config_path(self.app_state.repo_root)}"
+            )
             self._refresh_window_title()
 
     def _pick_freecad_dir(self) -> None:
+        fc = self.app_state.freecad_dir
         path = pick_workspace_directory(
             self,
             title="选择 FreeCAD 目录",
             repo_root=self.app_state.repo_root,
+            path_hint=format_absolute_config_path(fc) if fc else "",
         )
         if path:
-            p = Path(path).resolve()
+            p = Path(path).expanduser().resolve(strict=False)
             self.app_state.freecad_dir = p
             save_launcher_freecad_dir(p)
-            self.status_bar.configure(text=f"FreeCAD 目录: {path}")
+            self.status_bar.configure(text=f"FreeCAD 目录: {format_absolute_config_path(p)}")
             self._refresh_window_title()
 
     def _reload_config(self) -> None:

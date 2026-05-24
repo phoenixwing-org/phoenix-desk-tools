@@ -7,7 +7,15 @@ from pathlib import Path
 
 import customtkinter as ctk
 
-from fcdesk.config.user_prefs import load_workspace_prefs, merge_workspace_section
+from fcdesk.config.user_prefs import (
+    format_resolved_under_workspace,
+    format_stored_path_for_display,
+    load_workspace_prefs,
+    merge_workspace_section,
+    resolve_workspace_path_entry,
+    shorten_workspace_relative_display,
+    store_path_under_repo,
+)
 from fcdesk.pages.base import BasePage
 from fcdesk.shell.native_dialog import pick_workspace_directory
 from fcdesk.shell.state import AppState
@@ -52,16 +60,26 @@ class FcstdMapPage(BasePage):
 
     def on_show(self) -> None:
         pref = load_workspace_prefs(self.state.repo_root).get("fcstd_map") or {}
-        sr = pref.get("scan_root") or ""
-        root_path = Path(sr).expanduser() if sr else self.state.repo_root
-        if not root_path.is_dir():
-            root_path = self.state.repo_root
+        rr = self.state.repo_root
+        disp = shorten_workspace_relative_display(
+            format_stored_path_for_display(pref.get("scan_root"), rr) or ""
+        )
+
         self._scan_root_entry.delete(0, "end")
-        self._scan_root_entry.insert(0, str(root_path))
+        self._scan_root_entry.insert(0, disp)
 
     def _persist(self) -> None:
+        rr = self.state.repo_root.expanduser().resolve(strict=False)
         s = self._scan_root_entry.get().strip()
-        merge_workspace_section("fcstd_map", {"scan_root": s or None}, self.state.repo_root)
+        if not s:
+            stored = None
+        else:
+            p = resolve_workspace_path_entry(s, rr)
+            if p.resolve(strict=False) == rr.resolve(strict=False):
+                stored = None
+            else:
+                stored = store_path_under_repo(p, rr)
+        merge_workspace_section("fcstd_map", {"scan_root": stored}, self.state.repo_root)
 
     def _browse(self) -> None:
         path = pick_workspace_directory(
@@ -71,12 +89,20 @@ class FcstdMapPage(BasePage):
             path_hint=self._scan_root_entry.get(),
         )
         if path:
+            rr = self.state.repo_root.expanduser().resolve(strict=False)
             self._scan_root_entry.delete(0, "end")
-            self._scan_root_entry.insert(0, path)
+            self._scan_root_entry.insert(
+                0,
+                shorten_workspace_relative_display(
+                    format_resolved_under_workspace(Path(path).expanduser(), rr),
+                ),
+            )
             self._persist()
 
     def _run(self) -> None:
-        scan = Path(self._scan_root_entry.get().strip())
+        rr = self.state.repo_root.expanduser().resolve(strict=False)
+        s = self._scan_root_entry.get().strip()
+        scan = resolve_workspace_path_entry(s, rr)
         if not scan.is_dir():
             self._log.delete("1.0", "end")
             self._log.insert("end", f"错误：扫描根不存在 {scan}\n")

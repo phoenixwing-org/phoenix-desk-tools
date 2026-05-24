@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import posixpath
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -36,7 +37,7 @@ _WORKSPACE_DEFAULT: dict[str, Any] = {
         "recursive_scan": False,
     },
     "part_dedup": {
-        "extension": ".sldprt",
+        "extension": ".SLDPRT",
         "code_len": 6,
         "ver_len": 3,
         "check_code": True,
@@ -50,6 +51,7 @@ _LAUNCHER_DEFAULT: dict[str, Any] = {
     "version": 2,
     "recent_workspaces": [],
     "freecad_dir": None,
+    "window_geometry": None,
 }
 
 
@@ -65,9 +67,109 @@ def store_path_under_repo(path: Path, repo_root: Path) -> str:
     p = path.expanduser().resolve()
     rr = repo_root.expanduser().resolve()
     try:
-        return p.relative_to(rr).as_posix()
+        return _canonical_repo_relative_posix(p.relative_to(rr).as_posix())
     except ValueError:
         return str(p)
+
+
+def _canonical_repo_relative_posix(rel_posix: str) -> str:
+    """将 relative_to(workspace) 的结果规范为稳定的 posix（去掉 `./`、`foo/../bar`）。"""
+    raw = rel_posix.replace("\\", "/").strip()
+    if not raw or raw == ".":
+        return "."
+    n = posixpath.normpath(raw)
+    if not n or n == ".":
+        return "."
+    if n.startswith("../"):
+        # 不应出现在在工作空间树根下的路径；退回未规范串以免误裁剪
+        return raw
+    return n
+
+
+def format_relative_workspace_for_ui(canonical_under_repo: str) -> str:
+    """界面展示用：明示「相对工作空间根」的路径前加 `./`（存盘仍为 canonical 无前缀）。"""
+    if not (canonical_under_repo or "").strip():
+        return ""
+    s = canonical_under_repo.replace("\\", "/").strip()
+    if s == ".":
+        return "."
+    if s.startswith("../"):
+        return s
+    if s.startswith("./"):
+        n = posixpath.normpath(s)
+        if not n or n == ".":
+            return "."
+        if n.startswith("../"):
+            return n
+        return "./" + n
+    return "./" + s
+
+
+def format_resolved_under_workspace(abs_path: Path, repo_root: Path) -> str:
+    """用于界面展示：落在工作空间内则 `./` + 相对 posix（已 canonical），否则绝对路径。"""
+    p = abs_path.expanduser().resolve(strict=False)
+    rr = repo_root.expanduser().resolve(strict=False)
+    try:
+        raw_rel = p.relative_to(rr).as_posix()
+        canon = _canonical_repo_relative_posix(raw_rel)
+        return format_relative_workspace_for_ui(canon)
+    except ValueError:
+        return str(p.expanduser())
+
+
+def format_stored_path_for_display(stored: str | None, repo_root: Path) -> str | None:
+    """从配置文件读到的路径字段 → 输入框显示的字符串（与工作空间内存相对、外部存绝对的习惯一致）。"""
+    resolved = resolve_pref_path(stored, repo_root)
+    if resolved is None:
+        return None
+    return format_resolved_under_workspace(resolved, repo_root)
+
+
+def shorten_workspace_relative_display(text: str) -> str:
+    """工作空间根 canonical 相对路径为 '.' 时改为留空显示（占位提示「留空=根」）。
+
+    STEP 等对「必须填路径」页仍可直接显示 '.'，勿调用此函数。
+    """
+    s = (text or "").strip()
+    return "" if s == "." else s
+
+
+def format_absolute_config_path(path: Path | str | None) -> str:
+    """配置页、启动器等：路径展示一律为规范化绝对路径（不参与工作空间相对缩略）。"""
+    if path is None:
+        return ""
+    s = str(path).strip()
+    if not s:
+        return ""
+    return str(Path(s).expanduser().resolve(strict=False))
+
+
+def resolve_workspace_path_entry(text: str, repo_root: Path) -> Path:
+    """解析输入框相对于工作空间的目录：空白或 '.' → 工作空间根。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    raw = (text or "").strip()
+    if not raw or raw == ".":
+        return rr
+    q = Path(raw).expanduser()
+    if q.is_absolute():
+        return q.resolve(strict=False)
+    rel = posixpath.normpath(raw.replace("\\", "/"))
+    return (rr / rel).resolve(strict=False)
+
+
+def normalize_workspace_subpath(rel: str) -> str:
+    """「工程路径」等与工作空间根拼接的片断：统一到无前导 './' / 斜杠 的 posix 式样。"""
+    t = (rel or "").strip().replace("\\", "/")
+    if not t:
+        return ""
+    n = posixpath.normpath(t)
+    if n in (".", "/"):
+        return ""
+    if n.startswith("../"):
+        return n.lstrip("/")
+    while n.startswith("./"):
+        n = n[2:]
+    return n.lstrip("/")
 
 
 def resolve_pref_path(stored: str | None, repo_root: Path) -> Path | None:
@@ -75,8 +177,8 @@ def resolve_pref_path(stored: str | None, repo_root: Path) -> Path | None:
         return None
     s = str(stored).strip()
     if Path(s).is_absolute():
-        return Path(s).expanduser().resolve()
-    return (repo_root.expanduser().resolve() / Path(s)).resolve()
+        return Path(s).expanduser().resolve(strict=False)
+    return (repo_root.expanduser().resolve(strict=False) / Path(s)).resolve(strict=False)
 
 
 def _read_json(path: Path) -> dict[str, Any] | None:
@@ -113,7 +215,17 @@ def load_launcher_prefs() -> dict[str, Any]:
     toolbar = raw.get("toolbar")
     if isinstance(toolbar, dict) and toolbar.get("freecad_dir") and not data.get("freecad_dir"):
         data["freecad_dir"] = str(toolbar["freecad_dir"])
+    wg = raw.get("window_geometry")
+    if isinstance(wg, str) and wg.strip():
+        data["window_geometry"] = wg.strip()
     return data
+
+
+def save_launcher_window_geometry(geom: str) -> None:
+    """主窗口 WxH+X+Y，写入 launcher JSON（仅存尺寸位置，与各工作空间无关）。"""
+    launcher = load_launcher_prefs()
+    launcher["window_geometry"] = geom.strip()
+    save_launcher_prefs(launcher)
 
 
 def save_launcher_prefs(data: dict[str, Any]) -> None:
