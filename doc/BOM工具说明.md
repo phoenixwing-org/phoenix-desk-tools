@@ -17,9 +17,9 @@ API 参阅：[Python scripting tutorial](https://wiki.freecad.org/Python_scripti
 
 | 路线 | 说明 |
 | --- | --- |
-| **fcdesk「属性回写」** | ZIP 侧车 **`FcdeskBomAttrs.xml`**，字段与 **`FcstdMapEntry`** / `fcstd_map.json` 对齐；不写 `Document.xml`。约定见 **[Fcdesk嵌入式BOM属性约定.md](Fcdesk嵌入式BOM属性约定.md)**。 |
-| **FreeCAD 内向 Body/Part 写 Property** | 改的是文档内对象属性；与侧车 **互不替代**，要对齐需在宏里自行读 XML。 |
+| **fcdesk「属性回写」** | 直接写 **`Document.xml`** 首个 **`PartDesign::Body`** 的 Property（如 `PartNumber`，与 **`TempKevin`** 同类）；表单键与 **`FcstdMapEntry`** / `fcstd_map.json` 对齐。**旧侧车** `FcdeskBomAttrs.xml` **保存时被移除**。详见 **[Fcdesk嵌入式BOM属性约定.md](Fcdesk嵌入式BOM属性约定.md)**。 |
+| **仅在 FreeCAD 内改 Property** | 与 fcdesk 写的是 **同一处**文档数据；fcdesk **不替代** CAD 建模，但若字段名一致会互相覆盖。 |
 
-**属性面板里的「拆分单词」**：FreeCAD 按大写字母前插空格做展示。**若希望显示成整齐的「Part Number」这类词组，内部名应使用以大写字母开头的大驼峰（PascalCase），例如 `PartNumber`。** 小驼峰 **`partNumber`** 往往会变成 **`part`** + **`Number`** 两段，观感不如 PascalCase。**fcdesk 侧车、`fcstd_map.json` 条目里零件号为键名 `PartNumber`**（与大驼峰 Property 同源）；路径类仍为 `repo_rel_path` / `filename`。
+**属性面板里的「拆分单词」**：FreeCAD 按大写字母前插空格做展示。**若希望显示成整齐的「Part Number」这类词组，内部名应使用以大写字母开头的大驼峰（PascalCase），例如 `PartNumber`。** 小驼峰 **`partNumber`** 往往会变成 **`part`** + **`Number`** 两段，观感不如 PascalCase。**`fcstd_map.json`、属性回写字段零件号为键名 `PartNumber`**（与大驼峰 Property 同源）；路径类仍为 `repo_rel_path` / `filename`。
 
 导航 **「BOM 提取」** 为占位页（`bom_export`），尚未接入具体逻辑。

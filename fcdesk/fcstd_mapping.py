@@ -3,7 +3,7 @@
 供桌面「链接路径修正」、`fcstd_map.py`、以及将来的 BOM / 查重等复用。
 JSON 分为两种形态：
 
-- **结构化（默认）**：``schema_version`` + ``entries``，每条含零件号、**型号（如 ``ABC``）**、版本、类型 / label 等可扩展字段。
+- **结构化（默认）**：``schema_version`` + ``entries``，每条含零件号、**型号（如 ``ABC``）**、版本、类型、零件名称 (`PartName`) / label 等可扩展字段。
 - **遗留扁平**：``{ "某.FCStd": ["repo/relative/path.FCStd", ...], ... }``（仍可读）。
 
 路径字符串解释为相对调用方传入的「锚点目录」：桌面 Shell 下与 **工作空间根** 一致（`fcstd_map.json` 写入该目录；`fcstd_map --relative-to` 与 **`fix_fcstd_xlink_paths --map-anchor`** 均指向该根）。
@@ -33,6 +33,25 @@ def normalize_repo_rel_path_for_map(rel: str) -> str:
     return f"./{s}"
 
 
+def compose_fcstd_body_label_display(
+    *,
+    part_number: str,
+    part_version: str,
+    part_name: str,
+    label_fallback: str,
+) -> str | None:
+    """``PartNumber``.``PartVersion``-名称；名称为空时用 ``label_fallback``。
+
+    零件号与版本均非空时才生成字符串，否则 ``None``。
+    """
+    pn = (part_number or "").strip()
+    pv = (part_version or "").strip()
+    pname = (part_name or "").strip() or (label_fallback or "").strip()
+    if not pn or not pv:
+        return None
+    return f"{pn}.{pv}-{pname}"
+
+
 _INFIX_TYPE = re.compile(r"[-._]([HSR])[-._]", re.IGNORECASE)
 
 # 型号：文件名中的 「数字+TB」（如 ABC），或路径段 SampleABC…
@@ -53,6 +72,9 @@ class FcstdMapEntry:
 
     ModelSeries: str | None = None
     """产品/平台型号片段，如 ``ABC``；无法从路径或文件名识别时省略（JSON 不出现该键）"""
+
+    PartName: str | None = None
+    """可读零件名称（如与 Body ``Label`` 分离存储）；fcdesk / ``Document.xml`` 可与 Label 对齐。"""
 
     label: str | None = None
     """可读标签或外部系统引用；暂无解析时为空。"""
@@ -101,6 +123,7 @@ class FcstdMapEntry:
             PartVersion=hints.get("PartVersion"),
             TypeCode=_opt_str_upper(hints.get("TypeCode")),
             ModelSeries=_opt_str_upper(hints.get("ModelSeries")),
+            PartName=_opt_str(hints.get("PartName")),
             label=_opt_str(hints.get("label")),
         )
 
@@ -154,6 +177,7 @@ class FcstdMapDocument:
                     PartVersion=_opt_str(row.get("PartVersion")),
                     TypeCode=_opt_str_upper(row.get("TypeCode")),
                     ModelSeries=_opt_str_upper(row.get("ModelSeries")),
+                    PartName=_opt_str(row.get("PartName")),
                     label=_opt_str(row.get("label")),
                     extra=dict(ex),
                 )
@@ -301,6 +325,7 @@ def legacy_flat_dict_to_document(
                     PartVersion=hints.get("PartVersion"),
                     TypeCode=hints.get("TypeCode"),
                     ModelSeries=hints.get("ModelSeries"),
+                    PartName=hints.get("PartName"),
                     label=hints.get("label"),
                 )
             )

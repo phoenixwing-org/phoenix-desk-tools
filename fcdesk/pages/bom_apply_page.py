@@ -1,6 +1,8 @@
-"""属性回写：侧栏选中文件后可编辑 BOM 字段，并写入 FCStd ZIP 内 ``FcdeskBomAttrs.xml``。
+"""属性回写：侧栏选中文件后可编辑 BOM 字段，并写入 FCStd ZIP 内 ``Document.xml``
+（首个 ``PartDesign::Body`` 的 Property，可在 FreeCAD 属性面板中看到）。
 
-``PartNumber`` / ``PartVersion`` / ``TypeCode`` 等与序列化、`fcstd_map.json` / ``FcdeskBomAttrs.xml`` 键名一致；其余路径类字段仍为 snake_case。约定见 ``doc/Fcdesk嵌入式BOM属性约定.md``。
+``PartNumber`` / ``PartVersion`` / ``TypeCode`` / ``ModelSeries`` / ``PartName`` / ``label``（Body ``Label``）等与
+``FcstdMapEntry`` / ``fcstd_map.json`` 键名一致；其余路径类字段仍为 snake_case。约定见 ``doc/Fcdesk嵌入式BOM属性约定.md``。
 """
 
 from __future__ import annotations
@@ -18,7 +20,11 @@ from fcdesk.fcstd_embedded_attrs import (
     read_embedded_bom_attrs,
     write_embedded_bom_attrs,
 )
-from fcdesk.fcstd_mapping import FcstdMapEntry, try_load_fcstd_entry_from_workspace_map
+from fcdesk.fcstd_mapping import (
+    FcstdMapEntry,
+    compose_fcstd_body_label_display,
+    try_load_fcstd_entry_from_workspace_map,
+)
 from fcdesk.pages.base import BasePage
 from fcdesk.pages import form_widgets as fw
 from fcdesk.shell.state import AppState
@@ -31,6 +37,7 @@ _ATTR_ROWS: tuple[tuple[str, str, str, bool], ...] = (
     ("PartVersion", "版本", "PartVersion", True),
     ("TypeCode", "类型码 (H/S/R)", "TypeCode", True),
     ("ModelSeries", "型号系列", "ModelSeries", True),
+    ("PartName", "零件名称", "PartName", True),
     ("label", "标签", "Label", True),
 )
 
@@ -95,6 +102,14 @@ class BomApplyPage(BasePage):
         )
         self._btn_save = ctk.CTkButton(btn_bar, text="保存到 ZIP", width=112, command=self._save_zip)
         self._btn_save.grid(row=0, column=1, padx=(0, 10))
+        self._btn_label_formula = ctk.CTkButton(
+            btn_bar,
+            text="Label←编号公式",
+            width=128,
+            command=self._apply_label_formula,
+            fg_color=("gray70", "gray40"),
+        )
+        self._btn_label_formula.grid(row=0, column=3, padx=(0, 10))
 
         self._status_hint = ctk.CTkLabel(
             btn_bar,
@@ -103,7 +118,7 @@ class BomApplyPage(BasePage):
             font=ctk.CTkFont(size=12),
             text_color=("gray40", "gray65"),
         )
-        self._status_hint.grid(row=0, column=2, padx=(8, 0), sticky="w")
+        self._status_hint.grid(row=0, column=4, padx=(8, 0), sticky="w")
 
         self._abs_path_label = ctk.CTkLabel(
             wrap,
@@ -166,11 +181,15 @@ class BomApplyPage(BasePage):
             root_scroll,
             (
                 "表格第二列为 PartNumber / PartVersion …（大驼峰），与 FreeCAD 属性面板可读名一致；"
-                "`fcstd_map.json` 与 ``FcdeskBomAttrs.xml`` 中可写字段键名为 ``PartNumber``、``PartVersion``、``TypeCode`` 等（与大驼峰列一致；``label`` 为小写）。\n"
-                "在右侧栏选中 ``.FCStd`` 后可编辑 PartNumber / PartVersion / TypeCode / ModelSeries / Label。\n"
+                "``fcstd_map.json`` 中可写字段键名为 ``PartNumber``、``PartVersion``、``TypeCode``、``PartName`` 等"
+                "（见大驼峰列；``label`` 对应 Body 的 ``Label``）。若 ``PartName`` 为空保存时会按当前 ``Label`` 写入 Document。\n"
+                "载入时若文档无 ``PartName``，界面用 ``Label`` 预填。**Label←编号公式**：``PartNumber.PartVersion-{PartName}``（名为空则用标签）。\n"
+                "在右侧栏选中 ``.FCStd`` 后可编辑零件号…型号系列 · 零件名称 · 标签。\n"
                 "各字段值可为文本框；「仓库相对路径」「文件名」为只读。\n"
                 "可复制：拖选后用快捷键，或在框内右键点「复制」；若无选区则复制整框内容。\n"
-                "保存将把属性写入 ZIP 内的 ``FcdeskBomAttrs.xml``（不修改 Document.xml）。"
+                "保存将把属性写入 ``Document.xml`` 内首个 PartDesign Body 的 Property。"
+                "``PartNumber`` 等与手动「添加属性」一致：**组**默认为 **「CustomDefine」**（常量 ``FCDESK_EMBEDDED_BOM_PROPERTY_GROUP``），**工具提示**写入 ``Property/@doc``。 "
+                "若包内仍存在旧版 ``FcdeskBomAttrs.xml``，保存时会移除该文件并完成迁移。\n"
                 "若 FreeCAD 正打开该文件，保存常因占用失败——请先关闭 FreeCAD 或其它占用程序。\n"
                 "切换到树中另一个文件而未保存将丢弃当前未保存改动。"
             ),
@@ -274,6 +293,7 @@ class BomApplyPage(BasePage):
             "PartVersion": str(e.PartVersion or ""),
             "TypeCode": str(e.TypeCode or ""),
             "ModelSeries": str(e.ModelSeries or ""),
+            "PartName": str(e.PartName or ""),
             "label": str(e.label or ""),
         }
 
@@ -296,10 +316,10 @@ class BomApplyPage(BasePage):
         mapped = try_load_fcstd_entry_from_workspace_map(repo_root=rr, rel_workspace=rel)
         if mapped is not None:
             entry = mapped
-            note = "数据来源：fcstd_map.json · 嵌入式 XML 可对以下可编辑字段覆盖"
+            note = "数据来源：fcstd_map.json · Document.xml（Body Property）可对以下可编辑字段覆盖"
         else:
             entry = FcstdMapEntry.preview_from_workspace_relative(rel)
-            note = "数据来源：文件名 / 仓库相对路径推断 · 嵌入式 XML（若存在）可覆盖下方可写字段"
+            note = "数据来源：文件名 / 仓库相对路径推断 · Document.xml Body 字段（若有）可覆盖下方可写字段"
 
         full = rr / rel
         disp = format_resolved_under_workspace(full, rr)
@@ -312,10 +332,13 @@ class BomApplyPage(BasePage):
             try:
                 embedded = read_embedded_bom_attrs(full)
                 if embedded:
-                    note += "\n检测到 FcdeskBomAttrs.xml，可编辑字段以其中内容为准。"
+                    note += "\n已读取 Document.xml / 遗留侧车内的可写字段。"
             except FcdeskFcstdEmbeddedError as ex:
                 self._set_status(f"嵌入式属性读取警告：{ex}", ok=False)
         merged = self._merge_embedded_over(plain, embedded)
+        lb_vis = merged.get("label", "").strip()
+        if not merged.get("PartName", "").strip():
+            merged["PartName"] = lb_vis
 
         self._source_hint.configure(text=note)
         self._abs_path_label.configure(
@@ -341,6 +364,7 @@ class BomApplyPage(BasePage):
     def _set_btn_enabled_for_selection(self, full: Path) -> None:
         can = full.is_file() and full.suffix.casefold() == ".fcstd"
         self._btn_save.configure(state="normal" if can else "disabled")
+        self._btn_label_formula.configure(state="normal" if can else "disabled")
 
     def _configure_entry_widgets_editable(self, full: Path) -> None:
         can = full.is_file() and full.suffix.casefold() == ".fcstd"
@@ -374,6 +398,7 @@ class BomApplyPage(BasePage):
                 w.insert(0, "—")
                 w.configure(state="readonly")
         self._btn_save.configure(state="disabled")
+        self._btn_label_formula.configure(state="disabled")
         self._set_status("", ok=None)
 
     def _reload_disk(self) -> None:
@@ -382,6 +407,33 @@ class BomApplyPage(BasePage):
             return
         self.on_workspace_tree_select(self._current_rel, from_sidebar=False)
         self._set_status("已从磁盘重新读取", ok=True)
+
+    def _apply_label_formula(self) -> None:
+        if self._current_rel is None:
+            messagebox.showinfo("编号公式", "请先在右侧栏选择一个文件。", parent=self)
+            return
+        pn = self._value_widgets["PartNumber"].get()
+        pv = self._value_widgets["PartVersion"].get()
+        pnm = self._value_widgets["PartName"].get()
+        lb = self._value_widgets["label"].get()
+        built = compose_fcstd_body_label_display(
+            part_number=pn,
+            part_version=pv,
+            part_name=pnm,
+            label_fallback=lb,
+        )
+        if built is None:
+            messagebox.showwarning(
+                "编号公式",
+                "需要非空的零件号与版本，才能拼接为 Label。\n格式：PartNumber.PartVersion-PartName\n"
+                "（PartName 若为空则用当前 Label 填入连字符后那一段。）",
+                parent=self,
+            )
+            return
+        self._widget_set_value("label", built)
+        self._touch_field("label")
+        self._refresh_dirty_marks()
+        self._set_status(f"Label 已填为「{built}」（未写入 ZIP）", ok=True)
 
     def _save_zip(self) -> None:
         if self._current_rel is None or self._preview_entry is None:
@@ -398,6 +450,10 @@ class BomApplyPage(BasePage):
             return
 
         vals = self._collect_editable()
+        pn_name_coerce = vals.get("PartName", "").strip()
+        lbl_coerce = vals.get("label", "").strip()
+        if not pn_name_coerce and lbl_coerce:
+            vals["PartName"] = lbl_coerce
         try:
             write_embedded_bom_attrs(full, vals)
         except PermissionError as e:
@@ -420,10 +476,10 @@ class BomApplyPage(BasePage):
 
         self._baseline = {k: vals.get(k, "") for k in _EDIT_KEYS}
         self._refresh_dirty_marks()
-        self._set_status("已写入 FcdeskBomAttrs.xml（ZIP 原子替换）", ok=True)
+        self._set_status("已写入 Document.xml（ZIP 原子替换）", ok=True)
         messagebox.showinfo(
             "已保存",
-            "属性已写入该 FCStd ZIP 内的 FcdeskBomAttrs.xml。\n"
+            "属性已写入该 FCStd 包内 Document.xml（PartDesign Body 的 Property）。\n"
             "下次在 FreeCAD 中打开前请确保已写完并关闭其它占用。",
             parent=self,
         )

@@ -164,7 +164,7 @@ class FcstdMapPage(BasePage):
     @staticmethod
     def _fmt_meta_cell(row: dict) -> str:
         bits: list[str] = []
-        for k in ("PartNumber", "PartVersion", "TypeCode", "ModelSeries", "label"):
+        for k in ("PartNumber", "PartVersion", "TypeCode", "ModelSeries", "PartName", "label"):
             v = str(row.get(k) or "").strip()
             if v:
                 bits.append(v)
@@ -185,6 +185,7 @@ class FcstdMapPage(BasePage):
                         "PartVersion": e.PartVersion or "",
                         "TypeCode": (e.TypeCode or "").upper(),
                         "ModelSeries": e.ModelSeries or "",
+                        "PartName": e.PartName or "",
                         "label": e.label or "",
                     }
                     for e in doc.entries
@@ -206,6 +207,7 @@ class FcstdMapPage(BasePage):
                         "PartVersion": str(h.get("PartVersion") or "").strip(),
                         "TypeCode": tc,
                         "ModelSeries": str(h.get("ModelSeries") or "").strip(),
+                        "PartName": str(h.get("PartName") or "").strip(),
                         "label": str(h.get("label") or "").strip(),
                     }
                 )

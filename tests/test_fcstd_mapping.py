@@ -9,6 +9,7 @@ from pathlib import Path
 from fcdesk.fcstd_mapping import (
     FcstdMapDocument,
     FcstdMapEntry,
+    compose_fcstd_body_label_display,
     coerce_payload_to_basename_rel_paths,
     hints_from_fcstd_filename,
     hints_from_fcstd_location,
@@ -57,6 +58,36 @@ class TestHints(unittest.TestCase):
         self.assertEqual(h["TypeCode"], "R")
 
 
+class TestComposeLabelSlug(unittest.TestCase):
+    def test_with_part_name(self) -> None:
+        s = compose_fcstd_body_label_display(
+            part_number="1",
+            part_version="002",
+            part_name="本体",
+            label_fallback="X",
+        )
+        self.assertEqual(s, "1.002-本体")
+
+    def test_fallback_to_label_when_part_name_empty(self) -> None:
+        s = compose_fcstd_body_label_display(
+            part_number="9",
+            part_version="3",
+            part_name="",
+            label_fallback="灯座",
+        )
+        self.assertEqual(s, "9.3-灯座")
+
+    def test_requires_pn_and_pv(self) -> None:
+        self.assertIsNone(
+            compose_fcstd_body_label_display(
+                part_number="",
+                part_version="1",
+                part_name="A",
+                label_fallback="",
+            )
+        )
+
+
 class TestDocument(unittest.TestCase):
     def test_roundtrip_json(self) -> None:
         doc = FcstdMapDocument(
@@ -68,6 +99,7 @@ class TestDocument(unittest.TestCase):
                     PartVersion="002",
                     TypeCode="S",
                     ModelSeries="ABC",
+                    PartName="本体",
                     label=None,
                     extra={"source": "test"},
                 )
@@ -81,6 +113,7 @@ class TestDocument(unittest.TestCase):
         self.assertEqual(doc2.entries[0].PartNumber, "1")
         self.assertEqual(doc2.entries[0].PartVersion, "002")
         self.assertEqual(doc2.entries[0].ModelSeries, "ABC")
+        self.assertEqual(doc2.entries[0].PartName, "本体")
         self.assertEqual(doc2.entries[0].extra.get("source"), "test")
 
     def test_legacy_flat_upgrade(self) -> None:
