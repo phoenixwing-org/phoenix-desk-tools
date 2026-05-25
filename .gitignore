@@ -9,3 +9,5 @@ __pycache__
 phoenix_freecad_desktop.egg-info/
 # 本机工作台路径（自动生成；可复制 workspace.custom.json.example）
 workspace.custom.json
+dist/
+build/
