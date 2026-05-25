@@ -25,7 +25,13 @@ for _p in (_REPO_ROOT, _SCRIPTS_DIR):
 
 
 def _runner_stderr(msg: str) -> None:
-    sys.stderr.write(msg)
+    try:
+        sys.stderr.buffer.write(msg.encode("utf-8"))
+    except (AttributeError, TypeError):
+        try:
+            sys.stderr.write(msg)
+        except:
+            pass
     sys.stderr.flush()
 
 

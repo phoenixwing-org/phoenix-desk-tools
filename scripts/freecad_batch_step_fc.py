@@ -188,7 +188,13 @@ def run_step_batch_from_environ() -> None:
     import sys
 
     def _fcd_stderr(msg: str) -> None:
-        sys.stderr.write(msg)
+        try:
+            sys.stderr.buffer.write(msg.encode("utf-8"))
+        except (AttributeError, TypeError):
+            try:
+                sys.stderr.write(msg)
+            except:
+                pass
         if hasattr(sys.stderr, "flush"):
             sys.stderr.flush()
         try:
@@ -197,7 +203,13 @@ def run_step_batch_from_environ() -> None:
             pass
 
     def _fcd_stderr_err(msg: str) -> None:
-        sys.stderr.write(msg)
+        try:
+            sys.stderr.buffer.write(msg.encode("utf-8"))
+        except (AttributeError, TypeError):
+            try:
+                sys.stderr.write(msg)
+            except:
+                pass
         if hasattr(sys.stderr, "flush"):
             sys.stderr.flush()
         try:
