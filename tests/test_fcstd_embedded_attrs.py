@@ -54,15 +54,62 @@ MIN_DOC_TEMPLATE_WITH_REFERENCE_USER_PROP = """<?xml version='1.0' encoding='utf
 """
 
 
-def _prop_value_from_document_xml(xml_bytes: bytes, prop_local_name: str) -> str | None:
+MIN_DOC_ASSEMBLY_ONLY = """<?xml version='1.0' encoding='utf-8'?>
+<Document SchemaVersion="4" FileVersion="1">
+ <Objects Count="1">
+  <Object type="AssemblyWorkbench::Container" name="AssyRoot" id="1"/>
+ </Objects>
+ <ObjectData Count="1">
+  <Object name="AssyRoot">
+   <Properties Count="1">
+    <Property name="Label" type="App::PropertyString" status="134217728">
+     <String value="总成"/>
+    </Property>
+   </Properties>
+  </Object>
+ </ObjectData>
+</Document>
+"""
+
+
+MIN_DOC_BODY_AFTER_ASSEMBLY = """<?xml version='1.0' encoding='utf-8'?>
+<Document SchemaVersion="4" FileVersion="1">
+ <Objects Count="2">
+  <Object type="AssemblyWorkbench::Container" name="AssyRoot" id="1"/>
+  <Object type="PartDesign::Body" name="Body" id="2"/>
+ </Objects>
+ <ObjectData Count="2">
+  <Object name="AssyRoot">
+   <Properties Count="1">
+    <Property name="Label" type="App::PropertyString" status="134217728">
+     <String value="总成"/>
+    </Property>
+   </Properties>
+  </Object>
+  <Object name="Body">
+   <Properties Count="1">
+    <Property name="Label" type="App::PropertyString" status="134217728">
+     <String value="body-lbl"/>
+    </Property>
+   </Properties>
+  </Object>
+ </ObjectData>
+</Document>
+"""
+
+
+def _prop_value_for_object(xml_bytes: bytes, object_name: str, prop_local_name: str) -> str | None:
     doc_el = ET.fromstring(xml_bytes.decode("utf-8"))
     od_root = doc_el.find("ObjectData")
     assert od_root is not None
-    body = od_root.find("Object[@name='Body']")
-    if body is None:
-        body = od_root.find("Object")
-    assert body is not None
-    props = body.find("Properties")
+    target = None
+    for o in od_root.findall("Object"):
+        if o.get("name") == object_name:
+            target = o
+            break
+    if target is None:
+        target = od_root.findall("Object")[0]
+    props = target.find("Properties")
     assert props is not None
     for p in props.findall("Property"):
         if p.get("name") == prop_local_name:
@@ -72,26 +119,41 @@ def _prop_value_from_document_xml(xml_bytes: bytes, prop_local_name: str) -> str
     return None
 
 
-def _properties_count(xml_bytes: bytes) -> str | None:
+def _prop_value_from_document_xml(xml_bytes: bytes, prop_local_name: str) -> str | None:
+    return _prop_value_for_object(xml_bytes, "Body", prop_local_name)
+
+
+def _properties_count(xml_bytes: bytes, object_name: str = "Body") -> str | None:
     doc_el = ET.fromstring(xml_bytes.decode("utf-8"))
     od_root = doc_el.find("ObjectData")
     assert od_root is not None
-    body = od_root.find("Object[@name='Body']")
-    if body is None:
-        body = od_root.find("Object")
-    props = body.find("Properties")
+    target = None
+    for o in od_root.findall("Object"):
+        if o.get("name") == object_name:
+            target = o
+            break
+    assert target is not None
+    props = target.find("Properties")
     assert props is not None
     return props.get("Count")
 
 
-def _property_wrapper_attrib(xml_bytes: bytes, prop_local_name: str) -> dict[str, str]:
+def _property_wrapper_attrib(
+    xml_bytes: bytes,
+    prop_local_name: str,
+    *,
+    object_name: str = "Body",
+) -> dict[str, str]:
     doc_el = ET.fromstring(xml_bytes.decode("utf-8"))
     od_root = doc_el.find("ObjectData")
     assert od_root is not None
-    body = od_root.find("Object[@name='Body']")
-    if body is None:
-        body = od_root.find("Object")
-    props = body.find("Properties")
+    target = None
+    for o in od_root.findall("Object"):
+        if o.get("name") == object_name:
+            target = o
+            break
+    assert target is not None
+    props = target.find("Properties")
     assert props is not None
     for p in props.findall("Property"):
         if p.get("name") == prop_local_name:
@@ -233,6 +295,49 @@ class EmbeddedBomAttrsTest(unittest.TestCase):
             self.assertNotIn(EMBEDDED_BOM_XML, z.namelist())
             pn = _prop_value_from_document_xml(z.read("Document.xml"), "PartNumber")
         self.assertEqual(pn, "LEG-99")
+
+    def test_assembly_only_document_mounts_on_assembly_object(self) -> None:
+        """无 Body 时，`Object.type` 含 assembly 的根对象可作为挂载点。"""
+        td = Path(self.tmp)
+        fc = td / "assy.FCStd"
+        fc.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(fc, "w") as z:
+            z.writestr("Document.xml", MIN_DOC_ASSEMBLY_ONLY.strip().encode("utf-8"))
+        vals = {
+            "PartNumber": "A-1",
+            "PartVersion": "01",
+            "TypeCode": "H",
+            "ModelSeries": "5TA",
+            "PartName": "吊机",
+            "label": "总成",
+        }
+        write_embedded_bom_attrs(fc, vals)
+        with zipfile.ZipFile(fc, "r") as z:
+            xml = z.read("Document.xml")
+        self.assertEqual(_prop_value_for_object(xml, "AssyRoot", "PartNumber"), "A-1")
+        self.assertIsNone(_prop_value_for_object(xml, "AssyRoot", "FakeMissing"))
+        self.assertEqual(read_embedded_bom_attrs(fc), vals)
+
+    def test_partdesign_body_preferred_over_earlier_assembly(self) -> None:
+        """装配在前、Body 在后时仍优先挂载到 PartDesign::Body。"""
+        td = Path(self.tmp)
+        fc = td / "mixed.FCStd"
+        fc.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(fc, "w") as z:
+            z.writestr("Document.xml", MIN_DOC_BODY_AFTER_ASSEMBLY.strip().encode("utf-8"))
+        vals = {
+            "PartNumber": "B-2",
+            "PartVersion": "02",
+            "TypeCode": "",
+            "ModelSeries": "",
+            "PartName": "",
+            "label": "L2",
+        }
+        write_embedded_bom_attrs(fc, vals)
+        with zipfile.ZipFile(fc, "r") as z:
+            xml = z.read("Document.xml")
+        self.assertEqual(_prop_value_for_object(xml, "Body", "PartNumber"), "B-2")
+        self.assertIsNone(_prop_value_for_object(xml, "AssyRoot", "PartNumber"))
 
     def setUp(self) -> None:
         import tempfile

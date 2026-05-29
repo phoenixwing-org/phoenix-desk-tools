@@ -189,7 +189,7 @@ class FilteredWorkspaceTreeFrame(ctk.CTkFrame):
         self._tree_style_key = tree_style_suffix
         self._on_select = on_select
         self._var_fcstd = ctk.BooleanVar(value=True)
-        self._var_sw = ctk.BooleanVar(value=True)
+        self._var_sw = ctk.BooleanVar(value=False)
 
         bar = ctk.CTkFrame(self, fg_color="transparent")
         bar.pack(fill="x", pady=(0, 8))
@@ -374,9 +374,32 @@ class FilteredWorkspaceTreeFrame(ctk.CTkFrame):
         self._tree.item(self._ROOT_IID, open=True)
         for parts in sorted_dirs:
             try:
-                self._tree.item(dir_iid(parts), open=False)
+                self._tree.item(dir_iid(parts), open=True)
             except tk.TclError:
                 pass
+
+    def rescan_and_select(self, rel: Path | None) -> None:
+        """按当前勾选类型重新扫描，并选中 ``rel``（相对工作空间根）。"""
+        fc = self._var_fcstd.get()
+        sw = self._var_sw.get()
+        if not fc and not sw:
+            return
+        ws = self._state.repo_root
+        root = ws.expanduser().resolve(strict=False)
+        if not root.is_dir():
+            return
+        files = iter_filtered_files(ws, want_fcstd=fc, want_sw_part=sw)
+        self._populate(files)
+        if rel is not None:
+            self._select_relative_path(rel)
+
+    def _select_relative_path(self, rel: Path) -> None:
+        fiid = "file_" + quote(rel.as_posix(), safe="")
+        if not self._tree.exists(fiid):
+            return
+        self._tree.selection_set(fiid)
+        self._tree.see(fiid)
+        self._maybe_notify(rel)
 
     def clear(self) -> None:
         """清空树并重置占位。"""

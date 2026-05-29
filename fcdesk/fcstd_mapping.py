@@ -52,6 +52,80 @@ def compose_fcstd_body_label_display(
     return f"{pn}.{pv}-{pname}"
 
 
+def infer_fcstd_name_suffix(filename: str) -> str:
+    """FCStd 族文件扩展名（保留 ``.Drawing.FCStd`` / ``.ASSY.FCStd`` 等复合后缀）。"""
+    name = Path(filename).name
+    low = name.casefold()
+    for suffix_low in (".drawing.fcstd", ".assy.fcstd", ".fcstd"):
+        if low.endswith(suffix_low):
+            return name[-len(suffix_low) :]
+    return ".FCStd"
+
+
+def compose_fcstd_recommended_filename(
+    *,
+    part_number: str,
+    part_version: str,
+    type_code: str = "",
+    model_series: str = "",
+    part_name: str = "",
+    label_fallback: str = "",
+    suffix: str = ".FCStd",
+) -> str | None:
+    """推荐 FCStd 文件名，形如 ``100001.001-H-外壳.FCStd`` 或 ``…-ABC-零件段.ASSY.FCStd``。
+
+    规则：``{PartNumber}.{PartVersion}``，若有类型码则 ``-{TypeCode}``，若有型号则 ``-{ModelSeries}``，
+    若有名称则 ``-{名称}``（``PartName`` 优先，否则 ``label_fallback``），最后接 ``suffix``。
+    零件号与版本均非空时才生成，否则 ``None``。
+    """
+    pn = (part_number or "").strip()
+    pv = (part_version or "").strip()
+    if not pn or not pv:
+        return None
+    tc = (type_code or "").strip().upper()
+    ms = (model_series or "").strip().upper()
+    pname = (part_name or "").strip() or (label_fallback or "").strip()
+
+    stem = f"{pn}.{pv}"
+    if tc:
+        stem += f"-{tc}"
+    if ms:
+        stem += f"-{ms}"
+    if pname:
+        stem += f"-{pname}"
+
+    suf = suffix if suffix.startswith(".") else f".{suffix}"
+    return stem + suf
+
+
+def format_recommended_filename_hint(
+    *,
+    original_filename: str,
+    recommended_filename: str,
+    part_number: str,
+    part_version: str,
+    type_code: str,
+    model_series: str,
+    part_name: str,
+    label: str,
+    suffix: str,
+) -> str:
+    """界面说明：原文件名、推荐名、拼接规则与各字段取值。"""
+    pname = (part_name or "").strip()
+    lb = (label or "").strip()
+    name_src = "PartName" if pname else ("label（PartName 为空）" if lb else "（未填名称段）")
+    name_val = pname or lb or "—"
+    return (
+        f"原文件名：{original_filename or '—'}\n"
+        f"推荐文件名：{recommended_filename}\n"
+        f"规则：PartNumber.PartVersion[-TypeCode][-ModelSeries]-名称{suffix}\n"
+        f"PartNumber={part_number or '（空）'} · PartVersion={part_version or '（空）'} · "
+        f"TypeCode={(type_code or '').strip().upper() or '（空）'} · "
+        f"ModelSeries={(model_series or '').strip().upper() or '（空）'} · "
+        f"名称={name_val}（{name_src}） · label={lb or '（空）'}"
+    )
+
+
 _INFIX_TYPE = re.compile(r"[-._]([HSR])[-._]", re.IGNORECASE)
 
 # 型号：文件名中的 「数字+TB」（如 ABC），或路径段 SampleABC…
@@ -390,6 +464,87 @@ def map_json_payload_to_abs(payload: Mapping[str, Any], anchor: Path | str) -> d
     """从顶层 JSON dict 载入（结构化或遗留），产出 xlink 可用的 basename→绝对路径列表。"""
     flat = coerce_payload_to_basename_rel_paths(payload)
     return basename_pathstrings_to_abs(flat, anchor)
+
+
+_FCSTD_INVALID_BASENAME_CHARS = frozenset('/\\:*?"<>|')
+
+
+def is_fcstd_family_basename(name: str) -> bool:
+    """``.FCStd`` 族（含 ``.ASSY.FCStd``、``.Drawing.FCStd`` 等）。"""
+    return bool((name or "").strip()) and name.strip().casefold().endswith(".fcstd")
+
+
+def validate_fcstd_basename(name: str) -> str:
+    """校验并返回去除首尾空白后的 FCStd 族文件名（仅 basename，不含目录）。"""
+    s = (name or "").strip()
+    if not s:
+        raise ValueError("文件名为空")
+    if "/" in s or "\\" in s:
+        raise ValueError("文件名不能含路径分隔符")
+    if any(c in s for c in _FCSTD_INVALID_BASENAME_CHARS):
+        raise ValueError('文件名含非法字符（/ \\ : * ? " < > |）')
+    if not is_fcstd_family_basename(s):
+        raise ValueError("须为 .FCStd 族扩展名（如 .FCStd、.ASSY.FCStd、.Drawing.FCStd）")
+    return s
+
+
+def rename_workspace_fcstd_file(
+    *,
+    repo_root: Path,
+    rel: Path,
+    new_basename: str,
+) -> Path:
+    """在工作空间内重命名 FCStd 文件；返回新的相对路径。"""
+    new_basename = validate_fcstd_basename(new_basename)
+    root = repo_root.expanduser().resolve(strict=False)
+    src = (root / rel).resolve(strict=False)
+    if not src.is_file():
+        raise FileNotFoundError(f"源文件不存在：{src}")
+    if rel.name == new_basename:
+        return rel
+    new_rel = rel.parent / new_basename
+    dst = (root / new_rel).resolve(strict=False)
+    if dst.exists():
+        raise FileExistsError(f"目标已存在：{dst}")
+    src.rename(dst)
+    return new_rel
+
+
+def try_update_fcstd_map_entry_rename(
+    *,
+    repo_root: Path,
+    old_rel: Path,
+    new_rel: Path,
+) -> bool:
+    """若 ``fcstd_map.json`` 中有与 ``old_rel`` 匹配的条目，则更新路径与 ``filename``。"""
+    root = repo_root.expanduser().resolve(strict=False)
+    jp = root / "fcstd_map.json"
+    if not jp.is_file():
+        return False
+    try:
+        raw = json.loads(jp.read_text(encoding="utf-8"))
+        if not isinstance(raw, Mapping):
+            return False
+        doc = FcstdMapDocument.from_json_mapping(raw)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+        return False
+
+    want = normalize_repo_rel_path_for_map(old_rel.as_posix())
+    new_rr = normalize_repo_rel_path_for_map(new_rel.as_posix())
+    found = False
+    for e in doc.entries:
+        cand = normalize_repo_rel_path_for_map(Path(str(e.repo_rel_path)).as_posix())
+        if cand == want:
+            e.repo_rel_path = new_rr
+            e.filename = new_rel.name
+            found = True
+    if not found:
+        return False
+    jp.write_text(
+        json.dumps(doc.to_json_dict(), ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return True
 
 
 def try_load_fcstd_entry_from_workspace_map(

@@ -11,7 +11,7 @@ from typing import Any
 WORKSPACE_DOTFILE_NAME = ".phoenix-freecad-desktop.json"
 MAX_RECENT_WORKSPACES = 10
 
-_WORKSPACE_SECTIONS = ("fc_linkfix", "fcstd_map", "step_batch", "sw_step_export", "part_dedup")
+_WORKSPACE_SECTIONS = ("fc_linkfix", "fcstd_map", "step_batch", "sw_step_export", "part_dedup", "bom_apply")
 
 _WORKSPACE_DEFAULT: dict[str, Any] = {
     "PartVersion": 1,
@@ -42,6 +42,12 @@ _WORKSPACE_DEFAULT: dict[str, Any] = {
         "check_version": True,
         "code_must_be_digit": True,
         "scan_dir": None,
+    },
+    "bom_apply": {
+        "last_part_number": "",
+        "last_part_version": "001",
+        "last_type_code": "H",
+        "last_model_series": "",
     },
 }
 

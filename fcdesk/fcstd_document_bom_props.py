@@ -1,4 +1,7 @@
-"""将 BOM 可编辑字段写入 ``Document.xml`` 内 ``PartDesign::Body`` 的 ``Property`` 节点。
+"""将 BOM 可编辑字段写入 ``Document.xml`` 内可挂载对象的 ``Properties``。
+
+挂载对象优先级：**``PartDesign::Body``** → **类型名包含 ``Assembly`` 的对象**（装配/总成工作台）→ **``App::Part``**
+（常见于 Part / 总成容器）；均按 ``Document.xml`` 中 ``<Objects><Object/>`` **出现顺序**取第一个匹配的 ``name``。
 
 遵循 FreeCAD App 序列化惯例：每条动态 ``App::PropertyString`` 在 Document 中为
 
@@ -69,17 +72,45 @@ EDITABLE_DOCUMENT_ATTRS: tuple[str, ...] = (
 
 
 class FcdeskDocumentBomError(RuntimeError):
-    """读取或写回 Document.xml Body 属性失败。"""
+    """读取或写回 Document.xml 挂载对象属性失败。"""
 
 
-def _first_body_name(doc_el: ET.Element) -> str | None:
+def _iter_objects_typename_ordered(doc_el: ET.Element) -> list[tuple[str, str]]:
+    """``(ctype, name)`` 列表，顺序与 FC ``Objects`` 中声明一致。"""
+    out: list[tuple[str, str]] = []
     for obj in doc_el.findall("Objects/Object"):
-        if obj.get("type") != "PartDesign::Body":
-            continue
+        ctype = obj.get("type") or ""
         n = obj.get("name") or ""
-        if n:
+        if n.strip():
+            out.append((ctype, n))
+    return out
+
+
+def _first_bom_target_object_name(doc_el: ET.Element) -> str | None:
+    """选择写入 BOM / Label 挂载到的 DocumentObject 名称。"""
+    objs = _iter_objects_typename_ordered(doc_el)
+
+    for ctype, n in objs:
+        if ctype == "PartDesign::Body":
             return n
+
+    for ctype, n in objs:
+        if "assembly" in ctype.lower():
+            return n
+
+    for ctype, n in objs:
+        if ctype == "App::Part":
+            return n
+
     return None
+
+
+def _no_bom_mount_error(path: Path, objs: list[tuple[str, str]]) -> FcdeskDocumentBomError:
+    sample = ", ".join(f"{t}" for t, _ in objs[:12])
+    extra = f" 已列出部分 Object.type：{sample}" if sample else ""
+    return FcdeskDocumentBomError(
+        f"未发现可挂载 BOM 的对象（依次尝试 PartDesign::Body → type 中含 assembly → App::Part）：{path}.{extra}"
+    )
 
 
 def _body_properties_el(doc_el: ET.Element, body_name: str) -> ET.Element | None:
@@ -149,7 +180,10 @@ def _new_property_wrapper_attribs(properties_el: ET.Element, fc_name: str) -> di
 
 
 def read_body_bom_from_document(fcstd_path: Path) -> tuple[dict[str, str], frozenset[str]]:
-    """从 ``Document.xml`` 读出可编辑字典，以及哪些键已有对应 XML 字段（便于与旧侧车合并）。"""
+    """从 ``Document.xml`` 读出可编辑字典，以及哪些键已有对应 XML 字段（便于与旧侧车合并）。
+
+    挂载对象见 `_first_bom_target_object_name`（Body → type 中含 assembly → ``App::Part``）。
+    """
     path = fcstd_path.expanduser().resolve(strict=False)
     if not path.is_file():
         return {k: "" for k in EDITABLE_DOCUMENT_ATTRS}, frozenset()
@@ -163,12 +197,15 @@ def read_body_bom_from_document(fcstd_path: Path) -> tuple[dict[str, str], froze
         raise FcdeskDocumentBomError(str(e)) from e
 
     doc_el = ET.fromstring(raw)
-    body_name = _first_body_name(doc_el)
+    objs = _iter_objects_typename_ordered(doc_el)
+    body_name = _first_bom_target_object_name(doc_el)
     if body_name is None:
-        raise FcdeskDocumentBomError(f"未发现 PartDesign::Body：{path}")
+        raise _no_bom_mount_error(path, objs)
     props_el = _body_properties_el(doc_el, body_name)
     if props_el is None:
-        raise FcdeskDocumentBomError(f"ObjectData 中缺少 Body {body_name!r} 的 <Properties>：{path}")
+        raise FcdeskDocumentBomError(
+            f"ObjectData 中缺少挂载对象 {body_name!r} 的 <Properties>：{path}"
+        )
 
     out: dict[str, str] = {}
     explicit: set[str] = set()
@@ -221,7 +258,7 @@ def _set_label_string(properties_el: ET.Element, value: str) -> None:
             label_prop = p
             break
     if label_prop is None:
-        raise FcdeskDocumentBomError("Body 缺少原生 Label Property，无法写入标签。")
+        raise FcdeskDocumentBomError("挂载对象缺少原生 Label Property，无法写入标签。")
     s_el = label_prop.find("String")
     if s_el is None:
         s_el = ET.SubElement(label_prop, "String")
@@ -268,7 +305,10 @@ def _rewrite_fcstd_zip(
 
 
 def write_body_bom_to_document(fcstd_path: Path, values: Mapping[str, str]) -> None:
-    """把可编辑字段写入 ``Document.xml`` 的第一个 ``PartDesign::Body``，并移除包内 ``FcdeskBomAttrs.xml``（若有）。"""
+    """把可编辑字段写入 ``Document.xml`` 的 BOM 挂载对象，并移除包内 ``FcdeskBomAttrs.xml``（若有）。
+
+    挂载规则与 `read_body_bom_from_document` 一致。
+    """
     path = fcstd_path.expanduser().resolve(strict=False)
     if not path.is_file():
         raise FcdeskDocumentBomError(f"不存在或不可访问: {path}")
@@ -282,12 +322,13 @@ def write_body_bom_to_document(fcstd_path: Path, values: Mapping[str, str]) -> N
         raise FcdeskDocumentBomError(str(e)) from e
 
     doc_el = ET.fromstring(raw)
-    body_name = _first_body_name(doc_el)
+    objs = _iter_objects_typename_ordered(doc_el)
+    body_name = _first_bom_target_object_name(doc_el)
     if body_name is None:
-        raise FcdeskDocumentBomError(f"未发现 PartDesign::Body：{path}")
+        raise _no_bom_mount_error(path, objs)
     props_el = _body_properties_el(doc_el, body_name)
     if props_el is None:
-        raise FcdeskDocumentBomError(f"缺少 Body {body_name!r} 的 <Properties>：{path}")
+        raise FcdeskDocumentBomError(f"缺少挂载对象 {body_name!r} 的 <Properties>：{path}")
 
     trimmed = {k: str(values.get(k, "")).strip() for k in EDITABLE_DOCUMENT_ATTRS}
 

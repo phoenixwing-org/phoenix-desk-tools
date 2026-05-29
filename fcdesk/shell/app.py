@@ -296,6 +296,15 @@ class AppShell(ctk.CTk):
             return
         pg.on_workspace_tree_select(rel)
 
+    def refresh_workspace_tree_and_select(self, rel: Path | None) -> None:
+        """重扫侧栏树并选中给定相对路径（属性回写改名等场景）。"""
+        if self.workspace_tree_sidebar is None:
+            return
+        try:
+            self.workspace_tree_sidebar.rescan_and_select(rel)
+        except tk.TclError:
+            pass
+
     def _peek_mid_right_sash0(self) -> int | None:
         try:
             x, _y = self._mid_right_pw.sash_coord(0)
