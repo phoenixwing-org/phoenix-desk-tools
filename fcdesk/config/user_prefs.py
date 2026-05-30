@@ -1,4 +1,4 @@
-"""用户偏好：启动器 ``workspace.custom.json`` + 工作空间 ``.phoenix-freecad-desktop.json``。"""
+"""用户偏好：启动器 ``web-ui/.local/launcher.json`` + 工作空间 ``.phoenix-freecad-desktop.json``。"""
 
 from __future__ import annotations
 
@@ -55,6 +55,7 @@ _LAUNCHER_SHELL_LAYOUT_DEFAULT: dict[str, Any] = {
     "nav_rail_mode": 0,  # 0 窄仅图标 · 1 宽图标+文字
     "right_panel_open": True,
     "mid_right_sash_px": None,  # Panedwindow 首根 sash 距左侧像素；None 表示由窗口宽度推导默认
+    "right_panel_width_px": 300,  # Web 右侧工作空间树宽度
 }
 
 
@@ -73,6 +74,9 @@ def _normalized_shell_layout(raw: Any) -> dict[str, Any]:
         merged["mid_right_sash_px"] = int(spx)
     elif raw.get("mid_right_sash_px") is None:
         merged["mid_right_sash_px"] = None
+    rpw = raw.get("right_panel_width_px")
+    if isinstance(rpw, int) and rpw > 0:
+        merged["right_panel_width_px"] = int(rpw)
     return merged
 
 
@@ -85,8 +89,129 @@ _LAUNCHER_DEFAULT: dict[str, Any] = {
 }
 
 
-def launcher_prefs_file() -> Path:
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def web_launcher_prefs_file() -> Path:
+    """Web 前端侧本机启动器配置（gitignore：``web-ui/.local/launcher.json``）。"""
+    return _repo_root() / "web-ui" / ".local" / "launcher.json"
+
+
+def legacy_launcher_prefs_file() -> Path:
+    """桌面壳旧路径（兼容读取，写入时迁移到新路径）。"""
     return Path(__file__).resolve().parent / "workspace.custom.json"
+
+
+def launcher_prefs_file() -> Path:
+    """启动器 JSON 主路径：环境变量 > web-ui/.local > 旧 fcdesk/config。"""
+    env = __import__("os").environ.get("FCDESK_LAUNCHER_CONFIG", "").strip()
+    if env:
+        return Path(env).expanduser().resolve()
+    web_path = web_launcher_prefs_file()
+    if web_path.is_file():
+        return web_path
+    legacy = legacy_launcher_prefs_file()
+    if legacy.is_file():
+        return legacy
+    return web_path
+
+
+def _resolve_path_for_storage(path_like: Any) -> str | None:
+    if path_like is None:
+        return None
+    s = str(path_like).strip()
+    if not s:
+        return None
+    try:
+        return str(Path(s).expanduser().resolve(strict=False))
+    except OSError:
+        return None
+
+
+def _recent_workspace_paths_from_raw(raw: dict[str, Any] | None) -> list[str]:
+    """从 launcher JSON 提取最近工作空间（含 v1 ``toolbar.repo_root``）。"""
+    if not raw:
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+
+    def add(path_like: Any) -> None:
+        resolved = _resolve_path_for_storage(path_like)
+        if not resolved or resolved in seen:
+            return
+        seen.add(resolved)
+        out.append(resolved)
+
+    recent = raw.get("recent_workspaces")
+    if isinstance(recent, list):
+        for item in recent:
+            add(item)
+
+    toolbar = raw.get("toolbar")
+    if isinstance(toolbar, dict):
+        add(toolbar.get("repo_root"))
+
+    return out
+
+
+def _merge_launcher_prefs(web_raw: dict[str, Any] | None, legacy_raw: dict[str, Any] | None) -> dict[str, Any]:
+    """合并旧 ``workspace.custom.json`` → 新 ``web-ui/.local/launcher.json``（legacy 最近项优先）。"""
+    base = deepcopy(_LAUNCHER_DEFAULT)
+    if web_raw:
+        for key in ("version", "recent_workspaces", "freecad_dir", "window_geometry"):
+            if key in web_raw:
+                base[key] = web_raw[key]
+        if isinstance(web_raw.get("shell_layout"), dict):
+            base["shell_layout"] = _normalized_shell_layout(web_raw["shell_layout"])
+
+    merged_recent: list[str] = []
+    seen: set[str] = set()
+    for group in (_recent_workspace_paths_from_raw(legacy_raw), _recent_workspace_paths_from_raw(web_raw)):
+        for p in group:
+            if p not in seen:
+                seen.add(p)
+                merged_recent.append(p)
+    base["recent_workspaces"] = merged_recent[:MAX_RECENT_WORKSPACES]
+
+    if not base.get("freecad_dir") and legacy_raw:
+        fd = legacy_raw.get("freecad_dir")
+        if fd:
+            base["freecad_dir"] = str(fd)
+        toolbar = legacy_raw.get("toolbar")
+        if isinstance(toolbar, dict) and toolbar.get("freecad_dir") and not base.get("freecad_dir"):
+            base["freecad_dir"] = str(toolbar["freecad_dir"])
+
+    if not base.get("window_geometry") and legacy_raw:
+        wg = legacy_raw.get("window_geometry")
+        if isinstance(wg, str) and wg.strip():
+            base["window_geometry"] = wg.strip()
+
+    if legacy_raw and isinstance(legacy_raw.get("shell_layout"), dict):
+        if not web_raw or not isinstance(web_raw.get("shell_layout"), dict):
+            base["shell_layout"] = _normalized_shell_layout(legacy_raw["shell_layout"])
+
+    base["version"] = 2
+    return base
+
+
+def _launcher_storage_subset(raw: dict[str, Any] | None) -> dict[str, Any]:
+    if not raw:
+        return {}
+    out: dict[str, Any] = {}
+    for key in ("version", "recent_workspaces", "freecad_dir", "window_geometry"):
+        if key in raw:
+            out[key] = raw[key]
+    if isinstance(raw.get("shell_layout"), dict):
+        out["shell_layout"] = _normalized_shell_layout(raw["shell_layout"])
+    return out
+
+
+def _launcher_prefs_write_path() -> Path:
+    env = __import__("os").environ.get("FCDESK_LAUNCHER_CONFIG", "").strip()
+    if env:
+        return Path(env).expanduser().resolve()
+    return web_launcher_prefs_file()
 
 
 def workspace_dotfile_path(repo_root: Path) -> Path:
@@ -261,8 +386,9 @@ def save_launcher_shell_layout(
     nav_rail_mode: int | None = None,
     right_panel_open: bool | None = None,
     mid_right_sash_px: int | None = None,
+    right_panel_width_px: int | None = None,
 ) -> None:
-    """将左侧导航宽窄 / 右栏开合 / 中右分割 sash 写入 ``workspace.custom.json``（与其它启动器字段合并）。"""
+    """将左侧导航宽窄 / 右栏开合 / 中右分割 sash 写入 launcher JSON（与其它启动器字段合并）。"""
     launcher = load_launcher_prefs()
     cur = _normalized_shell_layout(launcher.get("shell_layout"))
     if nav_rail_mode is not None and int(nav_rail_mode) in (0, 1):
@@ -271,12 +397,21 @@ def save_launcher_shell_layout(
         cur["right_panel_open"] = bool(right_panel_open)
     if mid_right_sash_px is not None:
         cur["mid_right_sash_px"] = int(mid_right_sash_px)
+    if right_panel_width_px is not None:
+        cur["right_panel_width_px"] = int(right_panel_width_px)
     launcher["shell_layout"] = cur
     save_launcher_prefs(launcher)
 
 
 def save_launcher_prefs(data: dict[str, Any]) -> None:
-    _write_json(launcher_prefs_file(), data)
+    target = _launcher_prefs_write_path()
+    _write_json(target, data)
+    legacy = legacy_launcher_prefs_file()
+    if legacy.is_file() and legacy.resolve() != target.resolve():
+        try:
+            legacy.unlink()
+        except OSError:
+            pass
 
 
 def get_recent_workspaces() -> list[Path]:
@@ -371,21 +506,55 @@ def set_active_workspace(repo_root: Path, state: Any) -> None:
     record_recent_workspace(rp)
 
 
+def migrate_launcher_prefs_to_web() -> bool:
+    """将旧 ``fcdesk/config/workspace.custom.json`` 合并进 ``web-ui/.local/launcher.json``。
+
+    若 Web 侧尚无最近工作空间，会迁入桌面壳记录（含 v1 ``toolbar.repo_root``）。
+    返回是否写入了新文件。
+    """
+    web_path = web_launcher_prefs_file()
+    legacy = legacy_launcher_prefs_file()
+    legacy_raw = _read_json(legacy)
+    web_raw = _read_json(web_path)
+
+    if not legacy_raw and not web_raw:
+        return False
+
+    merged = _merge_launcher_prefs(web_raw, legacy_raw)
+
+    # 无 legacy 且 web 已完整则跳过
+    if legacy_raw is None and web_raw is not None:
+        return False
+
+    changed = _launcher_storage_subset(merged) != _launcher_storage_subset(web_raw)
+    if not web_path.is_file() or changed:
+        _write_json(web_path, merged)
+        return True
+    return False
+
+
 def migrate_legacy_workspace_prefs() -> None:
     """将旧版 ``workspace.custom.json`` 内嵌的工作区配置迁到各仓库根目录。"""
-    path = launcher_prefs_file()
-    raw = _read_json(path)
-    if not raw:
+    migrate_launcher_prefs_to_web()
+    legacy_raw = _read_json(legacy_launcher_prefs_file())
+    raw = _read_json(launcher_prefs_file())
+    section_source = legacy_raw if legacy_raw else raw
+    if not section_source:
         return
-    has_workspace_sections = any(k in raw for k in _WORKSPACE_SECTIONS)
-    toolbar = raw.get("toolbar") if isinstance(raw.get("toolbar"), dict) else {}
+    has_workspace_sections = any(k in section_source for k in _WORKSPACE_SECTIONS)
+    toolbar = section_source.get("toolbar") if isinstance(section_source.get("toolbar"), dict) else {}
     legacy_repo = toolbar.get("repo_root") if isinstance(toolbar, dict) else None
 
     if not has_workspace_sections and not legacy_repo:
         return
 
-    # 已是 v2 且无内嵌工作区小节时跳过
-    if raw.get("version") == 2 and not has_workspace_sections:
+    # 已是 v2 且无内嵌工作区小节、也无 legacy 需迁时跳过
+    if (
+        not legacy_raw
+        and raw
+        and raw.get("version") == 2
+        and not has_workspace_sections
+    ):
         return
 
     repo_path: Path | None = None
@@ -407,11 +576,11 @@ def migrate_legacy_workspace_prefs() -> None:
         if not dot.is_file():
             ws = deepcopy(_WORKSPACE_DEFAULT)
             for key in _WORKSPACE_SECTIONS:
-                inc = raw.get(key)
+                inc = section_source.get(key)
                 if isinstance(inc, dict):
                     ws[key].update(inc)
-            if isinstance(raw.get("version"), int):
-                ws["version"] = raw["version"]
+            if isinstance(section_source.get("version"), int):
+                ws["version"] = section_source["version"]
             save_workspace_prefs(repo_path, ws)
 
     launcher = load_launcher_prefs()

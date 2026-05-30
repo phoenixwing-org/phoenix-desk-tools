@@ -527,7 +527,7 @@ class AppShell(ctk.CTk):
             "UI: CustomTkinter\n"
             "配置: fcdesk/config/app_config.json\n"
             f"工作区偏好: {WORKSPACE_DOTFILE_NAME}（工作空间根目录）\n"
-            "最近工作空间: fcdesk/config/workspace.custom.json\n"
+            "最近工作空间: web-ui/.local/launcher.json\n"
             "文档: doc/文档索引.md",
             parent=self,
         )

@@ -205,19 +205,20 @@ CREATE TABLE xlink_patch_log (
 
 ## 6. `.phoenix` 目录布局（建议）
 
-与现有 **`.phoenix-freecad-desktop.json`**（轻量偏好）并存，职责分离：
+> **存储总原则**（讨论稿，未实现）：见 [Phoenix工作空间存储-规划讨论.md](Phoenix工作空间存储-规划讨论.md) — **默认不写** `.phoenix-freecad-desktop.json`，偏好与审计进 **`.phoenix/phoenix.sqlite`**；JSON 仅 **用户导出** 时生成。
 
 | 路径 | 用途 |
 | --- | --- |
-| `<工作空间根>/.phoenix-freecad-desktop.json` | **保留**：各页 UI 偏好（已有约定） |
-| `<工作空间根>/.phoenix/catalog.sqlite` | 文件资产快照、改名与 XLink 补丁事件 |
+| `<工作空间根>/.phoenix/phoenix.sqlite` | **主库**：各页偏好、`file_asset`、改名 / XLink 事件、`bom_apply` 记忆等 |
 | `<工作空间根>/.phoenix/reports/*.md` | 人类可读报告（XLink、改名、索引） |
-| `<工作空间根>/.phoenix/schema.sql` | 库表版本（迁移用，可选） |
-| `<工作空间根>/fcstd_map.json` | **保留在根**：与索引页、xlink 脚本兼容 |
+| `<工作空间根>/.phoenix/exports/*.json` | 用户触发的 JSON 导出（含 dotfile 兼容快照、`fcstd_map` 等） |
+| `<工作空间根>/.phoenix/schema/` | 可选：DDL / 迁移版本 |
+| `<工作空间根>/fcstd_map.json` | **非默认写盘**；由索引任务写库后 **按需导出**，供 xlink 脚本（或脚本日后读库） |
+| `<工作空间根>/.phoenix-freecad-desktop.json` | **遗留（当前代码仍会写）**；目标态仅 **导入 / 导出**，日常不生成 |
 
-**.gitignore 建议**（实现时）：默认忽略 `.phoenix/catalog.sqlite` 或整个 `.phoenix/`（视团队是否要提交报告）；在文档中说明。
+**.gitignore 建议**（实现时）：默认忽略整个 `.phoenix/`（或至少 `*.sqlite`）。
 
-**命名说明**：项目对外品牌为 phoenix-freecad-desktop；用 **`.phoenix/`** 作为工作空间内「工具数据目录」短名，与 dotfile `.phoenix-freecad-desktop.json` 前缀一致，避免再引入第四套命名。
+**命名说明**：**`.phoenix/`** 为工作空间内工具数据目录；与旧 dotfile 品牌前缀一致，但 **目标态不再在根目录散落 JSON 偏好文件**。
 
 ---
 
@@ -263,7 +264,7 @@ CREATE TABLE xlink_patch_log (
 ## 10. 小结
 
 - **改名**与**批量路径修正**互补：前者需要「**旧 basename → 新 basename**」的定向 XLink 替换；后者解决「**路径找不到文件**」的映射重定向。
-- **审计**宜 **Markdown 报告 + SQLite 事件库** 双轨；目录建议 **`工作空间根/.phoenix/`**，与现有 `.phoenix-freecad-desktop.json` 分工。
+- **审计**宜 **Markdown 报告 + SQLite 事件库** 双轨；目录建议 **`工作空间根/.phoenix/`**；**JSON 偏好 dotfile 不作为默认存储**（见 [Phoenix工作空间存储-规划讨论.md](Phoenix工作空间存储-规划讨论.md)）。
 - 推荐 **P0→P1 先打通改名引用预览与写回**，验证规则后再上 SQLite，降低一次性复杂度。
 
 确认本讨论稿方向后，可拆 Issue / 任务：`xlink_basename` 模块、`phoenix_store`  schema v1、属性回写 UI 联动。

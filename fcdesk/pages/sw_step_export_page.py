@@ -16,10 +16,10 @@ from fcdesk.config.user_prefs import (
     shorten_workspace_relative_display,
     store_path_under_repo,
 )
-from fcdesk.integration.solidworks_com import attach_solidworks, batch_export_models_to_step, windows_only
-from fcdesk.integration.solidworks_models import iter_sw_model_paths
+from fcdesk.solidworks.com import windows_only
 from fcdesk.pages.base import BasePage
 from fcdesk.pages import form_widgets as fw
+from fcdesk.services.sw_step_export_service import preview_sw_step_export, run_sw_step_export
 from fcdesk.shell.native_dialog import pick_workspace_directory
 from fcdesk.shell.state import AppState
 
@@ -201,16 +201,18 @@ class SwStepExportPage(BasePage):
         return sp, dp
 
     def _preview_count(self) -> None:
-        rr = self._resolved_src_dst()
-        if rr is None:
-            return
-        sp, _ = rr
         try:
-            n = len(iter_sw_model_paths(sp, recursive=self._recursive.get()))
-        except OSError as e:
+            data = preview_sw_step_export(
+                self.state.repo_root,
+                {
+                    "source_dir": self._src.get().strip(),
+                    "out_step_dir": self._dst.get().strip(),
+                    "recursive_scan": self._recursive.get(),
+                },
+            )
+            self._log_line(f"{data['source_display']}\n三维模型数量（不含图纸）: {data['model_count']}")
+        except ValueError as e:
             self._log_line(str(e))
-            return
-        self._log_line(f"{sp}\n三维模型数量（不含图纸）: {n}")
 
     def _log_line(self, text: str) -> None:
         if self._log is None:
@@ -234,71 +236,40 @@ class SwStepExportPage(BasePage):
                 "在 macOS/Linux 本页仅供布局与预览，请到 Windows 上再点导出。"
             )
             return
-        
+
         if not self._check_pywin32():
             self._log_line(
                 "未检测到 pywin32。请先：`pip install pywin32`（与此处启动 fcdesk 相同的 Python）。"
             )
             return
 
-        pairing = self._resolved_src_dst()
-        if pairing is None:
-            return
-        src, dst = pairing
         self._persist(quiet=True)
-
-        try:
-            paths = list(iter_sw_model_paths(src, recursive=self._recursive.get()))
-        except OSError as e:
-            self._log_line(str(e))
-            return
-        if not paths:
-            self._log_line("未发现 .sldprt / .sldasm，已中止。")
-            return
-
+        opts = {
+            "source_dir": self._src.get().strip(),
+            "out_step_dir": self._dst.get().strip(),
+            "recursive_scan": self._recursive.get(),
+        }
         self._log.delete("1.0", "end")
-        self._log_line(f"SolidWorks COM 导出：\n来源 {src}\nSTEP 目录 {dst}\n模型数 {len(paths)}")
+        self._log_line("SolidWorks COM 导出…")
 
         def worker() -> None:
-            co_initialized = False
             try:
-                import pythoncom
-                pythoncom.CoInitialize()
-                co_initialized = True
-            except Exception as e:
-                self.after(0, lambda: self._log_line(f"COM 初始化失败: {e}"))
-                return
-
-            def clog(m: str) -> None:
-                self.after(0, lambda s=m: self._log_line(s))
-
-            try:
-                sw_app = attach_solidworks()
-                outcome = batch_export_models_to_step(
-                    sw_app,
-                    paths=paths,
-                    out_step_dir=dst,
-                    log=clog,
-                )
+                data = run_sw_step_export(self.state.repo_root, opts)
                 lines_out = [
-                    f"成功 {len(outcome.ok)}，失败 {len(outcome.failed)}。",
+                    f"成功 {data['ok_count']}，失败 {data['failed_count']}。",
+                    f"输出 {data['out_display']}",
                 ]
-                if outcome.failed:
+                if data.get("failed"):
                     lines_out.append("—— 失败项 ——")
-                    for fp, err in outcome.failed[:50]:
-                        lines_out.append(f"  {fp}: {err}")
-                    if len(outcome.failed) > 50:
-                        lines_out.append(f" … 另有 {len(outcome.failed)-50} 条")
+                    for item in data["failed"]:
+                        lines_out.append(f"  {item['path']}: {item['error']}")
+                if data.get("log"):
+                    lines_out.append(data["log"])
                 text = "\n".join(lines_out)
-                self.after(0, lambda t=text: self._log_line("\n" + t))
+                self.after(0, lambda t=text: self._log_line(t))
+            except ValueError as e:
+                self.after(0, lambda err=str(e): self._log_line(err))
             except Exception as e:
-                msg = repr(e)
-                self.after(0, lambda m=msg: self._log_line("\n异常: " + m))
-            finally:
-                if co_initialized:
-                    try:
-                        pythoncom.CoUninitialize()
-                    except Exception:
-                        pass
+                self.after(0, lambda err=repr(e): self._log_line(f"异常: {err}"))
 
         threading.Thread(target=worker, daemon=True).start()

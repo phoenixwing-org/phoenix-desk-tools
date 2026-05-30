@@ -1,0 +1,146 @@
+<script setup lang="ts">
+import { computed } from "vue";
+import { useAppShell } from "../composables/useAppShell";
+import { DEFAULT_PAGE_ICONS } from "../types/config";
+
+const shell = useAppShell();
+
+const navItems = computed(() => shell.appConfig.value?.navigation ?? []);
+const shellLayout = computed(() => shell.shellLayout.value);
+const currentPage = computed(() => shell.currentPage.value);
+const wide = computed(() => shellLayout.value.nav_rail_mode === 1);
+
+function iconFor(page: string, custom?: string) {
+  return custom || DEFAULT_PAGE_ICONS[page] || "•";
+}
+
+async function toggleRail() {
+  const next = shell.shellLayout.value.nav_rail_mode === 1 ? 0 : 1;
+  await shell.persistShellLayout({ nav_rail_mode: next });
+}
+
+async function toggleRight() {
+  await shell.persistShellLayout({
+    right_panel_open: !shell.shellLayout.value.right_panel_open,
+  });
+}
+
+function select(page: string) {
+  shell.goToPage(page);
+}
+
+function hover(tip: string | null) {
+  shell.navHover.value = tip;
+}
+</script>
+
+<template>
+  <nav class="nav" :class="{ wide }">
+    <button
+      type="button"
+      class="nav-mode"
+      :title="wide ? '切换为窄栏（仅图标）' : '切换为宽栏（图标+文字）'"
+      @click="toggleRail"
+      @mouseenter="hover('导航：单击切换 窄图标 / 宽（图标+文字）')"
+      @mouseleave="hover(null)"
+    >
+      {{ wide ? "◀" : "▶" }}
+    </button>
+
+    <button
+      v-for="item in navItems"
+      :key="item.page"
+      type="button"
+      class="nav-item"
+      :class="{ active: currentPage === item.page }"
+      :title="item.label"
+      @click="select(item.page)"
+      @mouseenter="hover(item.label)"
+      @mouseleave="hover(null)"
+    >
+      <template v-if="wide">{{ iconFor(item.page, item.icon) }} {{ item.label }}</template>
+      <template v-else>{{ iconFor(item.page, item.icon) }}</template>
+    </button>
+
+    <div class="nav-spacer" />
+
+    <button
+      type="button"
+      class="nav-dock"
+      :title="shellLayout.right_panel_open ? '收起工作空间树' : '展开工作空间树'"
+      @click="toggleRight"
+      @mouseenter="hover('全局侧栏：展开 / 收起')"
+      @mouseleave="hover(null)"
+    >
+      {{ shellLayout.right_panel_open ? "«" : "»" }}
+    </button>
+  </nav>
+</template>
+
+<style scoped>
+.nav {
+  width: 36px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  background: var(--nav-bg);
+  border-right: 1px solid var(--border);
+  padding: 6px 3px 10px;
+}
+
+.nav.wide {
+  width: 148px;
+}
+
+.nav-mode,
+.nav-item,
+.nav-dock {
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.nav-mode {
+  height: 26px;
+  margin-bottom: 6px;
+  background: var(--nav-mode-bg);
+  color: var(--nav-mode-fg);
+}
+
+.nav-item {
+  min-height: 30px;
+  margin: 2px 0;
+  padding: 4px 6px;
+  text-align: center;
+}
+
+.nav.wide .nav-item {
+  min-height: 34px;
+  text-align: left;
+  padding: 6px 8px;
+}
+
+.nav-item:hover,
+.nav-dock:hover {
+  background: var(--nav-hover);
+}
+
+.nav-item.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.nav-spacer {
+  flex: 1;
+}
+
+.nav-dock {
+  height: 30px;
+  font-size: 1rem;
+  color: var(--muted);
+}
+</style>

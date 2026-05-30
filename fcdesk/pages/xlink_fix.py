@@ -1,17 +1,11 @@
 from __future__ import annotations
 
 import itertools
-import json
-import os
-import subprocess
-import sys
-import tempfile
 import threading
 from pathlib import Path
 
 import customtkinter as ctk
 import tkinter as tk
-from tkinter import messagebox
 from tkinter import ttk
 
 from fcdesk.config.user_prefs import (
@@ -24,12 +18,9 @@ from fcdesk.config.user_prefs import (
 )
 from fcdesk.pages.base import BasePage
 from fcdesk.pages import form_widgets as fw
+from fcdesk.services.xlink_fix_service import run_xlink_fix
 from fcdesk.shell.native_dialog import pick_workspace_directory
 from fcdesk.shell.state import AppState
-
-_SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
-FCSTD_WORKSPACE_MAP_NAME = "fcstd_map.json"
-
 
 class XLinkFixPage(BasePage):
     page_id = "xlink_fix"
@@ -44,7 +35,7 @@ class XLinkFixPage(BasePage):
         )
 
         hint = (
-            "映射与工作空间根的 fcstd_map.json 共用（由「FCStd 索引」页生成；条目路径相对工作空间根）。"
+            "映射来自 .phoenix/cad-database.sqlite（由「FCStd 索引」页扫描生成）。"
             "本页只需选择修正目录与脚本选项（偏好 fc_linkfix）。"
         )
         fw.page_hint_label(self, hint, wraplength=920).grid(
@@ -303,10 +294,6 @@ class XLinkFixPage(BasePage):
         self._log.insert("end", text + "\n")
         self._log.see("end")
 
-    def _workspace_fcstd_map_path(self) -> Path:
-        """与「FCStd 索引」页一致：工作空间根下的映射文件。"""
-        return self._repo() / FCSTD_WORKSPACE_MAP_NAME
-
     def _run(self) -> None:
         rr = self._repo()
         batch_dir = self._canon(self._batch_dir_entry.get(), fb=rr)
@@ -319,86 +306,31 @@ class XLinkFixPage(BasePage):
             )
             return
 
-        map_path = self._workspace_fcstd_map_path()
-        map_disp = format_resolved_under_workspace(map_path.resolve(strict=False), rr)
-        if not map_path.is_file():
-            self._log.delete("1.0", "end")
-            self._log_line(f"错误：缺少映射文件\n{map_path}")
-            self._log_line(
-                "请先到「FCStd 索引」页创建索引（路径相对工作空间根写入 fcstd_map.json）。"
-            )
-            self._results_tree_placeholder("错误：缺少 fcstd_map.json", map_disp)
-            messagebox.showwarning(
-                "链接路径修正",
-                f"请先到「FCStd 索引」页点击「创建索引」，在工作空间根得到：\n\n{map_path}",
-                parent=self.winfo_toplevel(),
-            )
-            return
-
         self._persist_xlink_fields()
-
-        cmd = [
-            sys.executable,
-            str(_SCRIPTS_DIR / "fix_fcstd_xlink_paths.py"),
-            "--map-anchor",
-            str(rr.resolve()),
-            "--map-json",
-            str(map_path.resolve()),
-        ]
-        if self._dry_run.get():
-            cmd.append("--dry-run")
-        if self._all_in_dir.get():
-            cmd += ["--all-in-dir", str(batch_dir)]
-        else:
-            doc_xml = batch_dir / "Document.xml"
-            if not doc_xml.is_file():
-                self._log.delete("1.0", "end")
-                self._log_line("错误：未找到 Document.xml（请先选择修正目录，或勾选 all-in-dir）")
-                self._results_tree_placeholder("错误：未找到 Document.xml", "")
-                return
-            cmd.append(str(doc_xml))
-
-        fd_tmp, json_out = tempfile.mkstemp(prefix="fcdesk_xlink_", suffix=".json")
-        os.close(fd_tmp)
-        cmd += ["--desktop-json-results", json_out]
-
+        batch_input = self._batch_dir_entry.get().strip()
         self._log.delete("1.0", "end")
-        self._results_tree_placeholder("正在运行脚本…", "")
-        self._log_line("$ " + " ".join(cmd))
+        self._results_tree_placeholder("正在运行…", "")
+        self._log_line("XLink 路径修正（读取 .phoenix 索引库）…")
 
-        def worker(json_path: str = json_out) -> None:
+        def worker() -> None:
             try:
-                proc = subprocess.run(
-                    cmd,
-                    cwd=str(_SCRIPTS_DIR),
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
+                data = run_xlink_fix(
+                    rr,
+                    batch_dir_input=batch_input,
+                    dry_run=self._dry_run.get(),
+                    all_in_dir=self._all_in_dir.get(),
                 )
-                out = (proc.stdout or "") + (proc.stderr or "")
-                self.after(
-                    0,
-                    lambda p=json_path, t=out, rc=proc.returncode: self._finish_xlink_fix_run(p, t, rc),
-                )
+                self.after(0, lambda d=data: self._finish_xlink_from_service(d))
+            except ValueError as e:
+                self.after(0, lambda err=str(e): self._finish_xlink_error(err))
             except Exception as e:
-                self.after(
-                    0,
-                    lambda p=json_path, err=str(e): self._finish_xlink_fix_run_failed(p, err),
-                )
+                self.after(0, lambda err=str(e): self._finish_xlink_error(err))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _finish_xlink_fix_run(self, json_path: str, captured: str, returncode: int) -> None:
-        data = None
-        jp = Path(json_path)
-        try:
-            if jp.is_file():
-                data = json.loads(jp.read_text(encoding="utf-8"))
-        except Exception:
-            data = None
-        finally:
-            jp.unlink(missing_ok=True)
-
+    def _finish_xlink_from_service(self, data: dict) -> None:
+        captured = data.get("log") or ""
+        returncode = int(data.get("exit_code", 1))
         self._log.insert("end", captured or "(无输出)")
         self._log_line(f"退出码: {returncode}")
 
@@ -409,8 +341,7 @@ class XLinkFixPage(BasePage):
         else:
             self._results_tree_placeholder("未能解析结构化结果（请查看日志）", "")
 
-    def _finish_xlink_fix_run_failed(self, json_path: str, err: str) -> None:
-        Path(json_path).unlink(missing_ok=True)
+    def _finish_xlink_error(self, err: str) -> None:
         self._log_line(err)
-        self._results_tree_placeholder("运行异常", err)
+        self._results_tree_placeholder("运行失败", err)
 

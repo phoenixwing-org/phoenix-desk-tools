@@ -16,46 +16,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from fcdesk.shell.state import AppState
-
-# 扫描时跳过的目录：名称做 casefold() 后与集合比对（避免 Windows / macOS 大小写写法差异）
-_SKIP_DIR_NAMES_CI = frozenset(
-    {
-        ".git",
-        ".svn",
-        ".hg",
-        "__pycache__",
-        ".venv",
-        "venv",
-        "node_modules",
-        ".idea",
-        ".vs",
-        ".bundle",
-        "Pods",  # CocoaPods（macOS / iOS 工程噪音）
-        # Windows（常见分区根或用户卷上的系统目录）
-        "$recycle.bin",
-        "system volume information",
-        "recovery",
-        "windowsapps",
-        "program files",
-        "program files (x86)",
-        "programdata",
-    }
-)
-
-
-def _should_skip_scan_dir(dirname: str) -> bool:
-    """是否跳过不参与递归的目录名（大小写无关 + 点前缀惯例）。"""
-    cf = dirname.casefold()
-    if cf in _SKIP_DIR_NAMES_CI:
-        return True
-    # Unix/macOS：以 . 开头的目录多为工具/源码配置，减少体积与噪音（非工程 CAD 时可避扫）
-    if cf.startswith("."):
-        return True
-    return False
-
-
-FCSTD_SUFFIX = ".fcstd"
-SW_PART_SUFFIX = ".sldprt"
+from fcdesk.workspace_scan import FCSTD_SUFFIX, SW_PART_SUFFIX, iter_filtered_files
 
 
 def apply_ctkish_treeview_style(tree: ttk.Treeview, style_name: str) -> None:
@@ -107,55 +68,6 @@ def apply_ctkish_treeview_style(tree: ttk.Treeview, style_name: str) -> None:
         host.configure(bg=bg)
     except tk.TclError:
         pass
-
-
-def iter_filtered_files(workspace: Path, *, want_fcstd: bool, want_sw_part: bool) -> list[Path]:
-    """递归列出工作空间内匹配扩展名的文件（相对路径）。"""
-    exts: set[str] = set()
-    if want_fcstd:
-        exts.add(FCSTD_SUFFIX)
-    if want_sw_part:
-        exts.add(SW_PART_SUFFIX)
-    if not exts:
-        return []
-
-    root = workspace.expanduser().resolve(strict=False)
-    if not root.is_dir():
-        return []
-
-    matched: list[Path] = []
-
-    def walk(cur: Path) -> None:
-        try:
-            entries = sorted(cur.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
-        except OSError:
-            # 权限、网络盘离线、Windows 路径过长等
-            return
-        for ent in entries:
-            try:
-                is_dir = ent.is_dir()
-                is_symlink = ent.is_symlink()
-            except OSError:
-                continue
-            if is_dir:
-                if _should_skip_scan_dir(ent.name):
-                    continue
-                # 不向「目录符号链接」递归：避免环路与误扫工作空间外（macOS/Linux 常见）；
-                # Windows 的 Junction 多数 is_symlink() 为 False，仅靠跳过集合无法覆盖全部情况。
-                if is_symlink:
-                    continue
-                walk(ent)
-                continue
-            suf = ent.suffix.casefold()
-            if suf in exts:
-                try:
-                    matched.append(ent.relative_to(root))
-                except ValueError:
-                    pass
-
-    walk(root)
-    matched.sort(key=lambda p: p.as_posix().lower())
-    return matched
 
 
 class FilteredWorkspaceTreeFrame(ctk.CTkFrame):

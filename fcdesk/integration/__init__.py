@@ -1,1 +1,20 @@
-"""fcdesk ↔ 外部 FreeCAD GUI 进程的轻量集成（收件箱桥接等）。"""
+"""fcdesk ↔ 外部 CAD 进程的轻量集成（兼容 re-export）。
+
+新代码请使用 ``fcdesk.freecad`` / ``fcdesk.solidworks``。
+"""
+
+from fcdesk.freecad.inbox_bridge import enqueue_step_batch, peek_response, response_path, take_response
+from fcdesk.solidworks.com import attach_solidworks, batch_export_models_to_step, windows_only
+from fcdesk.solidworks.models import iter_sw_model_paths, sw_doc_type_suffix
+
+__all__ = [
+    "enqueue_step_batch",
+    "peek_response",
+    "response_path",
+    "take_response",
+    "attach_solidworks",
+    "batch_export_models_to_step",
+    "windows_only",
+    "iter_sw_model_paths",
+    "sw_doc_type_suffix",
+]

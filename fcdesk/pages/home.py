@@ -158,7 +158,7 @@ class HomePage(BasePage):
             outer,
             (
                 f"各功能页路径与选项写入当前工作空间根下的 {WORKSPACE_DOTFILE_NAME}；"
-                "最近打开的工作空间列表保存在 fcdesk/config/workspace.custom.json。\n"
+                "最近打开的工作空间列表保存在 web-ui/.local/launcher.json（与 Web 共用）。\n"
                 "本页工作空间根与 FreeCAD 目录始终显示为绝对路径；其他功能页的目录在项目树内时以相对路径显示与保存。"
             ),
             wraplength=680,

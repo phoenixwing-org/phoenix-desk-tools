@@ -1,7 +1,7 @@
 命令行脚本（可被桌面壳的子进程调用，也可单独运行）：
 
 - **`fcstd_map.py`**：扫描生成映射。默认 **`--json`** 写出 **schema≥2** 结构化文档（`entries[]`：`repo_rel_path`、`filename`、**`PartNumber`、`PartVersion`、`TypeCode`、`ModelSeries`、`label`、`extra`**）；**`--legacy-json`** 仍可写旧扁平字典。推断见 **`fcdesk/fcstd_mapping.py`**。
-- **`fix_fcstd_xlink_paths.py`**：按 **`--map-json`**（默认可省略，则使用 `<map-anchor>/fcstd_map.json`）解析映射重写 XLink；**`--map-anchor`** 须与 **`fcstd_map --relative-to` / JSON 所在目录**一致。桌面壳下即 **工作空间根**。旧名 `fc_linkfix_fcstd_map.json` 已由单一 `fcstd_map.json` 取代。未提供映射时可 **`--live-scan`**。
+- **`fix_fcstd_xlink_paths.py`**：按 **`--map-json`** 或 **`--map-sqlite <工作空间根>`**（读 `.phoenix/cad-database.sqlite`）解析映射重写 XLink；**`--map-anchor`** 须与索引相对路径基准一致（桌面壳下即 **工作空间根**）。未提供映射时可 **`--live-scan`**。
 - **`setup_desktop_venv.sh`**（macOS）：一键创建 `.venv-desktop` 并以可编辑方式安装本项目（读取 `pyproject.toml` 依赖）。
 
 **FreeCADCmd（须在 FreeCAD 安装内执行，不要用系统 Python 跑）：**

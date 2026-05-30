@@ -10,7 +10,7 @@
 
 ## 界面（fcdesk → SW→STEP）
 
-选 **模型目录**、**STEP 输出目录**；可选 **递归**。**预览** 仅计数；**导出** 后台线程 COM。偏好写入工作空间 **`sw_step_export`**（`.phoenix-freecad-desktop.json`，见 **`workspace.dotfile.example`**）。
+选 **模型目录**、**STEP 输出目录**；可选 **递归**。**预览** 仅计数；**导出** 后台线程 COM。偏好写入工作空间 **`sw_step_export`**（当前为 `.phoenix-freecad-desktop.json` 内小节；目标态见 [Phoenix工作空间存储-规划讨论.md](Phoenix工作空间存储-规划讨论.md)）。
 
 ## 排障环境变量
 

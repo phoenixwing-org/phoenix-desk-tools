@@ -22,6 +22,7 @@ from fcdesk.config.user_prefs import (
 )
 from fcdesk.pages.base import BasePage
 from fcdesk.pages import form_widgets as fw
+from fcdesk.services.part_dedup_service import export_part_dedup_csv, scan_part_dedup
 from fcdesk.shell.native_dialog import pick_workspace_directory
 from fcdesk.shell.state import AppState
 
@@ -304,35 +305,42 @@ class PartDedupPage(BasePage):
         if nc:
             sec = self._tree.insert("", "end", iid=ni(), text=f"文件名重复（{nc} 组）", open=True, values=("",))
             for item in results["name_dup"]:
+                paths = item.get("paths_display") or item.get("paths") or item.get("路径") or []
+                name = item.get("label") or item.get("文件名") or ""
                 grp = self._tree.insert(
                     sec,
                     "end",
                     iid=ni(),
-                    text=f"{item['文件名']}（{len(item['路径'])} 个）",
+                    text=f"{name}（{len(paths)} 个）",
                     values=("",),
                     open=False,
                 )
-                add_paths(grp, item["路径"])
+                add_paths(grp, paths)
 
         if cc:
             sec = self._tree.insert("", "end", iid=ni(), text=f"编号重复（{cc} 组）", open=True, values=("",))
             for item in results["code_dup"]:
+                paths = item.get("paths_display") or item.get("paths") or item.get("路径") or []
+                code_label = item.get("label") or item.get("编号") or ""
                 grp = self._tree.insert(
                     sec,
                     "end",
                     iid=ni(),
-                    text=_pretty_code_dup_row_title(item["编号"]),
+                    text=_pretty_code_dup_row_title(code_label),
                     values=("",),
                     open=False,
                 )
-                add_paths(grp, item["路径"])
+                add_paths(grp, paths)
 
         if vc:
             sec = self._tree.insert("", "end", iid=ni(), text=f"编号+版本重复（{vc} 组）", open=True, values=("",))
             for item in results["ver_dup"]:
-                csv_sfx = item.get("_csv_fc") or ""
+                paths = item.get("paths_display") or item.get("paths") or item.get("路径") or []
+                csv_sfx = item.get("csv_fc") or item.get("_csv_fc") or ""
+                cod = item.get("code") or item.get("编号") or ""
+                ver_part = item.get("version") or item.get("版本") or ""
                 note_h = _fcstd_dup_human_note(_csv_suffix_to_fcstd_dup_tag(csv_sfx))
-                key = f"{item['编号']}_{item['版本']}"
+                key = f"{cod}_{ver_part}"
                 label = f"编号+版本：{key}"
                 if note_h:
                     label = f"{label} {note_h}"
@@ -344,7 +352,7 @@ class PartDedupPage(BasePage):
                     values=("",),
                     open=False,
                 )
-                add_paths(grp, item["路径"])
+                add_paths(grp, paths)
 
     def _pv(self) -> dict:
         return load_workspace_prefs(self.state.repo_root).get("part_dedup") or {}
@@ -450,172 +458,46 @@ class PartDedupPage(BasePage):
         
         return code, None
 
+    def _dedup_opts(self) -> dict:
+        return {
+            "extension": self._ext_var.get(),
+            "code_len": self._code_len_var.get(),
+            "ver_len": self._ver_len_var.get(),
+            "check_code": self._check_code.get(),
+            "check_version": self._check_version.get(),
+            "code_must_be_digit": self._code_must_be_digit.get(),
+            "scan_dir": self._dir_entry.get().strip(),
+        }
+
     def _scan(self) -> None:
-        self._persist(quiet=True)  # 扫描前自动保存当前配置
         self._log.delete("1.0", "end")
         self._last_results = {}
         self._tree.delete(*self._tree.get_children(""))
 
-        ext = self._ext_var.get()
-        repo_root = self.state.repo_root.expanduser().resolve()
-
-        scan_path = resolve_workspace_path_entry(self._dir_entry.get(), repo_root)
-        if not scan_path.is_dir():
-            hint = format_resolved_under_workspace(scan_path, repo_root)
-            self._log_line(f"错误：目录不存在：{hint}")
-            self._results_tree_placeholder("错误：扫描目录不存在", hint)
-            return
-
-        scan_disp = format_resolved_under_workspace(scan_path, repo_root)
-        self._log_line(f"扫描目录：{scan_disp}")
-        self._log_line(f"扩展名：{ext}（大小写无关匹配）")
-
-        # 后缀按 Unicode casefold 比较：覆盖 .FcStd / .FCSTD 等，避免仅用 rglob "*.fcstd"
-        # "*.FCSTD" 在区分大小写的卷（常见 macOS/APFS）上找不到混合大小写扩展名。
-        raw_ext = (ext or "").strip()
-        if not raw_ext.startswith("."):
-            raw_ext = "." + raw_ext.lstrip(".")
-        ext_cf = raw_ext.casefold()
-        files: list[Path] = []
         try:
-            for fp in scan_path.rglob("*"):
-                try:
-                    if fp.is_file() and fp.suffix.casefold() == ext_cf:
-                        files.append(fp)
-                except OSError:
-                    continue
-        except OSError as e:
-            self._log_line(f"扫描失败：{e}")
-            self._results_tree_placeholder("错误：遍历目录失败", str(e))
+            raw = scan_part_dedup(self.state.repo_root, opts=self._dedup_opts())
+        except ValueError as e:
+            self._log_line(str(e))
+            self._results_tree_placeholder("错误", str(e))
             return
 
-        files = sorted(files, key=lambda p: str(p.resolve()))
-        if not files:
-            self._log_line(f"未找到 {ext} 文件")
-            self._results_tree_placeholder("未发现匹配扩展名的文件", scan_disp)
-            return
-
-        self._log_line(f"共找到 {len(files)} 个文件（已去重）")
-        if ext_cf == ".fcstd":
-            self._log_line(
-                "说明：`.Drawing.FCStd`（图纸）与 `.FCStd`（一般构件）在编号查重中会分开计数。\n"
-            )
-
-        name_groups: dict[str, list[Path]] = defaultdict(list)
-        code_groups: dict[str, list[Path]] = defaultdict(list)
-        ver_groups: dict[str, list[Path]] = defaultdict(list)
-
-        for fp in files:
-            name_key = fp.name
-            name_groups[name_key].append(fp)
-
-            # FreeCAD FCStd：图纸与普通构件分桶，编号/编号+版本不混组
-            fcstd_tag = _freecad_fcstd_dup_tag(fp.name) if ext_cf == ".fcstd" else ""
-
-            if self._check_code.get():
-                code, ver = self._parse_filename(fp.name)
-                if code:
-                    # 能解析出版本号的文件只做「编号+版本」维度查重，不计入裸「编号重复」
-                    if not ver:
-                        code_groups[f"{code}{fcstd_tag}"].append(fp)
-
-                    if ver and self._check_version.get():
-                        ver_groups[f"{code}_{ver}{fcstd_tag}"].append(fp)
-
-        results = {
-            "name_dup": [],
-            "code_dup": [],
-            "ver_dup": [],
-        }
-
-        for name, paths in sorted(name_groups.items()):
-            if len(paths) > 1:
-                results["name_dup"].append({"文件名": name, "路径": [str(p) for p in paths]})
-
-        if self._check_code.get():
-            for grp_key, paths in sorted(code_groups.items()):
-                if len(paths) > 1:
-                    base, suf = _split_fcstd_group_key(grp_key)
-                    csv_suf = _fcstd_dup_csv_suffix(suf)
-                    results["code_dup"].append(
-                        {"编号": f"{base}{csv_suf}", "路径": [str(p) for p in paths]}
-                    )
-
-        if self._check_code.get() and self._check_version.get():
-            for ver_key, paths in sorted(ver_groups.items()):
-                if len(paths) > 1:
-                    stripped, suf = _split_fcstd_group_key(ver_key)
-                    parts_g = stripped.split("_", 1)
-                    cod = parts_g[0]
-                    ver_part = parts_g[1] if len(parts_g) > 1 else ""
-                    csv_suf = _fcstd_dup_csv_suffix(suf)
-                    results["ver_dup"].append(
-                        {
-                            "编号": cod,
-                            "版本": ver_part,
-                            "_csv_fc": csv_suf,
-                            "路径": [str(p) for p in paths],
-                        }
-                    )
-
+        results = raw["results"]
         self._last_results = results
+        stats = raw["stats"]
 
-        nc = len(results["name_dup"])
-        cc = len(results["code_dup"])
-        vc = len(results["ver_dup"])
-        total_dup = nc + cc + vc
-
-        self._log_line("─" * 42)
-        self._log_line("重复项概要（路径明细见下方树形表）")
-        self._log_line(f"文件名重复：{nc} 组")
-
-        code_on = self._check_code.get()
-        ver_on = self._check_version.get()
-        if code_on:
-            self._log_line(f"编号重复：{cc} 组")
-        else:
-            self._log_line("编号重复：（未勾选编号检查）")
-        if code_on and ver_on:
-            self._log_line(f"编号+版本重复：{vc} 组")
-        elif code_on:
-            self._log_line("编号+版本重复：（未勾选版本检查）")
-
+        self._log_line(raw.get("summary") or "")
         self._log_line("")
-        self._log_line(f"扫描完成：共 {total_dup} 组重复（树中可按 ▶ 折叠/展开分组）")
+        self._log_line(f"扫描完成：共 {stats['name_dup'] + stats['code_dup'] + stats['ver_dup']} 组重复")
 
-        self._populate_results_tree(results, repo_root)
+        self._populate_results_tree(results, self.state.repo_root)
 
     def _export_csv(self) -> None:
         if not self._last_results:
             self._log_line("请先执行扫描")
             return
-
-        repo_root = self.state.repo_root.expanduser().resolve()
-        csv_path = repo_root / "重复文件检查报告.csv"
-
         try:
-            with open(csv_path, "w", newline="", encoding="utf-8-sig") as f:
-                writer = csv.writer(f)
-                writer.writerow(["类型", "标识", "文件路径"])
-
-                for item in self._last_results.get("name_dup", []):
-                    for path in item["路径"]:
-                        writer.writerow(["文件名重复", item["文件名"], path])
-
-                for item in self._last_results.get("code_dup", []):
-                    for path in item["路径"]:
-                        writer.writerow(["编号重复", item["编号"], path])
-
-                for item in self._last_results.get("ver_dup", []):
-                    tag = item.get("_csv_fc") or ""
-                    for path in item["路径"]:
-                        writer.writerow([
-                            "编号+版本重复",
-                            f"{item['编号']}_{item['版本']}{tag}",
-                            path,
-                        ])
-
-            self._log_line(f"\nCSV 已导出：{csv_path}")
+            out = export_part_dedup_csv(self.state.repo_root, {"results": self._last_results})
+            self._log_line(f"\nCSV 已导出：{out['path_display']}")
         except Exception as e:
             self._log_line(f"\n导出失败：{e}")
 

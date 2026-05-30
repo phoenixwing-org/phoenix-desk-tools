@@ -23,6 +23,8 @@ python -m fcdesk              # 或 phoenix-fcdesktop
 
 依赖见 `pyproject.toml`。Windows + SolidWorks 可选：`pip install -e ".[windows-solidworks]"`。`mainloop()` 会占用当前终端直至关窗口。
 
+**Web 界面**（Vue + 本机 API，默认端口 5173）：见 [web-ui/README.md](web-ui/README.md)。
+
 ## 命名
 
 - **发行名**（Gitee/PyPI）：`phoenix-freecad-desktop`

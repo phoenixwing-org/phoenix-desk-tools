@@ -7,7 +7,11 @@ __pycache__
 .venv-desktop/
 .venv/
 phoenix_freecad_desktop.egg-info/
-# 本机工作台路径（自动生成；可复制 workspace.custom.json.example）
+# 本机工作台路径（自动生成；可复制 workspace.custom.json.example 或 web-ui/config/launcher.json.example）
 workspace.custom.json
+web-ui/.local/
 dist/
 build/
+web-ui/node_modules/
+web-ui/dist
+.phoenix/

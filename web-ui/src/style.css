@@ -1,0 +1,42 @@
+:root {
+  font-family: "SF Pro Text", "PingFang SC", system-ui, sans-serif;
+  line-height: 1.5;
+  color: #1a1a1a;
+  --shell-bg: #eceef2;
+  --page-bg: #f8f9fb;
+  --toolbar-bg: #fff;
+  --nav-bg: #e8eaef;
+  --sidebar-bg: #f0f2f6;
+  --panel-head-bg: #fafbfc;
+  --border: #d8dce3;
+  --border-strong: #b8bec8;
+  --text: #111827;
+  --muted: #64748b;
+  --btn-bg: #fafafa;
+  --accent: #2563eb;
+  --nav-hover: rgba(0, 0, 0, 0.06);
+  --nav-mode-bg: #c5cdd8;
+  --nav-mode-fg: #1e293b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button {
+  cursor: pointer;
+  font: inherit;
+}
+
+input,
+textarea {
+  font: inherit;
+}
+
+.page {
+  min-height: 100%;
+}

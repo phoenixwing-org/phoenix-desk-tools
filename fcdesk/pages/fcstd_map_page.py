@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 import itertools
-import json
-import subprocess
-import sys
 import threading
 from collections import defaultdict
 from pathlib import Path
@@ -14,25 +11,19 @@ from tkinter import ttk
 
 from fcdesk.config.user_prefs import (
     format_resolved_under_workspace,
-    format_stored_path_for_display,
-    load_workspace_prefs,
-    merge_workspace_section,
     resolve_workspace_path_entry,
     shorten_workspace_relative_display,
-    store_path_under_repo,
-)
-from fcdesk.fcstd_mapping import (
-    SCHEMA_VERSION,
-    FcstdMapDocument,
-    coerce_payload_to_basename_rel_paths,
-    hints_from_fcstd_location,
 )
 from fcdesk.pages.base import BasePage
 from fcdesk.pages import form_widgets as fw
+from fcdesk.services.fcstd_map_service import (
+    get_fcstd_map_prefs,
+    load_fcstd_map_payload,
+    run_fcstd_map_scan,
+    save_fcstd_map_prefs,
+)
 from fcdesk.shell.native_dialog import pick_workspace_directory
 from fcdesk.shell.state import AppState
-
-_SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
 
 
 class FcstdMapPage(BasePage):
@@ -46,8 +37,8 @@ class FcstdMapPage(BasePage):
         fw.page_hint_label(
             self,
             (
-                "扫描根下遍历 *.FCStd → 写入工作空间根的 fcstd_map.json；"
-                "条目路径相对工作空间根（供「链接路径修正」与同文件共用）。"
+                "扫描根下遍历 *.FCStd → 写入 .phoenix/cad-database.sqlite；"
+                "条目路径相对工作空间根（供「链接路径修正」使用）。"
             ),
             wraplength=880,
         ).grid(row=1, column=0, columnspan=3, padx=24, pady=(0, 10), sticky="nw")
@@ -106,7 +97,7 @@ class FcstdMapPage(BasePage):
         self.grid_columnconfigure(1, weight=1)
 
         self._apply_fcstd_map_tree_style()
-        self._results_tree_placeholder("点击下方「显示表格」加载 fcstd_map.json", "")
+        self._results_tree_placeholder("点击下方「显示表格」加载索引库", "")
 
     def _apply_fcstd_map_tree_style(self) -> None:
         """ttk.Treeview 大致贴近 CTk 亮/深色。"""
@@ -170,62 +161,19 @@ class FcstdMapPage(BasePage):
                 bits.append(v)
         return " · ".join(bits)
 
-    def _rows_from_payload(self, raw: dict) -> list[dict]:
-        """Structured entries 优先，否则沿用遗留扁平映射并补推断字段。"""
-        try:
-            if isinstance(raw.get("entries"), list) and raw["entries"]:
-                patched = dict(raw)
-                patched.setdefault("schema_version", SCHEMA_VERSION)
-                doc = FcstdMapDocument.from_json_mapping(patched)
-                return [
-                    {
-                        "filename": e.filename,
-                        "repo_rel_path": e.repo_rel_path,
-                        "PartNumber": e.PartNumber or "",
-                        "PartVersion": e.PartVersion or "",
-                        "TypeCode": (e.TypeCode or "").upper(),
-                        "ModelSeries": e.ModelSeries or "",
-                        "PartName": e.PartName or "",
-                        "label": e.label or "",
-                    }
-                    for e in doc.entries
-                ]
-        except (TypeError, ValueError, KeyError):
-            pass
-
-        rows: list[dict] = []
-        flat = coerce_payload_to_basename_rel_paths(raw)
-        for name in sorted(flat.keys()):
-            for rp in flat[name]:
-                h = hints_from_fcstd_location(name, rp)
-                tc = str(h.get("TypeCode") or "").strip().upper()
-                rows.append(
-                    {
-                        "filename": name,
-                        "repo_rel_path": rp,
-                        "PartNumber": str(h.get("PartNumber") or "").strip(),
-                        "PartVersion": str(h.get("PartVersion") or "").strip(),
-                        "TypeCode": tc,
-                        "ModelSeries": str(h.get("ModelSeries") or "").strip(),
-                        "PartName": str(h.get("PartName") or "").strip(),
-                        "label": str(h.get("label") or "").strip(),
-                    }
-                )
-        return rows
-
-    def _populate_fcstd_tree(self, map_json: Path, rows: list[dict]) -> None:
+    def _populate_fcstd_tree(self, source: Path, rows: list[dict]) -> None:
         rr = self.state.repo_root.expanduser().resolve(strict=False)
         nid = itertools.count()
         ni = lambda: f"fm_{next(nid)}"
         self._tree.delete(*self._tree.get_children(""))
 
-        jp_disp = format_resolved_under_workspace(map_json.resolve(strict=False), rr)
+        src_disp = format_resolved_under_workspace(source.resolve(strict=False), rr)
         sec = self._tree.insert(
             "",
             "end",
             iid=ni(),
-            text=f"{map_json.name}（{len(rows)} 条）",
-            values=("", jp_disp),
+            text=f"{source.name}（{len(rows)} 条）",
+            values=("", src_disp),
             open=True,
         )
 
@@ -264,54 +212,30 @@ class FcstdMapPage(BasePage):
 
     def _show_map_table(self) -> None:
         rr = self.state.repo_root.expanduser().resolve(strict=False)
-        jp = (rr / "fcstd_map.json").resolve(strict=False)
-        jp_disp = format_resolved_under_workspace(jp, rr)
-        if not jp.is_file():
+        payload = load_fcstd_map_payload(rr)
+        db_disp = payload.get("database_path_display") or ""
+        if not payload.get("exists"):
             self._results_tree_placeholder(
-                "未找到 fcstd_map.json",
-                f"{jp_disp} · 请先「创建索引」",
+                "尚无索引库",
+                f"{db_disp} · 请先「创建索引」" if db_disp else "",
             )
             return
-        try:
-            raw = json.loads(jp.read_text(encoding="utf-8"))
-        except OSError as e:
-            self._results_tree_placeholder("无法读取映射文件", str(e))
-            return
-        except json.JSONDecodeError as e:
-            self._results_tree_placeholder("JSON 解析失败", str(e))
-            return
-
-        payload = raw if isinstance(raw, dict) else {}
-        rows = self._rows_from_payload(payload)
+        rows = payload.get("entries") or []
         if not rows:
-            self._results_tree_placeholder("映射文件无条目", jp_disp)
+            self._results_tree_placeholder("索引库无条目", db_disp)
             return
-        self._populate_fcstd_tree(jp, rows)
+        self._populate_fcstd_tree(Path(payload["database_path"]), rows)
 
     def on_show(self) -> None:
-        pref = load_workspace_prefs(self.state.repo_root).get("fcstd_map") or {}
-        rr = self.state.repo_root
-        disp = shorten_workspace_relative_display(
-            format_stored_path_for_display(pref.get("scan_root"), rr) or ""
-        )
+        prefs = get_fcstd_map_prefs(self.state.repo_root)
+        disp = prefs.get("scan_root") or "."
 
         self._scan_root_entry.delete(0, "end")
         self._scan_root_entry.insert(0, disp)
         self._apply_fcstd_map_tree_style()
 
-
     def _persist(self) -> None:
-        rr = self.state.repo_root.expanduser().resolve(strict=False)
-        s = self._scan_root_entry.get().strip()
-        if not s:
-            stored = None
-        else:
-            p = resolve_workspace_path_entry(s, rr)
-            if p.resolve(strict=False) == rr.resolve(strict=False):
-                stored = None
-            else:
-                stored = store_path_under_repo(p, rr)
-        merge_workspace_section("fcstd_map", {"scan_root": stored}, self.state.repo_root)
+        save_fcstd_map_prefs(self.state.repo_root, self._scan_root_entry.get().strip())
 
     def _browse(self) -> None:
         path = pick_workspace_directory(
@@ -341,27 +265,15 @@ class FcstdMapPage(BasePage):
             return
 
         self._persist()
-        out = Path(self.state.repo_root) / "fcstd_map.json"
-        cmd = [
-            sys.executable,
-            str(_SCRIPTS_DIR / "fcstd_map.py"),
-            "--root",
-            str(scan),
-            "--relative-to",
-            str(rr.resolve(strict=False)),
-            "--json",
-            str(out.resolve(strict=False)),
-        ]
+        scan_input = self._scan_root_entry.get().strip()
         self._log.delete("1.0", "end")
-        self._log.insert("end", "$ " + " ".join(cmd) + "\n")
+        self._log.insert("end", f"工程内搜索：{format_resolved_under_workspace(scan, rr)}\n")
 
         def worker() -> None:
             try:
-                proc = subprocess.run(
-                    cmd, cwd=str(_SCRIPTS_DIR), capture_output=True, text=True, encoding="utf-8"
-                )
-                t = (proc.stdout or "") + (proc.stderr or "")
-                self.after(0, lambda: self._log.insert("end", t + f"\n退出码: {proc.returncode}\n"))
+                payload = run_fcstd_map_scan(rr, scan_root_input=scan_input)
+                log = payload.get("scan_log") or ""
+                self.after(0, lambda: self._log.insert("end", log + "\n"))
             except Exception as e:
                 self.after(0, lambda: self._log.insert("end", f"异常: {e}\n"))
 

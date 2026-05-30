@@ -8,11 +8,7 @@ from pathlib import Path
 
 import customtkinter as ctk
 
-from fcdesk.batch_step.job import StepBatchJob
-from fcdesk.batch_step.step_paths import (
-    list_step_paths_for_batch,
-    step_tree_stats,
-)
+from fcdesk.freecad.batch_step.job import StepBatchJob
 from fcdesk.config.user_prefs import (
     format_resolved_under_workspace,
     format_stored_path_for_display,
@@ -24,12 +20,11 @@ from fcdesk.config.user_prefs import (
 )
 from fcdesk.pages.base import BasePage
 from fcdesk.pages import form_widgets as fw
-from fcdesk.shell.freecad_exec import resolve_freecad_cmd
+from fcdesk.services.step_batch_service import preview_step_batch, run_step_batch
 from fcdesk.shell.native_dialog import pick_workspace_directory
 from fcdesk.shell.state import AppState
 
 _SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
-_RUNNER = _SCRIPTS_DIR / "freecad_batch_step_runner.py"
 _BRIDGE_POLL_SEC = 600.0
 
 
@@ -251,26 +246,29 @@ class StepBatchPage(BasePage):
             step_recursive=self._step_recursive.get(),
         )
 
+    def _step_batch_opts(self) -> dict:
+        vf_last, vf_all = self._vf_flags()
+        vf_key = "all" if vf_all else "last" if vf_last else "none"
+        return {
+            "step_dir": self._step_dir_entry.get().strip(),
+            "out_dir": self._out_dir_entry.get().strip(),
+            "skip_existing": self._skip_existing.get(),
+            "view_fit": vf_key,
+            "use_inbox_bridge": self._use_inbox_bridge.get(),
+            "step_recursive": self._step_recursive.get(),
+        }
+
     def _preview_count(self) -> None:
-        step_s = self._step_dir_entry.get().strip()
-        if not step_s:
-            self._log_line("请先填写 STEP 目录。")
-            return
-        rr = self._repo()
-        step_dir = resolve_workspace_path_entry(step_s, rr)
         try:
-            top, deep = step_tree_stats(step_dir)
-            rec = self._step_recursive.get()
-            n = len(list_step_paths_for_batch(step_dir, recursive=rec))
-        except (OSError, NotADirectoryError) as e:
-            self._log_line(f"无法扫描：{e}")
-            return
-        rec_on = "开" if rec else "关"
-        self._log_line(
-            f"{step_dir}\n"
-            f"  仅顶层 STEP：{top} | 全盘（含子文件夹）：{deep}\n"
-            f"  本次将批量处理数量：{n}（递归={rec_on}）"
-        )
+            data = preview_step_batch(self.state.repo_root, self._step_batch_opts())
+            rec_on = "开" if data["recursive"] else "关"
+            self._log_line(
+                f"{data['step_dir_display']}\n"
+                f"  仅顶层 STEP：{data['top_level']} | 全盘（含子文件夹）：{data['deep_total']}\n"
+                f"  本次将批量处理数量：{data['batch_count']}（递归={rec_on}）"
+            )
+        except ValueError as e:
+            self._log_line(str(e))
 
     def _run(self) -> None:
         self._persist(quiet=True)
@@ -285,7 +283,7 @@ class StepBatchPage(BasePage):
     def _run_via_inbox_bridge(self, job: StepBatchJob) -> None:
         import fcdesk
 
-        from fcdesk.integration.inbox_bridge import enqueue_step_batch, take_response
+        from fcdesk.freecad.inbox_bridge import enqueue_step_batch, take_response
 
         clone = Path(fcdesk.__file__).resolve().parent.parent
         fc_core = clone / "scripts" / "freecad_batch_step_fc.py"
@@ -336,51 +334,20 @@ class StepBatchPage(BasePage):
         self.after(300, tick)
 
     def _run_via_freecadcmd(self, job: StepBatchJob) -> None:
-        fc_home = self.state.freecad_dir
-        cmd_exe = resolve_freecad_cmd(fc_home)
-        if not cmd_exe:
-            hint = fc_home if fc_home else "(未设置)"
-            self._log_line(
-                f"错误：未找到批量命令解释器（freecadcmd / FreeCADCmd）。\n"
-                f"请在「配置」页选择安装根目录（当前：{hint}）。\n"
-                f"macOS 官方 dmg：请选应用程序里的 **FreeCAD.app**。\n"
-                f"新版本常见批次入口：**FreeCAD.app/Contents/Resources/bin/freecadcmd**\n"
-                f"少数旧版：**…/Contents/MacOS/FreeCADCmd**（外层 MacOS 里只有「FreeCAD」启动器的不行）。"
-            )
-            return
-        if not _RUNNER.is_file():
-            self._log_line(f"错误：找不到运行脚本 {_RUNNER}")
-            return
-
-        cmd = [str(cmd_exe), str(_RUNNER)]
-        inner_env = job.subprocess_env()
-        outer = os.environ.copy()
-        merged = {**outer, **inner_env}
-
-        line = "$ " + " ".join(cmd) + "\n" + "\n".join(f"{k}={v}" for k, v in sorted(inner_env.items()))
         self._log.delete("1.0", "end")
-        self._log_line(line)
+        self._log_line("freecadcmd 批量转换…")
 
         def worker() -> None:
             try:
-                proc = subprocess.run(
-                    cmd,
-                    cwd=str(self.state.repo_root.resolve()),
-                    env=merged,
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                )
-                out_parts = [(proc.stdout or ""), (proc.stderr or "")]
-                text = ("\n".join(p for p in out_parts if p)).strip()
-                self.after(
-                    0,
-                    lambda: self._log_line(text or "(无控制台输出)；请查看输出目录 Markdown 报告。"),
-                )
-                self.after(0, lambda: self._log_line(f"\n退出码: {proc.returncode}"))
+                data = run_step_batch(self.state.repo_root, self._step_batch_opts())
+                text = data.get("log") or ""
+                rc = data.get("exit_code", 1)
+                self.after(0, lambda: self._log_line(text))
+                self.after(0, lambda: self._log_line(f"\n退出码: {rc}"))
+            except ValueError as e:
+                self.after(0, lambda err=str(e): self._log_line(err))
             except Exception as e:
-                self.after(0, lambda: self._log_line(f"异常: {e}"))
+                self.after(0, lambda err=str(e): self._log_line(f"异常: {err}"))
 
         threading.Thread(target=worker, daemon=True).start()
 

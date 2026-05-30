@@ -191,9 +191,13 @@ class TestRenameWorkspaceFcstd(unittest.TestCase):
                     new_rel=Path("new.FCStd"),
                 )
             )
-            raw = json.loads((td / "fcstd_map.json").read_text(encoding="utf-8"))
-            self.assertEqual(raw["entries"][0]["filename"], "new.FCStd")
-            self.assertEqual(raw["entries"][0]["repo_rel_path"], "./new.FCStd")
+            from fcdesk.freecad.phoenix_store import find_fcstd_entry
+
+            entry = find_fcstd_entry(td, Path("new.FCStd"))
+            self.assertIsNotNone(entry)
+            assert entry is not None
+            self.assertEqual(entry.filename, "new.FCStd")
+            self.assertEqual(entry.repo_rel_path, "./new.FCStd")
         finally:
             shutil.rmtree(td, ignore_errors=True)
 
