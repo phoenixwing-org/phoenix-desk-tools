@@ -46,11 +46,12 @@ export function useIncomingRefQuery(
     logIncoming(`开始 ${actionLabel} · ${describeIncomingTargetQuery(q)} · ${transitiveLabel()}`);
   }
 
-  function formatHostSummary(opts: {
+  function   formatHostSummary(opts: {
     hostCount: number;
     directHostCount?: number;
     edgeCount?: number;
     hitCount?: number;
+    pendingHitCount?: number;
     mode?: "query" | "analyze";
   }) {
     return formatIncomingHostSummary({

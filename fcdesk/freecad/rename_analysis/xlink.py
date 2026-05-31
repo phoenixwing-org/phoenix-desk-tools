@@ -16,6 +16,46 @@ XLINK_FILE_RE = re.compile(r'(<XLink\s+file=")([^"]*)(")', re.MULTILINE)
 _SKIP_DIRS = frozenset({".git", ".phoenix", "__pycache__", "node_modules", ".venv", "venv"})
 
 
+def preferred_xlink_attr_for_target(
+    repo_root: Path,
+    host_repo_rel: str,
+    target_repo_rel: str,
+) -> str:
+    """从宿主 FCStd 所在目录到目标文件的相对 ``file`` 属性（FreeCAD 惯例）。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    host = (rr / host_repo_rel).resolve(strict=False)
+    target = (rr / target_repo_rel).resolve(strict=False)
+    return os.path.relpath(target, host.parent).replace(os.sep, "/")
+
+
+def resolve_xlink_attr_to_abs(repo_root: Path, host_repo_rel: str, xlink_attr: str) -> Path | None:
+    rr = repo_root.expanduser().resolve(strict=False)
+    host = (rr / host_repo_rel).resolve(strict=False)
+    attr = xlink_attr.replace("\\", "/").strip()
+    if not attr:
+        return None
+    candidate = (host.parent / attr).resolve(strict=False)
+    return candidate if candidate.is_file() else None
+
+
+def xlink_attr_matches_target(
+    repo_root: Path,
+    host_repo_rel: str,
+    xlink_attr: str,
+    target_repo_rel: str,
+) -> bool:
+    """XLink ``file`` 解析结果是否与目标文件路径一致。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    expected = (rr / target_repo_rel).resolve(strict=False)
+    actual = resolve_xlink_attr_to_abs(repo_root, host_repo_rel, xlink_attr)
+    if actual is None:
+        return False
+    try:
+        return actual.samefile(expected)
+    except OSError:
+        return actual == expected
+
+
 def replace_basename_in_xlink_attr(attr: str, old_basename: str, new_basename: str) -> str | None:
     """若 ``attr`` 末尾 basename 与 ``old_basename`` 相同（大小写忽略），返回替换后的 ``file`` 值。"""
     norm = attr.replace("\\", "/")

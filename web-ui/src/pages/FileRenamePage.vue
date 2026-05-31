@@ -127,8 +127,29 @@ function toggleAll(checked: boolean) {
   }
 }
 
-function hostPending(h: { hits: Array<{ status: string }> }) {
-  return h.hits.length > 0 && h.hits.some((x) => x.status !== "applied");
+function hitNeedsFix(hit: { status: string; proposed_text?: string; matched_text?: string }) {
+  if (hit.status === "applied" || hit.status === "ok") return false;
+  return hit.proposed_text !== hit.matched_text;
+}
+
+function chainPendingHits(
+  host: { host_repo_rel_path: string; host_filename: string; via_chain?: string[]; hits: Array<{ status: string; proposed_text?: string; matched_text?: string }> },
+  all: Array<{ host_repo_rel_path: string; host_filename: string; via_chain?: string[]; hits: Array<{ status: string; proposed_text?: string; matched_text?: string }> }>,
+) {
+  const chain = new Set((host.via_chain ?? []).map((p) => p.replace(/\\/g, "/")));
+  return all.filter((h) => chain.has(h.host_repo_rel_path.replace(/\\/g, "/")) && h.hits.some(hitNeedsFix));
+}
+
+function hostPending(h: {
+  hits: Array<{ status: string; proposed_text?: string; matched_text?: string }>;
+  depth?: number;
+  via_chain?: string[];
+  host_repo_rel_path?: string;
+  host_filename?: string;
+}) {
+  if (h.hits.some(hitNeedsFix)) return true;
+  if (!scan.value) return false;
+  return chainPendingHits(h as Parameters<typeof chainPendingHits>[0], scan.value.hosts).length > 0;
 }
 
 function selectPendingHosts() {
@@ -389,18 +410,18 @@ async function onScanRefs() {
       const old = originalFilename.value.trim();
       const neu = newFilename.value.trim() || old;
       const targetRel = rel.value.trim() || undefined;
-      logIncoming(`文件=${old}${targetRel ? ` rel=${targetRel}` : ""}`, { open: false });
-      data = await analyzeRenameReferences(
-        buildRenameAnalyzeParams(
-          { rel: targetRel, basename: old },
-          {
-            newBasename: neu,
-            excludeRepoRel: targetRel,
-            transitive,
-            persist: false,
-          },
-        ),
-      );
+      logIncoming(`basename=${old}${targetRel ? ` · 路径=${targetRel}` : ""}`, { open: false });
+        data = await analyzeRenameReferences(
+          buildRenameAnalyzeParams(
+            { basename: old },
+            {
+              newBasename: neu,
+              oldRepoRel: targetRel,
+              transitive,
+              persist: false,
+            },
+          ),
+        );
     }
     scan.value = data;
     selectPendingHosts();
@@ -408,6 +429,7 @@ async function onScanRefs() {
       hostCount: data.host_count,
       directHostCount: data.direct_host_count ?? data.host_count,
       hitCount: data.hit_count,
+      pendingHitCount: data.pending_hit_count ?? data.hit_count,
       mode: "analyze",
     });
     logIncoming(summary);
@@ -737,7 +759,7 @@ onUnmounted(() => {
       <section class="toolbar">
         <label class="chk-transitive">
           <input v-model="includeTransitive" type="checkbox" />
-          含总装配等间接引用（传递闭包）
+          含间接宿主（总装配等；勾选后写回子装配链上的 XLink 相对路径）
         </label>
         <button type="button" class="btn primary" :disabled="busy || !canAnalyze" @click="onScanRefs">
           {{ busy ? "…" : "开始分析" }}
@@ -787,7 +809,7 @@ onUnmounted(() => {
         </button>
         <label class="chk-transitive">
           <input v-model="includeTransitive" type="checkbox" />
-          含间接引用
+          含间接宿主（写回子装配链 XLink）
         </label>
         <button type="button" class="btn" :disabled="busy || !canAnalyze" @click="onScanRefs">分析引用</button>
       </section>
@@ -810,6 +832,7 @@ onUnmounted(() => {
     <section class="help-panel">
       <h3 class="help-title">说明</h3>
       <ul class="help-list">
+        <li>FreeCAD 每条 XLink 都记录相对路径；分析按<strong>文件名</strong>全库查找。间接宿主（总装配）勾选「修正选中引用」时，会写回经子装配链上待修正的 XLink。</li>
         <li>下方「引用查询」仅浏览入向/出向关系；要批量修正 XLink 请用上方「分析引用」与勾选写回。</li>
         <li>独立分析 · 手填模式：可输入<strong>部分文件名</strong>，或在右侧树点击后自动填入并分析。</li>
         <li>在右侧树中点击文件即可载入；目标文件名默认与当前相同。未改目标名也可「分析引用」查看谁在用此文件；修改后再执行改名。</li>

@@ -71,6 +71,7 @@ export function formatIncomingHostSummary(opts: {
   transitive: boolean;
   edgeCount?: number;
   hitCount?: number;
+  pendingHitCount?: number;
   mode?: "query" | "analyze";
 }): string {
   const direct = opts.directHostCount ?? opts.hostCount;
@@ -80,6 +81,7 @@ export function formatIncomingHostSummary(opts: {
       `分析完成：宿主 ${opts.hostCount} 个`,
       opts.transitive && indirect > 0 ? `直接 ${direct} · 间接 ${indirect}` : null,
       opts.hitCount != null ? `XLink ${opts.hitCount} 处` : null,
+      opts.pendingHitCount != null ? `待修正 ${opts.pendingHitCount} 处` : null,
     ]
       .filter(Boolean)
       .join(" · ");
@@ -98,6 +100,11 @@ export function buildRenameAnalyzeParams(
   q: TargetFileQuery,
   opts: {
     newBasename: string;
+    /** 改名后的目标路径（目录+新文件名），用于 XLink 路径写回 */
+    newRepoRel?: string;
+    /** 当前目标路径：排除其作为宿主、并精确匹配入向引用 */
+    oldRepoRel?: string;
+    /** @deprecated 用 oldRepoRel */
     excludeRepoRel?: string;
     transitive: boolean;
     persist: boolean;
@@ -112,11 +119,14 @@ export function buildRenameAnalyzeParams(
     };
   }
   const old = incomingQueryToBasename(q);
+  const neu = opts.newBasename.trim() || old;
+  const oldPath = (opts.oldRepoRel || opts.excludeRepoRel)?.trim();
+  const newPath = opts.newRepoRel?.trim() || undefined;
   return {
     old_basename: old,
-    new_basename: opts.newBasename.trim() || old,
-    old_repo_rel_path: opts.excludeRepoRel?.trim() || undefined,
-    target_repo_rel: q.rel,
+    new_basename: neu,
+    old_repo_rel_path: oldPath || undefined,
+    new_repo_rel_path: newPath || undefined,
     transitive: opts.transitive,
     persist: opts.persist,
   };

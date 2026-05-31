@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -12,19 +13,27 @@ from fcdesk.freecad.cad_index_types import is_fcstd_filename
 from fcdesk.freecad.fcstd_mapping import normalize_repo_rel_path_for_map
 from fcdesk.freecad.phoenix_store import (
     cad_database_path,
+    delete_bom_xrefs_for_hosts,
     ensure_fcstd_scan_record,
     get_file_asset_id,
     get_last_fcstd_scan_id,
+    insert_bom_xref_edges,
     list_present_fcstd_file_assets,
     load_bom_xref_meta,
     query_all_bom_xref_edges,
+    query_bom_xrefs_for_rename_basename,
     query_bom_xrefs_incoming,
     query_bom_xrefs_outgoing,
     replace_bom_xrefs,
+    find_present_repo_rel_by_filename,
 )
 from fcdesk.freecad.phoenix_store import _norm_key
 from fcdesk.freecad.rename_analysis.types import HostRefGroup, RenameAnalysisError, XLinkBasenameHit
-from fcdesk.freecad.rename_analysis.xlink import replace_basename_in_xlink_attr
+from fcdesk.freecad.rename_analysis.xlink import (
+    preferred_xlink_attr_for_target,
+    replace_basename_in_xlink_attr,
+    xlink_attr_matches_target,
+)
 
 
 def rebuild_bom_xrefs(repo_root: Path, *, scan_id: int, scan_root: Path) -> dict[str, Any]:
@@ -39,39 +48,14 @@ def rebuild_bom_xrefs(repo_root: Path, *, scan_id: int, scan_root: Path) -> dict
 
     edges: list[dict[str, Any]] = []
     for asset in assets:
-        host_rel = asset["repo_rel_path"]
-        host_path = rr / host_rel
-        if not host_path.is_file():
-            continue
-        for xlink in list_fcstd_xlink_attrs_from_file(host_path):
-            target_base = Path(xlink.replace("\\", "/")).name
-            resolved = resolve_xlink_target(
-                repo_root=rr,
-                host_repo_rel=host_rel,
-                xlink_file_attr=xlink,
+        edges.extend(
+            _bom_xref_edges_for_host(
+                rr,
+                asset,
                 basename_map=basename_map,
+                path_to_id=path_to_id,
             )
-            target_rel = resolved.target_repo_rel_path
-            target_id = path_to_id.get(target_rel) if target_rel else None
-            if target_id is None and target_rel:
-                target_id = get_file_asset_id(rr, target_rel)
-
-            detail = None
-            if resolved.candidate_paths:
-                detail = {"candidates": list(resolved.candidate_paths)}
-
-            edges.append(
-                {
-                    "host_file_asset_id": asset["id"],
-                    "host_repo_rel_path": host_rel,
-                    "xlink_file_attr": xlink,
-                    "target_basename": target_base,
-                    "target_file_asset_id": target_id,
-                    "target_repo_rel_path": target_rel,
-                    "resolve_status": resolved.resolve_status,
-                    "detail_json": detail,
-                }
-            )
+        )
 
     stats = replace_bom_xrefs(rr, scan_id=scan_id, edges=edges)
     return {
@@ -80,6 +64,94 @@ def rebuild_bom_xrefs(repo_root: Path, *, scan_id: int, scan_root: Path) -> dict
         "database_path_display": format_resolved_under_workspace(cad_database_path(rr), rr),
         **stats,
     }
+
+
+def _bom_xref_edges_for_host(
+    repo_root: Path,
+    asset: dict[str, Any],
+    *,
+    basename_map: dict[str, list[str]],
+    path_to_id: dict[str, int],
+) -> list[dict[str, Any]]:
+    host_rel = asset["repo_rel_path"]
+    host_path = repo_root / host_rel
+    if not host_path.is_file():
+        return []
+
+    edges: list[dict[str, Any]] = []
+    for xlink in list_fcstd_xlink_attrs_from_file(host_path):
+        target_base = Path(xlink.replace("\\", "/")).name
+        resolved = resolve_xlink_target(
+            repo_root=repo_root,
+            host_repo_rel=host_rel,
+            xlink_file_attr=xlink,
+            basename_map=basename_map,
+        )
+        target_rel = resolved.target_repo_rel_path
+        target_id = path_to_id.get(target_rel) if target_rel else None
+        if target_id is None and target_rel:
+            target_id = get_file_asset_id(repo_root, target_rel)
+
+        detail = None
+        if resolved.candidate_paths:
+            detail = {"candidates": list(resolved.candidate_paths)}
+
+        edges.append(
+            {
+                "host_file_asset_id": asset["id"],
+                "host_repo_rel_path": host_rel,
+                "xlink_file_attr": xlink,
+                "target_basename": target_base,
+                "target_file_asset_id": target_id,
+                "target_repo_rel_path": target_rel,
+                "resolve_status": resolved.resolve_status,
+                "detail_json": detail,
+            }
+        )
+    return edges
+
+
+def refresh_bom_xrefs_for_hosts(repo_root: Path, host_repo_rel_paths: list[str]) -> dict[str, Any]:
+    """XLink 写回后，从磁盘重读指定宿主的引用边并更新 ``bom_xref``。"""
+    from fcdesk.config.user_prefs import load_workspace_prefs
+    from fcdesk.services.fcstd_map_service import resolve_scan_root, scan_cad_basename_map
+
+    rr = repo_root.expanduser().resolve(strict=False)
+    hosts = [_norm_xref_path(p) or str(p).strip() for p in host_repo_rel_paths if str(p).strip()]
+    hosts = sorted({h for h in hosts if h})
+    if not hosts:
+        return {"updated_hosts": 0, "edge_count": 0}
+
+    ensure_bom_xref_built(rr)
+    scan_id = ensure_fcstd_scan_record(rr) or get_last_fcstd_scan_id(rr)
+    if scan_id is None:
+        return {"updated_hosts": 0, "edge_count": 0}
+
+    ws_pref = load_workspace_prefs(rr).get("fcstd_map") or {}
+    scan_root = resolve_scan_root(rr, ws_pref.get("scan_root"))
+    basename_map = scan_cad_basename_map(scan_root, anchor=rr)
+    path_to_id = {a["repo_rel_path"]: a["id"] for a in list_present_fcstd_file_assets(rr)}
+
+    delete_bom_xrefs_for_hosts(rr, hosts)
+    edges: list[dict[str, Any]] = []
+    updated = 0
+    for host_rel in hosts:
+        asset_id = get_file_asset_id(rr, host_rel)
+        if asset_id is None:
+            continue
+        asset = {"id": asset_id, "repo_rel_path": host_rel}
+        host_edges = _bom_xref_edges_for_host(
+            rr,
+            asset,
+            basename_map=basename_map,
+            path_to_id=path_to_id,
+        )
+        if host_edges:
+            updated += 1
+        edges.extend(host_edges)
+
+    stats = insert_bom_xref_edges(rr, scan_id=scan_id, edges=edges)
+    return {"updated_hosts": updated, **stats}
 
 
 def load_bom_xref_payload(repo_root: Path) -> dict[str, Any]:
@@ -170,6 +242,30 @@ def _direct_refs_for_host(
     return [r for r in direct_rows if _norm_xref_path(r.get("host_repo_rel_path")) == key]
 
 
+def fetch_rename_ref_rows(
+    repo_root: Path,
+    *,
+    old_basename: str,
+    exclude_repo_rel: str | None = None,
+    limit: int = 500,
+) -> list[dict[str, Any]]:
+    """改名分析：全库按 basename 查引用边（不依赖 target_repo_rel）。"""
+    base = old_basename.strip()
+    if not base:
+        return []
+    cap = max(1, min(int(limit), 2000))
+    rows = query_bom_xrefs_for_rename_basename(repo_root, base, limit=cap)
+    if exclude_repo_rel:
+        exclude_key = _norm_key(exclude_repo_rel)
+        rows = [r for r in rows if _norm_key(r["host_repo_rel_path"]) != exclude_key]
+    return rows
+
+
+def _find_unique_basename_path(repo_root: Path, basename: str) -> str | None:
+    rel = find_present_repo_rel_by_filename(repo_root, basename)
+    return _norm_xref_path(rel) if rel else None
+
+
 def fetch_incoming_direct_rows(
     repo_root: Path,
     *,
@@ -181,9 +277,16 @@ def fetch_incoming_direct_rows(
     """统一入向查询：直接引用边（BOM 引用 / 改名分析共用）。"""
     rel = (repo_rel or "").strip() or None
     base = (basename or "").strip() or None
+    cap = max(1, min(int(limit), 2000))
+    if base and not rel:
+        return fetch_rename_ref_rows(
+            repo_root,
+            old_basename=base,
+            exclude_repo_rel=exclude_repo_rel,
+            limit=cap,
+        )
     lookup_rel = rel
     lookup_base = base if not rel else None
-    cap = max(1, min(int(limit), 2000))
     rows = query_bom_xrefs_incoming(
         repo_root,
         repo_rel=lookup_rel,
@@ -194,6 +297,38 @@ def fetch_incoming_direct_rows(
         exclude_key = _norm_key(exclude_repo_rel)
         rows = [r for r in rows if _norm_key(r["host_repo_rel_path"]) != exclude_key]
     return rows
+
+
+def _filter_incoming_result(
+    incoming: dict[str, Any],
+    *,
+    exclude_repo_rel: str | None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    refs = list(incoming.get("refs") or [])
+    hosts = list(incoming.get("hosts") or [])
+    if not exclude_repo_rel:
+        return refs, hosts
+    exclude_key = _norm_key(exclude_repo_rel)
+    refs = [r for r in refs if _norm_key(r["host_repo_rel_path"]) != exclude_key]
+    hosts = [h for h in hosts if _norm_key(h["host_repo_rel_path"]) != exclude_key]
+    return refs, hosts
+
+
+def _merge_incoming_ref_rows(
+    direct_rows: list[dict[str, Any]],
+    host_entries: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    merged: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in direct_rows:
+        host = str(row.get("host_repo_rel_path") or "")
+        attr = str(row.get("xlink_file_attr") or "")
+        merged[(host, attr)] = row
+    for entry in host_entries:
+        for row in entry.get("direct_refs") or []:
+            host = str(row.get("host_repo_rel_path") or "")
+            attr = str(row.get("xlink_file_attr") or "")
+            merged[(host, attr)] = row
+    return list(merged.values())
 
 
 def resolve_incoming_host_entries(
@@ -347,75 +482,156 @@ def host_ref_groups_from_db(
     new_basename: str,
     exclude_repo_rel: str | None = None,
     target_repo_rel: str | None = None,
+    new_repo_rel_path: str | None = None,
     transitive: bool = True,
     limit: int = 500,
 ) -> list[HostRefGroup]:
-    """从 ``bom_xref`` 构建改名分析用的宿主分组（不读盘扫描）。"""
+    """从 ``bom_xref`` 构建改名分析用的宿主分组（与 ``search_incoming_refs`` 同源）。"""
     ensure_bom_xref_built(repo_root)
-    rel = (target_repo_rel or "").strip() or None
     base = old_basename.strip()
-    lookup_rel = rel
-    lookup_base = base if not rel else None
-
-    direct_rows = fetch_incoming_direct_rows(
-        repo_root,
-        repo_rel=lookup_rel,
-        basename=lookup_base,
-        exclude_repo_rel=exclude_repo_rel,
-        limit=limit,
-    )
-    if not direct_rows:
+    if not base:
         return []
 
-    hit_map = _build_rename_hit_map(direct_rows, old_basename=old_basename, new_basename=new_basename)
+    incoming = search_incoming_refs(
+        repo_root,
+        basename=base,
+        repo_rel=None,
+        transitive=transitive,
+        limit=limit,
+    )
+    direct_rows, host_entries = _filter_incoming_result(
+        incoming,
+        exclude_repo_rel=exclude_repo_rel,
+    )
+    ref_rows = _merge_incoming_ref_rows(direct_rows, host_entries)
+    if not ref_rows and not host_entries:
+        return []
+
+    canon_old = _find_unique_basename_path(repo_root, base) or _norm_xref_path(target_repo_rel)
+    new_target_repo_rel = (
+        _norm_xref_path(new_repo_rel_path)
+        or _find_unique_basename_path(repo_root, new_basename.strip())
+        or _resolve_new_target_repo_rel(
+            target_repo_rel=canon_old,
+            old_basename=old_basename,
+            new_basename=new_basename,
+        )
+    )
+    hit_map = _build_rename_hit_map(
+        repo_root,
+        ref_rows,
+        old_basename=old_basename,
+        new_basename=new_basename,
+        target_repo_rel=canon_old,
+        new_target_repo_rel=new_target_repo_rel,
+        list_all_matches=True,
+    )
 
     if not transitive:
         return _host_groups_from_hit_map(hit_map)
 
-    host_entries = resolve_incoming_host_entries(
-        repo_root,
-        repo_rel=lookup_rel,
-        basename=lookup_base,
-        direct_rows=direct_rows,
-        transitive=True,
-        limit=limit,
-    )
+    entry_meta = {
+        _norm_xref_path(e["host_repo_rel_path"]) or e["host_repo_rel_path"]: e for e in host_entries
+    }
 
     out: list[HostRefGroup] = []
+    out_keys: set[str] = set(hit_map.keys())
     for entry in host_entries:
-        host_key = entry["host_repo_rel_path"]
+        k = _norm_xref_path(entry["host_repo_rel_path"]) or entry["host_repo_rel_path"]
+        out_keys.add(k)
+
+    for host_key in sorted(out_keys):
         hits = hit_map.get(host_key, [])
+        meta = entry_meta.get(host_key, {})
         out.append(
             HostRefGroup(
                 host_repo_rel_path=host_key,
                 host_filename=Path(host_key).name,
                 hits=tuple(hits),
-                depth=int(entry.get("depth") or 0),
-                usage_kind=str(entry.get("usage_kind") or "direct"),
-                via_chain=tuple(entry.get("via_chain") or []),
+                depth=int(meta.get("depth") or 0),
+                usage_kind=str(meta.get("usage_kind") or ("direct" if hits else "indirect")),
+                via_chain=tuple(meta.get("via_chain") or []),
             )
         )
     return out
 
 
+def _resolve_new_target_repo_rel(
+    *,
+    target_repo_rel: str | None,
+    old_basename: str,
+    new_basename: str,
+) -> str | None:
+    rel = _norm_xref_path(target_repo_rel)
+    old = old_basename.strip()
+    new = new_basename.strip()
+    if old.casefold() == new.casefold():
+        return rel
+    if rel and Path(rel).name.casefold() == old.casefold():
+        return _norm_xref_path(str(Path(rel).with_name(new)))
+    return None
+
+
 def _build_rename_hit_map(
+    repo_root: Path,
     rows: list[dict[str, Any]],
     *,
     old_basename: str,
     new_basename: str,
+    target_repo_rel: str | None = None,
+    new_target_repo_rel: str | None = None,
+    list_all_matches: bool = False,
 ) -> dict[str, list[XLinkBasenameHit]]:
+    """按**文件名**匹配 XLink；目录与目标不一致时也列入待修正（可同时改 basename 与相对路径）。"""
     grouped: dict[str, list[XLinkBasenameHit]] = {}
-    same_name = old_basename.strip().casefold() == new_basename.strip().casefold()
+    old = old_basename.strip()
+    new = new_basename.strip()
+    renaming = old.casefold() != new.casefold()
+    canon = _norm_xref_path(target_repo_rel)
+    global_new_target = new_target_repo_rel or (
+        _norm_xref_path(str(Path(canon).with_name(new))) if canon and renaming else canon
+    )
+
     for row in rows:
         host = _norm_xref_path(row["host_repo_rel_path"]) or str(row["host_repo_rel_path"])
-        old_attr = row["xlink_file_attr"]
-        row_old = str(row["target_basename"])
-        if same_name:
-            proposed = old_attr
-        else:
-            proposed = replace_basename_in_xlink_attr(old_attr, row_old, new_basename)
-            if not proposed or proposed == old_attr:
+        old_attr = str(row["xlink_file_attr"])
+        attr_base = Path(old_attr.replace("\\", "/")).name
+        if attr_base.casefold() != old.casefold():
+            continue
+
+        row_target = _norm_xref_path(row.get("target_repo_rel_path"))
+        desired_target = global_new_target
+        if not desired_target and row_target and renaming:
+            desired_target = _norm_xref_path(str(Path(row_target).with_name(new)))
+        elif not desired_target:
+            desired_target = row_target or canon
+
+        check_target = row_target or canon or desired_target
+        proposed: str | None = None
+
+        if desired_target:
+            try:
+                expected_attr = preferred_xlink_attr_for_target(repo_root, host, desired_target)
+            except (OSError, ValueError):
+                expected_attr = None
+            if expected_attr and expected_attr != old_attr:
+                needs_path_fix = (
+                    renaming
+                    or not check_target
+                    or not xlink_attr_matches_target(repo_root, host, old_attr, check_target)
+                )
+                if needs_path_fix:
+                    proposed = expected_attr
+
+        if proposed is None and renaming:
+            proposed = replace_basename_in_xlink_attr(old_attr, old, new)
+
+        if not proposed or proposed == old_attr:
+            if list_all_matches:
+                proposed = old_attr
+            else:
                 continue
+
         grouped.setdefault(host, []).append(
             XLinkBasenameHit(
                 host_repo_rel_path=host,

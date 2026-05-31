@@ -1018,14 +1018,11 @@ def replace_ref_hits_for_rename_scan(
     rename_log_id: int,
     hits: list[Mapping[str, Any]],
 ) -> dict[str, Any]:
-    """写入引用扫描结果（替换同 ``rename_log_id`` 下旧的 pending 命中）。"""
+    """写入引用扫描结果（替换同 ``rename_log_id`` 下全部命中快照）。"""
     rr = repo_root.expanduser().resolve(strict=False)
     now = _utc_now_iso()
     with connect(rr) as conn:
-        conn.execute(
-            "DELETE FROM ref_hit WHERE rename_log_id = ? AND status = 'pending'",
-            (rename_log_id,),
-        )
+        conn.execute("DELETE FROM ref_hit WHERE rename_log_id = ?", (rename_log_id,))
         cur = conn.execute(
             """
             INSERT INTO change_event(kind, created_at, actor, source, note, stats_json)
@@ -1035,19 +1032,29 @@ def replace_ref_hits_for_rename_scan(
         )
         event_id = int(cur.lastrowid)
         for h in hits:
+            matched = str(h["matched_text"])
+            proposed = str(h["proposed_text"])
+            raw_status = str(h.get("status") or "").strip().lower()
+            if raw_status in ("ok", "applied", "pending"):
+                status = raw_status
+            elif proposed != matched:
+                status = "pending"
+            else:
+                status = "ok"
             conn.execute(
                 """
                 INSERT INTO ref_hit (
                     event_id, rename_log_id, host_repo_rel_path, host_asset_kind,
                     ref_kind, locator, matched_text, proposed_text, status, detail_json
-                ) VALUES (?, ?, ?, 'fcstd', 'xlink_file_attr', 'Document.xml', ?, ?, 'pending', NULL)
+                ) VALUES (?, ?, ?, 'fcstd', 'xlink_file_attr', 'Document.xml', ?, ?, ?, NULL)
                 """,
                 (
                     event_id,
                     rename_log_id,
                     h["host_repo_rel_path"],
-                    h["matched_text"],
-                    h["proposed_text"],
+                    matched,
+                    proposed,
+                    status,
                 ),
             )
     return load_ref_hits_for_rename(rr, rename_log_id)
@@ -1087,10 +1094,17 @@ def load_ref_hits_for_rename(repo_root: Path, rename_log_id: int) -> dict[str, A
         )
         bucket["hit_count"] = len(bucket["hits"])
     host_list = sorted(hosts.values(), key=lambda x: x["host_repo_rel_path"])
+    pending_hit_count = sum(
+        1
+        for h in host_list
+        for hit in h["hits"]
+        if hit["proposed_text"] != hit["matched_text"] and hit["status"] != "applied"
+    )
     return {
         "rename_log_id": rename_log_id,
         "host_count": len(host_list),
         "hit_count": sum(h["hit_count"] for h in host_list),
+        "pending_hit_count": pending_hit_count,
         "hosts": host_list,
     }
 
@@ -1358,6 +1372,84 @@ def replace_bom_xrefs(
     return stats
 
 
+def delete_bom_xrefs_for_hosts(repo_root: Path, host_repo_rel_paths: list[str]) -> int:
+    """删除指定宿主在 ``bom_xref`` 中的引用边（写回 XLink 后局部刷新用）。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    keys = [_norm_key(p) for p in host_repo_rel_paths if str(p).strip()]
+    if not keys:
+        return 0
+    deleted = 0
+    with connect(rr) as conn:
+        for key in keys:
+            cur = conn.execute("DELETE FROM bom_xref WHERE host_repo_rel_path = ?", (key,))
+            deleted += int(cur.rowcount)
+    return deleted
+
+
+def insert_bom_xref_edges(
+    repo_root: Path,
+    *,
+    scan_id: int,
+    edges: list[Mapping[str, Any]],
+    rebuilt_at: str | None = None,
+) -> dict[str, int]:
+    """向 ``bom_xref`` 追加边（不整表清空；配合 ``delete_bom_xrefs_for_hosts`` 使用）。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    now = rebuilt_at or _utc_now_iso()
+    stats = {"edge_count": 0, "target_resolved": 0, "target_ambiguous": 0, "target_missing": 0}
+    if not edges:
+        return stats
+
+    with connect(rr) as conn:
+        for edge in edges:
+            host_id = int(edge["host_file_asset_id"])
+            host_path = _norm_key(str(edge["host_repo_rel_path"]))
+            xlink = str(edge["xlink_file_attr"])
+            target_base = str(edge["target_basename"])
+            target_id = edge.get("target_file_asset_id")
+            target_path = edge.get("target_repo_rel_path")
+            if target_path:
+                target_path = _norm_key(str(target_path))
+            status = str(edge.get("resolve_status") or "missing")
+            detail = edge.get("detail_json")
+            if detail is not None and not isinstance(detail, str):
+                detail = json.dumps(detail, ensure_ascii=False)
+
+            conn.execute(
+                """
+                INSERT INTO bom_xref (
+                    scan_id, host_file_asset_id, host_repo_rel_path, ref_kind, locator,
+                    xlink_file_attr, target_basename, target_file_asset_id,
+                    target_repo_rel_path, resolve_status, detail_json, last_seen_at
+                ) VALUES (?, ?, ?, 'xlink_file_attr', 'Document.xml', ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    scan_id,
+                    host_id,
+                    host_path,
+                    xlink,
+                    target_base,
+                    int(target_id) if target_id is not None else None,
+                    target_path,
+                    status,
+                    detail,
+                    now,
+                ),
+            )
+            stats["edge_count"] += 1
+            if status == "resolved":
+                stats["target_resolved"] += 1
+            elif status == "ambiguous":
+                stats["target_ambiguous"] += 1
+            elif status in ("missing", "non_fcstd"):
+                stats["target_missing"] += 1
+
+        _meta_set(conn, "last_bom_xref_at", now)
+        _meta_set(conn, "last_bom_xref_scan_id", str(scan_id))
+
+    return stats
+
+
 def load_bom_xref_meta(repo_root: Path) -> dict[str, Any]:
     rr = repo_root.expanduser().resolve(strict=False)
     if not cad_database_path(rr).is_file():
@@ -1504,6 +1596,67 @@ def query_bom_xrefs_outgoing(
             LIMIT ?
             """,
             (key, cap),
+        ).fetchall()
+    return [_bom_xref_row_to_dict(r) for r in rows]
+
+
+def find_present_repo_rel_by_filename(repo_root: Path, filename: str) -> str | None:
+    """工作空间内按 filename 找唯一 present 文件（改名分析默认 basename 不重复）。"""
+    from fcdesk.freecad.fcstd_mapping import FILE_STATUS_PRESENT
+
+    name = filename.strip()
+    if not name:
+        return None
+    rr = repo_root.expanduser().resolve(strict=False)
+    with connect(rr) as conn:
+        row = conn.execute(
+            """
+            SELECT repo_rel_path FROM file_asset
+            WHERE lower(filename) = lower(?) AND file_status = ?
+            ORDER BY repo_rel_path
+            LIMIT 1
+            """,
+            (name, FILE_STATUS_PRESENT),
+        ).fetchone()
+    if row is None:
+        return None
+    return normalize_repo_rel_path_for_map(str(row["repo_rel_path"]))
+
+
+def query_bom_xrefs_for_rename_basename(
+    repo_root: Path,
+    basename: str,
+    *,
+    limit: int = 2000,
+) -> list[dict[str, Any]]:
+    """改名分析：仅按 basename 查全部引用边（不用路径；含 XLink 属性匹配）。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    base = basename.strip()
+    if not base:
+        return []
+    cap = max(1, min(int(limit), 2000))
+    like_tail = f"%/{base}"
+    like_tail_win = f"%\\{base}"
+    if _looks_like_exact_basename(base):
+        target_clause = "target_basename = ? COLLATE NOCASE"
+        target_param: Any = base
+    else:
+        target_clause = "target_basename LIKE ? ESCAPE '\\' COLLATE NOCASE"
+        target_param = f"%{_sql_like_escape(base)}%"
+
+    sql = f"""
+        SELECT * FROM bom_xref
+        WHERE ({target_clause}
+               OR xlink_file_attr = ? COLLATE NOCASE
+               OR xlink_file_attr LIKE ? ESCAPE '\\' COLLATE NOCASE
+               OR xlink_file_attr LIKE ? ESCAPE '\\' COLLATE NOCASE)
+        ORDER BY host_repo_rel_path, xlink_file_attr
+        LIMIT ?
+    """
+    with connect(rr) as conn:
+        rows = conn.execute(
+            sql,
+            (target_param, base, like_tail, like_tail_win, cap),
         ).fetchall()
     return [_bom_xref_row_to_dict(r) for r in rows]
 

@@ -18,6 +18,12 @@
       "description": "扫描 FCStd、MD、PDF、图片、DXF/DWG 等写入索引库"
     },
     {
+      "id": "bom_export",
+      "label": "BOM 列表",
+      "page": "bom_export",
+      "description": "按装配列出 XLink 子件 BOM 表（属性来自 CAD 索引）"
+    },
+    {
       "id": "part_catalog",
       "label": "零件目录",
       "page": "part_catalog",
@@ -58,12 +64,6 @@
       "label": "SW→STEP",
       "page": "sw_step_export",
       "description": "SolidWorks 三维模型批量导出 STEP（COM，Windows）"
-    },
-    {
-      "id": "bom_export",
-      "label": "BOM 列表",
-      "page": "bom_export",
-      "description": "按装配列出 XLink 子件 BOM 表（属性来自 CAD 索引）"
     },
     {
       "id": "home",

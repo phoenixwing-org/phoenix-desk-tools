@@ -16,8 +16,40 @@ const emit = defineEmits<{
   exportReport: [];
 }>();
 
+function hitNeedsFix(hit: { status: string; proposed_text: string; matched_text: string }) {
+  if (hit.status === "applied" || hit.status === "ok") return false;
+  return hit.proposed_text !== hit.matched_text;
+}
+
+function chainPendingHits(host: RefHitHost, all: RefHitHost[]) {
+  const chain = new Set((host.via_chain ?? []).map((p) => p.replace(/\\/g, "/")));
+  const rows: Array<{
+    hostPath: string;
+    hostName: string;
+    matched_text: string;
+    proposed_text: string;
+  }> = [];
+  for (const h of all) {
+    const hp = h.host_repo_rel_path.replace(/\\/g, "/");
+    if (!chain.has(hp)) continue;
+    for (const hit of h.hits) {
+      if (hitNeedsFix(hit)) {
+        rows.push({
+          hostPath: h.host_repo_rel_path,
+          hostName: h.host_filename,
+          matched_text: hit.matched_text,
+          proposed_text: hit.proposed_text,
+        });
+      }
+    }
+  }
+  return rows;
+}
+
 function hostPending(h: RefHitHost) {
-  return h.hits.length > 0 && h.hits.some((x) => x.status !== "applied");
+  if (h.hits.some(hitNeedsFix)) return true;
+  const all = props.scan?.hosts ?? [];
+  return chainPendingHits(h, all).length > 0;
 }
 
 function hostRelationLabel(h: RefHitHost) {
@@ -41,12 +73,12 @@ const allPendingSelected = () => {
     <div class="scan-head">
       <div>
         <h3 class="scan-title">改名分析</h3>
-        <p v-if="scan.old_basename && scan.new_basename" class="scan-names mono">
-          <template v-if="scan.old_basename.toLowerCase() === scan.new_basename.toLowerCase()">
-            当前引用：{{ scan.old_basename }}
+        <p class="scan-names mono">
+          <template v-if="scan.old_basename && scan.new_basename && scan.old_basename.toLowerCase() !== scan.new_basename.toLowerCase()">
+            {{ scan.old_basename }} → {{ scan.new_basename }}（含相对路径修正）
           </template>
-          <template v-else>
-            {{ scan.old_basename }} → {{ scan.new_basename }}
+          <template v-else-if="scan.old_basename">
+            按文件名 {{ scan.old_basename }} 检查 XLink（目录不一致也会列出）
           </template>
         </p>
       </div>
@@ -57,6 +89,9 @@ const allPendingSelected = () => {
           · 间接 <strong>{{ scan.host_count - scan.direct_host_count }}</strong>
         </template>
         · XLink <strong>{{ scan.hit_count }}</strong>
+        <template v-if="scan.pending_hit_count != null">
+          · 待修正 <strong>{{ scan.pending_hit_count }}</strong>
+        </template>
       </span>
     </div>
 
@@ -93,18 +128,42 @@ const allPendingSelected = () => {
           <span v-if="host.usage_kind === 'indirect' || (host.depth ?? 0) > 0" class="tag indirect">
             {{ hostRelationLabel(host) }}
           </span>
-          <span class="host-meta">{{ host.hit_count }} 处</span>
-          <span v-if="!hostPending(host)" class="tag ok">已修正</span>
+          <span class="host-meta">
+            {{
+              host.hit_count ||
+              chainPendingHits(host, scan.hosts).length ||
+              0
+            }}
+            处
+          </span>
+          <span v-if="hostPending(host)" class="tag warn">
+            {{ (host.depth ?? 0) > 0 && !host.hits.some(hitNeedsFix) ? "间接 · 待修正" : "待修正" }}
+          </span>
+          <span v-else-if="host.hit_count && host.hits.every((x) => x.status === 'ok')" class="tag ok">
+            路径正确
+          </span>
+          <span v-else-if="!hostPending(host)" class="tag ok">已修正</span>
         </label>
         <ul class="hit-list">
           <li v-if="host.via_chain?.length" class="mono via-line muted">
             经子装配：{{ host.via_chain.join(" → ") }}
           </li>
-          <li v-if="!host.hit_count && (host.usage_kind === 'indirect' || (host.depth ?? 0) > 0)" class="muted hit-line">
-            无直接 XLink（总装配经子装配间接引用，改名时无需修正此文件）
+          <li
+            v-for="(rollup, idx) in chainPendingHits(host, scan.hosts)"
+            :key="`chain-${idx}`"
+            class="mono hit-line chain-hit"
+          >
+            {{ rollup.hostName }}：{{ rollup.matched_text }} → {{ rollup.proposed_text }}
+          </li>
+          <li
+            v-if="(host.depth ?? 0) > 0 && chainPendingHits(host, scan.hosts).length"
+            class="muted hit-line chain-note"
+          >
+            勾选此间接宿主将写回上列子装配中的 XLink（FreeCAD 每条引用均含相对路径，需一并修正）
           </li>
           <li v-for="(hit, idx) in host.hits" :key="idx" class="mono hit-line">
             {{ hit.matched_text }} → {{ hit.proposed_text }}
+            <span v-if="hit.status === 'ok'" class="tag ok">路径正确</span>
           </li>
         </ul>
       </li>
@@ -225,8 +284,25 @@ const allPendingSelected = () => {
   color: #1d4ed8;
 }
 
+.tag.warn {
+  font-size: 0.72rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #fef3c7;
+  color: #b45309;
+}
+
 .via-line {
   margin-bottom: 4px;
+}
+
+.chain-hit {
+  color: #1d4ed8;
+}
+
+.chain-note {
+  font-size: 0.78rem;
+  line-height: 1.45;
 }
 
 .hit-list {

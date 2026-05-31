@@ -11,7 +11,7 @@ import {
 } from "../api";
 import { useAppShell } from "../composables/useAppShell";
 import { useWorkspaceFileQuery } from "../composables/useWorkspaceFileQuery";
-import { basenameFromRel, normalizeRepoRel, resolveOutgoingHostQuery } from "../utils/workspaceFileQuery";
+import { basenameFromRel, normalizeRepoRel, normalizeRepoRelForApi, resolveOutgoingHostQuery } from "../utils/workspaceFileQuery";
 
 const props = defineProps<{
   workbenchTabId?: string;
@@ -88,7 +88,9 @@ async function loadMapIndex() {
 }
 
 function resolveHostQuery() {
-  return resolveOutgoingHostQuery(queryText.value, pickedRel.value);
+  const q = resolveOutgoingHostQuery(queryText.value, pickedRel.value);
+  if (!q) return null;
+  return { rel: normalizeRepoRelForApi(q.rel) };
 }
 
 function statusLabel(status: string) {

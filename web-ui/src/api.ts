@@ -387,6 +387,7 @@ export type RefScanPayload = {
   host_count: number;
   direct_host_count?: number;
   hit_count: number;
+  pending_hit_count?: number;
   hosts: RefHitHost[];
 };
 
@@ -462,6 +463,7 @@ export function analyzeRenameReferences(body: {
   new_basename?: string;
   old_repo_rel_path?: string;
   target_repo_rel?: string;
+  new_repo_rel_path?: string;
   transitive?: boolean;
   persist?: boolean;
 }) {

@@ -235,6 +235,7 @@ class FileRenameScanBody(BaseModel):
     new_basename: str | None = None
     old_repo_rel_path: str | None = None
     target_repo_rel: str | None = None
+    new_repo_rel_path: str | None = None
     transitive: bool | None = True
     persist: bool | None = True
 
@@ -582,6 +583,7 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
                 new_basename=body.new_basename,
                 exclude_repo_rel=body.old_repo_rel_path,
                 target_repo_rel=body.target_repo_rel,
+                new_repo_rel_path=body.new_repo_rel_path,
                 transitive=body.transitive if body.transitive is not None else True,
                 persist=body.persist if body.persist is not None else True,
             )
@@ -624,6 +626,7 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
                 new_basename=body.new_basename,
                 exclude_repo_rel=body.old_repo_rel_path,
                 target_repo_rel=body.target_repo_rel,
+                new_repo_rel_path=body.new_repo_rel_path,
                 transitive=body.transitive if body.transitive is not None else True,
                 persist=body.persist if body.persist is not None else True,
             )

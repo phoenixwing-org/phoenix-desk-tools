@@ -211,7 +211,7 @@ defineExpose({ onSearch, registerTreeHandler, unregisterTreeHandler });
           <span class="label" />
           <label class="chk">
             <input v-model="includeTransitive" type="checkbox" />
-            含总装配等间接引用（传递闭包）
+            含总装配等间接宿主（引用查询用传递闭包；改名分析仅列出本文件内确有 XLink 的宿主）
           </label>
         </label>
       </div>
