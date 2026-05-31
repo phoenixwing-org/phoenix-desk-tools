@@ -1,4 +1,4 @@
-"""Web 样例路径与启动辅助。"""
+"""Web 版路径与启动辅助。"""
 
 from __future__ import annotations
 

@@ -15,7 +15,6 @@ const dryRun = ref(true);
 const allInDir = ref(true);
 const saving = ref(false);
 const running = ref(false);
-const logText = ref("");
 const result = ref<XlinkFixResult | null>(null);
 
 function prefsPayload() {
@@ -48,12 +47,12 @@ async function onSave() {
 
 async function onRun() {
   running.value = true;
-  logText.value = "";
   result.value = null;
+  shell.appendLog("XLink 路径修正…", { source: "xlink_fix" });
   try {
     const data = await runXlinkFix(prefsPayload());
     result.value = data;
-    logText.value = data.log || "";
+    shell.appendLog(data.log || "", { source: "xlink_fix" });
     const changes = data.total_changes ?? "—";
     shell.setStatus(
       data.exit_code === 0
@@ -61,6 +60,7 @@ async function onRun() {
         : `脚本退出码 ${data.exit_code}`,
     );
   } catch (e) {
+    shell.appendLog(String(e), { source: "xlink_fix" });
     shell.setStatus(String(e));
   } finally {
     running.value = false;
@@ -81,7 +81,7 @@ onMounted(async () => {
     <header class="page-head">
       <h1 class="page-title">链接路径修正</h1>
       <p class="page-desc">
-        读取工作空间 <code>.phoenix/cad-database.sqlite</code>（由「FCStd 索引」页扫描写入）。选择修正目录后运行
+        读取工作空间 <code>.phoenix/cad-database.sqlite</code>（由「CAD 索引」页扫描写入）。选择修正目录后运行
         <code>fix_fcstd_xlink_paths.py</code>。
       </p>
     </header>
@@ -105,8 +105,6 @@ onMounted(async () => {
       <p v-if="result?.batch_dir_display" class="meta-line">修正目录：{{ result.batch_dir_display }}</p>
       <p v-if="result?.report_path" class="meta-line">报告：{{ result.report_path }}</p>
     </section>
-
-    <pre v-if="logText" class="log">{{ logText }}</pre>
   </div>
 </template>
 

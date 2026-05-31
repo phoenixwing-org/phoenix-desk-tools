@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from fcdesk.freecad.batch_step.job import StepBatchJob
-from fcdesk.freecad.batch_step.report import write_batch_step_report_md
+from fcdesk.freecad.batch_step.report import (
+    parse_batch_step_report_summary,
+    parse_batch_step_stderr_summary,
+    render_batch_step_report_md,
+    write_batch_step_report_md,
+)
 from fcdesk.freecad.batch_step.step_naming import (
     body_label_from_file_stem_and_step,
     decode_step_x2_utf16_string,

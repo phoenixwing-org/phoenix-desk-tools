@@ -29,12 +29,16 @@ from fcdesk.freecad.fcstd_mapping import (
     FcstdMapEntry,
     compose_fcstd_body_label_display,
     compose_fcstd_recommended_filename,
+    coerce_inferred_part_name,
     format_recommended_filename_hint,
     infer_fcstd_name_suffix,
+    normalize_repo_rel_path_for_map,
     rename_workspace_fcstd_file,
+    resolve_part_name_for_scan,
     try_load_fcstd_entry_from_workspace_map,
     try_update_fcstd_map_entry_rename,
 )
+from fcdesk.freecad.phoenix_store import get_part_key_detail, migrate_fcstd_map_json
 
 _EDITABLE_FORM_KEYS = frozenset({*EDITABLE_ENTRY_ATTRS, "filename"})
 
@@ -93,9 +97,18 @@ def _merge_embedded_over(base: dict[str, str], embedded: dict[str, str]) -> dict
 
 def _merged_with_partname_coerce(row: dict[str, str]) -> dict[str, str]:
     merged = dict(row)
-    lb = merged.get("label", "").strip()
-    if not merged.get("PartName", "").strip():
-        merged["PartName"] = lb
+    inferred = coerce_inferred_part_name(
+        merged.get("PartName"),
+        merged.get("label"),
+        filename=merged.get("filename"),
+        repo_rel_path=merged.get("repo_rel_path"),
+        part_number=merged.get("PartNumber"),
+        part_version=merged.get("PartVersion"),
+        type_code=merged.get("TypeCode"),
+        model_series=merged.get("ModelSeries"),
+    )
+    if inferred:
+        merged["PartName"] = inferred
     return merged
 
 
@@ -244,7 +257,7 @@ def fill_bom_from_embedded(
     full = _ensure_fcstd_file(rr, rel)
     filters = (kind_filters or KindFiltersInput()).to_filters()
     kinds = read_fcstd_document_kinds(full)
-    _ensure_kinds_allow(kinds, filters, "从 ZIP 嵌入读取")
+    _ensure_kinds_allow(kinds, filters, "从文件嵌入读取")
 
     try:
         embedded = read_embedded_bom_attrs(full)
@@ -286,12 +299,7 @@ def apply_label_formula(
         merged = dict(payload["fields"])
         filled = list(payload["filled_keys"])
 
-    built = compose_fcstd_body_label_display(
-        part_number=merged.get("PartNumber", ""),
-        part_version=merged.get("PartVersion", ""),
-        part_name=merged.get("PartName", ""),
-        label_fallback=merged.get("label", ""),
-    )
+    built = _compose_label_from_form(merged, None)
     if not built:
         raise ValueError(
             "需要非空的零件号与版本才能拼接 Label。"
@@ -306,8 +314,16 @@ def save_bom_to_fcstd(repo_root: Path, rel: Path, values: dict[str, str]) -> Non
     full = _ensure_fcstd_file(rr, rel)
 
     vals = {k: str(values.get(k, "")).strip() for k in EDITABLE_ENTRY_ATTRS}
-    if not vals.get("PartName") and vals.get("label"):
-        vals["PartName"] = vals["label"]
+    inferred = coerce_inferred_part_name(
+        vals.get("PartName"),
+        vals.get("label"),
+        part_number=vals.get("PartNumber"),
+        part_version=vals.get("PartVersion"),
+        type_code=vals.get("TypeCode"),
+        model_series=vals.get("ModelSeries"),
+    )
+    if inferred and not vals.get("PartName"):
+        vals["PartName"] = inferred
 
     write_embedded_bom_attrs(full, vals)
     save_bom_apply_field_defaults(
@@ -416,6 +432,234 @@ def recommend_filename_for_values(
     }
 
 
+def _norm_rel_key(rel: Path) -> str:
+    return normalize_repo_rel_path_for_map(rel.as_posix().replace("\\", "/"))
+
+
+def _compose_label_from_form(
+    merged: dict[str, str],
+    mapped: FcstdMapEntry | None,
+    *,
+    use_label_fallback: bool = True,
+) -> str | None:
+    """用表单 + 索引本文件字段拼 Label；不做文件名/路径推断。"""
+    pn = (merged.get("PartNumber") or "").strip()
+    pv = (merged.get("PartVersion") or "").strip()
+    if mapped:
+        if not pn and mapped.PartNumber:
+            pn = str(mapped.PartNumber).strip()
+        if not pv and mapped.PartVersion:
+            pv = str(mapped.PartVersion).strip()
+    pname = merged.get("PartName", "").strip()
+    if not pname and mapped and mapped.PartName:
+        pname = str(mapped.PartName).strip()
+    fallback = merged.get("label", "") if use_label_fallback else ""
+    return compose_fcstd_body_label_display(
+        part_number=pn,
+        part_version=pv,
+        part_name=pname,
+        label_fallback=fallback,
+    )
+
+
+def _resolve_part_key_triple(
+    merged: dict[str, str],
+    mapped: FcstdMapEntry | None,
+    rel: Path,
+) -> tuple[str | None, str | None]:
+    pn = (merged.get("PartNumber") or "").strip()
+    pv = (merged.get("PartVersion") or "").strip()
+    if pn and pv:
+        return pn, pv
+    if mapped and mapped.PartNumber and mapped.PartVersion:
+        return str(mapped.PartNumber).strip(), str(mapped.PartVersion).strip()
+    plain = _entry_to_plain(FcstdMapEntry.preview_from_workspace_relative(rel))
+    pn = (plain.get("PartNumber") or "").strip()
+    pv = (plain.get("PartVersion") or "").strip()
+    return pn or None, pv or None
+
+
+def _plain_field(plain: dict[str, str], field_key: str) -> str:
+    return (plain.get(field_key) or "").strip()
+
+
+def _collect_index_related(
+    repo_root: Path,
+    rel: Path,
+    field_key: str,
+    *,
+    part_number: str,
+    part_version: str,
+) -> list[tuple[str, str]]:
+    rr = repo_root.expanduser().resolve(strict=False)
+    migrate_fcstd_map_json(rr)
+    detail = get_part_key_detail(rr, part_number, part_version)
+    if not detail:
+        return []
+    want = _norm_rel_key(rel)
+    out: list[tuple[str, str]] = []
+    for row in detail.get("files") or []:
+        if not isinstance(row, dict):
+            continue
+        rp = _norm_rel_key(Path(str(row.get("repo_rel_path") or "")))
+        if rp == want:
+            continue
+        val = (row.get(field_key) or "").strip()
+        if not val:
+            continue
+        fn = str(row.get("filename") or "").strip()
+        out.append((val, f"索引库 · 同零件键 {part_number}.{part_version} · {fn}"))
+    return out
+
+
+def _collect_filename_hint(rel: Path, field_key: str) -> list[tuple[str, str]]:
+    if field_key == "filename":
+        return []
+    plain = _merged_with_partname_coerce(
+        _entry_to_plain(FcstdMapEntry.preview_from_workspace_relative(rel))
+    )
+    val = _plain_field(plain, field_key)
+    if val:
+        return [(val, "文件名 / 路径推断")]
+    return []
+
+
+def _collect_prefs(repo_root: Path, field_key: str) -> list[tuple[str, str]]:
+    if field_key not in ("PartNumber", "PartVersion", "TypeCode", "ModelSeries"):
+        return []
+    fills = recommend_field_fill_values(load_bom_apply_field_defaults(repo_root))
+    val = (fills.get(field_key) or "").strip()
+    if val:
+        return [(val, "工作空间记忆（上次保存递增）")]
+    return []
+
+
+def recommend_bom_field(
+    repo_root: Path,
+    rel: Path,
+    field_key: str,
+    values: dict[str, str],
+    *,
+    kind_filters: KindFiltersInput | None = None,
+) -> dict[str, object]:
+    """单字段推荐：按优先级从文件嵌入、索引库、相关文件、文件名、工作空间记忆取值；只返回一个字段。"""
+    key = (field_key or "").strip()
+    if key not in _EDITABLE_FORM_KEYS:
+        raise ValueError(f"不支持推荐的字段: {field_key}")
+
+    rr = repo_root.expanduser().resolve(strict=False)
+    rel = Path(rel)
+    merged = _coerce_form_values(values)
+    mapped = try_load_fcstd_entry_from_workspace_map(repo_root=rr, rel_workspace=rel)
+    full = rr / rel
+    is_fcstd = full.is_file() and full.suffix.casefold() == ".fcstd"
+    pn, pv = _resolve_part_key_triple(merged, mapped, rel)
+
+    if key == "filename":
+        if not is_fcstd:
+            raise ValueError("仅 FCStd 可推荐文件名")
+        payload = recommend_filename_for_values(
+            rr,
+            rel,
+            merged,
+            fill_empty_from_prefs=False,
+            kind_filters=kind_filters,
+            original_filename=merged.get("filename") or rel.name,
+            persist_prefs=False,
+        )
+        name = str(payload.get("recommended_filename") or "").strip()
+        if name:
+            return {
+                "field": key,
+                "value": name,
+                "source_note": "按命名规则推荐",
+                "filled": True,
+            }
+        return {"field": key, "value": "", "source_note": "未找到可推荐值", "filled": False}
+
+    if key == "label":
+        built = _compose_label_from_form(merged, mapped, use_label_fallback=False)
+        if built:
+            return {
+                "field": key,
+                "value": built,
+                "source_note": "编号公式 PartNumber.PartVersion-PartName",
+                "filled": True,
+            }
+        return {"field": key, "value": "", "source_note": "未找到可推荐值", "filled": False}
+
+    candidates: list[tuple[str, str]] = []
+    if is_fcstd:
+        candidates.extend(_collect_embedded_field(full, key))
+    candidates.extend(_collect_index_same(mapped, key))
+    if pn and pv:
+        candidates.extend(_collect_index_related(rr, rel, key, part_number=pn, part_version=pv))
+    candidates.extend(_collect_filename_hint(rel, key))
+    candidates.extend(_collect_prefs(rr, key))
+
+    if key == "PartName":
+        for val, note in candidates:
+            if val:
+                refined = resolve_part_name_for_scan(
+                    val,
+                    merged.get("label"),
+                    filename=merged.get("filename") or rel.name,
+                    repo_rel_path=merged.get("repo_rel_path") or rel.as_posix(),
+                    part_number=pn or merged.get("PartNumber"),
+                    part_version=pv or merged.get("PartVersion"),
+                    type_code=merged.get("TypeCode"),
+                    model_series=merged.get("ModelSeries"),
+                    force_update=True,
+                )
+                out = refined or val
+                return {"field": key, "value": out, "source_note": note, "filled": True}
+        inferred = resolve_part_name_for_scan(
+            merged.get("PartName"),
+            merged.get("label"),
+            filename=merged.get("filename") or rel.name,
+            repo_rel_path=merged.get("repo_rel_path") or rel.as_posix(),
+            part_number=pn or merged.get("PartNumber"),
+            part_version=pv or merged.get("PartVersion"),
+            type_code=merged.get("TypeCode"),
+            model_series=merged.get("ModelSeries"),
+            force_update=False,
+        )
+        if inferred:
+            return {
+                "field": key,
+                "value": inferred,
+                "source_note": "智能去前缀（label / 文件名）",
+                "filled": True,
+            }
+        return {"field": key, "value": "", "source_note": "未找到可推荐值", "filled": False}
+
+    for val, note in candidates:
+        if val:
+            return {"field": key, "value": val, "source_note": note, "filled": True}
+    return {"field": key, "value": "", "source_note": "未找到可推荐值", "filled": False}
+
+
+def _collect_embedded_field(full: Path, field_key: str) -> list[tuple[str, str]]:
+    try:
+        embedded = read_embedded_bom_attrs(full)
+    except FcdeskFcstdEmbeddedError:
+        return []
+    val = (embedded.get(field_key) or "").strip()
+    if val:
+        return [(val, "文件内 Document.xml")]
+    return []
+
+
+def _collect_index_same(mapped: FcstdMapEntry | None, field_key: str) -> list[tuple[str, str]]:
+    if mapped is None:
+        return []
+    plain = _merged_with_partname_coerce(_entry_to_plain(mapped))
+    val = _plain_field(plain, field_key)
+    if val:
+        return [(val, "索引库 · 本文件")]
+    return []
+
+
 def rename_bom_fcstd_file(
     repo_root: Path,
     rel: Path,
@@ -423,13 +667,23 @@ def rename_bom_fcstd_file(
     *,
     baseline: dict[str, str],
     current: dict[str, str],
+    write_attrs_first: bool = False,
 ) -> dict[str, object]:
     rr = repo_root.expanduser().resolve(strict=False)
     rel = Path(rel)
     _ensure_fcstd_file(rr, rel)
 
-    if has_unsaved_document_attrs(baseline, current):
-        raise ValueError("当前有尚未写入 ZIP 的属性，请先保存到 ZIP 再改名")
+    unsaved = has_unsaved_document_attrs(baseline, current)
+    if unsaved and not write_attrs_first:
+        raise ValueError(
+            "当前有尚未写入文件的属性（零件号、版本、类型、标签等）。"
+            "请先「写入文件」，或选择「写入并改名」。"
+        )
+
+    attrs_saved = False
+    if unsaved and write_attrs_first:
+        save_bom_to_fcstd(rr, rel, current)
+        attrs_saved = True
 
     new_name = (new_filename or "").strip()
     if not new_name:
@@ -461,4 +715,5 @@ def rename_bom_fcstd_file(
         "rel_path": new_rel.as_posix(),
         "filename": new_name,
         "map_updated": map_updated,
+        "attrs_saved": attrs_saved,
     }

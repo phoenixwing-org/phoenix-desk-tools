@@ -22,7 +22,6 @@ const saving = ref(false);
 const previewing = ref(false);
 const running = ref(false);
 const preview = ref<StepBatchPreview | null>(null);
-const logText = ref("");
 
 function prefsPayload() {
   return {
@@ -75,16 +74,21 @@ async function onPreview() {
 
 async function onRun() {
   running.value = true;
-  logText.value = "";
+  shell.appendLog("freecadcmd 批量转换…（可能需要数分钟）", { source: "step_batch" });
   try {
     const data = await runStepBatch(prefsPayload());
-    logText.value = data.log;
-    shell.setStatus(
-      data.exit_code === 0
-        ? `转换完成 · 输出 ${data.out_dir_display}`
-        : `freecadcmd 退出码 ${data.exit_code}`,
-    );
+    shell.appendLog(data.log, { source: "step_batch" });
+    if (data.exit_code === 0 && data.ok_count != null) {
+      shell.setStatus(
+        `成功 ${data.ok_count} · 跳过 ${data.skip_count ?? 0} · 失败 ${data.fail_count ?? 0} · 输出 ${data.out_dir_display}`,
+      );
+    } else if (data.exit_code === 0) {
+      shell.setStatus(`转换完成 · 输出 ${data.out_dir_display}`);
+    } else {
+      shell.setStatus(`freecadcmd 退出码 ${data.exit_code} · 详见运行日志`);
+    }
   } catch (e) {
+    shell.appendLog(String(e), { source: "step_batch" });
     shell.setStatus(String(e));
   } finally {
     running.value = false;
@@ -146,8 +150,6 @@ onMounted(async () => {
         {{ preview.recursive ? "（含子目录）" : "" }}
       </p>
     </section>
-
-    <pre v-if="logText" class="log">{{ logText }}</pre>
   </div>
 </template>
 

@@ -99,10 +99,6 @@ class SwStepExportPage(BasePage):
         )
         ctk.CTkButton(btns, text="导出 STEP", command=self._run).pack(side="left")
 
-        row += 1
-        self._log = ctk.CTkTextbox(self, font=ctk.CTkFont(family="Menlo", size=12))
-        self._log.grid(row=row, column=0, columnspan=4, padx=24, pady=(0, 24), sticky="nsew")
-        self.grid_rowconfigure(row, weight=1)
         self.grid_columnconfigure(1, weight=1)
 
     def _pv(self) -> dict:
@@ -182,7 +178,7 @@ class SwStepExportPage(BasePage):
             },
             self.state.repo_root,
         )
-        if not quiet and self._log is not None:
+        if not quiet:
             self._log_line("已保存偏好 → sw_step_export。")
 
     def _resolved_src_dst(self) -> tuple[Path, Path] | None:
@@ -215,10 +211,7 @@ class SwStepExportPage(BasePage):
             self._log_line(str(e))
 
     def _log_line(self, text: str) -> None:
-        if self._log is None:
-            return
-        self._log.insert("end", text + "\n")
-        self._log.see("end")
+        self.append_log(text)
 
     def _check_pywin32(self) -> bool:
         """检查 pywin32 是否可用，返回 True 表示可用。"""
@@ -249,7 +242,6 @@ class SwStepExportPage(BasePage):
             "out_step_dir": self._dst.get().strip(),
             "recursive_scan": self._recursive.get(),
         }
-        self._log.delete("1.0", "end")
         self._log_line("SolidWorks COM 导出…")
 
         def worker() -> None:

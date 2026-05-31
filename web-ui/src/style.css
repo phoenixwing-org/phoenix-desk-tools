@@ -1,5 +1,7 @@
 :root {
   font-family: "SF Pro Text", "PingFang SC", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, "Liberation Mono",
+    "Courier New", monospace;
   line-height: 1.5;
   color: #1a1a1a;
   --shell-bg: #eceef2;
@@ -23,6 +25,13 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#app {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   margin: 0;
 }
@@ -38,5 +47,20 @@ textarea {
 }
 
 .page {
-  min-height: 100%;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* 整段等宽（路径、文件名、PartKey 等） */
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* 仅在 proportional 字体里让 0-9 等宽（混合中文列可用） */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
 }

@@ -68,11 +68,8 @@ class XLinkFixPage(BasePage):
         ctk.CTkButton(btns, text="运行", command=self._run).pack(side="left", padx=(0, 8))
         ctk.CTkButton(btns, text="打开报告目录", fg_color="gray40", command=self._open_report_dir).pack(side="left")
 
-        self._log = ctk.CTkTextbox(self, font=ctk.CTkFont(family="Menlo", size=12))
-        self._log.grid(row=5, column=0, columnspan=4, padx=24, pady=(8, 6), sticky="nsew")
-
         tree_wrap = ctk.CTkFrame(self, fg_color="transparent")
-        tree_wrap.grid(row=6, column=0, columnspan=4, padx=(24, 24), pady=(0, 24), sticky="nsew")
+        tree_wrap.grid(row=5, column=0, columnspan=4, padx=(24, 24), pady=(8, 24), sticky="nsew")
         tree_wrap.grid_rowconfigure(0, weight=1)
         tree_wrap.grid_columnconfigure(0, weight=1)
         self._tree_host = tk.Frame(tree_wrap, highlightthickness=0)
@@ -96,8 +93,7 @@ class XLinkFixPage(BasePage):
         self._tree_host.grid_rowconfigure(0, weight=1)
         self._tree_host.grid_columnconfigure(0, weight=1)
 
-        self.grid_rowconfigure(5, weight=1)
-        self.grid_rowconfigure(6, weight=2)
+        self.grid_rowconfigure(5, weight=2)
         self.grid_columnconfigure(1, weight=1)
 
         self._apply_xlink_fix_tree_style()
@@ -291,14 +287,12 @@ class XLinkFixPage(BasePage):
             os.system(f'open "{d}"' if sys.platform == "darwin" else f'xdg-open "{d}"')
 
     def _log_line(self, text: str) -> None:
-        self._log.insert("end", text + "\n")
-        self._log.see("end")
+        self.append_log(text)
 
     def _run(self) -> None:
         rr = self._repo()
         batch_dir = self._canon(self._batch_dir_entry.get(), fb=rr)
         if not batch_dir.is_dir():
-            self._log.delete("1.0", "end")
             self._log_line(f"错误：修正目录不存在 {batch_dir}")
             self._results_tree_placeholder(
                 "错误：修正目录不存在",
@@ -308,7 +302,6 @@ class XLinkFixPage(BasePage):
 
         self._persist_xlink_fields()
         batch_input = self._batch_dir_entry.get().strip()
-        self._log.delete("1.0", "end")
         self._results_tree_placeholder("正在运行…", "")
         self._log_line("XLink 路径修正（读取 .phoenix 索引库）…")
 
@@ -331,7 +324,7 @@ class XLinkFixPage(BasePage):
     def _finish_xlink_from_service(self, data: dict) -> None:
         captured = data.get("log") or ""
         returncode = int(data.get("exit_code", 1))
-        self._log.insert("end", captured or "(无输出)")
+        self.append_log(captured or "(无输出)")
         self._log_line(f"退出码: {returncode}")
 
         if isinstance(data, dict) and data.get("schema") == 1:

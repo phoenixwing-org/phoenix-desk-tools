@@ -184,7 +184,7 @@ def batch_save_steps_to_fcstd(
 
 
 def run_step_batch_from_environ() -> None:
-    """读环境变量 ``FCD_BATCH_*``，执行批量并写报告。"""
+    """读环境变量 ``FCD_BATCH_*``，执行批量；明细默认写入 stderr（界面日志）。"""
     import sys
 
     def _fcd_stderr(msg: str) -> None:
@@ -217,7 +217,7 @@ def run_step_batch_from_environ() -> None:
         except Exception:
             pass
 
-    from fcdesk.batch_step.report import write_batch_step_report_md
+    from fcdesk.batch_step.report import render_batch_step_report_md, write_batch_step_report_md
     from fcdesk.batch_step.step_paths import list_step_paths_for_batch, step_tree_stats
 
     step_dir_s = os.environ.get("FCD_BATCH_STEP_DIR", "").strip()
@@ -285,7 +285,7 @@ def run_step_batch_from_environ() -> None:
             "或在桌面「STEP 批量」勾选「包含子文件夹中的 STEP」。\n",
         )
     if scan_n == 0:
-        _fcd_stderr("[fcdesk] 未发现可转换的 STEP，仍会写 Markdown 报告（合计 0）。\n")
+        _fcd_stderr("[fcdesk] 未发现可转换的 STEP，仍会在运行日志中输出汇总（合计 0）。\n")
 
     if verbose and paths:
         show = paths[:40]
@@ -321,8 +321,13 @@ def run_step_batch_from_environ() -> None:
             ok += 1
 
     report_path = Path(out_dir) / report_name
-    write_batch_step_report_md(
-        report_path,
+    write_report = os.environ.get("FCD_BATCH_WRITE_REPORT", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+    report_md = render_batch_step_report_md(
         step_dir=step_dir_s,
         out_dir=out_dir,
         results=results,
@@ -331,10 +336,23 @@ def run_step_batch_from_environ() -> None:
         fail=fail,
         project_tag=project_tag,
     )
+    if write_report:
+        write_batch_step_report_md(
+            report_path,
+            step_dir=step_dir_s,
+            out_dir=out_dir,
+            results=results,
+            ok=ok,
+            skip=skip,
+            fail=fail,
+            project_tag=project_tag,
+        )
 
-    summary = (
-        f"批量结束：成功 {ok}，跳过 {skip}，失败 {fail}，共 {len(results)} 个 STEP。\n报告：{report_path}\n"
-    )
+    _fcd_stderr("\n" + report_md)
+
+    summary = f"批量结束：成功 {ok}，跳过 {skip}，失败 {fail}，共 {len(results)} 个 STEP。\n"
+    if write_report:
+        summary += f"报告文件：{report_path}\n"
     try:
         App.Console.PrintMessage(summary)
     except Exception:

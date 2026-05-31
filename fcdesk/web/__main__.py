@@ -1,4 +1,4 @@
-"""启动 Web 样例：单端口托管 API + 前端（默认 http://127.0.0.1:5173）。"""
+"""启动 Web 版 FreeCAD 管理工具：单端口托管 API + 前端（默认 http://127.0.0.1:5173）。"""
 
 from __future__ import annotations
 
@@ -57,7 +57,7 @@ def _schedule_open_browser(url: str, *, use_system: bool = False, delay_s: float
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Phoenix FCDesk Web（单服务：API + 静态前端，默认端口 5173）",
+        description="FreeCAD 管理工具（Web：单服务 API + 静态前端，默认端口 5173）",
     )
     parser.add_argument(
         "--workspace",

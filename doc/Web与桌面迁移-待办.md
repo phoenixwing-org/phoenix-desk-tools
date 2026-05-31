@@ -24,6 +24,8 @@
 
 关联：[Phoenix工作空间存储-规划讨论.md](Phoenix工作空间存储-规划讨论.md) §2、§7。
 
+**待办（讨论稿）：** [文件变更历史与引用证据-待办讨论.md](文件变更历史与引用证据-待办讨论.md) — P0 改名历史入库 → P1 引用证据 → P3 与 XLink 修正统一算法。
+
 ---
 
 ## 2. 各界面功能点检（Web vs 桌面 vs 服务层）
@@ -90,5 +92,8 @@ fcdesk/
 - [x] 桌面：`step_batch_page` → `step_batch_service`（保留 inbox）
 - [x] 桌面：`sw_step_export_page` → `sw_step_export_service`
 - [ ] 桌面：`bom_apply_page` → `bom_apply_service`（可选分步）
+- [ ] **文件变更历史**：`rename_log` 表 + 改名时写入（见 [文件变更历史与引用证据-待办讨论.md](文件变更历史与引用证据-待办讨论.md) P0）
+- [ ] **引用证据 / 改名传播**：扫描旧名引用、修正 XLink（P1–P2，同上）
+- [ ] **ReferenceFix 统一算法**：与 `xlink_fix` 共用抽象（P3，同上）
 - [x] P 后续：取消自动 `fcstd_map.json`（§1）
 - [x] P 后续：`fcdesk/freecad/`、`fcdesk/solidworks/` 目录迁移（§3）

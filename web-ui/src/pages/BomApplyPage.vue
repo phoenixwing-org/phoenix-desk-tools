@@ -1,43 +1,55 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import type { BomApplyPrefs, BomFields, BomKindFilters, BomPreview } from "../api";
 import {
-  applyLabelFormula,
   fetchBom,
   fetchBomDocumentKinds,
   fetchBomPrefs,
-  fillBomFromEmbedded,
-  fillBomFromFilename,
-  fillRecommendedValues,
-  recommendFilename,
-  renameBomFile,
+  recommendBomField,
   saveBom,
 } from "../api";
 import { useAppShell } from "../composables/useAppShell";
 
 const shell = useAppShell();
 
+const EDITABLE_KEYS = [
+  "PartNumber",
+  "PartVersion",
+  "TypeCode",
+  "ModelSeries",
+  "PartName",
+  "label",
+  "filename",
+] as const;
+
+/** 全部推荐顺序：基础字段 → 标签 → 文件名 */
+const RECOMMEND_ALL_ORDER: EditableKey[] = [...EDITABLE_KEYS];
+
+type EditableKey = (typeof EDITABLE_KEYS)[number];
+
 const FIELD_ROWS = [
-  { key: "repo_rel_path", cn: "仓库相对路径", en: "RepoRelativePath", editable: false },
-  { key: "filename", cn: "文件名", en: "Filename", editable: true },
-  { key: "PartNumber", cn: "零件号", en: "PartNumber", editable: true },
-  { key: "PartVersion", cn: "版本", en: "PartVersion", editable: true },
-  { key: "TypeCode", cn: "类型码 (H/S/R)", en: "TypeCode", editable: true },
-  { key: "ModelSeries", cn: "型号系列", en: "ModelSeries", editable: true },
-  { key: "PartName", cn: "零件名称", en: "PartName", editable: true },
-  { key: "label", cn: "标签", en: "Label", editable: true },
+  { key: "repo_rel_path", cn: "仓库相对路径", en: "RepoRelativePath", editable: false, recommend: false },
+  { key: "filename", cn: "文件名", en: "Filename", editable: true, recommend: true },
+  { key: "PartNumber", cn: "零件号", en: "PartNumber", editable: true, recommend: true },
+  { key: "PartVersion", cn: "版本", en: "PartVersion", editable: true, recommend: true },
+  { key: "TypeCode", cn: "类型码 (H/S/R)", en: "TypeCode", editable: true, recommend: true },
+  { key: "ModelSeries", cn: "型号系列", en: "ModelSeries", editable: true, recommend: true },
+  { key: "PartName", cn: "零件名称", en: "PartName", editable: true, recommend: true },
+  { key: "label", cn: "标签", en: "Label", editable: true, recommend: true },
 ] as const;
 
 const selectedRel = ref<string | null>(null);
 const originalFilename = ref("");
 const preview = ref<BomPreview | null>(null);
 const form = ref<Partial<BomFields>>({});
+const initialFields = ref<Partial<BomFields>>({});
 const baseline = ref<Partial<BomFields>>({});
 const bomPrefs = ref<BomApplyPrefs | null>(null);
 const loadingBom = ref(false);
 const busy = ref(false);
+const recommendingField = ref<string | null>(null);
+const recommendingAll = ref(false);
 const pageError = ref("");
-const filenameHint = ref("");
 
 const kindFilters = ref<BomKindFilters>({
   part: true,
@@ -57,8 +69,13 @@ const recommendedFillLine = computed(() => {
     r.TypeCode && `类型 ${r.TypeCode}`,
     r.ModelSeries && `型号 ${r.ModelSeries}`,
   ].filter(Boolean);
-  return parts.length ? `工作空间推荐值：${parts.join(" · ")}` : "";
+  return parts.length ? `工作空间记忆：${parts.join(" · ")}` : "";
 });
+
+function displayInitial(key: string) {
+  const v = String(initialFields.value[key as keyof BomFields] ?? "").trim();
+  return v || "（空）";
+}
 
 function isDirty(key: string) {
   const cur = String(form.value[key as keyof BomFields] ?? "").trim();
@@ -67,17 +84,30 @@ function isDirty(key: string) {
 }
 
 function hasUnsavedDocumentAttrs() {
-  for (const k of ["PartNumber", "PartVersion", "TypeCode", "ModelSeries", "PartName", "label"] as const) {
+  for (const k of EDITABLE_KEYS) {
+    if (k === "filename") continue;
     if (isDirty(k)) return true;
   }
   return false;
 }
 
-function applyFields(fields: Partial<BomFields>, resetBaseline = true) {
-  form.value = { ...form.value, ...fields };
-  if (resetBaseline) {
+function setFormFields(fields: Partial<BomFields>, opts?: { resetBaseline?: boolean; resetInitial?: boolean }) {
+  form.value = { ...fields };
+  if (opts?.resetBaseline !== false) {
     baseline.value = { ...form.value };
   }
+  if (opts?.resetInitial) {
+    initialFields.value = { ...form.value };
+  }
+}
+
+function patchField(key: keyof BomFields, value: string) {
+  form.value = { ...form.value, [key]: value };
+}
+
+function restoreField(key: keyof BomFields) {
+  patchField(key, String(initialFields.value[key] ?? ""));
+  shell.setStatus(`已恢复「${key}」为打开文件时的值`);
 }
 
 async function loadPrefs() {
@@ -95,12 +125,11 @@ async function loadBom(rel: string, fromSidebar = true) {
   selectedRel.value = rel;
   loadingBom.value = true;
   pageError.value = "";
-  filenameHint.value = "";
   try {
     const data = await fetchBom(rel);
     preview.value = data;
     originalFilename.value = data.fields.filename || rel.split("/").pop() || "";
-    applyFields(data.fields);
+    setFormFields(data.fields, { resetBaseline: true, resetInitial: true });
     if (data.embedded_warning) {
       shell.setStatus(`警告: ${data.embedded_warning}`);
     } else {
@@ -120,103 +149,56 @@ async function onReload() {
   shell.setStatus("已从磁盘重新读取");
 }
 
-async function onFillRecommended() {
+async function onRecommendField(key: EditableKey) {
   if (!selectedRel.value) return;
-  busy.value = true;
-  pageError.value = "";
-  try {
-    const data = await fillRecommendedValues(selectedRel.value, form.value);
-    applyFields(data.fields, false);
-    const msg =
-      data.filled_keys.length > 0
-        ? `已填入推荐值：${data.filled_keys.join("、")}`
-        : "各字段已有值，无需填入";
-    shell.setStatus(msg);
-  } catch (e) {
-    pageError.value = String(e);
-  } finally {
-    busy.value = false;
+  if (key === "filename" && !preview.value?.is_fcstd) {
+    shell.setStatus("仅 FCStd 可推荐文件名");
+    return;
   }
-}
-
-async function onFillFromZip() {
-  if (!selectedRel.value) return;
-  busy.value = true;
+  recommendingField.value = key;
   pageError.value = "";
   try {
-    const data = await fillBomFromEmbedded(selectedRel.value, form.value, kindFilters.value);
-    applyFields(data.fields);
-    if (data.document_kinds && preview.value) {
-      preview.value = { ...preview.value, document_kinds: data.document_kinds };
-    }
-    shell.setStatus("已从 ZIP 嵌入属性填入界面（尚未保存）");
-  } catch (e) {
-    pageError.value = String(e);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function onFillFromFilename() {
-  if (!selectedRel.value) return;
-  busy.value = true;
-  pageError.value = "";
-  try {
-    const data = await fillBomFromFilename(selectedRel.value);
-    applyFields(data.fields);
-    shell.setStatus("已从文件名 / 路径推断填入界面（尚未写入 ZIP）");
-  } catch (e) {
-    pageError.value = String(e);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function onLabelFormula() {
-  if (!selectedRel.value) return;
-  busy.value = true;
-  pageError.value = "";
-  try {
-    const data = await applyLabelFormula(selectedRel.value, form.value);
-    applyFields(data.fields, false);
-    const extra = data.filled_keys.length ? `（已补全 ${data.filled_keys.join("、")}）` : "";
-    shell.setStatus(`Label 已填为「${data.label}」${extra}（未写入 ZIP）`);
-  } catch (e) {
-    pageError.value = String(e);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function onRecommendFilename() {
-  if (!selectedRel.value) return;
-  busy.value = true;
-  pageError.value = "";
-  try {
-    const data = await recommendFilename(selectedRel.value, form.value, {
-      kindFilters: kindFilters.value,
-      originalFilename: originalFilename.value,
-    });
-    applyFields({ ...data.fields, filename: data.recommended_filename }, false);
-    filenameHint.value = data.hint_text;
-    if (data.document_kinds && preview.value) {
-      preview.value = { ...preview.value, document_kinds: data.document_kinds };
-    }
-    let msg = "文件名已填入推荐值";
-    if (data.filled_keys.length) {
-      msg = `已用记忆值补全 ${data.filled_keys.join("、")}；${msg}`;
-    }
-    if (data.matches_disk_name) {
-      msg += "（与磁盘当前名称一致）";
+    const data = await recommendBomField(selectedRel.value, key, form.value, kindFilters.value);
+    if (data.filled && data.value) {
+      patchField(key as keyof BomFields, data.value);
+      shell.setStatus(`${key} ← ${data.source_note}`);
     } else {
-      msg += "（未改磁盘；请先保存属性到 ZIP，再点改名）";
+      shell.setStatus(data.source_note || "未找到可推荐值");
     }
-    shell.setStatus(msg);
-    await loadPrefs();
   } catch (e) {
     pageError.value = String(e);
   } finally {
-    busy.value = false;
+    recommendingField.value = null;
+  }
+}
+
+async function onRecommendAll() {
+  if (!selectedRel.value) return;
+  recommendingAll.value = true;
+  pageError.value = "";
+  let working: Partial<BomFields> = { ...form.value };
+  const filled: string[] = [];
+  try {
+    for (const key of RECOMMEND_ALL_ORDER) {
+      if (key === "filename" && !preview.value?.is_fcstd) continue;
+      recommendingField.value = key;
+      const data = await recommendBomField(selectedRel.value, key, working, kindFilters.value);
+      if (data.filled && data.value) {
+        working = { ...working, [key]: data.value };
+        patchField(key as keyof BomFields, data.value);
+        filled.push(key);
+      }
+    }
+    if (filled.length) {
+      shell.setStatus(`全部推荐完成（${filled.length} 项）：${filled.join(" → ")}`);
+    } else {
+      shell.setStatus("未找到可推荐值");
+    }
+  } catch (e) {
+    pageError.value = String(e);
+  } finally {
+    recommendingField.value = null;
+    recommendingAll.value = false;
   }
 }
 
@@ -226,7 +208,7 @@ async function onSave() {
   pageError.value = "";
   try {
     await saveBom(selectedRel.value, form.value);
-    shell.setStatus("已写入 Document.xml（ZIP）");
+    shell.setStatus("已写入文件（Document.xml）");
     await loadBom(selectedRel.value, false);
     await loadPrefs();
   } catch (e) {
@@ -236,7 +218,7 @@ async function onSave() {
   }
 }
 
-async function onRename() {
+function onGoRename() {
   if (!selectedRel.value) return;
   const newName = (form.value.filename ?? "").trim();
   if (!newName) {
@@ -247,29 +229,7 @@ async function onRename() {
     shell.setStatus("文件名与磁盘相同，无需改名");
     return;
   }
-  if (
-    !window.confirm(
-      `将重命名磁盘文件：\n\n${originalFilename.value}\n    ↓\n${newName}\n\n请确认 FreeCAD 等已关闭占用。`,
-    )
-  ) {
-    return;
-  }
-  busy.value = true;
-  pageError.value = "";
-  try {
-    const data = await renameBomFile(selectedRel.value, form.value, baseline.value);
-    shell.setStatus(
-      data.map_updated
-        ? `已重命名为 ${data.filename}（已更新索引库）`
-        : `已重命名为 ${data.filename}`,
-    );
-    shell.requestTreeRescan(data.rel_path);
-    await loadBom(data.rel_path, false);
-  } catch (e) {
-    pageError.value = String(e);
-  } finally {
-    busy.value = false;
-  }
+  shell.openFileRenameForRel(selectedRel.value, form.value, baseline.value);
 }
 
 async function onDetectKinds() {
@@ -292,7 +252,21 @@ async function onDetectKinds() {
 onMounted(() => {
   loadPrefs();
   shell.registerTreeSelect((rel) => loadBom(rel));
+  const rel = shell.pendingBomRel.value;
+  if (rel) {
+    shell.pendingBomRel.value = null;
+    void loadBom(rel);
+  }
 });
+
+watch(
+  () => shell.pendingBomRel.value,
+  (rel) => {
+    if (!rel) return;
+    shell.pendingBomRel.value = null;
+    void loadBom(rel);
+  },
+);
 
 onUnmounted(() => {
   shell.registerTreeSelect(null);
@@ -303,10 +277,7 @@ onUnmounted(() => {
   <div class="page bom-page">
     <header class="page-head">
       <h1 class="page-title">属性回写</h1>
-      <p class="page-desc">
-        在右侧工作空间树选择 .FCStd，编辑 BOM 字段并写回 ZIP。空字段可用工作空间记忆（上次零件号 +1、版本
-        001、类型 H、上次型号）。
-      </p>
+      <p class="page-desc">在右侧选择 .FCStd，编辑 BOM 字段后写入文件；可逐字段「推荐」或一次「全部推荐」。</p>
     </header>
 
     <div v-if="pageError" class="banner err">{{ pageError }}</div>
@@ -315,97 +286,137 @@ onUnmounted(() => {
     <div v-else-if="loadingBom" class="empty">载入中…</div>
     <template v-else-if="preview">
       <div class="file-head">
-        <h2 class="file-name">{{ selectedName }}</h2>
+        <h2 class="file-name mono">{{ selectedName }}</h2>
         <p class="meta">{{ preview.abs_path_display }}</p>
         <p v-if="preview.document_kinds" class="meta kinds">
           文档类型：{{ preview.document_kinds.display }} · 后缀
           {{ preview.document_kinds.recommended_suffix }}
         </p>
         <p v-else class="meta">文档类型：—（非 FCStd 或未识别）</p>
-        <p class="meta note">{{ preview.source_note }}</p>
-        <p v-if="recommendedFillLine" class="meta prefs">{{ recommendedFillLine }}</p>
       </div>
 
+      <section class="toolbar">
+        <button type="button" class="btn" :disabled="busy" @click="onReload">重新读取</button>
+        <button
+          type="button"
+          class="btn recommend-all"
+          :disabled="busy || recommendingAll || !preview.is_fcstd"
+          @click="onRecommendAll"
+        >
+          {{ recommendingAll ? "推荐中…" : "全部推荐" }}
+        </button>
+        <button type="button" class="btn" :disabled="busy || !preview.is_fcstd" @click="onDetectKinds">
+          识别类型
+        </button>
+        <button type="button" class="btn primary" :disabled="busy || !preview.is_fcstd" @click="onSave">
+          {{ busy ? "…" : "写入文件" }}
+        </button>
+      </section>
+
+      <div v-if="!preview.is_fcstd" class="banner warn">当前非 FCStd，仅展示推断字段</div>
+
       <section class="kind-row">
-        <span class="kind-label">读取/推荐时匹配：</span>
+        <span class="kind-label">推荐文件名时匹配：</span>
         <label class="chk"><input v-model="kindFilters.part" type="checkbox" /> 零件</label>
         <label class="chk"><input v-model="kindFilters.assembly" type="checkbox" /> 装配</label>
         <label class="chk"><input v-model="kindFilters.drawing" type="checkbox" /> 图纸</label>
         <label class="chk">
           <input v-model="kindFilters.drawing_and_assembly" type="checkbox" /> 图纸+装配
         </label>
-        <button type="button" class="btn mini" :disabled="busy" @click="onDetectKinds">识别类型</button>
       </section>
 
-      <section class="toolbar">
-        <button type="button" class="btn" :disabled="busy" @click="onReload">重新读取</button>
-        <button type="button" class="btn" :disabled="busy || !preview.is_fcstd" @click="onFillRecommended">
-          填入推荐值
-        </button>
-        <button type="button" class="btn" :disabled="busy || !preview.is_fcstd" @click="onFillFromZip">
-          从 ZIP 写入界面
-        </button>
-        <button type="button" class="btn" :disabled="busy || !preview.is_fcstd" @click="onFillFromFilename">
-          从文件名写入
-        </button>
-        <button type="button" class="btn" :disabled="busy || !preview.is_fcstd" @click="onLabelFormula">
-          Label←编号公式
-        </button>
-        <button type="button" class="btn" :disabled="busy || !preview.is_fcstd" @click="onRecommendFilename">
-          推荐文件名
-        </button>
-        <button type="button" class="btn primary" :disabled="busy || !preview.is_fcstd" @click="onSave">
-          {{ busy ? "…" : "保存到 ZIP" }}
-        </button>
-      </section>
-
-      <div v-if="!preview.is_fcstd" class="banner warn">当前非 FCStd，仅展示推断字段</div>
-
-      <form class="form" @submit.prevent="onSave">
-        <div class="form-head">
-          <span class="col-mark" />
-          <span class="col-meta">说明 / 英文名</span>
-          <span class="col-val">值</span>
-        </div>
-        <div v-for="row in FIELD_ROWS" :key="row.key" class="form-row">
-          <span class="col-mark" :class="{ dirty: isDirty(row.key) }">
-            {{ isDirty(row.key) ? "●" : "" }}
-          </span>
-          <div class="col-meta">
-            <span class="cn">{{ row.cn }}</span>
-            <span class="en">{{ row.en }}</span>
+      <div class="form-scroll">
+        <form class="form" @submit.prevent="onSave">
+          <div class="form-head">
+            <span class="col-mark" />
+            <span class="col-meta">字段</span>
+            <span class="col-val">值</span>
+            <span class="col-act" />
           </div>
-          <div class="col-val">
-            <input
-              v-model="form[row.key as keyof BomFields]"
-              :readonly="!row.editable"
-              :class="{ readonly: !row.editable }"
-            />
-            <button
-              v-if="row.key === 'filename'"
-              type="button"
-              class="btn rename"
-              :disabled="busy || !preview.is_fcstd"
-              @click="onRename"
-            >
-              改名
-            </button>
+          <div v-for="row in FIELD_ROWS" :key="row.key" class="form-row">
+            <span class="col-mark" :class="{ dirty: isDirty(row.key) }">
+              {{ isDirty(row.key) ? "●" : "" }}
+            </span>
+            <div class="col-meta">
+              <span class="cn">{{ row.cn }}</span>
+              <span class="en">{{ row.en }}</span>
+            </div>
+            <div class="col-val">
+              <p v-if="row.editable" class="initial-line">
+                初始：{{ displayInitial(row.key) }}
+              </p>
+              <div class="input-row">
+                <input
+                  v-model="form[row.key as keyof BomFields]"
+                  :readonly="!row.editable"
+                  :class="{ readonly: !row.editable }"
+                  @contextmenu.prevent="row.editable && restoreField(row.key as keyof BomFields)"
+                />
+                <button
+                  v-if="row.recommend"
+                  type="button"
+                  class="btn mini recommend"
+                  :disabled="
+                    busy ||
+                    recommendingAll ||
+                    recommendingField === row.key ||
+                    (row.key === 'filename' && !preview.is_fcstd)
+                  "
+                  @click="onRecommendField(row.key as EditableKey)"
+                >
+                  {{ recommendingField === row.key ? "…" : "推荐" }}
+                </button>
+                <button
+                  v-if="row.key === 'filename'"
+                  type="button"
+                  class="btn mini"
+                  :disabled="busy || !preview.is_fcstd"
+                  @click="onGoRename"
+                >
+                  改名
+                </button>
+              </div>
+            </div>
+            <span class="col-act" />
           </div>
-        </div>
-        <p v-if="filenameHint" class="filename-hint">{{ filenameHint }}</p>
-      </form>
+        </form>
+
+        <section class="help-panel">
+          <h3 class="help-title">说明</h3>
+          <ul class="help-list">
+            <li>{{ preview.source_note }}</li>
+            <li v-if="recommendedFillLine">{{ recommendedFillLine }}</li>
+            <li>
+              <strong>全部推荐</strong>按顺序填充：零件号 → 版本 → 类型 → 型号 → 零件名称 → 标签 → 文件名（后项会用前项结果）。
+            </li>
+            <li>
+              <strong>Label</strong>：建立索引时优先保留文件内已有 Label；「推荐」按
+              PartNumber.PartVersion-PartName（如 100001.001-拉力机2），不含类型码/型号。
+            </li>
+            <li>仅更新当前字段，不会清空其他已填内容。</li>
+            <li>输入框<strong>右键</strong>恢复为打开/重新读取时的初始值（● 表示相对初始值有改动）。</li>
+            <li>「写入文件」将 BOM 属性写回 FCStd；「改名」改磁盘文件名。有 ● 未保存属性时，改名会询问是否<strong>写入并改名</strong>。</li>
+            <li>写入成功后工作空间记忆会更新（零件号 +1、版本 001、类型 H 等），供下次推荐。</li>
+          </ul>
+        </section>
+      </div>
     </template>
   </div>
 </template>
 
 <style scoped>
 .bom-page {
-  padding: 20px 24px 32px;
-  max-width: 920px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 20px 24px 16px;
+  max-width: 960px;
+  height: 100%;
 }
 
 .page-head {
-  margin-bottom: 16px;
+  flex-shrink: 0;
+  margin-bottom: 12px;
 }
 
 .page-title {
@@ -426,7 +437,8 @@ onUnmounted(() => {
 }
 
 .file-head {
-  margin-bottom: 12px;
+  flex-shrink: 0;
+  margin-bottom: 10px;
 }
 
 .file-name {
@@ -445,13 +457,12 @@ onUnmounted(() => {
   margin-top: 4px;
 }
 
-.meta.note,
-.meta.prefs {
-  margin-top: 6px;
-}
-
-.meta.prefs {
-  color: #15803d;
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-shrink: 0;
 }
 
 .kind-row {
@@ -459,8 +470,9 @@ onUnmounted(() => {
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
   font-size: 0.82rem;
+  flex-shrink: 0;
 }
 
 .kind-label {
@@ -471,13 +483,6 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 4px;
-}
-
-.toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 14px;
 }
 
 .btn {
@@ -491,17 +496,21 @@ onUnmounted(() => {
 .btn.mini {
   padding: 4px 10px;
   font-size: 0.78rem;
+  flex-shrink: 0;
+}
+
+.btn.recommend {
+  min-width: 52px;
+}
+
+.btn.recommend-all {
+  font-weight: 600;
 }
 
 .btn.primary {
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
-}
-
-.btn.rename {
-  flex-shrink: 0;
-  margin-left: 6px;
 }
 
 .btn:disabled {
@@ -512,7 +521,8 @@ onUnmounted(() => {
   padding: 8px 12px;
   border-radius: 6px;
   font-size: 0.85rem;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
+  flex-shrink: 0;
 }
 
 .banner.warn {
@@ -525,15 +535,23 @@ onUnmounted(() => {
   color: #b91c1c;
 }
 
+.form-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-bottom: 12px;
+}
+
 .form {
   display: grid;
   gap: 0;
+  align-content: start;
 }
 
 .form-head,
 .form-row {
   display: grid;
-  grid-template-columns: 20px 180px 1fr;
+  grid-template-columns: 20px 160px 1fr 0;
   gap: 10px;
   align-items: start;
 }
@@ -543,20 +561,29 @@ onUnmounted(() => {
   font-weight: 600;
   color: var(--muted);
   margin-bottom: 4px;
+  position: sticky;
+  top: 0;
+  background: var(--page-bg);
+  z-index: 1;
+  padding-bottom: 4px;
 }
 
 .col-mark {
   text-align: center;
   color: #c2410c;
   font-size: 1rem;
-  line-height: 2rem;
+  line-height: 1.6rem;
+}
+
+.col-mark.dirty {
+  font-weight: 700;
 }
 
 .col-meta {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding-top: 6px;
+  padding-top: 4px;
 }
 
 .col-meta .cn {
@@ -566,17 +593,26 @@ onUnmounted(() => {
 .col-meta .en {
   font-size: 0.75rem;
   color: var(--muted);
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
 }
 
-.col-val {
+.initial-line {
+  margin: 0 0 4px;
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.input-row {
   display: flex;
   align-items: center;
-  gap: 0;
+  gap: 6px;
 }
 
 .col-val input {
   flex: 1;
+  min-width: 0;
   padding: 6px 10px;
   border: 1px solid var(--border-strong);
   border-radius: 6px;
@@ -587,11 +623,33 @@ onUnmounted(() => {
   background: #f3f4f6;
 }
 
-.filename-hint {
-  margin: 10px 0 0 210px;
-  font-size: 0.78rem;
+.help-panel {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.help-title {
+  margin: 0 0 8px;
+  font-size: 0.88rem;
+}
+
+.help-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.8rem;
   color: var(--muted);
-  white-space: pre-wrap;
-  line-height: 1.5;
+  line-height: 1.55;
+}
+
+.help-list li + li {
+  margin-top: 6px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 </style>

@@ -11,6 +11,8 @@ import XlinkFixPage from "../pages/XlinkFixPage.vue";
 import PartDedupPage from "../pages/PartDedupPage.vue";
 import StepBatchPage from "../pages/StepBatchPage.vue";
 import SwStepExportPage from "../pages/SwStepExportPage.vue";
+import PartCatalogPage from "../pages/PartCatalogPage.vue";
+import FileRenamePage from "../pages/FileRenamePage.vue";
 import PlaceholderPage from "../pages/PlaceholderPage.vue";
 import { provideAppShell } from "../composables/useAppShell";
 
@@ -29,8 +31,12 @@ const pageComponent = computed(() => {
       return HomePage;
     case "bom_apply":
       return BomApplyPage;
+    case "file_rename":
+      return FileRenamePage;
     case "fcstd_map":
       return FcstdMapPage;
+    case "part_catalog":
+      return PartCatalogPage;
     case "xlink_fix":
       return XlinkFixPage;
     case "part_dedup":
@@ -114,9 +120,11 @@ onUnmounted(() => {
 
 <style scoped>
 .shell {
-  min-height: 100vh;
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   background: var(--shell-bg);
 }
 
@@ -143,7 +151,10 @@ onUnmounted(() => {
 .shell-main {
   flex: 1;
   min-width: 0;
-  overflow: auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   background: var(--page-bg);
   transition: margin-right 0.15s ease;
 }

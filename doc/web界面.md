@@ -55,7 +55,7 @@ exports/*.json  （含 fcstd_map、偏好快照等）
 | 服务层 | `fcdesk/services/` — workspace、bom_apply、launcher、fcstd_map、xlink_fix、part_dedup、step_batch、sw_step_export |
 | API | `fcdesk/web/app.py` — `python -m fcdesk.web` |
 | 前端 | `web-ui/` — Vue3 + Vite + TS（壳层 + 配置 + 属性回写 + FCStd 索引 + XLink + 查重 + STEP + SW→STEP） |
-| 启动器配置 | `web-ui/.local/launcher.json`（示例 `web-ui/config/launcher.json.example`） |
+| 启动器配置 | 本机 `…/phoenix-wing/fcdesk/launcher.json`（见 [启动器配置路径-规划讨论.md](启动器配置路径-规划讨论.md)） |
 | CAD 索引库 | `<工作空间>/.phoenix/cad-database.sqlite`（扫描后按需导出 `fcstd_map.json`） |
 | 运行说明 | [web-ui/README.md](../web-ui/README.md) |
 

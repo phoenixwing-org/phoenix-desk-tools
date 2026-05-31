@@ -104,7 +104,7 @@ def run_xlink_fix(
 
     migrate_fcstd_map_json(rr)
     if not cad_database_path(rr).is_file():
-        raise ValueError("请先在「FCStd 索引」页执行工程内搜索")
+        raise ValueError("请先在「CAD 索引」页执行工程内搜索")
 
     cmd = [
         sys.executable,

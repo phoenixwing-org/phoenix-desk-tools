@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
 import customtkinter as ctk
 from tkinter import messagebox
@@ -14,13 +13,16 @@ from fcdesk.config.user_prefs import (
     save_launcher_freecad_dir,
     set_active_workspace,
 )
+from fcdesk.config.launcher_paths import platform_launcher_prefs_file
+from fcdesk.freecad.default_install import default_freecad_install_dir
 from fcdesk.pages.base import BasePage
 from fcdesk.pages import form_widgets as fw
 from fcdesk.shell.native_dialog import pick_workspace_directory
 from fcdesk.shell.state import AppState
+from fcdesk.shell.web_launcher import open_web_ui
+from fcdesk.web.paths import default_web_port
 
 
-# 「最近打开」列表：必须为明亮/暗夜分别指定字色与底色，否则会出现在浅底上使用浅色字而不可读。
 _RECENT_SCROLL_LABEL = dict(
     label_fg_color=("#cdd5e2", "#2d2f36"),
     label_text_color=("#111827", "#f8fafc"),
@@ -38,7 +40,7 @@ _RECENT_BTN_OTHER = dict(
 
 
 class HomePage(BasePage):
-    """应用配置页：工作空间、FreeCAD 目录、偏好保存与全局操作。"""
+    """启动器：工作空间 / FreeCAD 配置，打开 Web 版。"""
 
     page_id = "home"
 
@@ -46,18 +48,18 @@ class HomePage(BasePage):
         self,
         master,
         state: AppState,
-        nav_items: list[Any],
         *,
         on_reload_config: Callable[[], None],
         on_about: Callable[[], None],
         refresh_window_title: Callable[[], None],
+        on_workspace_changed: Callable[[], None] | None = None,
         **kwargs,
     ) -> None:
         super().__init__(master, state, **kwargs)
-        self._nav_items = nav_items
         self._on_reload_config = on_reload_config
         self._on_about = on_about
         self._refresh_window_title = refresh_window_title
+        self._on_workspace_changed = on_workspace_changed
 
         outer = ctk.CTkScrollableFrame(self, label_text="配置")
         outer.grid(row=0, column=0, sticky="nsew", padx=24, pady=24)
@@ -81,15 +83,30 @@ class HomePage(BasePage):
         self._current_repo_label.grid(row=r, column=1, columnspan=3, sticky="ew", pady=(0, 8))
         r += 1
 
+        web_bar = ctk.CTkFrame(outer, fg_color="transparent")
+        web_bar.grid(row=r, column=0, columnspan=4, sticky="ew", pady=(0, 12))
+        ctk.CTkButton(
+            web_bar,
+            text="打开 Web 版",
+            width=160,
+            height=36,
+            font=ctk.CTkFont(size=14, weight="bold"),
+            command=self._open_web,
+        ).pack(side="left")
+        ctk.CTkLabel(
+            web_bar,
+            text=f"在系统浏览器打开功能界面（默认 CAD 索引，端口 {default_web_port()}）",
+            anchor="w",
+            text_color=("#64748b", "#94a3b8"),
+        ).pack(side="left", padx=(12, 0))
+        r += 1
+
         fw.sidebar_label(outer, text="工作空间根").grid(row=r, column=0, sticky="w", padx=(0, 8))
         self._repo_entry = ctk.CTkEntry(outer, placeholder_text="项目 / CAD 根目录")
         self._repo_entry.grid(row=r, column=1, sticky="ew", padx=(0, 8))
-        ctk.CTkButton(
-            outer,
-            text="浏览…",
-            width=88,
-            command=self._browse_repo,
-        ).grid(row=r, column=2, padx=(0, 4))
+        ctk.CTkButton(outer, text="浏览…", width=88, command=self._browse_repo).grid(
+            row=r, column=2, padx=(0, 4)
+        )
         r += 1
 
         fw.sidebar_label(outer, text="FreeCAD 目录").grid(
@@ -97,12 +114,20 @@ class HomePage(BasePage):
         )
         self._fc_entry = ctk.CTkEntry(outer, placeholder_text="可选：FreeCADCmd 所在目录")
         self._fc_entry.grid(row=r, column=1, sticky="ew", padx=(0, 8), pady=(8, 0))
-        ctk.CTkButton(
-            outer,
-            text="浏览…",
-            width=88,
-            command=self._browse_freecad,
-        ).grid(row=r, column=2, padx=(0, 4), pady=(8, 0))
+        fc_btns = ctk.CTkFrame(outer, fg_color="transparent")
+        fc_btns.grid(row=r, column=2, columnspan=2, sticky="w", pady=(8, 0))
+        ctk.CTkButton(fc_btns, text="浏览…", width=88, command=self._browse_freecad).pack(
+            side="left", padx=(0, 4)
+        )
+        default_fc = default_freecad_install_dir()
+        if default_fc:
+            ctk.CTkButton(
+                fc_btns,
+                text="默认位置",
+                width=88,
+                fg_color=("gray65", "gray35"),
+                command=self._fill_default_freecad,
+            ).pack(side="left")
         r += 1
 
         btn_bar = ctk.CTkFrame(outer, fg_color="transparent")
@@ -112,15 +137,10 @@ class HomePage(BasePage):
         ctk.CTkButton(btn_bar, text="保存偏好", width=112, command=self._save_prefs).grid(
             row=0, column=0, padx=(0, 10)
         )
-        ctk.CTkButton(
-            btn_bar,
-            text="重载 JSON",
-            width=100,
-            command=self._reload_clicked,
-        ).grid(row=0, column=1, padx=(0, 10))
-        ctk.CTkButton(btn_bar, text="关于", width=80, command=self._about_clicked).grid(
-            row=0, column=2
+        ctk.CTkButton(btn_bar, text="重载 JSON", width=100, command=self._reload_clicked).grid(
+            row=0, column=1, padx=(0, 10)
         )
+        ctk.CTkButton(btn_bar, text="关于", width=80, command=self._about_clicked).grid(row=0, column=2)
 
         fw.sidebar_label(outer, text="最近打开", anchor="nw").grid(
             row=r, column=0, sticky="nw", padx=(0, 8), pady=(20, 4)
@@ -141,25 +161,13 @@ class HomePage(BasePage):
         )
         r += 1
 
-        ctk.CTkLabel(outer, text="功能一览", font=ctk.CTkFont(weight="bold"), anchor="w").grid(
-            row=r, column=0, columnspan=4, sticky="w", pady=(20, 8)
-        )
-        r += 1
-        for item in self._nav_items:
-            if item.get("page") == "home":
-                continue
-            line = f"· {item.get('label')} — {item.get('description', '')}"
-            ctk.CTkLabel(outer, text=line, anchor="w", justify="left").grid(
-                row=r, column=0, columnspan=4, sticky="w", pady=2
-            )
-            r += 1
-
         fw.footer_hint_label(
             outer,
             (
-                f"各功能页路径与选项写入当前工作空间根下的 {WORKSPACE_DOTFILE_NAME}；"
-                "最近打开的工作空间列表保存在 web-ui/.local/launcher.json（与 Web 共用）。\n"
-                "本页工作空间根与 FreeCAD 目录始终显示为绝对路径；其他功能页的目录在项目树内时以相对路径显示与保存。"
+                "桌面版仅为启动器，不再包含各功能页。\n"
+                f"工作区偏好写入 {WORKSPACE_DOTFILE_NAME}；最近工作空间保存在\n"
+                f"{format_absolute_config_path(platform_launcher_prefs_file())}（与 Web 共用）。\n"
+                "命令行也可直接运行: python -m fcdesk.web -w <工作空间>"
             ),
             wraplength=680,
         ).grid(row=r, column=0, columnspan=4, sticky="nw", pady=(20, 0))
@@ -169,6 +177,39 @@ class HomePage(BasePage):
     def on_show(self) -> None:
         self._refresh_recent_list()
         self._sync_fields_from_state()
+
+    def _notify_workspace_changed(self) -> None:
+        self._refresh_window_title()
+        if self._on_workspace_changed:
+            self._on_workspace_changed()
+
+    def _open_web(self) -> None:
+        repo_s = self._repo_entry.get().strip()
+        if not repo_s:
+            messagebox.showwarning("打开 Web 版", "请先填写或浏览选择工作空间根目录。", parent=self)
+            return
+        rp = Path(repo_s).expanduser().resolve(strict=False)
+        if not rp.is_dir():
+            messagebox.showerror("打开 Web 版", "工作空间路径不是有效文件夹。", parent=self)
+            return
+        set_active_workspace(rp, self.state)
+        self._sync_fields_from_state()
+        self._notify_workspace_changed()
+        try:
+            url = open_web_ui(rp)
+            messagebox.showinfo(
+                "Web 版",
+                f"已在浏览器打开（或正在启动服务）：\n{url}\n\n"
+                "若页面无法加载，请稍候几秒后刷新，或手动运行:\n"
+                "python -m fcdesk.web --build",
+                parent=self,
+            )
+        except ValueError as exc:
+            messagebox.showerror("打开 Web 版", str(exc), parent=self)
+        except RuntimeError as exc:
+            messagebox.showerror("打开 Web 版", str(exc), parent=self)
+        except OSError as exc:
+            messagebox.showerror("打开 Web 版", f"无法启动 Web 服务: {exc}", parent=self)
 
     def _refresh_recent_list(self) -> None:
         for child in self._recent_list.winfo_children():
@@ -208,29 +249,18 @@ class HomePage(BasePage):
         except (OSError, RuntimeError):
             return
         if not rp.is_dir():
-            messagebox.showwarning(
-                "工作空间",
-                f"目录不存在或不可访问：\n{rp}",
-                parent=self,
-            )
+            messagebox.showwarning("工作空间", f"目录不存在或不可访问：\n{rp}", parent=self)
             self._refresh_recent_list()
             return
 
         current = self.state.repo_root.expanduser().resolve()
         if rp == current:
-            messagebox.showinfo(
-                "工作空间",
-                f"当前已是该工作空间，无需切换：\n{rp}",
-                parent=self,
-            )
+            messagebox.showinfo("工作空间", f"当前已是该工作空间：\n{rp}", parent=self)
             return
 
         if not messagebox.askyesno(
             "切换工作空间",
-            f"是否切换到以下工作空间？\n\n{rp}\n\n"
-            f"当前：{current}\n\n"
-            "切换后各功能页将读取该目录下的 "
-            f"{WORKSPACE_DOTFILE_NAME}。",
+            f"是否切换到以下工作空间？\n\n{rp}\n\n当前：{current}",
             parent=self,
         ):
             return
@@ -238,7 +268,7 @@ class HomePage(BasePage):
         set_active_workspace(rp, self.state)
         self._sync_fields_from_state()
         self._refresh_recent_list()
-        self._refresh_window_title()
+        self._notify_workspace_changed()
 
     def _sync_fields_from_state(self) -> None:
         self._repo_entry.delete(0, "end")
@@ -261,7 +291,7 @@ class HomePage(BasePage):
         set_active_workspace(rp, self.state)
         self._sync_fields_from_state()
         self._refresh_recent_list()
-        self._refresh_window_title()
+        self._notify_workspace_changed()
 
     def _browse_freecad(self) -> None:
         path = pick_workspace_directory(
@@ -277,7 +307,14 @@ class HomePage(BasePage):
         self._fc_entry.delete(0, "end")
         self._fc_entry.insert(0, format_absolute_config_path(p))
         save_launcher_freecad_dir(p)
-        self._refresh_window_title()
+        self._notify_workspace_changed()
+
+    def _fill_default_freecad(self) -> None:
+        p = default_freecad_install_dir()
+        if not p:
+            return
+        self._fc_entry.delete(0, "end")
+        self._fc_entry.insert(0, p)
 
     def _save_prefs(self) -> None:
         repo_s = self._repo_entry.get().strip()
@@ -296,11 +333,7 @@ class HomePage(BasePage):
         if fc_s:
             fp = Path(fc_s).expanduser().resolve()
             if not fp.is_dir():
-                messagebox.showerror(
-                    "保存",
-                    "FreeCAD 路径不是有效文件夹；可为空跳过。",
-                    parent=self,
-                )
+                messagebox.showerror("保存", "FreeCAD 路径不是有效文件夹；可为空跳过。", parent=self)
                 return
             self.state.freecad_dir = fp
             save_launcher_freecad_dir(fp)
@@ -309,13 +342,8 @@ class HomePage(BasePage):
             save_launcher_freecad_dir(None)
 
         self._refresh_recent_list()
-        self._refresh_window_title()
-        messagebox.showinfo(
-            "保存",
-            f"已记录最近工作空间。\nFreeCAD 目录已写入启动器配置。\n"
-            f"工作空间内各页偏好请在各功能页保存，或已存在于\n{WORKSPACE_DOTFILE_NAME}",
-            parent=self,
-        )
+        self._notify_workspace_changed()
+        messagebox.showinfo("保存", "已保存工作空间与 FreeCAD 目录偏好。", parent=self)
 
     def _reload_clicked(self) -> None:
         self._on_reload_config()

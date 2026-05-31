@@ -13,6 +13,12 @@ const workspacePath = computed(() => shell.workspacePath.value);
 const launcher = computed(() => shell.launcher.value);
 const appConfig = computed(() => shell.appConfig.value);
 const recentWorkspaces = computed(() => launcher.value?.recent_workspaces ?? []);
+const defaultFreecadDir = computed(() => launcher.value?.default_freecad_dir ?? "");
+
+function fillDefaultFreecad() {
+  const p = defaultFreecadDir.value.trim();
+  if (p) fcInput.value = p;
+}
 
 async function syncLegacyLauncher() {
   try {
@@ -52,15 +58,16 @@ async function refreshFields() {
 
 async function savePrefs() {
   const repo = repoInput.value.trim();
+  const fc = fcInput.value.trim();
   if (!repo) {
     alert("请先填写工作空间根目录。");
     return;
   }
   try {
+    // 先保存 FreeCAD 路径：switchWorkspace 会 reloadLauncher，watch(launcher) 会清空 fcInput
+    const fcResult = await saveLauncherFreecad(fc);
     await shell.switchWorkspace(repo);
-    await saveLauncherFreecad(fcInput.value.trim());
-    await shell.reloadLauncher();
-    fcInput.value = shell.launcher.value?.freecad_dir ?? "";
+    fcInput.value = fcResult.freecad_dir || fc;
     alert("已保存启动器偏好。");
   } catch (e) {
     alert(String(e));
@@ -100,6 +107,15 @@ const navItems = () => (appConfig.value?.navigation ?? []).filter((n) => n.page 
       <label class="field-label" for="fc">FreeCAD 目录</label>
       <div class="row">
         <input id="fc" v-model="fcInput" class="path-input" spellcheck="false" placeholder="可选" />
+        <button
+          v-if="defaultFreecadDir"
+          type="button"
+          class="btn"
+          title="填入本机常用安装路径"
+          @click="fillDefaultFreecad"
+        >
+          默认位置
+        </button>
       </div>
 
       <div class="btn-row">

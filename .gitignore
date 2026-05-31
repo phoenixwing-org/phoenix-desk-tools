@@ -15,3 +15,5 @@ build/
 web-ui/node_modules/
 web-ui/dist
 .phoenix/
+# 遗留（已迁入 .phoenix/；若仍存在可手动删除）
+.phoenix-freecad-desktop.json

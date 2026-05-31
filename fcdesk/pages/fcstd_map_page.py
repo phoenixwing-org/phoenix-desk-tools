@@ -32,12 +32,12 @@ class FcstdMapPage(BasePage):
     def __init__(self, master, state: AppState, **kwargs) -> None:
         super().__init__(master, state, **kwargs)
 
-        fw.page_title(self, text="FCStd 索引").grid(row=0, column=0, columnspan=3, padx=24, pady=(20, 4), sticky="nw")
+        fw.page_title(self, text="CAD 索引").grid(row=0, column=0, columnspan=3, padx=24, pady=(20, 4), sticky="nw")
 
         fw.page_hint_label(
             self,
             (
-                "扫描根下遍历 *.FCStd → 写入 .phoenix/cad-database.sqlite；"
+                "扫描根下遍历 FCStd、MD、PDF、图片、DXF/DWG 等 → 写入 .phoenix/cad-database.sqlite；"
                 "条目路径相对工作空间根（供「链接路径修正」使用）。"
             ),
             wraplength=880,
@@ -52,8 +52,15 @@ class FcstdMapPage(BasePage):
             row=2, column=2, padx=(4, 24), pady=6
         )
 
+        self._force_part_name_var = tk.BooleanVar(value=False)
+        ctk.CTkCheckBox(
+            self,
+            text="强制更新 PartName（智能去前缀，覆盖索引已有值）",
+            variable=self._force_part_name_var,
+        ).grid(row=3, column=0, columnspan=3, padx=24, pady=(0, 4), sticky="w")
+
         row3 = ctk.CTkFrame(self, fg_color="transparent")
-        row3.grid(row=3, column=0, columnspan=3, padx=24, pady=8, sticky="w")
+        row3.grid(row=4, column=0, columnspan=3, padx=24, pady=8, sticky="w")
         ctk.CTkButton(row3, text="保存偏好", fg_color=("gray65", "gray35"), command=self._persist).pack(
             side="left", padx=(0, 8)
         )
@@ -62,11 +69,8 @@ class FcstdMapPage(BasePage):
             side="left"
         )
 
-        self._log = ctk.CTkTextbox(self, font=ctk.CTkFont(family="Menlo", size=12))
-        self._log.grid(row=4, column=0, columnspan=3, padx=24, pady=(8, 6), sticky="nsew")
-
         tree_wrap = ctk.CTkFrame(self, fg_color="transparent")
-        tree_wrap.grid(row=5, column=0, columnspan=3, padx=(24, 24), pady=(0, 24), sticky="nsew")
+        tree_wrap.grid(row=5, column=0, columnspan=3, padx=(24, 24), pady=(8, 24), sticky="nsew")
         tree_wrap.grid_rowconfigure(0, weight=1)
         tree_wrap.grid_columnconfigure(0, weight=1)
         self._tree_host = tk.Frame(tree_wrap, highlightthickness=0)
@@ -92,7 +96,6 @@ class FcstdMapPage(BasePage):
         self._tree_host.grid_rowconfigure(0, weight=1)
         self._tree_host.grid_columnconfigure(0, weight=1)
 
-        self.grid_rowconfigure(4, weight=1)
         self.grid_rowconfigure(5, weight=2)
         self.grid_columnconfigure(1, weight=1)
 
@@ -232,10 +235,15 @@ class FcstdMapPage(BasePage):
 
         self._scan_root_entry.delete(0, "end")
         self._scan_root_entry.insert(0, disp)
+        self._force_part_name_var.set(bool(prefs.get("force_update_part_name")))
         self._apply_fcstd_map_tree_style()
 
     def _persist(self) -> None:
-        save_fcstd_map_prefs(self.state.repo_root, self._scan_root_entry.get().strip())
+        save_fcstd_map_prefs(
+            self.state.repo_root,
+            self._scan_root_entry.get().strip(),
+            force_update_part_name=bool(self._force_part_name_var.get()),
+        )
 
     def _browse(self) -> None:
         path = pick_workspace_directory(
@@ -260,21 +268,23 @@ class FcstdMapPage(BasePage):
         s = self._scan_root_entry.get().strip()
         scan = resolve_workspace_path_entry(s, rr)
         if not scan.is_dir():
-            self._log.delete("1.0", "end")
-            self._log.insert("end", f"错误：扫描根不存在 {scan}\n")
+            self.append_log(f"错误：扫描根不存在 {scan}")
             return
 
         self._persist()
         scan_input = self._scan_root_entry.get().strip()
-        self._log.delete("1.0", "end")
-        self._log.insert("end", f"工程内搜索：{format_resolved_under_workspace(scan, rr)}\n")
+        self.append_log(f"工程内搜索：{format_resolved_under_workspace(scan, rr)}")
 
         def worker() -> None:
             try:
-                payload = run_fcstd_map_scan(rr, scan_root_input=scan_input)
+                payload = run_fcstd_map_scan(
+                    rr,
+                    scan_root_input=scan_input,
+                    force_update_part_name=bool(self._force_part_name_var.get()),
+                )
                 log = payload.get("scan_log") or ""
-                self.after(0, lambda: self._log.insert("end", log + "\n"))
+                self.after(0, lambda lg=log: self.append_log(lg))
             except Exception as e:
-                self.after(0, lambda: self._log.insert("end", f"异常: {e}\n"))
+                self.after(0, lambda err=str(e): self.append_log(f"异常: {err}"))
 
         threading.Thread(target=worker, daemon=True).start()

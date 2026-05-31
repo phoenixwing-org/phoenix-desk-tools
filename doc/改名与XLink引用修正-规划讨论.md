@@ -2,7 +2,8 @@
 
 > [文档索引](文档索引.md)  
 > 状态：**讨论稿**（尚未实现）  
-> 关联：属性回写改名、`scripts/fix_fcstd_xlink_paths.py`、链接路径修正页、`fcstd_map.json`
+> 关联：属性回写改名、`scripts/fix_fcstd_xlink_paths.py`、链接路径修正页、`fcstd_map.json`  
+> **分阶段待办与表结构（P0 改名历史优先）** → [文件变更历史与引用证据-待办讨论.md](文件变更历史与引用证据-待办讨论.md)
 
 ---
 

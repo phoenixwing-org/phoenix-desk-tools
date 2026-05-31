@@ -1,4 +1,4 @@
-"""FastAPI：工作空间树 + 属性回写样例 API。"""
+"""FastAPI：FreeCAD 管理工具 Web 服务（工作空间树、各功能页 API）。"""
 
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ from fcdesk.services.bom_apply_service import (
     load_bom_preview,
     read_document_kinds,
     recommend_filename_for_values,
+    recommend_bom_field,
     rename_bom_fcstd_file,
     save_bom_to_fcstd,
 )
@@ -38,6 +39,12 @@ from fcdesk.services.launcher_service import (
     sync_launcher_from_legacy,
     update_launcher_freecad,
     update_shell_layout,
+)
+from fcdesk.services.part_key_service import (
+    load_part_key_detail_payload,
+    load_part_keys_payload,
+    patch_part_file_link,
+    patch_part_key,
 )
 from fcdesk.services.part_dedup_service import (
     export_part_dedup_csv,
@@ -59,6 +66,12 @@ from fcdesk.services.sw_step_export_service import (
 )
 from fcdesk.services.workspace_service import build_workspace_tree, scan_workspace_files
 from fcdesk.services.xlink_fix_service import get_xlink_prefs, run_xlink_fix, save_xlink_prefs
+from fcdesk.services.rename_analysis_service import (
+    analyze_rename_references,
+    apply_rename_analysis_corrections,
+    load_rename_analysis,
+)
+from fcdesk.services.rename_ref_service import execute_file_rename, load_file_rename_context, preview_rename_unsaved
 
 # 运行时工作空间根（``POST /api/workspace`` 或启动参数设置）
 _active_workspace: Path = Path.cwd().resolve()
@@ -103,6 +116,7 @@ class BomOperationBody(BomFieldsBody):
     baseline: BomFieldsBody | None = None
     original_filename: str = ""
     fill_empty_from_prefs: bool = True
+    write_attrs_first: bool = False
 
 
 def _bom_vals(body: BomFieldsBody) -> dict[str, str]:
@@ -123,14 +137,34 @@ class ShellLayoutBody(BaseModel):
     right_panel_open: bool | None = None
     mid_right_sash_px: int | None = None
     right_panel_width_px: int | None = None
+    log_panel_open: bool | None = None
+    log_panel_height_px: int | None = None
+    log_auto_open_on_append: bool | None = None
 
 
 class FcstdMapScanBody(BaseModel):
     scan_root: str = ""
+    force_update_part_name: bool | None = None
 
 
 class FcstdMapPrefsBody(BaseModel):
     scan_root: str = ""
+    force_update_part_name: bool | None = None
+
+
+class PartKeyPatchBody(BaseModel):
+    TypeCode: str | None = None
+    ModelSeries: str | None = None
+    PartName: str | None = None
+    label: str | None = None
+    notes: str | None = None
+    status: str | None = None
+
+
+class PartFileLinkPatchBody(BaseModel):
+    file_role: str | None = None
+    link_notes: str | None = None
+    link_status: str | None = None
 
 
 class XlinkFixPrefsBody(BaseModel):
@@ -143,6 +177,19 @@ class XlinkFixRunBody(BaseModel):
     batch_dir: str | None = None
     dry_run: bool | None = None
     all_in_dir: bool | None = None
+
+
+class FileRenameScanBody(BaseModel):
+    rename_log_id: int | None = None
+    old_basename: str | None = None
+    new_basename: str | None = None
+    old_repo_rel_path: str | None = None
+    persist: bool | None = True
+
+
+class FileRenameApplyBody(BaseModel):
+    rename_log_id: int
+    host_repo_rel_paths: list[str]
 
 
 class PartDedupPrefsBody(BaseModel):
@@ -179,7 +226,7 @@ class SwStepPrefsBody(BaseModel):
 
 
 def create_app(*, static_dir: Path | None = None) -> FastAPI:
-    app = FastAPI(title="Phoenix FCDesk Web Sample", version="0.1.0")
+    app = FastAPI(title="FreeCAD 管理工具", version="0.1.0")
 
     app.add_middleware(
         CORSMiddleware,
@@ -303,6 +350,23 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
+    @app.post("/api/bom/recommend-field")
+    def api_bom_recommend_field(
+        rel: str = Query(...),
+        field: str = Query(..., description="PartNumber / PartVersion / … / filename"),
+        body: BomOperationBody = ...,
+    ) -> dict:
+        try:
+            return recommend_bom_field(
+                get_workspace(),
+                Path(rel),
+                field,
+                _bom_vals(body),
+                kind_filters=_kind_filters(body),
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
     @app.post("/api/bom/fill-recommended-values")
     def api_bom_fill_recommended(rel: str = Query(...), body: BomFieldsBody = ...) -> dict:
         try:
@@ -364,11 +428,75 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
                 body.filename,
                 baseline=baseline,
                 current=_bom_vals(body),
+                write_attrs_first=body.write_attrs_first,
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         except OSError as e:
             raise HTTPException(status_code=500, detail=str(e)) from e
+
+    @app.get("/api/file-rename/context")
+    def api_file_rename_context(rel: str = Query(...)) -> dict:
+        ws = get_workspace()
+        try:
+            return load_file_rename_context(ws, Path(rel))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except FcdeskFcstdEmbeddedError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post("/api/file-rename/rename")
+    def api_file_rename_execute(rel: str = Query(...), body: BomOperationBody = ...) -> dict:
+        ws = get_workspace()
+        baseline = _bom_vals(body.baseline) if body.baseline else _bom_vals(body)
+        try:
+            return execute_file_rename(
+                ws,
+                Path(rel),
+                new_filename=body.filename,
+                baseline=baseline,
+                current=_bom_vals(body),
+                write_attrs_first=body.write_attrs_first,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except OSError as e:
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
+    @app.post("/api/file-rename/scan-refs")
+    def api_file_rename_scan_refs(body: FileRenameScanBody) -> dict:
+        ws = get_workspace()
+        try:
+            return analyze_rename_references(
+                ws,
+                rename_log_id=body.rename_log_id,
+                old_basename=body.old_basename,
+                new_basename=body.new_basename,
+                old_repo_rel_path=body.old_repo_rel_path,
+                persist=body.persist if body.persist is not None else True,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post("/api/file-rename/apply-refs")
+    def api_file_rename_apply_refs(body: FileRenameApplyBody) -> dict:
+        ws = get_workspace()
+        try:
+            return apply_rename_analysis_corrections(
+                ws,
+                rename_log_id=body.rename_log_id,
+                host_repo_rel_paths=body.host_repo_rel_paths,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.get("/api/file-rename/scan")
+    def api_file_rename_scan_get(rename_log_id: int = Query(...)) -> dict:
+        ws = get_workspace()
+        try:
+            return load_rename_analysis(ws, rename_log_id)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
 
     @app.get("/api/fcstd-map")
     def api_fcstd_map_get() -> dict:
@@ -382,7 +510,11 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
     @app.put("/api/fcstd-map/prefs")
     def api_fcstd_map_prefs_put(body: FcstdMapPrefsBody) -> dict:
         try:
-            return save_fcstd_map_prefs(get_workspace(), body.scan_root)
+            return save_fcstd_map_prefs(
+                get_workspace(),
+                body.scan_root,
+                force_update_part_name=body.force_update_part_name,
+            )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -390,7 +522,11 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
     def api_fcstd_map_scan(body: FcstdMapScanBody = ...) -> dict:
         ws = get_workspace()
         try:
-            return run_fcstd_map_scan(ws, scan_root_input=body.scan_root or None)
+            return run_fcstd_map_scan(
+                ws,
+                scan_root_input=body.scan_root or None,
+                force_update_part_name=body.force_update_part_name,
+            )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         except OSError as e:
@@ -405,6 +541,54 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail=str(e)) from e
         except OSError as e:
             raise HTTPException(status_code=500, detail=str(e)) from e
+
+    @app.get("/api/part-keys")
+    def api_part_keys_list() -> dict:
+        return load_part_keys_payload(get_workspace())
+
+    @app.get("/api/part-keys/{part_number}/{part_version}")
+    def api_part_key_detail(part_number: str, part_version: str) -> dict:
+        try:
+            return load_part_key_detail_payload(get_workspace(), part_number, part_version)
+        except LookupError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
+
+    @app.patch("/api/part-keys/{part_number}/{part_version}")
+    def api_part_key_patch(part_number: str, part_version: str, body: PartKeyPatchBody) -> dict:
+        try:
+            return patch_part_key(
+                get_workspace(),
+                part_number,
+                part_version,
+                type_code=body.TypeCode,
+                model_series=body.ModelSeries,
+                part_name=body.PartName,
+                label=body.label,
+                notes=body.notes,
+                status=body.status,
+            )
+        except LookupError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
+
+    @app.patch("/api/part-keys/{part_number}/{part_version}/files/{file_asset_id}")
+    def api_part_file_link_patch(
+        part_number: str,
+        part_version: str,
+        file_asset_id: int,
+        body: PartFileLinkPatchBody,
+    ) -> dict:
+        try:
+            return patch_part_file_link(
+                get_workspace(),
+                part_number,
+                part_version,
+                file_asset_id,
+                file_role=body.file_role,
+                link_notes=body.link_notes,
+                link_status=body.link_status,
+            )
+        except LookupError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
 
     @app.get("/api/xlink-fix/prefs")
     def api_xlink_prefs_get() -> dict:

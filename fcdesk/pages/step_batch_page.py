@@ -9,6 +9,7 @@ from pathlib import Path
 import customtkinter as ctk
 
 from fcdesk.freecad.batch_step.job import StepBatchJob
+from fcdesk.freecad.batch_step.report import parse_batch_step_report_summary
 from fcdesk.config.user_prefs import (
     format_resolved_under_workspace,
     format_stored_path_for_display,
@@ -101,21 +102,16 @@ class StepBatchPage(BasePage):
         )
 
         row += 1
-        self._log = ctk.CTkTextbox(self, font=ctk.CTkFont(family="Menlo", size=12))
-        self._log.grid(row=row, column=0, columnspan=4, padx=24, pady=(8, 24), sticky="nsew")
-
-        row += 1
         fw.footer_hint_label(
             self,
             (
                 "A：freecadcmd（需在「配置」选 FreeCAD 目录）\n"
                 "B：已开的 FreeCAD（需先执行监听宏）\n"
-                "偏好 → step_batch"
+                "偏好 → step_batch · 运行日志见右侧栏"
             ),
             wraplength=600,
         ).grid(row=row, column=0, columnspan=4, padx=24, pady=(8, 24), sticky="nw")
 
-        self.grid_rowconfigure(row - 1, weight=1)
         self.grid_columnconfigure(0, minsize=80)
         self.grid_columnconfigure(1, weight=1)
 
@@ -288,7 +284,6 @@ class StepBatchPage(BasePage):
         clone = Path(fcdesk.__file__).resolve().parent.parent
         fc_core = clone / "scripts" / "freecad_batch_step_fc.py"
         if not fc_core.is_file():
-            self._log.delete("1.0", "end")
             self._log_line(
                 "错误：收件箱桥接需要 **桌面工具源码树** 里的 scripts/freecad_batch_step_fc.py。\n"
                 f"根据当前 fcdesk 安装解析到目录：{clone}\n\n"
@@ -300,7 +295,6 @@ class StepBatchPage(BasePage):
         listener = _SCRIPTS_DIR / "freecad_fcdesk_inbox_listener.py"
         uid = enqueue_step_batch(clone, job)
 
-        self._log.delete("1.0", "end")
         self._log_line(
             "[桥接] 已向已打开的 FreeCAD 投递 STEP 批量任务。\n"
             f"任务 id: {uid}\n"
@@ -308,7 +302,7 @@ class StepBatchPage(BasePage):
             f"监听宏（每台机在 FreeCAD 里执行过一次即可）：\n  {listener}\n"
             "~/.fcdesk/freecad_bridge/inbox/<任务id>_queued.json\n"
             "~/.fcdesk/freecad_bridge/done/<任务id>_result.json\n\n"
-            "请勿关闭 FreeCAD；下方会轮询回信（超时 10 min）。报告仍在所选输出目录的 Markdown。\n",
+            "请勿关闭 FreeCAD；下方会轮询回信（超时 10 min）。明细见本页运行日志 / FreeCAD 控制台。\n",
         )
 
         deadline = time.monotonic() + _BRIDGE_POLL_SEC
@@ -317,7 +311,20 @@ class StepBatchPage(BasePage):
             data = take_response(uid)
             if data is not None:
                 if data.get("ok"):
-                    self._log_line("\n[fcdesk] FreeCAD 端执行结束（参见上方报告路径）。")
+                    report_path = job.out_dir / job.report_filename
+                    summary = parse_batch_step_report_summary(report_path)
+                    if summary:
+                        self._log_line(
+                            "\n"
+                            f"转换完成：成功 {summary['ok']}，跳过 {summary['skip']}，"
+                            f"失败 {summary['fail']}，共 {summary['total']} 个 STEP。"
+                        )
+                        if report_path.is_file():
+                            self._log_line(f"报告文件：{report_path}")
+                    else:
+                        self._log_line(
+                            "\n[fcdesk] FreeCAD 端执行结束；明细见 FreeCAD 报告窗口 / 本页日志。"
+                        )
                 else:
                     err = data.get("error") or "(无详情)"
                     self._log_line("\n[fcdesk] FreeCAD 端报错：\n" + err)
@@ -334,23 +341,22 @@ class StepBatchPage(BasePage):
         self.after(300, tick)
 
     def _run_via_freecadcmd(self, job: StepBatchJob) -> None:
-        self._log.delete("1.0", "end")
-        self._log_line("freecadcmd 批量转换…")
+        self._log_line("freecadcmd 批量转换…（可能需要数分钟）")
 
         def worker() -> None:
             try:
                 data = run_step_batch(self.state.repo_root, self._step_batch_opts())
                 text = data.get("log") or ""
-                rc = data.get("exit_code", 1)
-                self.after(0, lambda: self._log_line(text))
-                self.after(0, lambda: self._log_line(f"\n退出码: {rc}"))
+                self.after(0, lambda: self._finish_run_log(text))
             except ValueError as e:
-                self.after(0, lambda err=str(e): self._log_line(err))
+                self.after(0, lambda err=str(e): self._finish_run_log(err))
             except Exception as e:
-                self.after(0, lambda err=str(e): self._log_line(f"异常: {err}"))
+                self.after(0, lambda err=str(e): self._finish_run_log(f"异常: {err}"))
 
         threading.Thread(target=worker, daemon=True).start()
 
+    def _finish_run_log(self, text: str) -> None:
+        self.append_log(text)
+
     def _log_line(self, text: str) -> None:
-        self._log.insert("end", text + "\n")
-        self._log.see("end")
+        self.append_log(text)

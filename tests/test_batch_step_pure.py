@@ -7,7 +7,12 @@ import unittest
 from pathlib import Path
 
 from fcdesk.batch_step.job import StepBatchJob
-from fcdesk.batch_step.report import write_batch_step_report_md
+from fcdesk.batch_step.report import (
+    parse_batch_step_report_summary,
+    parse_batch_step_stderr_summary,
+    render_batch_step_report_md,
+    write_batch_step_report_md,
+)
 from fcdesk.batch_step.step_paths import (
     iter_step_paths,
     iter_step_paths_recursive,
@@ -111,6 +116,49 @@ class TestReport(unittest.TestCase):
             text = out.read_text(encoding="utf-8")
             self.assertIn("STEP → FCStd", text)
             self.assertIn("X", text)
+
+    def test_parse_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            tdir = Path(td)
+            out = tdir / "r.md"
+            write_batch_step_report_md(
+                out,
+                step_dir=tdir / "step",
+                out_dir=tdir / "fc",
+                results=[("a.stp", "a.FCStd", None), ("b.stp", None, "skip_existing")],
+                ok=1,
+                skip=1,
+                fail=0,
+            )
+            summary = parse_batch_step_report_summary(out)
+            self.assertIsNotNone(summary)
+            assert summary is not None
+            self.assertEqual(summary["ok"], 1)
+            self.assertEqual(summary["skip"], 1)
+            self.assertEqual(summary["fail"], 0)
+            self.assertEqual(summary["total"], 2)
+
+    def test_parse_stderr_summary(self) -> None:
+        text = "批量结束\n[fcdesk] OK=3 skip=1 fail=0 total=4\n"
+        summary = parse_batch_step_stderr_summary(text)
+        self.assertIsNotNone(summary)
+        assert summary is not None
+        self.assertEqual(summary["ok"], 3)
+        self.assertEqual(summary["skip"], 1)
+        self.assertEqual(summary["fail"], 0)
+        self.assertEqual(summary["total"], 4)
+
+    def test_render_report_roundtrip(self) -> None:
+        md = render_batch_step_report_md(
+            step_dir="/tmp/step",
+            out_dir="/tmp/out",
+            results=[("a.stp", "a.FCStd", None)],
+            ok=1,
+            skip=0,
+            fail=0,
+        )
+        self.assertIn("统计：成功 1", md)
+        self.assertIn("a.stp", md)
 
 
 if __name__ == "__main__":

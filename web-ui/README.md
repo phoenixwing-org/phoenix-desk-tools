@@ -1,4 +1,4 @@
-# Web 样例（单端口）
+# FreeCAD 管理工具（Web · 单端口）
 
 **一个进程、一个端口**：Python 同时提供 API 与已构建的 Vue 前端（默认 **5173**）。无需再开 Vite 开发服。
 
@@ -26,7 +26,7 @@ python -m fcdesk.web -w /path/to/CAD/workspace
 - 不要自动打开：加 `--no-open`
 - 要用系统浏览器：`--open-system`
 
-`-w` 省略时使用 launcher 配置里**最近的工作空间**（`web-ui/.local/launcher.json`）。
+`-w` 省略时使用 launcher 里**最近的工作空间**（本机 `…/phoenix-wing/fcdesk/launcher.json`，见 [doc/启动器配置路径-规划讨论.md](../doc/启动器配置路径-规划讨论.md)）。
 
 ## 仅 API（调试）
 

@@ -16,7 +16,7 @@ from fcdesk.bom_apply_prefs import (
     recommend_field_fill_values,
     save_bom_apply_field_defaults,
 )
-from fcdesk.config.user_prefs import WORKSPACE_DOTFILE_NAME
+from fcdesk.config.user_prefs import workspace_dotfile_path
 
 
 class TestBomApplyPrefs(unittest.TestCase):
@@ -47,7 +47,7 @@ class TestBomApplyPrefs(unittest.TestCase):
             self.assertEqual(prefs["last_part_version"], "002")
             self.assertEqual(prefs["last_type_code"], "S")
             self.assertEqual(prefs["last_model_series"], "5TA")
-            raw = json.loads((td / WORKSPACE_DOTFILE_NAME).read_text(encoding="utf-8"))
+            raw = json.loads(workspace_dotfile_path(td).read_text(encoding="utf-8"))
             self.assertIn("bom_apply", raw)
         finally:
             shutil.rmtree(td, ignore_errors=True)

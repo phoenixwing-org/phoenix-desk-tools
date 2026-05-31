@@ -1,7 +1,7 @@
 # Phoenix 工作空间存储 — 规划讨论
 
 > [文档索引](文档索引.md)  
-> 状态：**讨论稿 · 未实现**（本文仅完善设计；**当前代码仍会写入** `.phoenix-freecad-desktop.json` 等，见 §1）
+> 状态：**讨论稿 · 部分实现**（偏好 JSON 已迁入 **`.phoenix/phoenix-freecad-desktop.json`**；SQLite 主库仍为规划项，见 §1）
 
 ---
 
@@ -12,7 +12,8 @@
 | 位置 | 内容 |
 | --- | --- |
 | `fcdesk/config/workspace.custom.json` | 启动器级：最近工作空间、`freecad_dir`、窗口几何 |
-| `<工作空间根>/.phoenix-freecad-desktop.json` | 各功能页偏好（`fc_linkfix`、`step_batch`、`bom_apply` …） |
+| `<工作空间根>/.phoenix/phoenix-freecad-desktop.json` | 各功能页偏好（`fc_linkfix`、`step_batch`、`bom_apply` …） |
+| `<工作空间根>/.phoenix-freecad-desktop.json` | **遗留**；读取时迁入 `.phoenix/` |
 | `<工作空间根>/fcstd_map.json` | FCStd 索引（与 xlink 脚本共用） |
 
 属性回写「上次零件号 / 默认版本」等已写入 dotfile 的 `bom_apply` 小节（`fcdesk/bom_apply_prefs.py`）。
@@ -136,7 +137,7 @@ flowchart LR
 
 | 阶段 | 行为 |
 | --- | --- |
-| **M0（当前）** | 继续写 `.phoenix-freecad-desktop.json`；文档标记为遗留 |
+| **M0（当前）** | 偏好 JSON 在 **`.phoenix/phoenix-freecad-desktop.json`**；根目录 dotfile 仅迁移读取 |
 | **M1** | 双写：SQLite + dotfile（过渡，便于回滚） |
 | **M2** | 仅 SQLite；dotfile 仅 **导入 / 导出** |
 | **M3** | 默认不生成 dotfile；文档与示例移除根目录 JSON 依赖 |

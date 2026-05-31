@@ -31,7 +31,7 @@ def default_bom_apply_prefs() -> dict[str, str]:
 
 
 def load_bom_apply_field_defaults(repo_root: Path) -> dict[str, str]:
-    """从 ``.phoenix-freecad-desktop.json`` 的 ``bom_apply`` 小节读取。"""
+    """从 ``.phoenix/phoenix-freecad-desktop.json`` 的 ``bom_apply`` 小节读取。"""
     out = default_bom_apply_prefs()
     raw = load_workspace_prefs(repo_root).get("bom_apply")
     if not isinstance(raw, dict):

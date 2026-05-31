@@ -18,6 +18,7 @@ _NAV_RAIL_LABEL_W = 144
 _DEFAULT_PAGE_ICONS: dict[str, str] = {
     "home": "⚙",
     "fcstd_map": "◫",
+    "part_catalog": "◉",
     "xlink_fix": "⎘",
     "step_batch": "⇩",
     "sw_step_export": "▣",

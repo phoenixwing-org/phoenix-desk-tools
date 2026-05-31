@@ -35,6 +35,7 @@ from fcdesk.fcstd_embedded_attrs import (
 )
 from fcdesk.fcstd_mapping import (
     FcstdMapEntry,
+    coerce_inferred_part_name,
     compose_fcstd_body_label_display,
     compose_fcstd_recommended_filename,
     format_recommended_filename_hint,
@@ -346,10 +347,10 @@ class BomApplyPage(BasePage):
                 "**从ZIP内写入界面**：仅从当前包内 Document / 旧侧车读取可写字段，覆盖下方表单（不写盘）；无有效字段时会提示。\n"
                 "**从文件名写入界面**：按 ``fcstd_mapping`` 规则从文件名与仓库路径推断零件号「版本」「类型」「型号」等并填入（不写盘）；推断不出内容时会提示。\n"
                 "**推荐文件名**：按 ``PartNumber.PartVersion[-TypeCode][-ModelSeries]-名称`` 拼出推荐名；"
-                "空字段会先填入工作空间记忆：**上次零件号 +1**、版本默认 **001**、类型默认 **H**、**上次型号**（存于 ``.phoenix-freecad-desktop.json`` 的 ``bom_apply``）。\n"
+                "空字段会先填入工作空间记忆：**上次零件号 +1**、版本默认 **001**、类型默认 **H**、**上次型号**（存于 ``.phoenix/phoenix-freecad-desktop.json`` 的 ``bom_apply``）。\n"
                 "后缀由 **Document.xml 识别类型** 决定（装配 ``.ASSY.FCStd``、图纸 ``.Drawing.FCStd``、零件 ``.FCStd``），"
                 "上方勾选用于过滤「从 ZIP 读取 / 推荐文件名」是否对该类型生效；选中文件时会自动识别类型（亦可点「识别类型」）。\n"
-                "「推荐文件名」仅填入文件名字段；**改名** 前须先 **保存到 ZIP**（有未写入属性时会阻止改名），再点文件行右侧 **改名** 写回磁盘。\n"
+                "「推荐文件名」仅填入文件名字段；**改名** 前有未写入属性时会询问是否**写入并改名**。\n"
                 "保存将把属性写入 ``Document.xml`` 内 BOM 挂载对象的 Property（Body → type 含 assembly → App::Part）。"
                 "``PartNumber`` 等与手动「添加属性」一致：**组**默认为 **「CustomDefine」**（常量 ``FCDESK_EMBEDDED_BOM_PROPERTY_GROUP``），**工具提示**写入 ``Property/@doc``。 "
                 "若包内仍存在旧版 ``FcdeskBomAttrs.xml``，保存时会移除该文件并完成迁移。\n"
@@ -675,9 +676,7 @@ class BomApplyPage(BasePage):
             except FcdeskFcstdEmbeddedError as ex:
                 self._set_status(f"嵌入式属性读取警告：{ex}", ok=False)
         merged = self._merge_embedded_over(plain, embedded)
-        lb_vis = merged.get("label", "").strip()
-        if not merged.get("PartName", "").strip():
-            merged["PartName"] = lb_vis
+        merged = self._merged_with_partname_coerce(merged)
 
         self._source_hint.configure(text=note)
         self._abs_path_label.configure(
@@ -764,9 +763,18 @@ class BomApplyPage(BasePage):
 
     def _merged_with_partname_coerce(self, row: dict[str, str]) -> dict[str, str]:
         merged = dict(row)
-        lb_vis = merged.get("label", "").strip()
-        if not merged.get("PartName", "").strip():
-            merged["PartName"] = lb_vis
+        inferred = coerce_inferred_part_name(
+            merged.get("PartName"),
+            merged.get("label"),
+            filename=merged.get("filename"),
+            repo_rel_path=merged.get("repo_rel_path"),
+            part_number=merged.get("PartNumber"),
+            part_version=merged.get("PartVersion"),
+            type_code=merged.get("TypeCode"),
+            model_series=merged.get("ModelSeries"),
+        )
+        if inferred:
+            merged["PartName"] = inferred
         return merged
 
     def _push_merged_into_form(self, merged: dict[str, str]) -> None:
@@ -907,14 +915,17 @@ class BomApplyPage(BasePage):
             messagebox.showinfo("改名", "请先在右侧栏选择一个文件。", parent=self)
             return
         if self._has_unsaved_document_attrs():
-            messagebox.showwarning(
+            if not messagebox.askyesno(
                 "改名",
-                "当前有尚未写入 ZIP 的属性（零件号、版本、类型、标签等）。\n"
-                "请先点击「保存到 ZIP」，再执行磁盘改名。",
+                "当前有尚未写入 ZIP 的属性（零件号、版本、类型、标签等）。\n\n"
+                "是否先写入 Document.xml，再重命名磁盘文件？",
                 parent=self,
-            )
-            self._set_status("改名已取消：请先保存属性到 ZIP", ok=False)
-            return
+            ):
+                self._set_status("改名已取消", ok=False)
+                return
+            if not self._save_zip(silent=True):
+                messagebox.showwarning("改名", "写入属性失败，已取消改名。", parent=self)
+                return
         new_name = self._value_widgets["filename"].get().strip()
         if new_name in ("", "—"):
             messagebox.showwarning("改名", "请先填写目标文件名。", parent=self)
@@ -976,52 +987,65 @@ class BomApplyPage(BasePage):
             note += "（已更新 fcstd_map.json）"
         self._set_status(note, ok=True)
 
-    def _save_zip(self) -> None:
+    def _save_zip(self, *, silent: bool = False) -> bool:
         if self._current_rel is None or self._preview_entry is None:
-            messagebox.showwarning("保存", "没有选中的文件。", parent=self)
-            return
+            if not silent:
+                messagebox.showwarning("保存", "没有选中的文件。", parent=self)
+            return False
         rr = self.state.repo_root.expanduser().resolve(strict=False)
         full = rr / self._current_rel
         if not full.is_file() or full.suffix.casefold() != ".fcstd":
-            messagebox.showwarning(
-                "保存",
-                "仅支持将可编辑字段写入 .FCStd（ZIP）。当前文件不适用。",
-                parent=self,
-            )
-            return
+            if not silent:
+                messagebox.showwarning(
+                    "保存",
+                    "仅支持将可编辑字段写入 .FCStd（ZIP）。当前文件不适用。",
+                    parent=self,
+                )
+            return False
 
         vals = self._collect_editable()
-        pn_name_coerce = vals.get("PartName", "").strip()
-        lbl_coerce = vals.get("label", "").strip()
-        if not pn_name_coerce and lbl_coerce:
-            vals["PartName"] = lbl_coerce
+        inferred = coerce_inferred_part_name(
+            vals.get("PartName"),
+            vals.get("label"),
+            part_number=vals.get("PartNumber"),
+            part_version=vals.get("PartVersion"),
+            type_code=vals.get("TypeCode"),
+            model_series=vals.get("ModelSeries"),
+        )
+        if inferred and not vals.get("PartName", "").strip():
+            vals["PartName"] = inferred
         try:
             write_embedded_bom_attrs(full, vals)
         except PermissionError as e:
-            messagebox.showwarning(
-                "保存失败",
-                "没有权限改写文件（可能被占用）。\n请先关闭 FreeCAD 或其它占用该文件的程序。\n\n"
-                f"{e}",
-                parent=self,
-            )
+            if not silent:
+                messagebox.showwarning(
+                    "保存失败",
+                    "没有权限改写文件（可能被占用）。\n请先关闭 FreeCAD 或其它占用该文件的程序。\n\n"
+                    f"{e}",
+                    parent=self,
+                )
             self._set_status("保存失败：权限 / 占用", ok=False)
-            return
+            return False
         except OSError as e:
-            messagebox.showerror("保存失败", str(e), parent=self)
+            if not silent:
+                messagebox.showerror("保存失败", str(e), parent=self)
             self._set_status("保存失败", ok=False)
-            return
+            return False
         except FcdeskFcstdEmbeddedError as e:
-            messagebox.showerror("保存失败", str(e), parent=self)
+            if not silent:
+                messagebox.showerror("保存失败", str(e), parent=self)
             self._set_status("保存失败：ZIP/XML", ok=False)
-            return
+            return False
 
         self._baseline = {k: vals.get(k, "") for k in _EDIT_KEYS}
         self._refresh_dirty_marks()
         self._persist_bom_apply_prefs_from_form()
         self._set_status("已写入 Document.xml（ZIP 原子替换）", ok=True)
-        messagebox.showinfo(
-            "已保存",
-            "属性已写入该 FCStd 包内 Document.xml（挂载对象下的 Property）。\n"
-            "下次在 FreeCAD 中打开前请确保已写完并关闭其它占用。",
-            parent=self,
-        )
+        if not silent:
+            messagebox.showinfo(
+                "已保存",
+                "属性已写入该 FCStd 包内 Document.xml（挂载对象下的 Property）。\n"
+                "下次在 FreeCAD 中打开前请确保已写完并关闭其它占用。",
+                parent=self,
+            )
+        return True

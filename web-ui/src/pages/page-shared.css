@@ -1,6 +1,5 @@
 .tool-page {
   padding: 20px 22px 32px;
-  min-height: 100%;
 }
 
 .page-head {
@@ -116,7 +115,9 @@
 }
 
 .mono {
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
 }
 
 code {

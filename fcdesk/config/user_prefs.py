@@ -1,14 +1,21 @@
-"""用户偏好：启动器 ``web-ui/.local/launcher.json`` + 工作空间 ``.phoenix-freecad-desktop.json``。"""
+"""用户偏好：启动器（本机 ``launcher.json``）+ 工作空间 ``.phoenix/phoenix-freecad-desktop.json``。"""
 
 from __future__ import annotations
 
 import json
+import os
 import posixpath
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-WORKSPACE_DOTFILE_NAME = ".phoenix-freecad-desktop.json"
+from fcdesk.config.launcher_paths import legacy_flat_launcher_prefs_file, platform_launcher_prefs_file
+
+WORKSPACE_PHOENIX_DIR = ".phoenix"
+WORKSPACE_PREFS_BASENAME = "phoenix-freecad-desktop.json"
+WORKSPACE_DOTFILE_LEGACY_NAME = ".phoenix-freecad-desktop.json"
+# 界面 / API 展示用相对工作空间根的路径
+WORKSPACE_DOTFILE_NAME = f"{WORKSPACE_PHOENIX_DIR}/{WORKSPACE_PREFS_BASENAME}"
 MAX_RECENT_WORKSPACES = 10
 
 _WORKSPACE_SECTIONS = ("fc_linkfix", "fcstd_map", "step_batch", "sw_step_export", "part_dedup", "bom_apply")
@@ -20,7 +27,7 @@ _WORKSPACE_DEFAULT: dict[str, Any] = {
         "dry_run": True,
         "all_in_dir": True,
     },
-    "fcstd_map": {"scan_root": None},
+    "fcstd_map": {"scan_root": None, "force_update_part_name": False},
     "step_batch": {
         "step_dir": None,
         "out_dir": None,
@@ -56,6 +63,9 @@ _LAUNCHER_SHELL_LAYOUT_DEFAULT: dict[str, Any] = {
     "right_panel_open": True,
     "mid_right_sash_px": None,  # Panedwindow 首根 sash 距左侧像素；None 表示由窗口宽度推导默认
     "right_panel_width_px": 300,  # Web 右侧工作空间树宽度
+    "log_panel_open": True,
+    "log_panel_height_px": 180,
+    "log_auto_open_on_append": True,
 }
 
 
@@ -77,6 +87,15 @@ def _normalized_shell_layout(raw: Any) -> dict[str, Any]:
     rpw = raw.get("right_panel_width_px")
     if isinstance(rpw, int) and rpw > 0:
         merged["right_panel_width_px"] = int(rpw)
+    lpo = raw.get("log_panel_open")
+    if isinstance(lpo, bool):
+        merged["log_panel_open"] = lpo
+    lph = raw.get("log_panel_height_px")
+    if isinstance(lph, int) and lph >= 80:
+        merged["log_panel_height_px"] = int(lph)
+    lao = raw.get("log_auto_open_on_append")
+    if isinstance(lao, bool):
+        merged["log_auto_open_on_append"] = lao
     return merged
 
 
@@ -94,7 +113,7 @@ def _repo_root() -> Path:
 
 
 def web_launcher_prefs_file() -> Path:
-    """Web 前端侧本机启动器配置（gitignore：``web-ui/.local/launcher.json``）。"""
+    """旧路径 ``web-ui/.local/launcher.json``（仅迁移读取）。"""
     return _repo_root() / "web-ui" / ".local" / "launcher.json"
 
 
@@ -104,17 +123,27 @@ def legacy_launcher_prefs_file() -> Path:
 
 
 def launcher_prefs_file() -> Path:
-    """启动器 JSON 主路径：环境变量 > web-ui/.local > 旧 fcdesk/config。"""
-    env = __import__("os").environ.get("FCDESK_LAUNCHER_CONFIG", "").strip()
+    """启动器 JSON 读取路径：环境变量 > 本机平台路径 > 旧 web-ui/.local > 旧 workspace.custom.json。"""
+    env = os.environ.get("FCDESK_LAUNCHER_CONFIG", "").strip()
     if env:
         return Path(env).expanduser().resolve()
+    platform = platform_launcher_prefs_file()
+    if platform.is_file():
+        return platform
     web_path = web_launcher_prefs_file()
     if web_path.is_file():
         return web_path
     legacy = legacy_launcher_prefs_file()
     if legacy.is_file():
         return legacy
-    return web_path
+    return platform
+
+
+def _launcher_prefs_write_path() -> Path:
+    env = os.environ.get("FCDESK_LAUNCHER_CONFIG", "").strip()
+    if env:
+        return Path(env).expanduser().resolve()
+    return platform_launcher_prefs_file()
 
 
 def _resolve_path_for_storage(path_like: Any) -> str | None:
@@ -156,7 +185,7 @@ def _recent_workspace_paths_from_raw(raw: dict[str, Any] | None) -> list[str]:
 
 
 def _merge_launcher_prefs(web_raw: dict[str, Any] | None, legacy_raw: dict[str, Any] | None) -> dict[str, Any]:
-    """合并旧 ``workspace.custom.json`` → 新 ``web-ui/.local/launcher.json``（legacy 最近项优先）。"""
+    """合并两份 launcher 片段（legacy 最近项优先、补全 freecad 等）。"""
     base = deepcopy(_LAUNCHER_DEFAULT)
     if web_raw:
         for key in ("version", "recent_workspaces", "freecad_dir", "window_geometry"):
@@ -207,15 +236,66 @@ def _launcher_storage_subset(raw: dict[str, Any] | None) -> dict[str, Any]:
     return out
 
 
-def _launcher_prefs_write_path() -> Path:
-    env = __import__("os").environ.get("FCDESK_LAUNCHER_CONFIG", "").strip()
-    if env:
-        return Path(env).expanduser().resolve()
-    return web_launcher_prefs_file()
+def _merge_launcher_sources(*sources: dict[str, Any] | None) -> dict[str, Any]:
+    """合并多份 launcher 来源；``sources`` 顺序越靠后，标量字段优先级越高。"""
+    present = [s for s in sources if s]
+    if not present:
+        return deepcopy(_LAUNCHER_DEFAULT)
+
+    merged = deepcopy(_LAUNCHER_DEFAULT)
+    merged_recent: list[str] = []
+    seen: set[str] = set()
+    for raw in present:
+        for p in _recent_workspace_paths_from_raw(raw):
+            if p not in seen:
+                seen.add(p)
+                merged_recent.append(p)
+    merged["recent_workspaces"] = merged_recent[:MAX_RECENT_WORKSPACES]
+
+    for raw in reversed(present):
+        if isinstance(raw.get("version"), int):
+            merged["version"] = raw["version"]
+        fd = raw.get("freecad_dir")
+        if fd:
+            merged["freecad_dir"] = str(fd)
+        toolbar = raw.get("toolbar")
+        if isinstance(toolbar, dict) and toolbar.get("freecad_dir") and not merged.get("freecad_dir"):
+            merged["freecad_dir"] = str(toolbar["freecad_dir"])
+        wg = raw.get("window_geometry")
+        if isinstance(wg, str) and wg.strip():
+            merged["window_geometry"] = wg.strip()
+        if isinstance(raw.get("shell_layout"), dict):
+            merged["shell_layout"] = _normalized_shell_layout(raw["shell_layout"])
+
+    merged["version"] = 2
+    return merged
+
+
+def workspace_phoenix_dir(repo_root: Path) -> Path:
+    return repo_root.expanduser().resolve(strict=False) / WORKSPACE_PHOENIX_DIR
+
+
+def legacy_workspace_dotfile_path(repo_root: Path) -> Path:
+    """旧版：工作空间根下的 ``.phoenix-freecad-desktop.json``（仅迁移读取）。"""
+    return repo_root.expanduser().resolve(strict=False) / WORKSPACE_DOTFILE_LEGACY_NAME
 
 
 def workspace_dotfile_path(repo_root: Path) -> Path:
-    return repo_root.expanduser().resolve() / WORKSPACE_DOTFILE_NAME
+    return workspace_phoenix_dir(repo_root) / WORKSPACE_PREFS_BASENAME
+
+
+def migrate_workspace_dotfile(repo_root: Path) -> bool:
+    """将根目录遗留 dotfile 迁入 ``.phoenix/phoenix-freecad-desktop.json``。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    new_path = workspace_dotfile_path(rr)
+    if new_path.is_file():
+        return False
+    legacy_path = legacy_workspace_dotfile_path(rr)
+    legacy_raw = _read_json(legacy_path)
+    if not legacy_raw:
+        return False
+    _write_json(new_path, legacy_raw)
+    return True
 
 
 def store_path_under_repo(path: Path, repo_root: Path) -> str:
@@ -387,8 +467,11 @@ def save_launcher_shell_layout(
     right_panel_open: bool | None = None,
     mid_right_sash_px: int | None = None,
     right_panel_width_px: int | None = None,
+    log_panel_open: bool | None = None,
+    log_panel_height_px: int | None = None,
+    log_auto_open_on_append: bool | None = None,
 ) -> None:
-    """将左侧导航宽窄 / 右栏开合 / 中右分割 sash 写入 launcher JSON（与其它启动器字段合并）。"""
+    """将左侧导航宽窄 / 右栏开合 / 中右分割 sash / 运行日志窗 写入 launcher JSON。"""
     launcher = load_launcher_prefs()
     cur = _normalized_shell_layout(launcher.get("shell_layout"))
     if nav_rail_mode is not None and int(nav_rail_mode) in (0, 1):
@@ -399,6 +482,12 @@ def save_launcher_shell_layout(
         cur["mid_right_sash_px"] = int(mid_right_sash_px)
     if right_panel_width_px is not None:
         cur["right_panel_width_px"] = int(right_panel_width_px)
+    if log_panel_open is not None:
+        cur["log_panel_open"] = bool(log_panel_open)
+    if log_panel_height_px is not None:
+        cur["log_panel_height_px"] = max(80, int(log_panel_height_px))
+    if log_auto_open_on_append is not None:
+        cur["log_auto_open_on_append"] = bool(log_auto_open_on_append)
     launcher["shell_layout"] = cur
     save_launcher_prefs(launcher)
 
@@ -451,6 +540,7 @@ def save_launcher_freecad_dir(path: Path | None) -> None:
 
 
 def load_workspace_prefs(repo_root: Path) -> dict[str, Any]:
+    migrate_workspace_dotfile(repo_root)
     data = deepcopy(_WORKSPACE_DEFAULT)
     raw = _read_json(workspace_dotfile_path(repo_root))
     if not raw:
@@ -506,36 +596,36 @@ def set_active_workspace(repo_root: Path, state: Any) -> None:
     record_recent_workspace(rp)
 
 
-def migrate_launcher_prefs_to_web() -> bool:
-    """将旧 ``fcdesk/config/workspace.custom.json`` 合并进 ``web-ui/.local/launcher.json``。
+def migrate_launcher_prefs() -> bool:
+    """将 legacy / 旧 ``web-ui/.local`` 合并写入本机平台 ``launcher.json``。
 
-    若 Web 侧尚无最近工作空间，会迁入桌面壳记录（含 v1 ``toolbar.repo_root``）。
-    返回是否写入了新文件。
+    返回是否写入了平台路径。
     """
-    web_path = web_launcher_prefs_file()
-    legacy = legacy_launcher_prefs_file()
-    legacy_raw = _read_json(legacy)
-    web_raw = _read_json(web_path)
+    platform_path = platform_launcher_prefs_file()
+    legacy_raw = _read_json(legacy_launcher_prefs_file())
+    web_raw = _read_json(web_launcher_prefs_file())
+    flat_platform_raw = _read_json(legacy_flat_launcher_prefs_file())
+    platform_raw = _read_json(platform_path)
 
-    if not legacy_raw and not web_raw:
+    if not legacy_raw and not web_raw and not flat_platform_raw and not platform_raw:
         return False
 
-    merged = _merge_launcher_prefs(web_raw, legacy_raw)
-
-    # 无 legacy 且 web 已完整则跳过
-    if legacy_raw is None and web_raw is not None:
-        return False
-
-    changed = _launcher_storage_subset(merged) != _launcher_storage_subset(web_raw)
-    if not web_path.is_file() or changed:
-        _write_json(web_path, merged)
+    merged = _merge_launcher_sources(legacy_raw, web_raw, flat_platform_raw, platform_raw)
+    changed = _launcher_storage_subset(merged) != _launcher_storage_subset(platform_raw)
+    if not platform_path.is_file() or changed:
+        _write_json(platform_path, merged)
         return True
     return False
 
 
+def migrate_launcher_prefs_to_web() -> bool:
+    """兼容旧名：等同于 :func:`migrate_launcher_prefs`。"""
+    return migrate_launcher_prefs()
+
+
 def migrate_legacy_workspace_prefs() -> None:
     """将旧版 ``workspace.custom.json`` 内嵌的工作区配置迁到各仓库根目录。"""
-    migrate_launcher_prefs_to_web()
+    migrate_launcher_prefs()
     legacy_raw = _read_json(legacy_launcher_prefs_file())
     raw = _read_json(launcher_prefs_file())
     section_source = legacy_raw if legacy_raw else raw
@@ -573,6 +663,7 @@ def migrate_legacy_workspace_prefs() -> None:
 
     if repo_path is not None and has_workspace_sections:
         dot = workspace_dotfile_path(repo_path)
+        migrate_workspace_dotfile(repo_path)
         if not dot.is_file():
             ws = deepcopy(_WORKSPACE_DEFAULT)
             for key in _WORKSPACE_SECTIONS:

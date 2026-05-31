@@ -164,6 +164,22 @@ export function saveBom(rel: string, fields: Partial<BomFields>) {
   });
 }
 
+export function recommendBomField(
+  rel: string,
+  field: string,
+  fields: Partial<BomFields>,
+  kindFilters: BomKindFilters,
+) {
+  return jsonFetch<{ field: string; value: string; source_note: string; filled: boolean }>(
+    `/api/bom/recommend-field?rel=${encodeURIComponent(rel)}&field=${encodeURIComponent(field)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...bomBody(fields), kind_filters: kindFilters }),
+    },
+  );
+}
+
 export function fillRecommendedValues(rel: string, fields: Partial<BomFields>) {
   return jsonFetch<{ fields: BomFields; filled_keys: string[] }>(
     `/api/bom/fill-recommended-values?rel=${encodeURIComponent(rel)}`,
@@ -251,23 +267,118 @@ export function renameBomFile(
   rel: string,
   fields: Partial<BomFields>,
   baseline: Partial<BomFields>,
+  opts?: { writeAttrsFirst?: boolean },
 ) {
-  return jsonFetch<{ rel_path: string; filename: string; map_updated: boolean }>(
-    `/api/bom/rename?rel=${encodeURIComponent(rel)}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...bomBody(fields),
-        baseline: bomBody(baseline),
-      }),
-    },
+  return jsonFetch<{
+    rel_path: string;
+    filename: string;
+    map_updated: boolean;
+    attrs_saved?: boolean;
+  }>(`/api/bom/rename?rel=${encodeURIComponent(rel)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ...bomBody(fields),
+      baseline: bomBody(baseline),
+      write_attrs_first: Boolean(opts?.writeAttrsFirst),
+    }),
+  });
+}
+
+export type RenameLog = {
+  id: number;
+  old_repo_rel_path: string;
+  new_repo_rel_path: string;
+  old_filename: string;
+  new_filename: string;
+  old_basename: string;
+  new_basename: string;
+  created_at: string;
+};
+
+export type RefHitHost = {
+  host_repo_rel_path: string;
+  host_filename: string;
+  hit_count: number;
+  hits: Array<{
+    id?: number;
+    matched_text: string;
+    proposed_text: string;
+    status: string;
+  }>;
+};
+
+export type RefScanPayload = {
+  rename_log_id: number | null;
+  host_count: number;
+  hit_count: number;
+  hosts: RefHitHost[];
+};
+
+export function fetchFileRenameContext(rel: string) {
+  return jsonFetch<{ rel_path: string; preview: BomPreview }>(
+    `/api/file-rename/context?rel=${encodeURIComponent(rel)}`,
   );
+}
+
+export function executeFileRename(
+  rel: string,
+  fields: Partial<BomFields>,
+  baseline: Partial<BomFields>,
+  opts?: { writeAttrsFirst?: boolean },
+) {
+  return jsonFetch<{
+    rel_path: string;
+    filename: string;
+    map_updated: boolean;
+    attrs_saved?: boolean;
+    rename_log_id?: number;
+    rename_log?: RenameLog;
+  }>(`/api/file-rename/rename?rel=${encodeURIComponent(rel)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ...bomBody(fields),
+      baseline: bomBody(baseline),
+      write_attrs_first: Boolean(opts?.writeAttrsFirst),
+    }),
+  });
+}
+
+export function scanFileRenameRefs(body: {
+  rename_log_id?: number;
+  old_basename?: string;
+  new_basename?: string;
+  persist?: boolean;
+}) {
+  return jsonFetch<RefScanPayload>("/api/file-rename/scan-refs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function applyFileRenameRefs(renameLogId: number, hostRepoRelPaths: string[]) {
+  return jsonFetch<{
+    rename_log_id: number;
+    applied_hosts: string[];
+    failed: Array<{ host_repo_rel_path: string; error: string }>;
+    xlink_patches: number;
+    scan: RefScanPayload;
+  }>("/api/file-rename/apply-refs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      rename_log_id: renameLogId,
+      host_repo_rel_paths: hostRepoRelPaths,
+    }),
+  });
 }
 
 export type FcstdMapEntry = {
   repo_rel_path: string;
   filename: string;
+  asset_kind: string;
   PartNumber: string;
   PartVersion: string;
   TypeCode: string;
@@ -284,7 +395,12 @@ export type FcstdMapStats = {
   missing: number;
   unique_filenames: number;
   duplicate_filename_kinds: number;
+  cad_file_count: number;
   fcstd_file_count: number;
+  markdown_file_count: number;
+  pdf_file_count: number;
+  cad_exchange_file_count: number;
+  image_file_count: number;
 };
 
 export type FcstdMapPayload = {
@@ -293,7 +409,7 @@ export type FcstdMapPayload = {
   map_path: string;
   map_path_display: string;
   exists: boolean;
-  prefs: { scan_root: string };
+  prefs: { scan_root: string; force_update_part_name: boolean };
   last_scan_at: string;
   scan_root: string;
   stats: FcstdMapStats;
@@ -305,19 +421,19 @@ export function fetchFcstdMap() {
   return jsonFetch<FcstdMapPayload>("/api/fcstd-map");
 }
 
-export function saveFcstdMapPrefs(scan_root: string) {
-  return jsonFetch<{ scan_root: string }>("/api/fcstd-map/prefs", {
+export function saveFcstdMapPrefs(scan_root: string, force_update_part_name?: boolean) {
+  return jsonFetch<{ scan_root: string; force_update_part_name: boolean }>("/api/fcstd-map/prefs", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ scan_root }),
+    body: JSON.stringify({ scan_root, force_update_part_name }),
   });
 }
 
-export function scanFcstdMap(scan_root = "") {
+export function scanFcstdMap(scan_root = "", force_update_part_name?: boolean) {
   return jsonFetch<FcstdMapPayload>("/api/fcstd-map/scan", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ scan_root }),
+    body: JSON.stringify({ scan_root, force_update_part_name }),
   });
 }
 
@@ -325,6 +441,101 @@ export function exportFcstdMapJson() {
   return jsonFetch<{ path: string; path_display: string }>("/api/fcstd-map/export-json", {
     method: "POST",
   });
+}
+
+export type PartKeyEntry = {
+  id: number;
+  part_number: string;
+  part_version: string;
+  part_key: string;
+  TypeCode: string;
+  ModelSeries: string;
+  PartName: string;
+  label: string;
+  notes: string;
+  status: "active" | "obsolete" | string;
+  file_count: number;
+  present_count: number;
+  missing_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PartKeyFile = {
+  id: number;
+  repo_rel_path: string;
+  filename: string;
+  asset_kind?: string;
+  PartNumber: string;
+  PartVersion: string;
+  TypeCode: string;
+  ModelSeries: string;
+  PartName: string;
+  label: string;
+  file_status: "present" | "missing";
+  file_role: string;
+  link_notes: string;
+  link_status: "active" | "obsolete" | string;
+  linked_at: string;
+  last_seen_at: string;
+  updated_at: string;
+};
+
+export type PartKeysPayload = {
+  database_path: string;
+  database_path_display: string;
+  exists: boolean;
+  entries: PartKeyEntry[];
+  stats: {
+    total_keys: number;
+    total_files: number;
+    obsolete_keys: number;
+  };
+};
+
+export type PartKeyDetail = PartKeyEntry & {
+  files: PartKeyFile[];
+};
+
+export function fetchPartKeys() {
+  return jsonFetch<PartKeysPayload>("/api/part-keys");
+}
+
+export function fetchPartKeyDetail(partNumber: string, partVersion: string) {
+  return jsonFetch<PartKeyDetail>(
+    `/api/part-keys/${encodeURIComponent(partNumber)}/${encodeURIComponent(partVersion)}`,
+  );
+}
+
+export function patchPartKey(
+  partNumber: string,
+  partVersion: string,
+  patch: Partial<Pick<PartKeyEntry, "TypeCode" | "ModelSeries" | "PartName" | "label" | "notes" | "status">>,
+) {
+  return jsonFetch<PartKeyDetail>(
+    `/api/part-keys/${encodeURIComponent(partNumber)}/${encodeURIComponent(partVersion)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    },
+  );
+}
+
+export function patchPartFileLink(
+  partNumber: string,
+  partVersion: string,
+  fileAssetId: number,
+  patch: Partial<Pick<PartKeyFile, "file_role" | "link_notes" | "link_status">>,
+) {
+  return jsonFetch<PartKeyDetail>(
+    `/api/part-keys/${encodeURIComponent(partNumber)}/${encodeURIComponent(partVersion)}/files/${fileAssetId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    },
+  );
 }
 
 export type XlinkFixPrefs = {
@@ -467,14 +678,21 @@ export function previewStepBatch(opts: Partial<StepBatchPrefs> = {}) {
 }
 
 export function runStepBatch(opts: Partial<StepBatchPrefs> = {}) {
-  return jsonFetch<{ exit_code: number; log: string; out_dir_display: string; prefs: StepBatchPrefs }>(
-    "/api/step-batch/run",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(opts),
-    },
-  );
+  return jsonFetch<{
+    exit_code: number;
+    log: string;
+    ok_count: number | null;
+    skip_count: number | null;
+    fail_count: number | null;
+    total_count: number | null;
+    out_dir_display: string;
+    report_display: string;
+    prefs: StepBatchPrefs;
+  }>("/api/step-batch/run", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(opts),
+  });
 }
 
 export type SwStepPrefs = {

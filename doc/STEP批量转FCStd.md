@@ -1,6 +1,6 @@
 # STEP 批量导入为 FCStd
 
-在 **FreeCADCmd**（或 FreeCAD Python 会话）中批量 **`step/**/*.stp|.step`** → 输出目录 **`.FCStd`**，并写 Markdown 报告。
+在 **FreeCADCmd**（或 FreeCAD Python 会话）中批量 **`step/**/*.stp|.step`** → 输出目录 **`.FCStd`**；**汇总与明细默认写入运行日志**（stderr / 界面日志区），**不**在输出目录生成 `batch_step_convert_report.md`。
 
 ## fcdesk「STEP 批量」页
 
@@ -31,11 +31,12 @@
 | `FCD_BATCH_SKIP_EXISTING` | `1`：已有同名 `.FCStd` 则跳过 |
 | `FCD_BATCH_STEP_RECURSIVE` | `1`：含子文件夹 |
 | `FCD_BATCH_VIEW_FIT_LAST` / `FCD_BATCH_VIEW_FIT_ALL` | 会话内视图（CLI 多半无效） |
-| `FCD_BATCH_REPORT_NAME` | 报告文件名，默认 `batch_step_convert_report.md` |
+| `FCD_BATCH_REPORT_NAME` | 可选写盘时的报告文件名（默认 `batch_step_convert_report.md`） |
+| `FCD_BATCH_WRITE_REPORT` | `1`：额外在输出目录写入 Markdown 报告文件；默认不写 |
 | `FCD_BATCH_PROJECT_TAG` | 报告中的工程标记（可选） |
 | `FCD_BATCH_VERBOSE` | `1`：stderr 多打路径 |
 
-**未 `export`** 变量时 subprocess 拿不到，看起来像「没转出任何 FCStd」。STEP 若在子目录需 **`FCD_BATCH_STEP_RECURSIVE=1`**。详见报告与 **`scripts/example_run_step_batch.sh`**。
+**未 `export`** 变量时 subprocess 拿不到，看起来像「没转出任何 FCStd」。STEP 若在子目录需 **`FCD_BATCH_STEP_RECURSIVE=1`**。CLI 需落盘报告时设 **`FCD_BATCH_WRITE_REPORT=1`**。详见 **`scripts/example_run_step_batch.sh`**。
 
 ## 手写一例
 

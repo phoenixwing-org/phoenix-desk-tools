@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from fcdesk.freecad.batch_step.job import StepBatchJob
+from fcdesk.freecad.batch_step.report import parse_batch_step_report_summary, parse_batch_step_stderr_summary
 from fcdesk.freecad.batch_step.step_paths import list_step_paths_for_batch, step_tree_stats
 from fcdesk.config.user_prefs import (
     format_resolved_under_workspace,
@@ -121,6 +122,44 @@ def preview_step_batch(repo_root: Path, opts: dict[str, Any] | None = None) -> d
     }
 
 
+def _format_run_log(
+    *,
+    repo_root: Path,
+    job: StepBatchJob,
+    exit_code: int,
+    proc_output: str,
+    summary: dict[str, int] | None,
+    report_written: bool,
+) -> str:
+    rr = repo_root.expanduser().resolve(strict=False)
+    out_display = format_resolved_under_workspace(job.out_dir, rr)
+    report_path = job.out_dir / job.report_filename
+    report_display = format_resolved_under_workspace(report_path, rr)
+    lines: list[str] = []
+
+    if summary:
+        lines.append(
+            f"转换完成：成功 {summary['ok']}，跳过 {summary['skip']}，失败 {summary['fail']}，"
+            f"共 {summary['total']} 个 STEP。"
+        )
+    elif exit_code == 0:
+        lines.append("freecadcmd 已结束（退出码 0）。")
+    else:
+        lines.append(f"freecadcmd 退出码 {exit_code}。")
+
+    lines.append(f"输出目录：{out_display}")
+    if report_written and report_path.is_file():
+        lines.append(f"报告文件：{report_display}")
+
+    proc_output = proc_output.strip()
+    if proc_output:
+        lines.extend(["", "—— 运行日志 ——", proc_output])
+    elif summary is None:
+        lines.append("（无控制台输出）")
+
+    return "\n".join(lines)
+
+
 def run_step_batch(repo_root: Path, opts: dict[str, Any] | None = None) -> dict[str, Any]:
     rr = repo_root.expanduser().resolve(strict=False)
     if opts:
@@ -153,10 +192,26 @@ def run_step_batch(repo_root: Path, opts: dict[str, Any] | None = None) -> dict[
         encoding="utf-8",
         errors="replace",
     )
-    text = "\n".join(p for p in [(proc.stdout or ""), (proc.stderr or "")] if p).strip()
+    proc_output = "\n".join(p for p in [(proc.stdout or ""), (proc.stderr or "")] if p).strip()
+    report_path = job.out_dir / job.report_filename
+    summary = parse_batch_step_stderr_summary(proc_output) or parse_batch_step_report_summary(report_path)
+    report_written = report_path.is_file()
+    log = _format_run_log(
+        repo_root=rr,
+        job=job,
+        exit_code=proc.returncode,
+        proc_output=proc_output,
+        summary=summary,
+        report_written=report_written,
+    )
     return {
         "exit_code": proc.returncode,
-        "log": text or "(无控制台输出)；请查看输出目录 Markdown 报告。",
+        "log": log,
+        "ok_count": summary["ok"] if summary else None,
+        "skip_count": summary["skip"] if summary else None,
+        "fail_count": summary["fail"] if summary else None,
+        "total_count": summary["total"] if summary else None,
         "out_dir_display": format_resolved_under_workspace(job.out_dir, rr),
+        "report_display": format_resolved_under_workspace(report_path, rr) if report_written else "",
         "prefs": prefs,
     }

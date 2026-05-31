@@ -9,27 +9,72 @@ import {
   type FcstdMapPayload,
 } from "../api";
 import { useAppShell } from "../composables/useAppShell";
+import ResizableDataTable from "../components/ResizableDataTable.vue";
+import type { TableColumnDef } from "../composables/useResizableTable";
 
 const shell = useAppShell();
 
+const cadColumns: TableColumnDef[] = [
+  { key: "status", label: "状态", width: 52, minWidth: 44 },
+  { key: "kind", label: "类型", width: 72, minWidth: 56 },
+  { key: "file", label: "文件名", width: 200, minWidth: 100 },
+  { key: "partKey", label: "PartKey", width: 108, minWidth: 80 },
+  { key: "partVersion", label: "PartVersion", width: 88, minWidth: 72 },
+  { key: "typeCode", label: "TypeCode", width: 72, minWidth: 56 },
+  { key: "modelSeries", label: "ModelSeries", width: 96, minWidth: 72 },
+  { key: "partName", label: "PartName", width: 120, minWidth: 80 },
+  { key: "label", label: "label", width: 120, minWidth: 80 },
+  { key: "meta", label: "属性摘要", width: 220, minWidth: 120 },
+  { key: "dir", label: "相对目录", width: 140, minWidth: 80 },
+];
+
+const KIND_OPTIONS = [
+  { value: "all", label: "全部类型" },
+  { value: "fcstd", label: "FCStd" },
+  { value: "markdown", label: "MD" },
+  { value: "pdf", label: "PDF" },
+  { value: "cad_exchange", label: "DXF/DWG" },
+  { value: "image", label: "图片" },
+] as const;
+
+type KindFilter = (typeof KIND_OPTIONS)[number]["value"];
+
 const scanRoot = ref(".");
+const forceUpdatePartName = ref(false);
 const loading = ref(false);
 const scanning = ref(false);
 const saving = ref(false);
 const exporting = ref(false);
 const data = ref<FcstdMapPayload | null>(null);
 const statusFilter = ref<"all" | "present" | "missing">("all");
-const logText = ref("");
+const kindFilter = ref<KindFilter>("all");
 
 const stats = computed(() => data.value?.stats);
 const entries = computed(() => {
-  const rows = data.value?.entries ?? [];
-  if (statusFilter.value === "all") return rows;
-  return rows.filter((r) => r.file_status === statusFilter.value);
+  let rows = data.value?.entries ?? [];
+  if (statusFilter.value !== "all") {
+    rows = rows.filter((r) => r.file_status === statusFilter.value);
+  }
+  if (kindFilter.value !== "all") {
+    rows = rows.filter((r) => (r.asset_kind || "fcstd") === kindFilter.value);
+  }
+  return rows;
 });
 
 function setStatus(msg: string) {
   shell.setStatus(msg);
+}
+
+function assetKindLabel(row: FcstdMapEntry) {
+  const map: Record<string, string> = {
+    fcstd: "FCStd",
+    markdown: "MD",
+    pdf: "PDF",
+    cad_exchange: "DXF/DWG",
+    image: "图片",
+    other: "其他",
+  };
+  return map[row.asset_kind] ?? row.asset_kind ?? "—";
 }
 
 async function refresh() {
@@ -37,6 +82,7 @@ async function refresh() {
   try {
     data.value = await fetchFcstdMap();
     scanRoot.value = data.value.prefs.scan_root || ".";
+    forceUpdatePartName.value = Boolean(data.value.prefs.force_update_part_name);
     setStatus(data.value.exists ? `索引 ${data.value.stats.total_entries} 条` : "尚无索引库");
   } catch (e) {
     setStatus(String(e));
@@ -48,8 +94,9 @@ async function refresh() {
 async function onSavePrefs() {
   saving.value = true;
   try {
-    const prefs = await saveFcstdMapPrefs(scanRoot.value.trim());
+    const prefs = await saveFcstdMapPrefs(scanRoot.value.trim(), forceUpdatePartName.value);
     scanRoot.value = prefs.scan_root;
+    forceUpdatePartName.value = Boolean(prefs.force_update_part_name);
     setStatus("已保存扫描根偏好");
   } catch (e) {
     setStatus(String(e));
@@ -60,15 +107,16 @@ async function onSavePrefs() {
 
 async function onScan() {
   scanning.value = true;
-  logText.value = "";
+  shell.appendLog(`工程内搜索：${scanRoot.value.trim()}`, { source: "fcstd_map" });
   try {
-    data.value = await scanFcstdMap(scanRoot.value.trim());
+    data.value = await scanFcstdMap(scanRoot.value.trim(), forceUpdatePartName.value);
     scanRoot.value = data.value.prefs.scan_root || ".";
-    logText.value = data.value.scan_log ?? "";
+    shell.appendLog(data.value.scan_log ?? "", { source: "fcstd_map" });
     setStatus(
-      `扫描完成：存在 ${data.value.stats.present} · 缺失 ${data.value.stats.missing}`,
+      `扫描完成：存在 ${data.value.stats.present} · CAD ${data.value.stats.cad_file_count}`,
     );
   } catch (e) {
+    shell.appendLog(String(e), { source: "fcstd_map" });
     setStatus(String(e));
   } finally {
     scanning.value = false;
@@ -79,7 +127,7 @@ async function onExportJson() {
   exporting.value = true;
   try {
     const out = await exportFcstdMapJson();
-    setStatus(`已导出 fcstd_map.json → ${out.path_display}`);
+    setStatus(`已导出 fcstd_map.json（仅 FCStd）→ ${out.path_display}`);
     await refresh();
   } catch (e) {
     setStatus(String(e));
@@ -92,10 +140,29 @@ function statusLabel(row: FcstdMapEntry) {
   return row.file_status === "missing" ? "缺失" : "存在";
 }
 
+function partKeyLabel(row: FcstdMapEntry) {
+  if (!row.PartNumber || !row.PartVersion) return "";
+  return `${row.PartNumber}.${row.PartVersion}`;
+}
+
+function openPartKey(row: FcstdMapEntry) {
+  if (!row.PartNumber || !row.PartVersion) return;
+  shell.openPartKeyDetail(row.PartNumber, row.PartVersion);
+}
+
 function metaCell(row: FcstdMapEntry) {
+  if (row.asset_kind && row.asset_kind !== "fcstd") return "—";
   return [row.PartNumber, row.PartVersion, row.TypeCode, row.ModelSeries, row.PartName, row.label]
     .filter(Boolean)
     .join(" · ");
+}
+
+function relDir(row: FcstdMapEntry): string {
+  const p = row.repo_rel_path.replace(/\\/g, "/").replace(/^\.\//, "");
+  const i = p.lastIndexOf("/");
+  if (i < 0) return ".";
+  const dir = p.slice(0, i);
+  return dir || ".";
 }
 
 onMounted(() => refresh());
@@ -104,11 +171,11 @@ onMounted(() => refresh());
 <template>
   <div class="page fcstd-map-page">
     <header class="page-head">
-      <h1 class="page-title">FCStd 索引</h1>
+      <h1 class="page-title">CAD 索引</h1>
       <p class="page-desc">
-        扫描工程内 *.FCStd，写入
-        <code>.phoenix/cad-database.sqlite</code>（数据库为真源）；采集 BOM 属性字段。再次扫描时磁盘上已不存在的条目标记为
-        <strong>缺失</strong>。需要与 xlink 脚本或外部工具对接时，按需导出 <code>fcstd_map.json</code>。
+        扫描工程内 <strong>FCStd、Markdown、PDF、图片、DXF/DWG</strong> 等，写入
+        <code>.phoenix/cad-database.sqlite</code>。FCStd 会采集 BOM 属性；再次扫描时磁盘上已不存在的条目标记为
+        <strong>缺失</strong>。导出 <code>fcstd_map.json</code> 仍<strong>仅含 FCStd</strong>（供 xlink 脚本）。
       </p>
     </header>
 
@@ -122,6 +189,10 @@ onMounted(() => refresh());
         <button type="button" class="btn primary" :disabled="scanning" @click="onScan">
           {{ scanning ? "扫描中…" : "工程内搜索" }}
         </button>
+        <label class="force-opt">
+          <input v-model="forceUpdatePartName" type="checkbox" />
+          强制更新 PartName
+        </label>
         <button type="button" class="btn" :disabled="loading" @click="refresh">刷新表格</button>
         <button
           type="button"
@@ -132,6 +203,9 @@ onMounted(() => refresh());
           {{ exporting ? "导出中…" : "导出 fcstd_map.json" }}
         </button>
       </div>
+      <p class="meta-line hint-line">
+        PartName：默认仅在为空时从 label/文件名智能去前缀；勾选「强制更新」后重新扫描会覆盖索引中已有 PartName（不写回 FCStd 文件）。
+      </p>
       <p v-if="data?.database_path_display" class="meta-line">数据库：{{ data.database_path_display }}</p>
       <p v-if="data?.map_path_display" class="meta-line">JSON 导出路径：{{ data.map_path_display }}</p>
       <p v-if="data?.last_scan_at" class="meta-line">上次扫描：{{ data.last_scan_at }}</p>
@@ -141,8 +215,13 @@ onMounted(() => refresh());
       <span>条目 {{ stats.total_entries }}</span>
       <span class="ok">存在 {{ stats.present }}</span>
       <span class="warn">缺失 {{ stats.missing }}</span>
+      <span>CAD {{ stats.cad_file_count }}</span>
       <span>FCStd {{ stats.fcstd_file_count }}</span>
-      <span>重名种类 {{ stats.duplicate_filename_kinds }}</span>
+      <span>MD {{ stats.markdown_file_count }}</span>
+      <span>PDF {{ stats.pdf_file_count }}</span>
+      <span>DXF/DWG {{ stats.cad_exchange_file_count }}</span>
+      <span>图片 {{ stats.image_file_count }}</span>
+      <span>重名 {{ stats.duplicate_filename_kinds }}</span>
     </section>
 
     <section class="filters">
@@ -155,56 +234,58 @@ onMounted(() => refresh());
       <label class="filter">
         <input v-model="statusFilter" type="radio" value="missing" /> 缺失
       </label>
+      <span class="filter-sep">|</span>
+      <label v-for="opt in KIND_OPTIONS" :key="opt.value" class="filter">
+        <input v-model="kindFilter" type="radio" :value="opt.value" /> {{ opt.label }}
+      </label>
       <span class="count">{{ entries.length }} 行</span>
     </section>
 
-    <div class="table-wrap">
-      <table v-if="entries.length" class="data-table">
-        <thead>
-          <tr>
-            <th>状态</th>
-            <th>相对路径</th>
-            <th>文件名</th>
-            <th>PartNumber</th>
-            <th>PartVersion</th>
-            <th>TypeCode</th>
-            <th>ModelSeries</th>
-            <th>PartName</th>
-            <th>label</th>
-            <th>属性摘要</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="row in entries" :key="row.repo_rel_path + row.file_status" :class="row.file_status">
-            <td>{{ statusLabel(row) }}</td>
-            <td class="mono">{{ row.repo_rel_path }}</td>
-            <td>{{ row.filename }}</td>
-            <td>{{ row.PartNumber }}</td>
-            <td>{{ row.PartVersion }}</td>
-            <td>{{ row.TypeCode }}</td>
-            <td>{{ row.ModelSeries }}</td>
-            <td>{{ row.PartName }}</td>
-            <td>{{ row.label }}</td>
-            <td class="meta">{{ metaCell(row) }}</td>
-          </tr>
-        </tbody>
-      </table>
-      <p v-else-if="!loading" class="empty">
+    <ResizableDataTable v-if="entries.length" :columns="cadColumns" wrap-class="table-grow">
+      <tbody>
+        <tr v-for="row in entries" :key="row.repo_rel_path + row.file_status" :class="row.file_status">
+          <td>{{ statusLabel(row) }}</td>
+          <td>{{ assetKindLabel(row) }}</td>
+          <td class="mono">{{ row.filename }}</td>
+          <td class="mono">
+            <button
+              v-if="partKeyLabel(row)"
+              type="button"
+              class="link-key"
+              @click="openPartKey(row)"
+            >
+              {{ partKeyLabel(row) }}
+            </button>
+            <span v-else>{{ row.PartNumber }}</span>
+          </td>
+          <td class="mono">{{ row.PartVersion }}</td>
+          <td>{{ row.TypeCode }}</td>
+          <td>{{ row.ModelSeries }}</td>
+          <td>{{ row.PartName }}</td>
+          <td>{{ row.label }}</td>
+          <td class="meta">{{ metaCell(row) }}</td>
+          <td class="mono">{{ relDir(row) }}</td>
+        </tr>
+      </tbody>
+    </ResizableDataTable>
+    <div v-else-if="!loading" class="table-wrap table-grow empty-wrap">
+      <p class="empty">
         {{ data?.exists ? "当前筛选无条目" : "尚无索引，点击「工程内搜索」开始扫描" }}
       </p>
     </div>
-
-    <pre v-if="logText" class="log">{{ logText }}</pre>
   </div>
 </template>
 
 <style scoped>
 .fcstd-map-page {
-  padding: 20px 22px 32px;
-  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 20px 22px 16px;
 }
 
 .page-head {
+  flex-shrink: 0;
   margin-bottom: 16px;
 }
 
@@ -222,6 +303,7 @@ onMounted(() => refresh());
 }
 
 .controls {
+  flex-shrink: 0;
   margin-bottom: 12px;
 }
 
@@ -271,6 +353,20 @@ onMounted(() => refresh());
   color: var(--muted);
 }
 
+.hint-line {
+  max-width: 880px;
+  line-height: 1.45;
+}
+
+.force-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--muted);
+  user-select: none;
+}
+
 .stats {
   display: flex;
   flex-wrap: wrap;
@@ -281,6 +377,7 @@ onMounted(() => refresh());
   border-radius: 8px;
   font-size: 0.85rem;
   margin-bottom: 10px;
+  flex-shrink: 0;
 }
 
 .stats .ok {
@@ -293,10 +390,12 @@ onMounted(() => refresh());
 
 .filters {
   display: flex;
-  gap: 14px;
+  flex-wrap: wrap;
+  gap: 10px;
   align-items: center;
   margin-bottom: 8px;
   font-size: 0.85rem;
+  flex-shrink: 0;
 }
 
 .filter {
@@ -305,74 +404,72 @@ onMounted(() => refresh());
   gap: 4px;
 }
 
+.filter-sep {
+  color: var(--muted);
+  margin: 0 4px;
+}
+
 .count {
   color: var(--muted);
   margin-left: auto;
 }
 
-.table-wrap {
+.table-grow {
+  flex: 1;
+  min-height: 0;
+}
+
+.empty-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   overflow: auto;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: #fff;
-  max-height: calc(100vh - 320px);
 }
 
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.8rem;
-}
-
-.data-table th,
-.data-table td {
-  padding: 6px 10px;
-  border-bottom: 1px solid #eee;
-  text-align: left;
-  vertical-align: top;
-}
-
-.data-table th {
-  position: sticky;
-  top: 0;
-  background: #f8fafc;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.data-table tr.missing {
+:deep(.resizable-data-table tr.missing) {
   background: #fff7ed;
 }
 
-.data-table tr.missing td:first-child {
+:deep(.resizable-data-table tr.missing td:first-child) {
   color: #c2410c;
   font-weight: 600;
 }
 
 .mono {
-  font-family: ui-monospace, monospace;
-  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  font-size: 0.76rem;
 }
 
 .meta {
   color: #64748b;
-  max-width: 220px;
+}
+
+.link-key {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  text-decoration: underline;
+}
+
+.link-key:hover {
+  color: #1d4ed8;
 }
 
 .empty {
   padding: 28px;
   color: var(--muted);
   text-align: center;
-}
-
-.log {
-  margin-top: 12px;
-  padding: 10px 12px;
-  background: #1e293b;
-  color: #e2e8f0;
-  border-radius: 8px;
-  font-size: 0.78rem;
-  white-space: pre-wrap;
 }
 
 code {

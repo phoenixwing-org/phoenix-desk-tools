@@ -169,13 +169,8 @@ class PartDedupPage(BasePage):
         ctk.CTkButton(btns, text="扫描", command=self._scan).pack(side="left", padx=(0, 8))
         ctk.CTkButton(btns, text="导出 CSV", fg_color="gray45", command=self._export_csv).pack(side="left")
 
-        row += 1
-        self._log = ctk.CTkTextbox(self, font=ctk.CTkFont(family="Menlo", size=12))
-        self._log.grid(row=row, column=0, columnspan=4, padx=24, pady=(8, 6), sticky="nsew")
-        row += 1
-
         tree_wrap = ctk.CTkFrame(self, fg_color="transparent")
-        tree_wrap.grid(row=row, column=0, columnspan=4, padx=(24, 24), pady=(0, 12), sticky="nsew")
+        tree_wrap.grid(row=row, column=0, columnspan=4, padx=(24, 24), pady=(8, 12), sticky="nsew")
         tree_wrap.grid_rowconfigure(0, weight=1)
         tree_wrap.grid_columnconfigure(0, weight=1)
         self._tree_host = tk.Frame(tree_wrap, highlightthickness=0)
@@ -212,9 +207,7 @@ class PartDedupPage(BasePage):
             row=row, column=0, columnspan=4, padx=24, pady=(8, 24), sticky="nw"
         )
 
-        log_row = row - 2
         tree_row = row - 1
-        self.grid_rowconfigure(log_row, weight=1)
         self.grid_rowconfigure(tree_row, weight=2)
         self.grid_columnconfigure(0, minsize=80)
         self.grid_columnconfigure(1, weight=1)
@@ -409,7 +402,7 @@ class PartDedupPage(BasePage):
             },
             self.state.repo_root,
         )
-        if not quiet and self._log is not None:
+        if not quiet:
             self._log_line("已保存偏好 → part_dedup")
 
     def _browse_dir(self) -> None:
@@ -470,7 +463,6 @@ class PartDedupPage(BasePage):
         }
 
     def _scan(self) -> None:
-        self._log.delete("1.0", "end")
         self._last_results = {}
         self._tree.delete(*self._tree.get_children(""))
 
@@ -502,5 +494,4 @@ class PartDedupPage(BasePage):
             self._log_line(f"\n导出失败：{e}")
 
     def _log_line(self, text: str) -> None:
-        self._log.insert("end", text + "\n")
-        self._log.see("end")
+        self.append_log(text)

@@ -26,5 +26,11 @@ class BasePage(ctk.CTkFrame):
         """全局侧栏「工作空间目录树」选中文件时调用（路径相对当前工作空间根）。"""
         ...
 
-    def append_log(self, text: str) -> None:
-        self.state.last_log = text
+    def append_log(self, text: str, *, source: str | None = None) -> None:
+        root = self.winfo_toplevel()
+        if hasattr(root, "shell_append_log"):
+            root.shell_append_log(text, source=source or getattr(self, "page_id", None))
+            return
+        chunk = text if (not text or text.endswith("\n")) else text + "\n"
+        prev = self.state.last_log or ""
+        self.state.last_log = prev + chunk

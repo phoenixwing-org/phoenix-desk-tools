@@ -20,7 +20,6 @@ const saving = ref(false);
 const previewing = ref(false);
 const running = ref(false);
 const modelCount = ref<number | null>(null);
-const logText = ref("");
 
 function prefsPayload() {
   return {
@@ -67,12 +66,13 @@ async function onPreview() {
 
 async function onRun() {
   running.value = true;
-  logText.value = "";
+  shell.appendLog("SolidWorks COM 导出…", { source: "sw_step_export" });
   try {
     const data = await runSwStepExport(prefsPayload());
-    logText.value = data.log;
+    shell.appendLog(data.log, { source: "sw_step_export" });
     shell.setStatus(`成功 ${data.ok_count} · 失败 ${data.failed_count} · 输出 ${data.out_display}`);
   } catch (e) {
+    shell.appendLog(String(e), { source: "sw_step_export" });
     shell.setStatus(String(e));
   } finally {
     running.value = false;
@@ -129,8 +129,6 @@ onMounted(async () => {
 
       <p v-if="modelCount !== null" class="meta-line">发现 {{ modelCount }} 个 .sldprt / .sldasm</p>
     </section>
-
-    <pre v-if="logText" class="log">{{ logText }}</pre>
   </div>
 </template>
 
