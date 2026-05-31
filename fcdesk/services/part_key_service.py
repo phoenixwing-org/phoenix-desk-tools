@@ -14,6 +14,9 @@ from fcdesk.freecad.phoenix_store import (
     update_part_file_link_record,
     update_part_key_record,
 )
+from fcdesk.freecad.fcstd_mapping import normalize_repo_rel_path_for_map
+from fcdesk.freecad.rename_analysis.types import RenameAnalysisError
+from fcdesk.services.bom_xref_service import load_assembly_tree
 
 
 def _ensure_index_loaded(repo_root: Path) -> None:
@@ -106,3 +109,30 @@ def patch_part_file_link(
     if detail is None:
         raise LookupError("未找到关联文件")
     return detail
+
+
+def load_part_assembly_tree_payload(
+    repo_root: Path,
+    part_number: str,
+    part_version: str,
+    host_repo_rel: str,
+    *,
+    full: bool = False,
+) -> dict[str, Any]:
+    rr = repo_root.expanduser().resolve(strict=False)
+    detail = get_part_key_detail(rr, part_number, part_version)
+    if detail is None:
+        raise LookupError(f"未找到零件键: {part_number}.{part_version}")
+
+    host = normalize_repo_rel_path_for_map(host_repo_rel.strip())
+    allowed = {
+        normalize_repo_rel_path_for_map(str(f.get("repo_rel_path") or ""))
+        for f in detail.get("files", [])
+    }
+    if host not in allowed:
+        raise ValueError("所选装配文件不属于该零件键")
+
+    try:
+        return load_assembly_tree(rr, host, full=full)
+    except RenameAnalysisError as ex:
+        raise LookupError(str(ex)) from ex

@@ -11,10 +11,13 @@ from fcdesk.config.launcher_paths import platform_launcher_prefs_file
 from fcdesk.config.user_prefs import (
     WORKSPACE_DOTFILE_NAME,
     format_absolute_config_path,
-    get_recent_workspaces,
+    is_ephemeral_workspace_path,
     legacy_launcher_prefs_file,
+    list_recent_workspace_paths_raw,
     load_launcher_prefs,
+    prune_recent_workspaces,
     record_recent_workspace,
+    remove_recent_workspace,
     save_launcher_freecad_dir,
     save_launcher_shell_layout,
 )
@@ -28,17 +31,25 @@ def app_config_payload() -> dict[str, Any]:
         "title": str(app.get("title") or "FreeCAD 管理工具"),
         "navigation": cfg.get("navigation") or [],
         "toolbar": cfg.get("toolbar") or {"items": []},
+        "workbench": cfg.get("workbench") or {},
         "workspace_dotfile": WORKSPACE_DOTFILE_NAME,
         "launcher_config_path": format_absolute_config_path(platform_launcher_prefs_file()),
     }
 
 
 def launcher_prefs_payload() -> dict[str, Any]:
+    prune_recent_workspaces(persist=True)
     launcher = load_launcher_prefs()
-    recent = [
-        format_absolute_config_path(p)
-        for p in get_recent_workspaces()
+    entries = [
+        {
+            "path": format_absolute_config_path(p),
+            "exists": p.is_dir(),
+            "ephemeral": is_ephemeral_workspace_path(p),
+        }
+        for p in list_recent_workspace_paths_raw()
+        if not is_ephemeral_workspace_path(p)
     ]
+    recent = [e["path"] for e in entries if e["exists"]]
     fd = launcher.get("freecad_dir")
     fc_path = format_absolute_config_path(Path(str(fd))) if fd else ""
     sl = launcher.get("shell_layout") or {}
@@ -47,6 +58,7 @@ def launcher_prefs_payload() -> dict[str, Any]:
     return {
         "version": launcher.get("version", 2),
         "recent_workspaces": recent,
+        "recent_workspace_entries": entries,
         "freecad_dir": fc_path,
         "default_freecad_dir": default_fc or "",
         "platform": sys.platform,
@@ -98,3 +110,20 @@ def activate_workspace(path: Path) -> dict[str, str]:
         raise ValueError(f"不是有效目录: {p}")
     record_recent_workspace(p)
     return {"path": str(p), "name": p.name or str(p)}
+
+
+def remove_recent_workspace_entry(path: str) -> dict[str, Any]:
+    raw = path.strip()
+    if not raw:
+        raise ValueError("路径不能为空")
+    p = Path(raw).expanduser().resolve(strict=False)
+    if not remove_recent_workspace(p):
+        raise ValueError("列表中未找到该路径")
+    return launcher_prefs_payload()
+
+
+def prune_recent_workspace_entries() -> dict[str, Any]:
+    removed = prune_recent_workspaces(persist=True)
+    payload = launcher_prefs_payload()
+    payload["pruned_count"] = removed
+    return payload

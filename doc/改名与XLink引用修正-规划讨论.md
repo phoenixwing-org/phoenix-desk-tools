@@ -123,14 +123,16 @@ sequenceDiagram
 
 ## 5. 审计与报告：写到哪里
 
-### 5.1 继续保留人类可读报告
+### 5.1 人类可读报告（仅导出，非默认）
 
-与 `fix_fcstd_xlink_paths.py` 一致，每次任务生成：
+**默认**：结构化结果写入 **`cad-database.sqlite`**（`rename_log`、`ref_hit`、`ref_patch_log`、`change_event` 等）；Web/桌面界面 **读 API → 库**。
 
-- `<workspace>/.phoenix/reports/xlink-basename-YYYYMMDD-HHMMSS.md`  
-  含：rename 摘要、每宿主文件修改表、跳过原因、dry-run / 已写回。
+**可选**：用户点击「导出报告」时，才生成 Markdown，例如：
 
-便于 diff、邮件评审、不依赖 SQLite 工具。
+- `<workspace>/.phoenix/reports/rename-analysis-*.md`（改名分析）
+- `<workspace>/.phoenix/reports/xlink-*.md`（XLink 修正，若用户显式导出或 CLI 未加 `--no-report`）
+
+便于 diff、邮件评审；**不是**每次任务自动落盘。
 
 ### 5.2 SQLite 适合存什么
 

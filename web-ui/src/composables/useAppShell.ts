@@ -1,13 +1,18 @@
-import { computed, inject, provide, ref, shallowRef, type InjectionKey, type Ref } from "vue";
+import { computed, inject, provide, ref, shallowRef, watch, type InjectionKey, type Ref } from "vue";
 import type { AppConfig, LauncherPrefs, NavItem, ShellLayout } from "../types/config";
 import type { BomFields } from "../api";
 import {
   fetchAppConfig,
   fetchLauncherPrefs,
+  fetchShellLog,
   getWorkspace,
   patchShellLayout,
   setWorkspace,
 } from "../api";
+import { collectPageStates } from "./usePageSession";
+import { loadWorkbenchSession, saveWorkbenchSessionAll } from "./workbenchSession";
+import { createWorkbench, type WorkbenchContext } from "./useWorkbench";
+import type { OpenTabOptions, WorkbenchTab, WorkbenchTabPayload } from "../types/workbench";
 
 export type LogAppendOptions = {
   /** 强制展开 / 仅追加不展开；默认遵循 log_auto_open_on_append */
@@ -16,16 +21,27 @@ export type LogAppendOptions = {
   source?: string;
 };
 
+/** @deprecated 使用 Tab payload；保留类型供页面过渡 */
 export type PendingFileRename = {
   rel: string;
   form: Partial<BomFields>;
   baseline: Partial<BomFields>;
 };
 
+/** @deprecated 使用 Tab payload */
+export type PendingRenameAnalysis = {
+  renameLogId?: number;
+  oldBasename?: string;
+  newBasename?: string;
+  excludeRepoRel?: string;
+  autoAnalyze?: boolean;
+};
+
 export type AppShellContext = {
   appConfig: Ref<AppConfig | null>;
   launcher: Ref<LauncherPrefs | null>;
   workspacePath: Ref<string>;
+  /** 当前激活 Tab 的 pageId */
   currentPage: Ref<string>;
   navHover: Ref<string | null>;
   shellLayout: Ref<ShellLayout>;
@@ -38,26 +54,45 @@ export type AppShellContext = {
   clearLog: () => void;
   setLogOpen: (open: boolean) => void;
   goToPage: (pageId: string) => void;
-  partKeyDetail: Ref<{ partNumber: string; partVersion: string } | null>;
-  openPartKeyDetail: (partNumber: string, partVersion: string) => void;
-  closePartKeyDetail: () => void;
-  pendingBomRel: Ref<string | null>;
-  pendingFileRename: Ref<PendingFileRename | null>;
+  openPartKeyDetail: (
+    partNumber: string,
+    partVersion: string,
+    opts?: { partName?: string; label?: string },
+  ) => void;
   openBomApplyForRel: (repoRelPath: string) => void;
   openFileRenameForRel: (
     repoRelPath: string,
     form: Partial<BomFields>,
     baseline: Partial<BomFields>,
   ) => void;
+  openRenameAnalysis: (opts?: PendingRenameAnalysis) => void;
   switchWorkspace: (path: string) => Promise<void>;
   persistShellLayout: (patch: Partial<ShellLayout>) => Promise<void>;
   reloadLauncher: () => Promise<void>;
   init: () => Promise<void>;
   treeSelectHandler: Ref<((rel: string) => void) | null>;
-  registerTreeSelect: (fn: ((rel: string) => void) | null) => void;
+  /** 仅当前激活 Tab 会收到树点击；后台 Tab 注册不会生效 */
+  registerTreeSelect: (tabId: string | undefined, fn: ((rel: string) => void) | null) => void;
   treeRescanToken: Ref<number>;
   treeSelectAfterRescan: Ref<string | null>;
   requestTreeRescan: (selectRel?: string) => void;
+  // Workbench / Tab
+  tabs: Ref<WorkbenchTab[]>;
+  activeTabId: Ref<string>;
+  tabBarTabs: Ref<WorkbenchTab[]>;
+  showTabBar: Ref<boolean>;
+  openTab: (opts: OpenTabOptions) => string;
+  openNewTabForPage: (pageId: string) => string;
+  activateTab: (tabId: string) => void;
+  closeTab: (tabId: string) => Promise<boolean>;
+  getTab: (tabId: string) => WorkbenchTab | undefined;
+  activeTab: () => WorkbenchTab | undefined;
+  updateTab: (tabId: string, patch: Partial<Pick<WorkbenchTab, "title" | "subtitle" | "dirty">>) => void;
+  setTabDirty: (tabId: string, dirty: boolean) => void;
+  consumeTabPayload: (tabId: string) => WorkbenchTabPayload | undefined;
+  consumeTabPageState: (tabId: string) => Record<string, unknown> | undefined;
+  canOpenNewTab: (pageId: string) => boolean;
+  scheduleWorkbenchSave: () => void;
 };
 
 const APP_SHELL_KEY: InjectionKey<AppShellContext> = Symbol("appShell");
@@ -78,7 +113,6 @@ export function provideAppShell(): AppShellContext {
   const appConfig = shallowRef<AppConfig | null>(null);
   const launcher = shallowRef<LauncherPrefs | null>(null);
   const workspacePath = ref("");
-  const currentPage = ref("home");
   const navHover = ref<string | null>(null);
   const shellLayout = ref<ShellLayout>({ ...DEFAULT_SHELL });
   const statusText = ref("");
@@ -86,11 +120,26 @@ export function provideAppShell(): AppShellContext {
   const logSource = ref<string | null>(null);
   const logAutoOpenSuppressed = ref(false);
   const treeSelectHandler = shallowRef<((rel: string) => void) | null>(null);
+  const treeHandlersByTab = new Map<string, (rel: string) => void>();
   const treeRescanToken = ref(0);
   const treeSelectAfterRescan = ref<string | null>(null);
-  const partKeyDetail = ref<{ partNumber: string; partVersion: string } | null>(null);
-  const pendingBomRel = ref<string | null>(null);
-  const pendingFileRename = ref<PendingFileRename | null>(null);
+
+  function syncActiveTreeHandler() {
+    const id = wb.activeTabId.value;
+    treeSelectHandler.value = id ? (treeHandlersByTab.get(id) ?? null) : null;
+  }
+
+  function pruneTreeHandlers() {
+    const ids = new Set(wb.tabs.value.map((t) => t.id));
+    for (const id of treeHandlersByTab.keys()) {
+      if (!ids.has(id)) treeHandlersByTab.delete(id);
+    }
+    syncActiveTreeHandler();
+  }
+  const wb: WorkbenchContext = createWorkbench(appConfig);
+  const currentPage = wb.activePageId;
+  let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  let persistenceReady = false;
 
   const currentNavItem = computed(() =>
     appConfig.value?.navigation.find((n) => n.page === currentPage.value),
@@ -131,27 +180,56 @@ export function provideAppShell(): AppShellContext {
   }
 
   function goToPage(pageId: string) {
-    currentPage.value = pageId;
+    wb.navigateToPage(pageId === "rename_analysis" ? "file_rename" : pageId);
     navHover.value = null;
   }
 
-  function openPartKeyDetail(partNumber: string, partVersion: string) {
+  function openPartKeyDetail(
+    partNumber: string,
+    partVersion: string,
+    opts?: { partName?: string; label?: string },
+  ) {
     const pn = partNumber.trim();
     const pv = partVersion.trim();
     if (!pn || !pv) return;
-    partKeyDetail.value = { partNumber: pn, partVersion: pv };
-    goToPage("part_catalog");
-  }
-
-  function closePartKeyDetail() {
-    partKeyDetail.value = null;
+    const contextKey = `${pn}.${pv}`;
+    const existing = wb.tabs.value.find(
+      (t) => t.pageId === "part_key_detail" && t.contextKey === contextKey,
+    );
+    if (existing) {
+      wb.activateTab(existing.id);
+      return;
+    }
+    const subtitle = opts?.partName?.trim() || opts?.label?.trim() || undefined;
+    try {
+      wb.openTab({
+        pageId: "part_key_detail",
+        title: contextKey,
+        subtitle,
+        contextKey,
+        payload: { partKey: { partNumber: pn, partVersion: pv } },
+        forceNew: true,
+      });
+    } catch (e) {
+      setStatus(String(e));
+    }
   }
 
   function openBomApplyForRel(repoRelPath: string) {
     const rel = repoRelPath.trim();
     if (!rel) return;
-    pendingBomRel.value = rel;
-    goToPage("bom_apply");
+    try {
+      wb.openTab({
+        pageId: "bom_apply",
+        title: wb.basename(rel),
+        subtitle: rel,
+        contextKey: rel,
+        payload: { bomRel: rel },
+        forceNew: true,
+      });
+    } catch (e) {
+      setStatus(String(e));
+    }
   }
 
   function openFileRenameForRel(
@@ -161,12 +239,34 @@ export function provideAppShell(): AppShellContext {
   ) {
     const rel = repoRelPath.trim();
     if (!rel) return;
-    pendingFileRename.value = {
-      rel,
-      form: { ...form },
-      baseline: { ...baseline },
-    };
-    goToPage("file_rename");
+    try {
+      wb.openTab({
+        pageId: "file_rename",
+        title: wb.basename(rel),
+        subtitle: rel,
+        contextKey: rel,
+        payload: {
+          fileRename: { rel, form: { ...form }, baseline: { ...baseline } },
+        },
+        forceNew: true,
+      });
+    } catch (e) {
+      setStatus(String(e));
+    }
+  }
+
+  function openRenameAnalysis(opts?: PendingRenameAnalysis) {
+    const title = opts?.renameLogId != null ? `改名 #${opts.renameLogId}` : "文件改名";
+    try {
+      wb.openTab({
+        pageId: "file_rename",
+        title,
+        payload: { renameAnalysis: opts ? { ...opts } : {} },
+        forceNew: true,
+      });
+    } catch (e) {
+      setStatus(String(e));
+    }
   }
 
   async function reloadLauncher() {
@@ -176,10 +276,77 @@ export function provideAppShell(): AppShellContext {
   }
 
   async function switchWorkspace(path: string) {
+    flushWorkbenchSession();
     const ws = await setWorkspace(path.trim());
     workspacePath.value = ws.path;
     await reloadLauncher();
+    await restoreWorkbenchSession();
     setStatus(`工作空间: ${ws.path}`);
+  }
+
+  function flushWorkbenchSession() {
+    if (!persistenceReady || !workspacePath.value) return;
+    const ids = wb.tabs.value.map((t) => t.id);
+    const states = collectPageStates(ids);
+    const snap = wb.exportSession(states);
+    void saveWorkbenchSessionAll(workspacePath.value, snap);
+  }
+
+  function scheduleWorkbenchSave() {
+    if (!persistenceReady) return;
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      flushWorkbenchSession();
+    }, 800);
+  }
+
+  async function restoreWorkbenchSession() {
+    const snap = await loadWorkbenchSession(workspacePath.value);
+    if (snap && wb.restoreSession(snap)) return;
+    wb.tabs.value = [];
+    wb.activeTabId.value = "";
+    const page = resolveInitialPage() ?? "home";
+    wb.ensureInitialTab(page);
+  }
+
+  function setupWorkbenchPersistence() {
+    watch(wb.tabs, () => {
+      pruneTreeHandlers();
+      scheduleWorkbenchSave();
+    }, { deep: true });
+    watch(wb.activeTabId, () => {
+      syncActiveTreeHandler();
+      scheduleWorkbenchSave();
+    }, { immediate: true });
+    if (typeof window !== "undefined") {
+      window.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") flushWorkbenchSession();
+      });
+      window.addEventListener("beforeunload", () => flushWorkbenchSession());
+    }
+    persistenceReady = true;
+  }
+
+  let shellLogCursor = 0;
+  let shellLogPollTimer: ReturnType<typeof setInterval> | null = null;
+
+  function pollShellLog() {
+    void fetchShellLog(shellLogCursor)
+      .then((data) => {
+        for (const line of data.lines) {
+          appendLog(line.text, { source: line.source, open: true });
+        }
+        shellLogCursor = data.total;
+      })
+      .catch(() => {
+        /* 服务已关闭或未就绪 */
+      });
+  }
+
+  function setupShellLogPolling() {
+    if (typeof window === "undefined" || shellLogPollTimer) return;
+    shellLogPollTimer = setInterval(pollShellLog, 2500);
   }
 
   async function persistShellLayout(patch: Partial<ShellLayout>) {
@@ -188,8 +355,11 @@ export function provideAppShell(): AppShellContext {
     shellLayout.value = { ...shellLayout.value, ...updated };
   }
 
-  function registerTreeSelect(fn: ((rel: string) => void) | null) {
-    treeSelectHandler.value = fn;
+  function registerTreeSelect(tabId: string | undefined, fn: ((rel: string) => void) | null) {
+    if (!tabId) return;
+    if (fn) treeHandlersByTab.set(tabId, fn);
+    else treeHandlersByTab.delete(tabId);
+    syncActiveTreeHandler();
   }
 
   function requestTreeRescan(selectRel?: string) {
@@ -206,13 +376,52 @@ export function provideAppShell(): AppShellContext {
     return nav.find((n) => n.page !== "home")?.page ?? nav[0]?.page;
   }
 
+  function applyUrlDeepLink(): void {
+    const params = new URLSearchParams(window.location.search);
+    const page = params.get("page")?.trim();
+    if (!page) return;
+
+    const rel = params.get("rel")?.trim();
+    if (page === "bom_apply" && rel) {
+      openBomApplyForRel(rel);
+      return;
+    }
+    if (page === "file_rename" && rel) {
+      try {
+        wb.openTab({
+          pageId: "file_rename",
+          title: wb.basename(rel),
+          subtitle: rel,
+          contextKey: rel,
+          payload: { fileRename: { rel, form: {}, baseline: {} } },
+          forceNew: true,
+        });
+      } catch (e) {
+        setStatus(String(e));
+      }
+      return;
+    }
+    if (page === "rename_analysis" || (page === "file_rename" && params.get("rename_log_id"))) {
+      const logRaw = params.get("rename_log_id")?.trim();
+      const logId = logRaw ? Number(logRaw) : NaN;
+      openRenameAnalysis({
+        renameLogId: Number.isFinite(logId) ? logId : undefined,
+        autoAnalyze: params.get("analyze") === "1",
+      });
+      return;
+    }
+    goToPage(page);
+  }
+
   async function init() {
     appConfig.value = await fetchAppConfig();
     const ws = await getWorkspace();
     workspacePath.value = ws.path;
     await reloadLauncher();
-    const page = resolveInitialPage();
-    if (page) currentPage.value = page;
+    await restoreWorkbenchSession();
+    applyUrlDeepLink();
+    setupWorkbenchPersistence();
+    setupShellLogPolling();
   }
 
   const ctx: AppShellContext = {
@@ -231,13 +440,10 @@ export function provideAppShell(): AppShellContext {
     clearLog,
     setLogOpen,
     goToPage,
-    partKeyDetail,
     openPartKeyDetail,
-    closePartKeyDetail,
-    pendingBomRel,
-    pendingFileRename,
     openBomApplyForRel,
     openFileRenameForRel,
+    openRenameAnalysis,
     switchWorkspace,
     persistShellLayout,
     reloadLauncher,
@@ -247,6 +453,22 @@ export function provideAppShell(): AppShellContext {
     treeRescanToken,
     treeSelectAfterRescan,
     requestTreeRescan,
+    tabs: wb.tabs,
+    activeTabId: wb.activeTabId,
+    tabBarTabs: wb.tabBarTabs,
+    showTabBar: wb.showTabBar,
+    openTab: wb.openTab,
+    openNewTabForPage: wb.openNewTabForPage,
+    activateTab: wb.activateTab,
+    closeTab: wb.closeTab,
+    getTab: wb.getTab,
+    activeTab: wb.activeTab,
+    updateTab: wb.updateTab,
+    setTabDirty: wb.setTabDirty,
+    consumeTabPayload: wb.consumeTabPayload,
+    consumeTabPageState: wb.consumeTabPageState,
+    canOpenNewTab: wb.canOpenNewTab,
+    scheduleWorkbenchSave,
   };
 
   provide(APP_SHELL_KEY, ctx);

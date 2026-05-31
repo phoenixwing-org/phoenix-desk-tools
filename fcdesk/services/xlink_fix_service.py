@@ -127,6 +127,7 @@ def run_xlink_fix(
     fd_tmp, json_out = tempfile.mkstemp(prefix="fcdesk_xlink_", suffix=".json")
     os.close(fd_tmp)
     cmd += ["--desktop-json-results", json_out]
+    cmd.append("--no-report")
 
     proc = subprocess.run(
         cmd,

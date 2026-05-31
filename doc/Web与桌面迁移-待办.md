@@ -41,7 +41,9 @@
 | `bom_apply` | `bom_apply_service` | ✅ 功能对齐桌面 | ⚠️ 直连核心库 | Web 已补推荐值/改名等；桌面页可改调 service |
 | `bom_export` | — | 占位 | 占位 | 待 FreeCAD BOM 提取方案 |
 
-**Web 独有：** 壳层布局 API（`shell-layout`）、无原生目录对话框（手输路径）。
+**Web 独有：** 壳层布局 API（`shell-layout`）、无原生目录对话框（手输路径）、**Workbench 多 Tab**（见 [Web壳层-Tab与状态持久化-规划讨论.md](Web壳层-Tab与状态持久化-规划讨论.md)）。
+
+**桌面 Tk 范围（已冻结）：** 不做 Tab / Workbench 等壳层改进；**仅保留**配置（`home`）、打开 Web 浏览器等最基础能力。业务页在 Tk 内仍可访问，但**不**与 Web Tab 模型对齐。
 
 **桌面独有：** 工作空间树侧栏、XLink 结果 Treeview、STEP 收件箱桥接、原生「浏览…」对话框。
 
@@ -96,4 +98,5 @@ fcdesk/
 - [ ] **引用证据 / 改名传播**：扫描旧名引用、修正 XLink（P1–P2，同上）
 - [ ] **ReferenceFix 统一算法**：与 `xlink_fix` 共用抽象（P3，同上）
 - [x] P 后续：取消自动 `fcstd_map.json`（§1）
-- [x] P 后续：`fcdesk/freecad/`、`fcdesk/solidworks/` 目录迁移（§3）
+- [x] **Web 壳层 Tab / session 持久化**（P0–P4，见 [Web壳层-Tab与状态持久化-规划讨论.md](Web壳层-Tab与状态持久化-规划讨论.md)）
+- [ ] **Web 壳层**：其余工具页（xlink、step_batch…）可选 session 快照

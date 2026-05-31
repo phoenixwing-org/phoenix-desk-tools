@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { removeRecentWorkspace } from "../api";
 import { useAppShell } from "../composables/useAppShell";
 
 const shell = useAppShell();
@@ -25,6 +26,18 @@ async function pickRecent(path: string) {
   }
 }
 
+async function removeRecent(path: string, event: MouseEvent) {
+  event.stopPropagation();
+  if (!window.confirm(`从最近列表中移除？\n\n${path}`)) return;
+  try {
+    await removeRecentWorkspace(path);
+    await shell.reloadLauncher();
+    shell.setStatus("已从最近列表移除");
+  } catch (e) {
+    shell.setStatus(String(e));
+  }
+}
+
 function openConfig() {
   recentOpen.value = false;
   shell.goToPage("home");
@@ -41,17 +54,28 @@ function openConfig() {
       <div class="recent-wrap">
         <button type="button" class="tb-btn" @click="recentOpen = !recentOpen">最近 ▾</button>
         <div v-if="recentOpen" class="recent-menu">
-          <button
-            v-for="p in recent"
-            :key="p"
-            type="button"
-            class="recent-item"
-            :class="{ current: p === workspacePath }"
-            @click="pickRecent(p)"
-          >
-            {{ p === workspacePath ? "● " : "" }}{{ p }}
-          </button>
+          <div v-for="p in recent" :key="p" class="recent-row">
+            <button
+              type="button"
+              class="recent-item"
+              :class="{ current: p === workspacePath }"
+              @click="pickRecent(p)"
+            >
+              {{ p === workspacePath ? "● " : "" }}{{ p }}
+            </button>
+            <button
+              type="button"
+              class="recent-remove"
+              title="从最近列表移除"
+              @click="removeRecent(p, $event)"
+            >
+              ×
+            </button>
+          </div>
           <p v-if="!recent.length" class="recent-empty">尚无记录</p>
+          <button v-if="recent.length" type="button" class="recent-manage" @click="openConfig">
+            管理最近列表…
+          </button>
         </div>
       </div>
       <button type="button" class="tb-btn primary" @click="openConfig">配置</button>
@@ -134,9 +158,16 @@ function openConfig() {
   padding: 6px;
 }
 
+.recent-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+
 .recent-item {
+  flex: 1;
   display: block;
-  width: 100%;
   text-align: left;
   padding: 8px 10px;
   border: none;
@@ -153,6 +184,41 @@ function openConfig() {
 .recent-item.current {
   background: #dbeafe;
   font-weight: 500;
+}
+
+.recent-remove {
+  flex-shrink: 0;
+  width: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.recent-remove:hover {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.recent-manage {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 10px;
+  border: none;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 6px 6px;
+  background: transparent;
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-align: left;
+}
+
+.recent-manage:hover {
+  background: #f8fafc;
+  color: var(--accent);
 }
 
 .recent-empty {

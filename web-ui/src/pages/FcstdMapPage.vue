@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import {
   exportFcstdMapJson,
   fetchFcstdMap,
@@ -9,12 +9,20 @@ import {
   type FcstdMapPayload,
 } from "../api";
 import { useAppShell } from "../composables/useAppShell";
+import { usePageSession } from "../composables/usePageSession";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
 import type { TableColumnDef } from "../composables/useResizableTable";
 
+const props = defineProps<{
+  workbenchTabId?: string;
+}>();
+
 const shell = useAppShell();
 
+const SESSION_V = 2;
+
 const cadColumns: TableColumnDef[] = [
+  { key: "index", label: "#", width: 44, minWidth: 40, headerClass: "col-index" },
   { key: "status", label: "状态", width: 52, minWidth: 44 },
   { key: "kind", label: "类型", width: 72, minWidth: 56 },
   { key: "file", label: "文件名", width: 200, minWidth: 100 },
@@ -48,9 +56,11 @@ const exporting = ref(false);
 const data = ref<FcstdMapPayload | null>(null);
 const statusFilter = ref<"all" | "present" | "missing">("all");
 const kindFilter = ref<KindFilter>("all");
+const searchQuery = ref("");
 
 const stats = computed(() => data.value?.stats);
-const entries = computed(() => {
+
+const baseEntries = computed(() => {
   let rows = data.value?.entries ?? [];
   if (statusFilter.value !== "all") {
     rows = rows.filter((r) => r.file_status === statusFilter.value);
@@ -165,7 +175,103 @@ function relDir(row: FcstdMapEntry): string {
   return dir || ".";
 }
 
-onMounted(() => refresh());
+function normalizeSearchText(text: string): string {
+  return text.toLowerCase().replace(/[^\w.\-+]/g, " ");
+}
+
+function entrySearchHaystack(row: FcstdMapEntry): string {
+  return normalizeSearchText(
+    [
+      row.filename,
+      row.repo_rel_path,
+      row.PartNumber,
+      row.PartVersion,
+      row.TypeCode,
+      row.ModelSeries,
+      row.PartName,
+      row.label,
+      row.asset_kind,
+      assetKindLabel(row),
+      statusLabel(row),
+      partKeyLabel(row),
+      relDir(row),
+      metaCell(row),
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
+}
+
+function entryMatchesSearch(row: FcstdMapEntry, query: string): boolean {
+  const q = query.trim();
+  if (!q) return true;
+  const hay = entrySearchHaystack(row);
+  const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
+  return tokens.every((token) => {
+    if (hay.includes(token)) return true;
+    const norm = normalizeSearchText(token).trim();
+    return norm.length > 0 && hay.includes(norm);
+  });
+}
+
+const filteredEntries = computed(() => {
+  const q = searchQuery.value.trim();
+  if (!q) return baseEntries.value;
+  return baseEntries.value.filter((r) => entryMatchesSearch(r, q));
+});
+
+async function hydratePageSession(snap: Record<string, unknown>): Promise<boolean> {
+  if (snap.v !== SESSION_V) return false;
+  if (snap.scanRoot != null) scanRoot.value = String(snap.scanRoot);
+  if (typeof snap.forceUpdatePartName === "boolean") {
+    forceUpdatePartName.value = snap.forceUpdatePartName;
+  }
+  const sf = snap.statusFilter;
+  if (sf === "all" || sf === "present" || sf === "missing") {
+    statusFilter.value = sf;
+  }
+  const kf = snap.kindFilter;
+  if (KIND_OPTIONS.some((o) => o.value === kf)) {
+    kindFilter.value = kf as KindFilter;
+  }
+  if (snap.searchQuery != null) {
+    searchQuery.value = String(snap.searchQuery);
+  }
+  await refresh();
+  return true;
+}
+
+function applyInitialTabState() {
+  if (!props.workbenchTabId) {
+    void refresh();
+    return;
+  }
+  const pageState = shell.consumeTabPageState(props.workbenchTabId);
+  if (pageState) {
+    void hydratePageSession(pageState);
+    return;
+  }
+  void refresh();
+}
+
+usePageSession(props.workbenchTabId, {
+  serialize: () => ({
+    v: SESSION_V,
+    scanRoot: scanRoot.value,
+    forceUpdatePartName: forceUpdatePartName.value,
+    statusFilter: statusFilter.value,
+    kindFilter: kindFilter.value,
+    searchQuery: searchQuery.value,
+  }),
+  hydrate: hydratePageSession,
+  isDirty: () => false,
+});
+
+watch([scanRoot, forceUpdatePartName, statusFilter, kindFilter, searchQuery], () =>
+  shell.scheduleWorkbenchSave(),
+);
+
+onMounted(() => applyInitialTabState());
 </script>
 
 <template>
@@ -225,6 +331,21 @@ onMounted(() => refresh());
     </section>
 
     <section class="filters">
+      <div class="search-row">
+        <label class="search-label" for="cad-index-search">搜索</label>
+        <input
+          id="cad-index-search"
+          v-model="searchQuery"
+          class="search-input"
+          type="search"
+          spellcheck="false"
+          placeholder="文件名、PartKey、路径、PartName… 空格分隔多关键词"
+        />
+        <button v-if="searchQuery.trim()" type="button" class="btn-clear" @click="searchQuery = ''">
+          清除
+        </button>
+      </div>
+      <div class="filter-row">
       <label class="filter">
         <input v-model="statusFilter" type="radio" value="all" /> 全部
       </label>
@@ -238,12 +359,22 @@ onMounted(() => refresh());
       <label v-for="opt in KIND_OPTIONS" :key="opt.value" class="filter">
         <input v-model="kindFilter" type="radio" :value="opt.value" /> {{ opt.label }}
       </label>
-      <span class="count">{{ entries.length }} 行</span>
+      <span class="count">
+        显示 <strong>{{ filteredEntries.length }}</strong>
+        <template v-if="searchQuery.trim()"> / {{ baseEntries.length }}</template>
+        条
+      </span>
+      </div>
     </section>
 
-    <ResizableDataTable v-if="entries.length" :columns="cadColumns" wrap-class="table-grow">
+    <ResizableDataTable v-if="filteredEntries.length" :columns="cadColumns" wrap-class="table-grow">
       <tbody>
-        <tr v-for="row in entries" :key="row.repo_rel_path + row.file_status" :class="row.file_status">
+        <tr
+          v-for="(row, idx) in filteredEntries"
+          :key="row.repo_rel_path + row.file_status"
+          :class="row.file_status"
+        >
+          <td class="col-index">{{ idx + 1 }}</td>
           <td>{{ statusLabel(row) }}</td>
           <td>{{ assetKindLabel(row) }}</td>
           <td class="mono">{{ row.filename }}</td>
@@ -270,7 +401,13 @@ onMounted(() => refresh());
     </ResizableDataTable>
     <div v-else-if="!loading" class="table-wrap table-grow empty-wrap">
       <p class="empty">
-        {{ data?.exists ? "当前筛选无条目" : "尚无索引，点击「工程内搜索」开始扫描" }}
+        {{
+          data?.exists
+            ? searchQuery.trim()
+              ? "无匹配条目，请调整搜索或筛选"
+              : "当前筛选无条目"
+            : "尚无索引，点击「工程内搜索」开始扫描"
+        }}
       </p>
     </div>
   </div>
@@ -390,12 +527,50 @@ onMounted(() => refresh());
 
 .filters {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
+  flex-direction: column;
+  gap: 8px;
   margin-bottom: 8px;
   font-size: 0.85rem;
   flex-shrink: 0;
+}
+
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-label {
+  font-size: 0.82rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.search-input {
+  flex: 1;
+  min-width: 200px;
+  max-width: 560px;
+  padding: 7px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.btn-clear {
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--btn-bg);
+  font-size: 0.78rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
 }
 
 .filter {
@@ -433,9 +608,16 @@ onMounted(() => refresh());
   background: #fff7ed;
 }
 
-:deep(.resizable-data-table tr.missing td:first-child) {
+:deep(.resizable-data-table tr.missing td:nth-child(2)) {
   color: #c2410c;
   font-weight: 600;
+}
+
+:deep(.resizable-data-table .col-index),
+:deep(.resizable-data-table td.col-index) {
+  text-align: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .mono {

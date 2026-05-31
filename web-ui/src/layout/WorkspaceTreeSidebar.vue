@@ -4,6 +4,7 @@ import TreeBranch from "../components/TreeBranch.vue";
 import ShellLogPanel from "./ShellLogPanel.vue";
 import { fetchTree, type TreeNode } from "../api";
 import { useAppShell } from "../composables/useAppShell";
+import { countTreeFiles, filterTreeNode } from "../utils/workspaceTreeFilter";
 
 const LOG_MIN_H = 80;
 const LOG_MAX_RATIO = 0.7;
@@ -17,7 +18,26 @@ const wantSw = ref(false);
 const tree = ref<TreeNode | null>(null);
 const fileCount = ref(0);
 const selectedRel = ref<string | null>(null);
+const treeFilterQuery = ref("");
 const loading = ref(false);
+
+const displayTree = computed((): TreeNode | null => {
+  if (!tree.value) return null;
+  const q = treeFilterQuery.value.trim();
+  if (!q) return tree.value;
+  return filterTreeNode(tree.value, q);
+});
+
+const displayFileCount = computed(() => {
+  if (!displayTree.value) return 0;
+  return countTreeFiles(displayTree.value);
+});
+
+const treeTitle = computed(() => {
+  const q = treeFilterQuery.value.trim();
+  if (!q) return `工作空间树（${fileCount.value}）`;
+  return `工作空间树（${displayFileCount.value} / ${fileCount.value}）`;
+});
 
 const shellLayout = computed(() => shell.shellLayout.value);
 const workspacePath = computed(() => shell.workspacePath.value);
@@ -103,6 +123,7 @@ watch(sidebarRef, (el) => bindSidebarObserver(el), { flush: "post" });
 
 watch(workspacePath, () => {
   selectedRel.value = null;
+  treeFilterQuery.value = "";
   scan();
 });
 
@@ -136,7 +157,25 @@ onUnmounted(() => {
   >
     <div class="ws-tree-section">
       <div class="ws-head">
-        <span class="ws-title">工作空间树（{{ fileCount }}）</span>
+        <span class="ws-title">{{ treeTitle }}</span>
+        <div class="ws-search-row">
+          <input
+            v-model="treeFilterQuery"
+            class="ws-search-input"
+            type="search"
+            spellcheck="false"
+            placeholder="筛选文件名 / 路径…"
+          />
+          <button
+            v-if="treeFilterQuery.trim()"
+            type="button"
+            class="mini"
+            title="清除筛选"
+            @click="treeFilterQuery = ''"
+          >
+            清除
+          </button>
+        </div>
         <div class="ws-filters">
           <label class="chk"><input v-model="wantFcstd" type="checkbox" @change="scan" /> FCStd</label>
           <label class="chk"><input v-model="wantSw" type="checkbox" @change="scan" /> .sldprt</label>
@@ -147,12 +186,13 @@ onUnmounted(() => {
       </div>
       <div class="ws-tree">
         <TreeBranch
-          v-if="tree"
-          :node="tree"
+          v-if="displayTree"
+          :node="displayTree"
           :selected="selectedRel"
           @select-file="onSelect"
         />
-        <p v-else class="muted">扫描中…</p>
+        <p v-else-if="tree && treeFilterQuery.trim()" class="muted">无匹配文件</p>
+        <p v-else class="muted">{{ loading ? "扫描中…" : "无数据" }}</p>
       </div>
     </div>
 
@@ -199,6 +239,22 @@ onUnmounted(() => {
   font-weight: 600;
   font-size: 0.85rem;
   margin-bottom: 6px;
+}
+
+.ws-search-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.ws-search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  font-size: 0.78rem;
 }
 
 .ws-filters {

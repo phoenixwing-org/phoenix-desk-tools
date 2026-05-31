@@ -10,6 +10,7 @@
 - ``replace_basename_in_xlink_attr`` — 纯函数，可单测
 """
 
+from fcdesk.freecad.rename_analysis.report import write_rename_analysis_report
 from fcdesk.freecad.rename_analysis.types import (
     HostRefGroup,
     RenameAnalysisError,
@@ -42,4 +43,5 @@ __all__ = [
     "scan_document_xml_xlink_hits",
     "scan_fcstd_host_hits",
     "scan_workspace_xlink_basename_refs",
+    "write_rename_analysis_report",
 ]

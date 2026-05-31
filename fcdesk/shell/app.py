@@ -88,10 +88,11 @@ class AppShell(ctk.CTk):
             self,
             text="",
             anchor="w",
-            height=24,
-            font=ctk.CTkFont(size=12),
+            height=22,
+            font=ctk.CTkFont(size=11),
+            text_color=("#64748b", "#94a3b8"),
         )
-        self.status_bar.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 6))
+        self.status_bar.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 4))
 
         self._refresh_window_title()
         self._render_status_bar()
@@ -107,19 +108,18 @@ class AppShell(ctk.CTk):
     def _refresh_window_title(self) -> None:
         from fcdesk.config.user_prefs import format_absolute_config_path
 
-        self.title(
-            f"{self._app_title_base} 启动器 — {format_absolute_config_path(self.app_state.repo_root)}"
-        )
+        self.title(f"{self._app_title_base} — {self.app_state.repo_root.name}")
 
     def _render_status_bar(self) -> None:
         from fcdesk.config.user_prefs import format_absolute_config_path
 
         fc = self.app_state.freecad_dir
-        chunks = [f"工作空间: {format_absolute_config_path(self.app_state.repo_root)}"]
+        ws = format_absolute_config_path(self.app_state.repo_root)
         if fc and fc.is_dir():
-            chunks.append(f"FreeCAD: {format_absolute_config_path(fc)}")
-        chunks.append("功能请在 Web 版中使用")
-        self.status_bar.configure(text="  |  ".join(chunks))
+            fc_s = format_absolute_config_path(fc)
+            self.status_bar.configure(text=f"{ws}  ·  FreeCAD: {fc_s}")
+        else:
+            self.status_bar.configure(text=ws)
 
     def _reload_config(self) -> None:
         self.config = load_app_config(self._config_path)
@@ -131,24 +131,17 @@ class AppShell(ctk.CTk):
         except ValueError:
             pass
         self._refresh_window_title()
-        messagebox.showinfo(
-            "配置",
-            "已从 app_config.json 重新载入应用标题与主题。",
-            parent=self,
-        )
 
     def _about(self) -> None:
         from fcdesk.config.launcher_paths import platform_launcher_prefs_file
-        from fcdesk.config.user_prefs import WORKSPACE_DOTFILE_NAME, format_absolute_config_path
+        from fcdesk.config.user_prefs import format_absolute_config_path
 
         messagebox.showinfo(
             "关于",
             f"{self._app_title_base}\n\n"
-            "本窗口为启动器（CustomTkinter）。\n"
-            "全部 CAD 管理功能请在 Web 版中使用。\n\n"
-            f"Web 启动: python -m fcdesk.web\n"
-            f"工作区偏好: {WORKSPACE_DOTFILE_NAME}\n"
-            f"启动器配置: {format_absolute_config_path(platform_launcher_prefs_file())}",
+            "桌面窗口为启动器；功能请用 Web 版。\n"
+            f"python -m fcdesk.web\n\n"
+            f"配置: {format_absolute_config_path(platform_launcher_prefs_file())}",
             parent=self,
         )
 

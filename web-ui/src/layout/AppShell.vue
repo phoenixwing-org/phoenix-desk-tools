@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, type Component } from "vue";
 import AppToolbar from "./AppToolbar.vue";
 import NavSidebar from "./NavSidebar.vue";
 import StatusBar from "./StatusBar.vue";
 import WorkspaceTreeSidebar from "./WorkspaceTreeSidebar.vue";
+import WorkbenchTabBar from "./WorkbenchTabBar.vue";
 import HomePage from "../pages/HomePage.vue";
 import BomApplyPage from "../pages/BomApplyPage.vue";
 import FcstdMapPage from "../pages/FcstdMapPage.vue";
@@ -12,43 +13,42 @@ import PartDedupPage from "../pages/PartDedupPage.vue";
 import StepBatchPage from "../pages/StepBatchPage.vue";
 import SwStepExportPage from "../pages/SwStepExportPage.vue";
 import PartCatalogPage from "../pages/PartCatalogPage.vue";
+import PartKeyDetailPage from "../pages/PartKeyDetailPage.vue";
 import FileRenamePage from "../pages/FileRenamePage.vue";
+import BomExportPage from "../pages/BomExportPage.vue";
 import PlaceholderPage from "../pages/PlaceholderPage.vue";
 import { provideAppShell } from "../composables/useAppShell";
+import ChoiceDialogHost from "../components/ChoiceDialogHost.vue";
 
 const shell = provideAppShell();
 const loading = ref(true);
 const loadError = ref("");
+
+const activeTab = computed(() => shell.activeTab());
 
 const shellLayout = computed(() => shell.shellLayout.value);
 const rightWidth = computed(() =>
   shellLayout.value.right_panel_open ? `${shellLayout.value.right_panel_width_px}px` : "0px",
 );
 
-const pageComponent = computed(() => {
-  switch (shell.currentPage.value) {
-    case "home":
-      return HomePage;
-    case "bom_apply":
-      return BomApplyPage;
-    case "file_rename":
-      return FileRenamePage;
-    case "fcstd_map":
-      return FcstdMapPage;
-    case "part_catalog":
-      return PartCatalogPage;
-    case "xlink_fix":
-      return XlinkFixPage;
-    case "part_dedup":
-      return PartDedupPage;
-    case "step_batch":
-      return StepBatchPage;
-    case "sw_step_export":
-      return SwStepExportPage;
-    default:
-      return PlaceholderPage;
-  }
-});
+const PAGE_COMPONENTS: Record<string, Component> = {
+  home: HomePage,
+  bom_apply: BomApplyPage,
+  file_rename: FileRenamePage,
+  rename_analysis: FileRenamePage,
+  fcstd_map: FcstdMapPage,
+  part_catalog: PartCatalogPage,
+  part_key_detail: PartKeyDetailPage,
+  xlink_fix: XlinkFixPage,
+  part_dedup: PartDedupPage,
+  step_batch: StepBatchPage,
+  sw_step_export: SwStepExportPage,
+  bom_export: BomExportPage,
+};
+
+function pageComponent(pageId: string): Component {
+  return PAGE_COMPONENTS[pageId] ?? PlaceholderPage;
+}
 
 function onResizeStart(e: MouseEvent) {
   e.preventDefault();
@@ -73,13 +73,6 @@ function onResizeStart(e: MouseEvent) {
   window.addEventListener("mouseup", onUp);
 }
 
-watch(
-  () => shell.currentPage.value,
-  () => {
-    shell.registerTreeSelect(null);
-  },
-);
-
 onMounted(async () => {
   try {
     await shell.init();
@@ -91,7 +84,9 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-  shell.registerTreeSelect(null);
+  for (const tab of shell.tabs.value) {
+    shell.registerTreeSelect(tab.id, null);
+  }
 });
 </script>
 
@@ -103,7 +98,17 @@ onUnmounted(() => {
     <div class="shell-body">
       <NavSidebar />
       <main class="shell-main" :style="{ marginRight: rightWidth }">
-        <component :is="pageComponent" />
+        <WorkbenchTabBar v-if="shell.showTabBar.value" />
+        <div class="shell-pages">
+          <KeepAlive :max="24">
+            <component
+              v-if="activeTab"
+              :key="activeTab.id"
+              :is="pageComponent(activeTab.pageId)"
+              :workbench-tab-id="activeTab.id"
+            />
+          </KeepAlive>
+        </div>
       </main>
       <div
         v-if="shellLayout.right_panel_open"
@@ -115,6 +120,7 @@ onUnmounted(() => {
       <WorkspaceTreeSidebar />
     </div>
     <StatusBar />
+    <ChoiceDialogHost />
   </div>
 </template>
 
@@ -157,6 +163,19 @@ onUnmounted(() => {
   flex-direction: column;
   background: var(--page-bg);
   transition: margin-right 0.15s ease;
+}
+
+.shell-pages {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.shell-pages :deep(> .page),
+.shell-pages :deep(> div) {
+  height: 100%;
+  overflow: auto;
 }
 
 .shell-resizer {

@@ -21,6 +21,9 @@ class HostRefGroup:
     host_repo_rel_path: str
     host_filename: str
     hits: tuple[XLinkBasenameHit, ...]
+    depth: int = 0
+    usage_kind: str = "direct"
+    via_chain: tuple[str, ...] = ()
 
     @property
     def hit_count(self) -> int:

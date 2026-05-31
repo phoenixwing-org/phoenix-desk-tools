@@ -26,14 +26,15 @@
 
 ```
 <工作空间根>/.phoenix/
-  phoenix.sqlite          # 主库（名称可讨论，下文暂用此名）
+  cad-database.sqlite     # 主库（现网名称；含索引、改名、引用证据、prefs、ui_session…）
   schema/                 # 可选：版本化 DDL / 迁移脚本
-  reports/                # 人类可读报告（XLink、改名、扫描等 .md）
+  reports/                # 仅「导出报告」时写入的人类可读 .md（默认不自动生成）
   exports/                # 用户主动「导出 JSON」时的输出目录（可选默认落点）
 ```
 
-- **读写路径**：应用启动后通过 `phoenix_store`（待实现）访问 SQLite；各页偏好、改名事件、`file_asset`、属性回写记忆等均落表。
+- **读写路径**：应用启动后通过 `phoenix_store` 访问 SQLite；各页偏好、改名事件、`file_asset`、属性回写记忆、Tab/`ui_session` 等均落表。
 - **JSON 导出**：仅当用户在界面或 API 中选择 **「导出 JSON」**（或等价命令）时，才从库中**序列化**出 `.phoenix-freecad-desktop.json` 形态、或 `fcstd_map.json` 片段、或自定义导出包——**不是日常写盘路径**。
+- **Markdown 报告**：改名分析、XLink 修正等**默认只写 DB**（结构化表 + API 展示）；`.phoenix/reports/*.md` **仅**在用户点击「导出报告」时生成（与 STEP 批量 `FCD_BATCH_WRITE_REPORT` 默认关一致）。
 - **导入 JSON**（可选对称能力）：一次性迁移旧 dotfile / 手工编辑的 JSON → 写入 SQLite，完成后仍以库为准。
 
 ---

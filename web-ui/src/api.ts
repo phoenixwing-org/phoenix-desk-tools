@@ -107,11 +107,50 @@ export function saveLauncherFreecad(path: string) {
   });
 }
 
+export function removeRecentWorkspace(path: string) {
+  return jsonFetch<LauncherPrefs>("/api/config/launcher/recent/remove", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path }),
+  });
+}
+
+export function pruneRecentWorkspaces() {
+  return jsonFetch<LauncherPrefs & { pruned_count?: number }>(
+    "/api/config/launcher/recent/prune",
+    { method: "POST" },
+  );
+}
+
 export function patchShellLayout(patch: Partial<ShellLayout>) {
   return jsonFetch<ShellLayout>("/api/config/launcher/shell-layout", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
+  });
+}
+
+export type ShellLogLine = { text: string; source: string };
+
+export function fetchShellLog(after = 0) {
+  return jsonFetch<{ lines: ShellLogLine[]; total: number }>(
+    `/api/shell/log?after=${after}`,
+  );
+}
+
+export function appendShellLog(text: string, source = "web") {
+  return jsonFetch<{ total: number }>("/api/shell/log", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, source }),
+  });
+}
+
+export function shutdownWebServer() {
+  return jsonFetch<{ status: string }>("/api/shutdown", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
   });
 }
 
@@ -124,6 +163,35 @@ export function setWorkspace(path: string) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ path }),
+  });
+}
+
+export type WorkbenchSessionResponse = {
+  version: number;
+  session: {
+    version?: number;
+    active_tab_id?: string;
+    activeTabId?: string;
+    tabs?: Array<Record<string, unknown>>;
+  } | null;
+  updated_at: string | null;
+  database_path?: string;
+  database_path_display?: string;
+};
+
+export function fetchWorkbenchSession() {
+  return jsonFetch<WorkbenchSessionResponse>("/api/workbench/session");
+}
+
+export function saveWorkbenchSession(body: {
+  version: number;
+  active_tab_id: string;
+  tabs: Array<Record<string, unknown>>;
+}) {
+  return jsonFetch<WorkbenchSessionResponse>("/api/workbench/session", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
 }
 
@@ -300,6 +368,9 @@ export type RefHitHost = {
   host_repo_rel_path: string;
   host_filename: string;
   hit_count: number;
+  depth?: number;
+  usage_kind?: "direct" | "indirect" | string;
+  via_chain?: string[];
   hits: Array<{
     id?: number;
     matched_text: string;
@@ -310,9 +381,19 @@ export type RefHitHost = {
 
 export type RefScanPayload = {
   rename_log_id: number | null;
+  old_basename?: string;
+  new_basename?: string;
+  transitive?: boolean;
   host_count: number;
+  direct_host_count?: number;
   hit_count: number;
   hosts: RefHitHost[];
+};
+
+export type RenameLogsPayload = {
+  database_path: string;
+  database_path_display: string;
+  entries: RenameLog[];
 };
 
 export function fetchFileRenameContext(rel: string) {
@@ -358,21 +439,96 @@ export function scanFileRenameRefs(body: {
   });
 }
 
-export function applyFileRenameRefs(renameLogId: number, hostRepoRelPaths: string[]) {
+export function applyFileRenameRefs(
+  hostRepoRelPaths: string[],
+  opts: {
+    renameLogId?: number;
+    oldBasename?: string;
+    newBasename?: string;
+    targetRepoRel?: string;
+    transitive?: boolean;
+  },
+) {
+  return applyRenameAnalysisCorrections(hostRepoRelPaths, opts);
+}
+
+export function fetchRenameLogs(limit = 50) {
+  return jsonFetch<RenameLogsPayload>(`/api/rename-analysis/logs?limit=${limit}`);
+}
+
+export function analyzeRenameReferences(body: {
+  rename_log_id?: number;
+  old_basename?: string;
+  new_basename?: string;
+  old_repo_rel_path?: string;
+  target_repo_rel?: string;
+  transitive?: boolean;
+  persist?: boolean;
+}) {
+  return jsonFetch<RefScanPayload>("/api/rename-analysis/analyze", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function applyRenameAnalysisCorrections(
+  hostRepoRelPaths: string[],
+  opts: {
+    renameLogId?: number;
+    oldBasename?: string;
+    newBasename?: string;
+    excludeRepoRel?: string;
+    targetRepoRel?: string;
+    transitive?: boolean;
+  },
+) {
   return jsonFetch<{
-    rename_log_id: number;
+    rename_log_id: number | null;
+    old_basename?: string;
+    new_basename?: string;
     applied_hosts: string[];
     failed: Array<{ host_repo_rel_path: string; error: string }>;
     xlink_patches: number;
     scan: RefScanPayload;
-  }>("/api/file-rename/apply-refs", {
+  }>("/api/rename-analysis/apply", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      rename_log_id: renameLogId,
+      rename_log_id: opts.renameLogId,
+      old_basename: opts.oldBasename,
+      new_basename: opts.newBasename,
+      exclude_repo_rel: opts.excludeRepoRel,
+      target_repo_rel: opts.targetRepoRel,
+      transitive: opts.transitive,
       host_repo_rel_paths: hostRepoRelPaths,
     }),
   });
+}
+
+export function loadRenameAnalysis(renameLogId: number) {
+  return jsonFetch<{ rename_log: RenameLog; scan: RefScanPayload }>(
+    `/api/rename-analysis/load?rename_log_id=${renameLogId}`,
+  );
+}
+
+export function exportRenameAnalysisReport(body: {
+  scan: RefScanPayload;
+  rename_log_id?: number;
+  note?: string;
+}) {
+  return jsonFetch<{ report_path: string; report_path_display: string }>(
+    "/api/rename-analysis/export-report",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        scan: body.scan,
+        rename_log_id: body.rename_log_id,
+        note: body.note,
+      }),
+    },
+  );
 }
 
 export type FcstdMapEntry = {
@@ -415,6 +571,7 @@ export type FcstdMapPayload = {
   stats: FcstdMapStats;
   entries: FcstdMapEntry[];
   scan_log?: string;
+  bom_xref?: BomXrefMeta & { scan_id?: number };
 };
 
 export function fetchFcstdMap() {
@@ -441,6 +598,75 @@ export function exportFcstdMapJson() {
   return jsonFetch<{ path: string; path_display: string }>("/api/fcstd-map/export-json", {
     method: "POST",
   });
+}
+
+export type BomXrefMeta = {
+  edge_count: number;
+  host_count: number;
+  last_bom_xref_at?: string;
+  target_resolved?: number;
+  target_ambiguous?: number;
+  target_missing?: number;
+  database_path?: string;
+  database_path_display?: string;
+};
+
+export type BomXrefEdge = {
+  id: number;
+  host_repo_rel_path: string;
+  host_file_asset_id: number;
+  xlink_file_attr: string;
+  target_basename: string;
+  target_repo_rel_path: string | null;
+  target_file_asset_id: number | null;
+  resolve_status: string;
+  ref_kind: string;
+  detail?: unknown;
+};
+
+export function fetchBomXrefMeta() {
+  return jsonFetch<BomXrefMeta>("/api/bom-xrefs/meta");
+}
+
+export type BomXrefHost = {
+  host_repo_rel_path: string;
+  depth: number;
+  usage_kind: "direct" | "indirect";
+  via_chain: string[];
+  direct_refs?: BomXrefEdge[];
+};
+
+export function fetchBomXrefIncoming(opts: {
+  rel?: string;
+  basename?: string;
+  limit?: number;
+  transitive?: boolean;
+}) {
+  const q = new URLSearchParams();
+  if (opts.rel) q.set("rel", opts.rel);
+  if (opts.basename) q.set("basename", opts.basename);
+  if (opts.limit != null) q.set("limit", String(opts.limit));
+  if (opts.transitive === false) q.set("transitive", "false");
+  const qs = q.toString();
+  return jsonFetch<{
+    query: { repo_rel?: string; basename?: string; transitive?: boolean };
+    count: number;
+    direct_count?: number;
+    refs: BomXrefEdge[];
+    hosts: BomXrefHost[];
+  }>(`/api/bom-xrefs/incoming${qs ? `?${qs}` : ""}`);
+}
+
+export function fetchBomXrefOutgoing(rel: string, limit?: number) {
+  const q = new URLSearchParams({ rel });
+  if (limit != null) q.set("limit", String(limit));
+  return jsonFetch<{ host_repo_rel_path: string; count: number; refs: BomXrefEdge[] }>(
+    `/api/bom-xrefs/outgoing?${q}`,
+  );
+}
+
+export function rebuildBomXrefs() {
+  return jsonFetch<BomXrefMeta & { scan_id?: number }>("/api/bom-xrefs/rebuild", { method: "POST" });
 }
 
 export type PartKeyEntry = {
@@ -504,6 +730,45 @@ export function fetchPartKeys() {
 export function fetchPartKeyDetail(partNumber: string, partVersion: string) {
   return jsonFetch<PartKeyDetail>(
     `/api/part-keys/${encodeURIComponent(partNumber)}/${encodeURIComponent(partVersion)}`,
+  );
+}
+
+export type AssemblyTreeNode = {
+  id: string;
+  repo_rel_path: string;
+  basename: string;
+  resolve_status: string;
+  xlink_file_attr: string;
+  part_number: string;
+  part_version: string;
+  part_key: string;
+  TypeCode: string;
+  ModelSeries: string;
+  PartName: string;
+  label: string;
+  file_role: string;
+  children: AssemblyTreeNode[];
+};
+
+export type AssemblyTreePayload = {
+  host_repo_rel_path: string;
+  mode: "first" | "full";
+  node_count: number;
+  nodes: AssemblyTreeNode[];
+};
+
+export function fetchPartAssemblyTree(
+  partNumber: string,
+  partVersion: string,
+  hostRel: string,
+  full: boolean,
+) {
+  const params = new URLSearchParams({
+    host_rel: hostRel,
+    full: full ? "true" : "false",
+  });
+  return jsonFetch<AssemblyTreePayload>(
+    `/api/part-keys/${encodeURIComponent(partNumber)}/${encodeURIComponent(partVersion)}/assembly-tree?${params}`,
   );
 }
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { saveLauncherFreecad, syncLauncherFromLegacy } from "../api";
+import { pruneRecentWorkspaces, removeRecentWorkspace, saveLauncherFreecad, shutdownWebServer, syncLauncherFromLegacy } from "../api";
 import { useAppShell } from "../composables/useAppShell";
 
 const shell = useAppShell();
@@ -13,6 +13,13 @@ const workspacePath = computed(() => shell.workspacePath.value);
 const launcher = computed(() => shell.launcher.value);
 const appConfig = computed(() => shell.appConfig.value);
 const recentWorkspaces = computed(() => launcher.value?.recent_workspaces ?? []);
+const recentEntries = computed(
+  () =>
+    launcher.value?.recent_workspace_entries ??
+    recentWorkspaces.value.map((path) => ({ path, exists: true })),
+);
+const webRunning = ref(false);
+const webUrl = ref("http://127.0.0.1:5173");
 const defaultFreecadDir = computed(() => launcher.value?.default_freecad_dir ?? "");
 
 function fillDefaultFreecad() {
@@ -37,9 +44,9 @@ async function syncLegacyLauncher() {
 }
 
 onMounted(async () => {
-  await syncLegacyLauncher();
   repoInput.value = workspacePath.value;
   fcInput.value = launcher.value?.freecad_dir ?? "";
+  await refreshWebStatus();
 });
 
 watch(workspacePath, (v) => {
@@ -88,6 +95,55 @@ async function switchRecent(path: string) {
   }
 }
 
+async function refreshWebStatus() {
+  try {
+    await fetch("/api/health", { method: "GET" });
+    webRunning.value = true;
+  } catch {
+    webRunning.value = false;
+  }
+}
+
+async function stopWebServer() {
+  if (!window.confirm(`停止本地 Web 服务并释放端口？\n\n${webUrl.value}`)) return;
+  shell.appendLog(`请求关闭 Web 服务：${webUrl.value}`, { source: "config", open: true });
+  try {
+    await shutdownWebServer();
+    shell.appendLog("Web 服务正在关闭…", { source: "config", open: true });
+    shell.setStatus("Web 服务已关闭");
+    webRunning.value = false;
+  } catch (e) {
+    const msg = String(e);
+    shell.appendLog(`关闭 Web 服务失败：${msg}`, { source: "config", open: true });
+    shell.setStatus(msg);
+    alert(msg);
+  }
+}
+
+async function removeRecent(path: string, event: MouseEvent) {
+  event.stopPropagation();
+  if (!window.confirm(`从最近列表中移除？\n\n${path}`)) return;
+  try {
+    await removeRecentWorkspace(path);
+    await shell.reloadLauncher();
+    shell.setStatus("已从最近列表移除");
+  } catch (e) {
+    alert(String(e));
+  }
+}
+
+async function pruneRecentList() {
+  if (!window.confirm("清理最近列表中的临时目录与无效路径？")) return;
+  try {
+    const data = await pruneRecentWorkspaces();
+    await shell.reloadLauncher();
+    const n = data.pruned_count ?? 0;
+    shell.setStatus(n > 0 ? `已清理 ${n} 条记录` : "无需清理");
+  } catch (e) {
+    alert(String(e));
+  }
+}
+
 const navItems = () => (appConfig.value?.navigation ?? []).filter((n) => n.page !== "home");
 </script>
 
@@ -131,20 +187,49 @@ const navItems = () => (appConfig.value?.navigation ?? []).filter((n) => n.page 
     </section>
 
     <section class="section">
-      <h2 class="section-title">最近打开</h2>
-      <p class="hint">点击路径可切换（将询问确认）</p>
-      <div class="recent-list">
-        <button
-          v-for="p in recentWorkspaces"
-          :key="p"
-          type="button"
-          class="recent-btn"
-          :class="{ current: p === workspacePath }"
-          @click="switchRecent(p)"
-        >
-          {{ p === workspacePath ? "● 当前 · " : "" }}{{ p }}
+      <h2 class="section-title">Web 服务</h2>
+      <p class="hint">
+        {{ webRunning ? `运行中 · ${webUrl}` : "未检测到本页面对应的服务（可能已在其它端口运行）" }}
+      </p>
+      <div class="btn-row">
+        <button type="button" class="btn danger" :disabled="!webRunning" @click="stopWebServer">
+          关闭 Web 服务
         </button>
-        <p v-if="!recentWorkspaces.length" class="muted">尚无记录</p>
+        <button type="button" class="btn" @click="refreshWebStatus">刷新状态</button>
+      </div>
+      <p class="hint">关闭后释放 5173 端口；详细步骤见右侧运行日志。</p>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">最近打开</h2>
+      <p class="hint">
+        仅记录你主动切换/保存的工作空间根目录（写入本机 launcher.json）。系统临时目录不会再加入列表。
+      </p>
+      <div class="btn-row compact">
+        <button type="button" class="btn" @click="pruneRecentList">清理临时/无效项</button>
+      </div>
+      <p class="hint">点击路径可切换；右侧 × 可单条移除（不删除磁盘目录）</p>
+      <div class="recent-list">
+        <div
+          v-for="entry in recentEntries"
+          :key="entry.path"
+          class="recent-row"
+          :class="{ missing: !entry.exists, current: entry.path === workspacePath }"
+        >
+          <button type="button" class="recent-btn" @click="switchRecent(entry.path)">
+            <span v-if="!entry.exists" class="missing-tag">已失效</span>
+            {{ entry.path === workspacePath ? "● 当前 · " : "" }}{{ entry.path }}
+          </button>
+          <button
+            type="button"
+            class="recent-remove"
+            title="从最近列表移除"
+            @click="removeRecent(entry.path, $event)"
+          >
+            ×
+          </button>
+        </div>
+        <p v-if="!recentEntries.length" class="muted">尚无记录</p>
       </div>
     </section>
 
@@ -216,6 +301,11 @@ const navItems = () => (appConfig.value?.navigation ?? []).filter((n) => n.page 
   margin-top: 14px;
 }
 
+.btn-row.compact {
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
 .btn {
   padding: 8px 16px;
   border: 1px solid var(--border-strong);
@@ -227,6 +317,16 @@ const navItems = () => (appConfig.value?.navigation ?? []).filter((n) => n.page 
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
+}
+
+.btn.danger {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.btn.danger:disabled {
+  opacity: 0.45;
 }
 
 .hint {
@@ -241,7 +341,18 @@ const navItems = () => (appConfig.value?.navigation ?? []).filter((n) => n.page 
   gap: 6px;
 }
 
+.recent-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.recent-row.missing .recent-btn {
+  opacity: 0.72;
+}
+
 .recent-btn {
+  flex: 1;
   text-align: left;
   padding: 8px 12px;
   border: none;
@@ -251,9 +362,41 @@ const navItems = () => (appConfig.value?.navigation ?? []).filter((n) => n.page 
   word-break: break-all;
 }
 
-.recent-btn.current {
+.recent-row.current .recent-btn {
   background: #2563eb;
   color: #fff;
+}
+
+.missing-tag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.recent-row.current .missing-tag {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.recent-remove {
+  flex-shrink: 0;
+  width: 32px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--btn-bg);
+  color: var(--muted);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.recent-remove:hover {
+  background: #fee2e2;
+  border-color: #fecaca;
+  color: #b91c1c;
 }
 
 .feature-list {

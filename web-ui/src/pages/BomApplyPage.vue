@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from "vue";
 import type { BomApplyPrefs, BomFields, BomKindFilters, BomPreview } from "../api";
 import {
   fetchBom,
@@ -9,8 +9,16 @@ import {
   saveBom,
 } from "../api";
 import { useAppShell } from "../composables/useAppShell";
+import { usePageSession } from "../composables/usePageSession";
+import { promptChoice } from "../composables/choiceDialog";
+
+const props = defineProps<{
+  workbenchTabId?: string;
+}>();
 
 const shell = useAppShell();
+
+const SESSION_V = 1;
 
 const EDITABLE_KEYS = [
   "PartNumber",
@@ -105,11 +113,6 @@ function patchField(key: keyof BomFields, value: string) {
   form.value = { ...form.value, [key]: value };
 }
 
-function restoreField(key: keyof BomFields) {
-  patchField(key, String(initialFields.value[key] ?? ""));
-  shell.setStatus(`已恢复「${key}」为打开文件时的值`);
-}
-
 async function loadPrefs() {
   try {
     bomPrefs.value = await fetchBomPrefs();
@@ -118,13 +121,57 @@ async function loadPrefs() {
   }
 }
 
-async function loadBom(rel: string, fromSidebar = true) {
-  if (fromSidebar && selectedRel.value && hasUnsavedDocumentAttrs()) {
-    shell.setStatus("已从树切换：未保存的编辑已丢弃");
+async function confirmSwitchFile(targetRel: string): Promise<boolean> {
+  if (!hasUnsavedDocumentAttrs()) return true;
+  const name = selectedRel.value?.split("/").pop() ?? "当前文件";
+  const next = targetRel.split("/").pop() ?? targetRel;
+
+  const choice = await promptChoice({
+    title: "切换文件",
+    message: `「${name}」有尚未写入文件的属性（● 标记）。\n\n要打开「${next}」？`,
+    choices: [
+      { id: "save", label: "写入属性并切换", variant: "primary" },
+      { id: "discard", label: "放弃修改并切换", variant: "danger" },
+      { id: "cancel", label: "取消切换" },
+    ],
+  });
+
+  if (choice === "cancel" || choice === null) {
+    shell.setStatus("已取消切换文件");
+    return false;
   }
+  if (choice === "discard") return true;
+
+  if (!selectedRel.value || !preview.value?.is_fcstd) {
+    pageError.value = "当前非 FCStd，无法写入属性";
+    return false;
+  }
+  busy.value = true;
+  pageError.value = "";
+  try {
+    await saveBom(selectedRel.value, form.value);
+    baseline.value = { ...form.value };
+    shell.setStatus("已写入文件，正在切换…");
+    await loadPrefs();
+    return true;
+  } catch (e) {
+    pageError.value = String(e);
+    return false;
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function loadBom(rel: string) {
   selectedRel.value = rel;
   loadingBom.value = true;
   pageError.value = "";
+  if (props.workbenchTabId) {
+    shell.updateTab(props.workbenchTabId, {
+      title: rel.split("/").pop() ?? rel,
+      subtitle: rel,
+    });
+  }
   try {
     const data = await fetchBom(rel);
     preview.value = data;
@@ -145,7 +192,7 @@ async function loadBom(rel: string, fromSidebar = true) {
 
 async function onReload() {
   if (!selectedRel.value) return;
-  await loadBom(selectedRel.value, false);
+  await loadBom(selectedRel.value);
   shell.setStatus("已从磁盘重新读取");
 }
 
@@ -209,7 +256,7 @@ async function onSave() {
   try {
     await saveBom(selectedRel.value, form.value);
     shell.setStatus("已写入文件（Document.xml）");
-    await loadBom(selectedRel.value, false);
+    await loadBom(selectedRel.value);
     await loadPrefs();
   } catch (e) {
     pageError.value = String(e);
@@ -249,27 +296,120 @@ async function onDetectKinds() {
   }
 }
 
-onMounted(() => {
-  loadPrefs();
-  shell.registerTreeSelect((rel) => loadBom(rel));
-  const rel = shell.pendingBomRel.value;
-  if (rel) {
-    shell.pendingBomRel.value = null;
-    void loadBom(rel);
+async function onTreeSelect(rel: string) {
+  if (rel === selectedRel.value) return;
+  if (!(await confirmSwitchFile(rel))) return;
+  await loadBom(rel);
+}
+
+async function openPendingRel(rel: string) {
+  if (selectedRel.value && rel !== selectedRel.value && !(await confirmSwitchFile(rel))) return;
+  await loadBom(rel);
+}
+
+function registerTreeHandler() {
+  if (!props.workbenchTabId) return;
+  shell.registerTreeSelect(props.workbenchTabId, (rel) => {
+    void onTreeSelect(rel);
+  });
+}
+
+function unregisterTreeHandler() {
+  if (!props.workbenchTabId) return;
+  shell.registerTreeSelect(props.workbenchTabId, null);
+}
+
+function consumeTabPayload() {
+  if (!props.workbenchTabId) return;
+  const payload = shell.consumeTabPayload(props.workbenchTabId);
+  const rel = payload?.bomRel?.trim();
+  if (rel) void openPendingRel(rel);
+}
+
+async function hydratePageSession(snap: Record<string, unknown>): Promise<boolean> {
+  if (snap.v !== SESSION_V) return false;
+  if (snap.kindFilters && typeof snap.kindFilters === "object") {
+    kindFilters.value = { ...kindFilters.value, ...(snap.kindFilters as BomKindFilters) };
   }
+  const rel = String(snap.rel ?? "").trim();
+  if (!rel) return true;
+  form.value = { ...(snap.form as Partial<BomFields>) };
+  baseline.value = { ...(snap.baseline as Partial<BomFields>) };
+  initialFields.value = { ...(snap.initialFields as Partial<BomFields>) };
+  await loadBom(rel);
+  return true;
+}
+
+function applyInitialTabState() {
+  if (!props.workbenchTabId) return;
+  const pageState = shell.consumeTabPageState(props.workbenchTabId);
+  if (pageState) {
+    void hydratePageSession(pageState);
+    return;
+  }
+  consumeTabPayload();
+}
+
+usePageSession(props.workbenchTabId, {
+  serialize: () => ({
+    v: SESSION_V,
+    rel: selectedRel.value,
+    form: form.value,
+    baseline: baseline.value,
+    initialFields: initialFields.value,
+    kindFilters: kindFilters.value,
+  }),
+  hydrate: hydratePageSession,
+  isDirty: hasUnsavedDocumentAttrs,
+  flush: async () => {
+    if (!hasUnsavedDocumentAttrs()) return true;
+    if (!selectedRel.value || !preview.value?.is_fcstd) {
+      pageError.value = "当前非 FCStd，无法写入属性";
+      return false;
+    }
+    busy.value = true;
+    pageError.value = "";
+    try {
+      await saveBom(selectedRel.value, form.value);
+      baseline.value = { ...form.value };
+      shell.setStatus("已写入文件");
+      return true;
+    } catch (e) {
+      pageError.value = String(e);
+      return false;
+    } finally {
+      busy.value = false;
+    }
+  },
+});
+
+watch([selectedRel, form, baseline, kindFilters], () => shell.scheduleWorkbenchSave(), { deep: true });
+
+onMounted(() => {
+  void loadPrefs();
+  applyInitialTabState();
+  registerTreeHandler();
+});
+
+onActivated(() => {
+  registerTreeHandler();
+});
+
+onDeactivated(() => {
+  /* handler 保留在 Tab map 中，由 activeTabId 路由 */
 });
 
 watch(
-  () => shell.pendingBomRel.value,
-  (rel) => {
-    if (!rel) return;
-    shell.pendingBomRel.value = null;
-    void loadBom(rel);
+  () => hasUnsavedDocumentAttrs(),
+  (dirty) => {
+    if (props.workbenchTabId) shell.setTabDirty(props.workbenchTabId, dirty);
   },
+  { immediate: true },
 );
 
 onUnmounted(() => {
-  shell.registerTreeSelect(null);
+  unregisterTreeHandler();
+  if (props.workbenchTabId) shell.setTabDirty(props.workbenchTabId, false);
 });
 </script>
 
@@ -350,7 +490,6 @@ onUnmounted(() => {
                   v-model="form[row.key as keyof BomFields]"
                   :readonly="!row.editable"
                   :class="{ readonly: !row.editable }"
-                  @contextmenu.prevent="row.editable && restoreField(row.key as keyof BomFields)"
                 />
                 <button
                   v-if="row.recommend"

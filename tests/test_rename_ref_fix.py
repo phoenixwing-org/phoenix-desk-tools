@@ -15,6 +15,8 @@ from fcdesk.freecad.rename_analysis import (
 from fcdesk.services.rename_analysis_service import (
     analyze_rename_references,
     apply_rename_analysis_corrections,
+    export_rename_analysis_report,
+    list_rename_logs_payload,
 )
 from fcdesk.services.rename_ref_service import execute_file_rename
 
@@ -87,6 +89,9 @@ class TestRenameRefFix(unittest.TestCase):
             root = Path(tmp)
             _write_fcstd(root / "child.FCStd", "<Document/>")
             _write_fcstd(root / "asm.FCStd", _HOST_XML)
+            from fcdesk.services.fcstd_map_service import run_fcstd_map_scan
+
+            run_fcstd_map_scan(root)
 
             out = execute_file_rename(
                 root,
@@ -111,6 +116,57 @@ class TestRenameRefFix(unittest.TestCase):
             self.assertEqual(apply_out["xlink_patches"], 2)
             xml = zipfile.ZipFile(root / "asm.FCStd").read("Document.xml").decode("utf-8")
             self.assertNotIn("child.FCStd", xml)
+
+    def test_manual_analyze_and_apply_without_rename_log(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_fcstd(root / "child.FCStd", "<Document/>")
+            _write_fcstd(root / "asm.FCStd", _HOST_XML)
+            from fcdesk.services.fcstd_map_service import run_fcstd_map_scan
+
+            run_fcstd_map_scan(root)
+
+            scan = analyze_rename_references(
+                root,
+                old_basename="child.FCStd",
+                new_basename="new.FCStd",
+                persist=False,
+            )
+            self.assertEqual(scan["host_count"], 1)
+            host = scan["hosts"][0]["host_repo_rel_path"]
+
+            out = apply_rename_analysis_corrections(
+                root,
+                old_basename="child.FCStd",
+                new_basename="new.FCStd",
+                host_repo_rel_paths=[host],
+            )
+            self.assertEqual(out["xlink_patches"], 2)
+
+    def test_list_logs_and_export_report(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_fcstd(root / "child.FCStd", "<Document/>")
+            execute_file_rename(
+                root,
+                Path("child.FCStd"),
+                new_filename="new.FCStd",
+                baseline={"PartNumber": "1"},
+                current={"PartNumber": "1", "filename": "new.FCStd"},
+            )
+            from fcdesk.services.fcstd_map_service import run_fcstd_map_scan
+
+            run_fcstd_map_scan(root)
+            logs = list_rename_logs_payload(root)
+            self.assertEqual(len(logs["entries"]), 1)
+
+            scan = analyze_rename_references(root, rename_log_id=logs["entries"][0]["id"])
+            report = export_rename_analysis_report(
+                root,
+                scan=scan,
+                rename_log_id=logs["entries"][0]["id"],
+            )
+            self.assertTrue(Path(report["report_path"]).is_file())
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -36,11 +36,14 @@ from fcdesk.services.launcher_service import (
     activate_workspace,
     app_config_payload,
     launcher_prefs_payload,
+    remove_recent_workspace_entry,
+    prune_recent_workspace_entries,
     sync_launcher_from_legacy,
     update_launcher_freecad,
     update_shell_layout,
 )
 from fcdesk.services.part_key_service import (
+    load_part_assembly_tree_payload,
     load_part_key_detail_payload,
     load_part_keys_payload,
     patch_part_file_link,
@@ -69,9 +72,19 @@ from fcdesk.services.xlink_fix_service import get_xlink_prefs, run_xlink_fix, sa
 from fcdesk.services.rename_analysis_service import (
     analyze_rename_references,
     apply_rename_analysis_corrections,
+    export_rename_analysis_report,
+    list_rename_logs_payload,
     load_rename_analysis,
 )
+from fcdesk.freecad.rename_analysis.types import RenameAnalysisError
 from fcdesk.services.rename_ref_service import execute_file_rename, load_file_rename_context, preview_rename_unsaved
+from fcdesk.services.bom_xref_service import (
+    load_bom_xref_payload,
+    rebuild_bom_xrefs_from_last_scan,
+    search_incoming_refs,
+    search_outgoing_refs,
+)
+from fcdesk.services.workbench_service import get_workbench_session_payload, save_workbench_session
 
 # 运行时工作空间根（``POST /api/workspace`` 或启动参数设置）
 _active_workspace: Path = Path.cwd().resolve()
@@ -92,6 +105,12 @@ def set_workspace(path: Path) -> Path:
 
 class WorkspaceBody(BaseModel):
     path: str
+
+
+class WorkbenchSessionBody(BaseModel):
+    version: int = 1
+    active_tab_id: str = ""
+    tabs: list[dict] = []
 
 
 class BomFieldsBody(BaseModel):
@@ -132,6 +151,10 @@ class LauncherFreecadBody(BaseModel):
     path: str = ""
 
 
+class LauncherRecentRemoveBody(BaseModel):
+    path: str = ""
+
+
 class ShellLayoutBody(BaseModel):
     nav_rail_mode: int | None = None
     right_panel_open: bool | None = None
@@ -140,6 +163,33 @@ class ShellLayoutBody(BaseModel):
     log_panel_open: bool | None = None
     log_panel_height_px: int | None = None
     log_auto_open_on_append: bool | None = None
+
+
+class ShellLogBody(BaseModel):
+    text: str = ""
+    source: str = "server"
+
+
+_SHELL_LOG: list[dict[str, str]] = []
+_SHELL_LOG_MAX = 300
+
+
+def append_shell_log(text: str, source: str = "server") -> None:
+    chunk = str(text).strip()
+    if not chunk:
+        return
+    _SHELL_LOG.append({"text": chunk, "source": source})
+    if len(_SHELL_LOG) > _SHELL_LOG_MAX:
+        del _SHELL_LOG[: len(_SHELL_LOG) - _SHELL_LOG_MAX]
+
+
+def shell_log_total() -> int:
+    return len(_SHELL_LOG)
+
+
+def shell_log_since(after: int) -> dict[str, object]:
+    start = max(0, min(after, len(_SHELL_LOG)))
+    return {"lines": _SHELL_LOG[start:], "total": len(_SHELL_LOG)}
 
 
 class FcstdMapScanBody(BaseModel):
@@ -184,12 +234,25 @@ class FileRenameScanBody(BaseModel):
     old_basename: str | None = None
     new_basename: str | None = None
     old_repo_rel_path: str | None = None
+    target_repo_rel: str | None = None
+    transitive: bool | None = True
     persist: bool | None = True
 
 
 class FileRenameApplyBody(BaseModel):
-    rename_log_id: int
+    rename_log_id: int | None = None
+    old_basename: str | None = None
+    new_basename: str | None = None
+    exclude_repo_rel: str | None = None
+    target_repo_rel: str | None = None
+    transitive: bool | None = True
     host_repo_rel_paths: list[str]
+
+
+class RenameAnalysisExportBody(BaseModel):
+    rename_log_id: int | None = None
+    scan: dict
+    note: str | None = None
 
 
 class PartDedupPrefsBody(BaseModel):
@@ -261,6 +324,17 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(e)) from e
         return {"freecad_dir": fc}
 
+    @app.post("/api/config/launcher/recent/remove")
+    def api_config_launcher_recent_remove(body: LauncherRecentRemoveBody) -> dict:
+        try:
+            return remove_recent_workspace_entry(body.path)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post("/api/config/launcher/recent/prune")
+    def api_config_launcher_recent_prune() -> dict:
+        return prune_recent_workspace_entries()
+
     @app.patch("/api/config/launcher/shell-layout")
     def api_config_shell_layout(body: ShellLayoutBody) -> dict:
         patch = body.model_dump(exclude_none=True)
@@ -271,6 +345,32 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
     @app.get("/api/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.post("/api/shutdown")
+    @app.get("/api/shutdown")
+    def api_shutdown(request: Request) -> dict[str, str]:
+        client = request.client
+        if client and client.host not in ("127.0.0.1", "::1", "localhost"):
+            raise HTTPException(status_code=403, detail="仅允许本机关闭")
+        import threading
+
+        def _stop() -> None:
+            import os
+            import signal
+
+            os.kill(os.getpid(), signal.SIGTERM)
+
+        threading.Timer(0.15, _stop).start()
+        return {"status": "stopping"}
+
+    @app.post("/api/shell/log")
+    def api_shell_log_append(body: ShellLogBody) -> dict[str, int]:
+        append_shell_log(body.text, body.source or "server")
+        return {"total": shell_log_total()}
+
+    @app.get("/api/shell/log")
+    def api_shell_log_get(after: int = Query(0, ge=0)) -> dict:
+        return shell_log_since(after)
 
     @app.get("/api/workspace")
     def api_get_workspace() -> dict[str, str]:
@@ -285,6 +385,14 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         return ws
+
+    @app.get("/api/workbench/session")
+    def api_workbench_session_get() -> dict:
+        return get_workbench_session_payload(get_workspace())
+
+    @app.put("/api/workbench/session")
+    def api_workbench_session_put(body: WorkbenchSessionBody) -> dict:
+        return save_workbench_session(get_workspace(), body.model_dump())
 
     @app.get("/api/tree")
     def api_tree(
@@ -472,10 +580,14 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
                 rename_log_id=body.rename_log_id,
                 old_basename=body.old_basename,
                 new_basename=body.new_basename,
-                old_repo_rel_path=body.old_repo_rel_path,
+                exclude_repo_rel=body.old_repo_rel_path,
+                target_repo_rel=body.target_repo_rel,
+                transitive=body.transitive if body.transitive is not None else True,
                 persist=body.persist if body.persist is not None else True,
             )
         except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except RenameAnalysisError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
     @app.post("/api/file-rename/apply-refs")
@@ -485,18 +597,80 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
             return apply_rename_analysis_corrections(
                 ws,
                 rename_log_id=body.rename_log_id,
+                old_basename=body.old_basename,
+                new_basename=body.new_basename,
+                exclude_repo_rel=body.exclude_repo_rel,
+                target_repo_rel=body.target_repo_rel,
+                transitive=body.transitive if body.transitive is not None else True,
+                host_repo_rel_paths=body.host_repo_rel_paths,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except RenameAnalysisError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.get("/api/rename-analysis/logs")
+    def api_rename_analysis_logs(limit: int = Query(50, ge=1, le=200)) -> dict:
+        return list_rename_logs_payload(get_workspace(), limit=limit)
+
+    @app.post("/api/rename-analysis/analyze")
+    def api_rename_analysis_analyze(body: FileRenameScanBody) -> dict:
+        ws = get_workspace()
+        try:
+            return analyze_rename_references(
+                ws,
+                rename_log_id=body.rename_log_id,
+                old_basename=body.old_basename,
+                new_basename=body.new_basename,
+                exclude_repo_rel=body.old_repo_rel_path,
+                target_repo_rel=body.target_repo_rel,
+                transitive=body.transitive if body.transitive is not None else True,
+                persist=body.persist if body.persist is not None else True,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except RenameAnalysisError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post("/api/rename-analysis/apply")
+    def api_rename_analysis_apply(body: FileRenameApplyBody) -> dict:
+        ws = get_workspace()
+        try:
+            return apply_rename_analysis_corrections(
+                ws,
+                rename_log_id=body.rename_log_id,
+                old_basename=body.old_basename,
+                new_basename=body.new_basename,
+                exclude_repo_rel=body.exclude_repo_rel,
+                target_repo_rel=body.target_repo_rel,
+                transitive=body.transitive if body.transitive is not None else True,
                 host_repo_rel_paths=body.host_repo_rel_paths,
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
-    @app.get("/api/file-rename/scan")
-    def api_file_rename_scan_get(rename_log_id: int = Query(...)) -> dict:
+    @app.get("/api/rename-analysis/load")
+    def api_rename_analysis_load(rename_log_id: int = Query(...)) -> dict:
         ws = get_workspace()
         try:
             return load_rename_analysis(ws, rename_log_id)
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e)) from e
+
+    @app.post("/api/rename-analysis/export-report")
+    def api_rename_analysis_export(body: RenameAnalysisExportBody) -> dict:
+        ws = get_workspace()
+        try:
+            return export_rename_analysis_report(
+                ws,
+                scan=body.scan,
+                rename_log_id=body.rename_log_id,
+                note=body.note,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except OSError as e:
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
     @app.get("/api/fcstd-map")
     def api_fcstd_map_get() -> dict:
@@ -542,6 +716,51 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
         except OSError as e:
             raise HTTPException(status_code=500, detail=str(e)) from e
 
+    @app.get("/api/bom-xrefs/meta")
+    def api_bom_xrefs_meta() -> dict:
+        return load_bom_xref_payload(get_workspace())
+
+    @app.get("/api/bom-xrefs/incoming")
+    def api_bom_xrefs_incoming(
+        rel: str | None = Query(None),
+        basename: str | None = Query(None),
+        limit: int = Query(500, ge=1, le=2000),
+        transitive: bool = Query(True),
+    ) -> dict:
+        ws = get_workspace()
+        try:
+            from fcdesk.services.bom_xref_service import ensure_bom_xref_built
+
+            ensure_bom_xref_built(ws)
+            return search_incoming_refs(
+                ws,
+                repo_rel=rel,
+                basename=basename,
+                limit=limit,
+                transitive=transitive,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except RenameAnalysisError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.get("/api/bom-xrefs/outgoing")
+    def api_bom_xrefs_outgoing(
+        rel: str = Query(...),
+        limit: int = Query(500, ge=1, le=2000),
+    ) -> dict:
+        try:
+            return search_outgoing_refs(get_workspace(), rel, limit=limit)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post("/api/bom-xrefs/rebuild")
+    def api_bom_xrefs_rebuild() -> dict:
+        try:
+            return rebuild_bom_xrefs_from_last_scan(get_workspace())
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
     @app.get("/api/part-keys")
     def api_part_keys_list() -> dict:
         return load_part_keys_payload(get_workspace())
@@ -552,6 +771,26 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
             return load_part_key_detail_payload(get_workspace(), part_number, part_version)
         except LookupError as e:
             raise HTTPException(status_code=404, detail=str(e)) from e
+
+    @app.get("/api/part-keys/{part_number}/{part_version}/assembly-tree")
+    def api_part_assembly_tree(
+        part_number: str,
+        part_version: str,
+        host_rel: str = Query(..., min_length=1),
+        full: bool = Query(False),
+    ) -> dict:
+        try:
+            return load_part_assembly_tree_payload(
+                get_workspace(),
+                part_number,
+                part_version,
+                host_rel,
+                full=full,
+            )
+        except LookupError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
     @app.patch("/api/part-keys/{part_number}/{part_version}")
     def api_part_key_patch(part_number: str, part_version: str, body: PartKeyPatchBody) -> dict:

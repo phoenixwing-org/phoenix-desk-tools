@@ -50,6 +50,15 @@ def _norm_key(repo_rel_path: str) -> str:
     return normalize_repo_rel_path_for_map(repo_rel_path.replace("\\", "/").strip())
 
 
+def _sql_like_escape(text: str) -> str:
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _looks_like_exact_basename(name: str) -> bool:
+    lower = name.casefold()
+    return lower.endswith(".fcstd") and "/" not in name and "\\" not in name
+
+
 @contextmanager
 def connect(repo_root: Path) -> Iterator[sqlite3.Connection]:
     rr = repo_root.expanduser().resolve(strict=False)
@@ -226,6 +235,52 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
         )
         conn.execute(
             "UPDATE meta SET value = '4' WHERE key = 'schema_version'"
+        )
+        version = 4
+    if version < 5:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS ui_session (
+                scope TEXT PRIMARY KEY NOT NULL,
+                payload_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """
+        )
+        conn.execute(
+            "UPDATE meta SET value = '5' WHERE key = 'schema_version'"
+        )
+        version = 5
+    if version < 6:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS bom_xref (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scan_id INTEGER NOT NULL REFERENCES fcstd_scan(id) ON DELETE CASCADE,
+                host_file_asset_id INTEGER NOT NULL REFERENCES file_asset(id) ON DELETE CASCADE,
+                host_repo_rel_path TEXT NOT NULL,
+                ref_kind TEXT NOT NULL DEFAULT 'xlink_file_attr',
+                locator TEXT NOT NULL DEFAULT 'Document.xml',
+                xlink_file_attr TEXT NOT NULL,
+                target_basename TEXT NOT NULL,
+                target_file_asset_id INTEGER REFERENCES file_asset(id) ON DELETE SET NULL,
+                target_repo_rel_path TEXT,
+                resolve_status TEXT NOT NULL DEFAULT 'missing',
+                detail_json TEXT,
+                last_seen_at TEXT NOT NULL,
+                UNIQUE(host_file_asset_id, xlink_file_attr)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_bom_xref_host ON bom_xref(host_file_asset_id);
+            CREATE INDEX IF NOT EXISTS idx_bom_xref_host_path ON bom_xref(host_repo_rel_path);
+            CREATE INDEX IF NOT EXISTS idx_bom_xref_target_asset ON bom_xref(target_file_asset_id);
+            CREATE INDEX IF NOT EXISTS idx_bom_xref_target_basename ON bom_xref(target_basename);
+            CREATE INDEX IF NOT EXISTS idx_bom_xref_target_path ON bom_xref(target_repo_rel_path);
+            CREATE INDEX IF NOT EXISTS idx_bom_xref_scan ON bom_xref(scan_id);
+            """
+        )
+        conn.execute(
+            "UPDATE meta SET value = '6' WHERE key = 'schema_version'"
         )
 
 
@@ -493,10 +548,12 @@ def save_fcstd_document(
     *,
     scan_root: str,
     stats: Mapping[str, int],
-) -> None:
+) -> int:
+    """写入索引并记录扫描历史，返回 ``fcstd_scan.id``。"""
     rr = repo_root.expanduser().resolve(strict=False)
     now = doc.last_scan_at or _utc_now_iso()
     stats_json = json.dumps(dict(stats), ensure_ascii=False)
+    scan_id = 0
 
     with connect(rr) as conn:
         seen: set[str] = set()
@@ -518,10 +575,13 @@ def save_fcstd_document(
         _meta_set(conn, "last_scan_at", now)
         _meta_set(conn, "scan_root", scan_root)
         _meta_set(conn, "last_scan_stats", stats_json)
-        conn.execute(
+        cur = conn.execute(
             "INSERT INTO fcstd_scan(scanned_at, scan_root, stats_json) VALUES (?, ?, ?)",
             (now, scan_root, stats_json),
         )
+        scan_id = int(cur.lastrowid)
+
+    return scan_id
 
 
 def find_fcstd_entry(repo_root: Path, rel_workspace: Path) -> FcstdMapEntry | None:
@@ -1069,3 +1129,407 @@ def insert_ref_patch_event(repo_root: Path, *, stats: Mapping[str, Any]) -> int:
             (now, json.dumps(dict(stats), ensure_ascii=False)),
         )
         return int(cur.lastrowid)
+
+
+def phoenix_reports_dir(repo_root: Path) -> Path:
+    d = phoenix_dir(repo_root) / "reports"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def list_rename_logs(repo_root: Path, *, limit: int = 50) -> list[dict[str, Any]]:
+    """最近改名记录（新 → 旧）。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    if not cad_database_path(rr).is_file():
+        return []
+    cap = max(1, min(int(limit), 200))
+    with connect(rr) as conn:
+        rows = conn.execute(
+            """
+            SELECT rl.*, ce.created_at AS event_created_at, ce.source AS event_source
+            FROM rename_log rl
+            JOIN change_event ce ON ce.id = rl.event_id
+            ORDER BY ce.created_at DESC, rl.id DESC
+            LIMIT ?
+            """,
+            (cap,),
+        ).fetchall()
+    return [_rename_log_row_to_dict(r) for r in rows]
+
+
+UI_SESSION_SCOPE_WORKBENCH = "workbench"
+
+
+def load_ui_session(repo_root: Path, *, scope: str = UI_SESSION_SCOPE_WORKBENCH) -> dict[str, Any] | None:
+    """读取 Web 壳层 UI 会话（Tab 列表与页内快照 JSON）。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    if not cad_database_path(rr).is_file():
+        return None
+    with connect(rr) as conn:
+        row = conn.execute(
+            "SELECT payload_json FROM ui_session WHERE scope = ?",
+            (scope,),
+        ).fetchone()
+    if row is None:
+        return None
+    try:
+        data = json.loads(str(row["payload_json"]))
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def save_ui_session(
+    repo_root: Path,
+    payload: Mapping[str, Any],
+    *,
+    scope: str = UI_SESSION_SCOPE_WORKBENCH,
+) -> str:
+    """写入 UI 会话 JSON，返回 ``updated_at``（UTC ISO）。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    updated_at = _utc_now_iso()
+    blob = json.dumps(dict(payload), ensure_ascii=False, separators=(",", ":"))
+    with connect(rr) as conn:
+        conn.execute(
+            """
+            INSERT INTO ui_session(scope, payload_json, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(scope) DO UPDATE SET
+                payload_json = excluded.payload_json,
+                updated_at = excluded.updated_at
+            """,
+            (scope, blob, updated_at),
+        )
+    return updated_at
+
+
+def ui_session_updated_at(repo_root: Path, *, scope: str = UI_SESSION_SCOPE_WORKBENCH) -> str | None:
+    rr = repo_root.expanduser().resolve(strict=False)
+    if not cad_database_path(rr).is_file():
+        return None
+    with connect(rr) as conn:
+        row = conn.execute(
+            "SELECT updated_at FROM ui_session WHERE scope = ?",
+            (scope,),
+        ).fetchone()
+    return str(row["updated_at"]) if row else None
+
+
+def get_last_fcstd_scan_id(repo_root: Path) -> int | None:
+    rr = repo_root.expanduser().resolve(strict=False)
+    if not cad_database_path(rr).is_file():
+        return None
+    with connect(rr) as conn:
+        row = conn.execute(
+            "SELECT id FROM fcstd_scan ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    return int(row["id"]) if row else None
+
+
+def ensure_fcstd_scan_record(repo_root: Path) -> int | None:
+    """若已有 ``file_asset`` 但缺少 ``fcstd_scan`` 行，补一条扫描记录供 BOM 引用重建。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    if not cad_database_path(rr).is_file():
+        return None
+    existing = get_last_fcstd_scan_id(rr)
+    if existing is not None:
+        return existing
+    with connect(rr) as conn:
+        row = conn.execute("SELECT COUNT(*) AS c FROM file_asset").fetchone()
+        if not row or int(row["c"]) <= 0:
+            return None
+        now = _meta_get(conn, "last_scan_at") or _utc_now_iso()
+        scan_root = _meta_get(conn, "scan_root") or "."
+        stats_raw = _meta_get(conn, "last_scan_stats") or "{}"
+        cur = conn.execute(
+            "INSERT INTO fcstd_scan(scanned_at, scan_root, stats_json) VALUES (?, ?, ?)",
+            (now, scan_root, stats_raw),
+        )
+        return int(cur.lastrowid)
+
+
+def get_file_asset_id(repo_root: Path, repo_rel_path: str) -> int | None:
+    rr = repo_root.expanduser().resolve(strict=False)
+    key = _norm_key(repo_rel_path)
+    with connect(rr) as conn:
+        row = conn.execute(
+            "SELECT id FROM file_asset WHERE repo_rel_path = ?",
+            (key,),
+        ).fetchone()
+    return int(row["id"]) if row else None
+
+    rr = repo_root.expanduser().resolve(strict=False)
+    key = _norm_key(repo_rel_path)
+    with connect(rr) as conn:
+        row = conn.execute(
+            "SELECT id FROM file_asset WHERE repo_rel_path = ?",
+            (key,),
+        ).fetchone()
+    return int(row["id"]) if row else None
+
+
+def list_present_fcstd_file_assets(repo_root: Path) -> list[dict[str, Any]]:
+    rr = repo_root.expanduser().resolve(strict=False)
+    if not cad_database_path(rr).is_file():
+        return []
+    with connect(rr) as conn:
+        rows = conn.execute(
+            """
+            SELECT id, repo_rel_path, filename
+            FROM file_asset
+            WHERE file_status = ? AND LOWER(filename) LIKE '%.fcstd'
+            ORDER BY repo_rel_path
+            """,
+            (FILE_STATUS_PRESENT,),
+        ).fetchall()
+    return [
+        {
+            "id": int(r["id"]),
+            "repo_rel_path": str(r["repo_rel_path"]),
+            "filename": str(r["filename"]),
+        }
+        for r in rows
+    ]
+
+
+def replace_bom_xrefs(
+    repo_root: Path,
+    *,
+    scan_id: int,
+    edges: list[Mapping[str, Any]],
+    rebuilt_at: str | None = None,
+) -> dict[str, int]:
+    rr = repo_root.expanduser().resolve(strict=False)
+    now = rebuilt_at or _utc_now_iso()
+    stats = {"edge_count": 0, "host_count": 0, "target_resolved": 0, "target_ambiguous": 0, "target_missing": 0}
+    hosts: set[str] = set()
+
+    with connect(rr) as conn:
+        conn.execute("DELETE FROM bom_xref")
+        for edge in edges:
+            host_id = int(edge["host_file_asset_id"])
+            host_path = _norm_key(str(edge["host_repo_rel_path"]))
+            xlink = str(edge["xlink_file_attr"])
+            target_base = str(edge["target_basename"])
+            target_id = edge.get("target_file_asset_id")
+            target_path = edge.get("target_repo_rel_path")
+            if target_path:
+                target_path = _norm_key(str(target_path))
+            status = str(edge.get("resolve_status") or "missing")
+            detail = edge.get("detail_json")
+            if detail is not None and not isinstance(detail, str):
+                detail = json.dumps(detail, ensure_ascii=False)
+
+            conn.execute(
+                """
+                INSERT INTO bom_xref (
+                    scan_id, host_file_asset_id, host_repo_rel_path, ref_kind, locator,
+                    xlink_file_attr, target_basename, target_file_asset_id,
+                    target_repo_rel_path, resolve_status, detail_json, last_seen_at
+                ) VALUES (?, ?, ?, 'xlink_file_attr', 'Document.xml', ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    scan_id,
+                    host_id,
+                    host_path,
+                    xlink,
+                    target_base,
+                    int(target_id) if target_id is not None else None,
+                    target_path,
+                    status,
+                    detail,
+                    now,
+                ),
+            )
+            stats["edge_count"] += 1
+            hosts.add(host_path)
+            if status == "resolved":
+                stats["target_resolved"] += 1
+            elif status == "ambiguous":
+                stats["target_ambiguous"] += 1
+            elif status in ("missing", "non_fcstd"):
+                stats["target_missing"] += 1
+
+        stats["host_count"] = len(hosts)
+        _meta_set(conn, "last_bom_xref_at", now)
+        _meta_set(conn, "last_bom_xref_scan_id", str(scan_id))
+        _meta_set(conn, "last_bom_xref_stats", json.dumps(stats, ensure_ascii=False))
+
+    return stats
+
+
+def load_bom_xref_meta(repo_root: Path) -> dict[str, Any]:
+    rr = repo_root.expanduser().resolve(strict=False)
+    if not cad_database_path(rr).is_file():
+        return {"edge_count": 0, "host_count": 0, "last_bom_xref_at": ""}
+    with connect(rr) as conn:
+        count = conn.execute("SELECT COUNT(*) AS n FROM bom_xref").fetchone()
+        hosts = conn.execute(
+            "SELECT COUNT(DISTINCT host_repo_rel_path) AS n FROM bom_xref"
+        ).fetchone()
+        last_at = _meta_get(conn, "last_bom_xref_at")
+        raw_stats = _meta_get(conn, "last_bom_xref_stats")
+    extra: dict[str, Any] = {}
+    if raw_stats:
+        try:
+            parsed = json.loads(raw_stats)
+            if isinstance(parsed, dict):
+                extra = parsed
+        except json.JSONDecodeError:
+            pass
+    return {
+        "edge_count": int(count["n"]) if count else 0,
+        "host_count": int(hosts["n"]) if hosts else 0,
+        "last_bom_xref_at": last_at or "",
+        **extra,
+    }
+
+
+def _bom_xref_row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
+    detail: Any = None
+    raw = row["detail_json"]
+    if raw:
+        try:
+            detail = json.loads(str(raw))
+        except json.JSONDecodeError:
+            detail = raw
+    return {
+        "id": int(row["id"]),
+        "host_repo_rel_path": str(row["host_repo_rel_path"]),
+        "host_file_asset_id": int(row["host_file_asset_id"]),
+        "xlink_file_attr": str(row["xlink_file_attr"]),
+        "target_basename": str(row["target_basename"]),
+        "target_repo_rel_path": row["target_repo_rel_path"],
+        "target_file_asset_id": row["target_file_asset_id"],
+        "resolve_status": str(row["resolve_status"]),
+        "ref_kind": str(row["ref_kind"]),
+        "detail": detail,
+    }
+
+
+def query_all_bom_xref_edges(repo_root: Path) -> list[dict[str, Any]]:
+    """加载全部引用边（构图 / 传递查询用）。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    if not cad_database_path(rr).is_file():
+        return []
+    with connect(rr) as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                host_repo_rel_path,
+                xlink_file_attr,
+                target_basename,
+                target_repo_rel_path,
+                target_file_asset_id,
+                resolve_status
+            FROM bom_xref
+            ORDER BY host_repo_rel_path, xlink_file_attr
+            """
+        ).fetchall()
+    return [
+        {
+            "host_repo_rel_path": str(r["host_repo_rel_path"]),
+            "xlink_file_attr": str(r["xlink_file_attr"]),
+            "target_basename": str(r["target_basename"]),
+            "target_repo_rel_path": r["target_repo_rel_path"],
+            "target_file_asset_id": r["target_file_asset_id"],
+            "resolve_status": str(r["resolve_status"]),
+        }
+        for r in rows
+    ]
+
+
+def query_bom_xrefs_incoming(
+    repo_root: Path,
+    *,
+    repo_rel: str | None = None,
+    basename: str | None = None,
+    limit: int = 500,
+) -> list[dict[str, Any]]:
+    rr = repo_root.expanduser().resolve(strict=False)
+    cap = max(1, min(int(limit), 2000))
+    clauses: list[str] = []
+    params: list[Any] = []
+
+    if repo_rel:
+        key = _norm_key(repo_rel)
+        asset_id = get_file_asset_id(rr, key)
+        if asset_id is not None:
+            clauses.append("(target_file_asset_id = ? OR target_repo_rel_path = ?)")
+            params.extend([asset_id, key])
+        else:
+            clauses.append("target_repo_rel_path LIKE ? ESCAPE '\\' COLLATE NOCASE")
+            params.append(f"%{_sql_like_escape(key)}%")
+    if basename:
+        base = basename.strip()
+        if _looks_like_exact_basename(base):
+            clauses.append("target_basename = ? COLLATE NOCASE")
+            params.append(base)
+        else:
+            clauses.append("target_basename LIKE ? ESCAPE '\\' COLLATE NOCASE")
+            params.append(f"%{_sql_like_escape(base)}%")
+
+    if not clauses:
+        return []
+
+    where = " OR ".join(f"({c})" for c in clauses) if len(clauses) > 1 else clauses[0]
+    sql = f"""
+        SELECT * FROM bom_xref
+        WHERE {where}
+        ORDER BY host_repo_rel_path, xlink_file_attr
+        LIMIT ?
+    """
+    params.append(cap)
+
+    with connect(rr) as conn:
+        rows = conn.execute(sql, tuple(params)).fetchall()
+    return [_bom_xref_row_to_dict(r) for r in rows]
+
+
+def query_bom_xrefs_outgoing(
+    repo_root: Path,
+    host_repo_rel: str,
+    *,
+    limit: int = 500,
+) -> list[dict[str, Any]]:
+    rr = repo_root.expanduser().resolve(strict=False)
+    key = _norm_key(host_repo_rel)
+    cap = max(1, min(int(limit), 2000))
+    with connect(rr) as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM bom_xref
+            WHERE host_repo_rel_path = ?
+            ORDER BY target_basename, xlink_file_attr
+            LIMIT ?
+            """,
+            (key, cap),
+        ).fetchall()
+    return [_bom_xref_row_to_dict(r) for r in rows]
+
+
+def query_bom_xrefs_for_basename(
+    repo_root: Path,
+    *,
+    old_basename: str,
+    exclude_repo_rel: str | None = None,
+    target_repo_rel: str | None = None,
+) -> list[dict[str, Any]]:
+    """改名分析：从库中查仍引用目标文件的宿主边（支持部分 basename / 精确路径）。"""
+    base = old_basename.strip()
+    rel = (target_repo_rel or "").strip() or None
+    if not base and not rel:
+        return []
+
+    lookup_base = base if not rel else None
+    rows = query_bom_xrefs_incoming(
+        repo_root,
+        repo_rel=rel,
+        basename=lookup_base,
+        limit=2000,
+    )
+    exclude_key = _norm_key(exclude_repo_rel) if exclude_repo_rel else None
+    if exclude_key:
+        rows = [r for r in rows if _norm_key(r["host_repo_rel_path"]) != exclude_key]
+    return rows
+

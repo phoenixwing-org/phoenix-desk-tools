@@ -6,10 +6,22 @@ export type NavItem = {
   icon?: string;
 };
 
+export type WorkbenchPageTabPolicy = {
+  max_tabs: number;
+  tab_enabled?: boolean;
+};
+
+export type WorkbenchConfig = {
+  tab_bar?: "main_content_top";
+  default_max_tabs?: number;
+  pages?: Record<string, WorkbenchPageTabPolicy>;
+};
+
 export type AppConfig = {
   title: string;
   navigation: NavItem[];
   toolbar: { items: unknown[] };
+  workbench?: WorkbenchConfig;
   workspace_dotfile: string;
   launcher_config_path: string;
 };
@@ -24,9 +36,15 @@ export type ShellLayout = {
   log_auto_open_on_append: boolean;
 };
 
+export type RecentWorkspaceEntry = {
+  path: string;
+  exists: boolean;
+};
+
 export type LauncherPrefs = {
   version: number;
   recent_workspaces: string[];
+  recent_workspace_entries?: RecentWorkspaceEntry[];
   freecad_dir: string;
   default_freecad_dir?: string;
   platform?: string;
@@ -46,6 +64,8 @@ export const DEFAULT_PAGE_ICONS: Record<string, string> = {
   bom_export: "▤",
   bom_apply: "✎",
   file_rename: "↦",
+  rename_analysis: "🔍",
   part_catalog: "◉",
+  part_key_detail: "◉",
   part_dedup: "≡",
 };

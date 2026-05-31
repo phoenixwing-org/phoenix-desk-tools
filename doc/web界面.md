@@ -78,6 +78,7 @@ python -m fcdesk.web --build -w /path/to/workspace
 | **W1** | 工作空间树扫描、属性回写只读/写入 API |
 | **W2** | 改名、推荐文件名、导出 JSON |
 | **W3** | XLink 预览/执行、FCStd 索引、长任务进度 |
+| **W4** | 壳层 Tab（**主内容区顶**）+ session 持久化；每页 `max_tabs` 见 `app_config.workbench`（[讨论稿](Web壳层-Tab与状态持久化-规划讨论.md) §8） |
 
 ---
 

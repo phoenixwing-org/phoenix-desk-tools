@@ -1,9 +1,9 @@
 {
   "app": {
     "title": "FreeCAD 管理工具",
-    "geometry": "640x520",
-    "min_width": 520,
-    "min_height": 420,
+    "geometry": "440x320",
+    "min_width": 400,
+    "min_height": 280,
     "appearance_mode": "system",
     "color_theme": "blue"
   },
@@ -31,9 +31,9 @@
     },
     {
       "id": "file_rename",
-      "label": "文件改名",
+      "label": "改名与引用",
       "page": "file_rename",
-      "description": "重命名 FCStd 并修正 XLink 引用"
+      "description": "重命名 FCStd、分析/修正 XLink、只读引用查询"
     },
     {
       "id": "xlink_fix",
@@ -61,9 +61,9 @@
     },
     {
       "id": "bom_export",
-      "label": "BOM 提取",
+      "label": "BOM 列表",
       "page": "bom_export",
-      "description": "提取 BOM 到表格（待接 FreeCAD）"
+      "description": "按装配列出 XLink 子件 BOM 表（属性来自 CAD 索引）"
     },
     {
       "id": "home",
@@ -71,5 +71,22 @@
       "page": "home",
       "description": "工作空间、FreeCAD 目录与偏好"
     }
-  ]
+  ],
+  "workbench": {
+    "tab_bar": "main_content_top",
+    "default_max_tabs": 1,
+    "pages": {
+      "bom_apply": { "max_tabs": 8, "tab_enabled": true },
+      "file_rename": { "max_tabs": 8, "tab_enabled": true },
+      "part_key_detail": { "max_tabs": 8, "tab_enabled": true },
+      "fcstd_map": { "max_tabs": 1 },
+      "part_catalog": { "max_tabs": 1 },
+      "xlink_fix": { "max_tabs": 1 },
+      "part_dedup": { "max_tabs": 1 },
+      "step_batch": { "max_tabs": 1 },
+      "sw_step_export": { "max_tabs": 1 },
+      "bom_export": { "max_tabs": 1 },
+      "home": { "max_tabs": 1 }
+    }
+  }
 }

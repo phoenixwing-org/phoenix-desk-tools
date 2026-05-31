@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import posixpath
+import tempfile
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,22 @@ WORKSPACE_DOTFILE_LEGACY_NAME = ".phoenix-freecad-desktop.json"
 # 界面 / API 展示用相对工作空间根的路径
 WORKSPACE_DOTFILE_NAME = f"{WORKSPACE_PHOENIX_DIR}/{WORKSPACE_PREFS_BASENAME}"
 MAX_RECENT_WORKSPACES = 10
+
+# 临时 / 测试目录名片段：不应进入「最近工作空间」
+_EPHEMERAL_DIR_NAME_MARKERS = (
+    "fcstd_map_svc_",
+    "fcstd_map_emb_",
+    "fcstd_map_lbl_",
+    "fcstd_map_mig_",
+    "cad_map_types_",
+    "cad_pdf_pn_",
+    "ws_tree_",
+    "bom_prefs_",
+    "fcdesk_rename_",
+    "fcdesk_kind_",
+    "fcdesk_embedded_",
+    "fcdesk_xlink_",
+)
 
 _WORKSPACE_SECTIONS = ("fc_linkfix", "fcstd_map", "step_batch", "sw_step_export", "part_dedup", "bom_apply")
 
@@ -512,16 +529,103 @@ def get_recent_workspaces() -> list[Path]:
         except (OSError, RuntimeError):
             continue
         key = str(p)
-        if key in seen or not p.is_dir():
+        if key in seen or not p.is_dir() or is_ephemeral_workspace_path(p):
             continue
         seen.add(key)
         out.append(p)
     return out
 
 
+def is_ephemeral_workspace_path(path: Path) -> bool:
+    """系统临时目录或开发/单测用的临时工作空间，不应记入「最近打开」。"""
+    try:
+        p = path.expanduser().resolve(strict=False)
+    except (OSError, RuntimeError):
+        return True
+    name = p.name
+    if any(marker in name for marker in _EPHEMERAL_DIR_NAME_MARKERS):
+        return True
+    try:
+        tmp_root = Path(tempfile.gettempdir()).resolve(strict=False)
+        if p == tmp_root or tmp_root in p.parents:
+            return True
+    except (OSError, RuntimeError):
+        pass
+    parts = p.parts
+    if len(parts) >= 3 and parts[1] == "var" and parts[2] == "folders":
+        return True
+    if len(parts) >= 2 and parts[1] == "tmp":
+        return True
+    return False
+
+
+def list_recent_workspace_paths_raw() -> list[Path]:
+    """launcher.json 中的最近列表（含目录已不存在项，去重保序）。"""
+    out: list[Path] = []
+    seen: set[str] = set()
+    for item in load_launcher_prefs().get("recent_workspaces") or []:
+        try:
+            p = Path(str(item)).expanduser().resolve(strict=False)
+        except (OSError, RuntimeError):
+            continue
+        key = str(p)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(p)
+    return out
+
+
+def prune_recent_workspaces(*, persist: bool = True) -> int:
+    """移除临时目录等不应保留的最近项；返回删除条数。"""
+    launcher = load_launcher_prefs()
+    recent = launcher.get("recent_workspaces") or []
+    kept: list[str] = []
+    removed = 0
+    seen: set[str] = set()
+    for item in recent:
+        try:
+            p = Path(str(item)).expanduser().resolve(strict=False)
+            key = str(p)
+        except (OSError, RuntimeError):
+            key = str(item).strip()
+            p = None
+        if key in seen:
+            removed += 1
+            continue
+        seen.add(key)
+        if p is not None and is_ephemeral_workspace_path(p):
+            removed += 1
+            continue
+        kept.append(str(item))
+    if removed and persist:
+        launcher["recent_workspaces"] = kept
+        save_launcher_prefs(launcher)
+    return removed
+
+
+def remove_recent_workspace(repo_root: Path) -> bool:
+    """从最近列表移除一项（按规范化路径匹配）。"""
+    target = _normalize_path_key(repo_root)
+    launcher = load_launcher_prefs()
+    recent = launcher.get("recent_workspaces") or []
+    kept: list[str] = []
+    removed = False
+    for item in recent:
+        if _paths_equal(item, target):
+            removed = True
+            continue
+        kept.append(str(item))
+    if not removed:
+        return False
+    launcher["recent_workspaces"] = kept
+    save_launcher_prefs(launcher)
+    return True
+
+
 def record_recent_workspace(repo_root: Path) -> None:
     rp = repo_root.expanduser().resolve()
-    if not rp.is_dir():
+    if not rp.is_dir() or is_ephemeral_workspace_path(rp):
         return
     launcher = load_launcher_prefs()
     recent = [str(rp)]
@@ -571,7 +675,6 @@ def merge_workspace_section(section: str, patch: dict[str, Any], repo_root: Path
         else:
             cur[k] = v
     save_workspace_prefs(rp, dat)
-    record_recent_workspace(rp)
     return dat
 
 
@@ -596,9 +699,43 @@ def set_active_workspace(repo_root: Path, state: Any) -> None:
     record_recent_workspace(rp)
 
 
+def _normalize_path_key(path: Path | str) -> str:
+    try:
+        return str(Path(str(path)).expanduser().resolve(strict=False))
+    except (OSError, RuntimeError):
+        return str(path).strip()
+
+
+def _paths_equal(a: Path | str, b: Path | str) -> bool:
+    return _normalize_path_key(a) == _normalize_path_key(b)
+
+
+def _backfill_launcher_from_legacy(base: dict[str, Any], *legacy_sources: dict[str, Any] | None) -> dict[str, Any]:
+    """平台 ``launcher.json`` 已存在时，仅从 legacy 补全缺失字段（不覆盖 recent）。"""
+    out = deepcopy(base)
+    for raw in legacy_sources:
+        if not raw:
+            continue
+        if not out.get("freecad_dir") and raw.get("freecad_dir"):
+            out["freecad_dir"] = str(raw["freecad_dir"])
+        toolbar = raw.get("toolbar")
+        if isinstance(toolbar, dict) and toolbar.get("freecad_dir") and not out.get("freecad_dir"):
+            out["freecad_dir"] = str(toolbar["freecad_dir"])
+        if not out.get("window_geometry"):
+            wg = raw.get("window_geometry")
+            if isinstance(wg, str) and wg.strip():
+                out["window_geometry"] = wg.strip()
+        if not isinstance(out.get("shell_layout"), dict) or out["shell_layout"] == _LAUNCHER_SHELL_LAYOUT_DEFAULT:
+            if isinstance(raw.get("shell_layout"), dict):
+                out["shell_layout"] = _normalized_shell_layout(raw["shell_layout"])
+    out["version"] = 2
+    return out
+
+
 def migrate_launcher_prefs() -> bool:
     """将 legacy / 旧 ``web-ui/.local`` 合并写入本机平台 ``launcher.json``。
 
+    平台文件已存在时，``recent_workspaces`` 以平台为准，不再从 legacy 拉回（避免删了又出现）。
     返回是否写入了平台路径。
     """
     platform_path = platform_launcher_prefs_file()
@@ -610,8 +747,14 @@ def migrate_launcher_prefs() -> bool:
     if not legacy_raw and not web_raw and not flat_platform_raw and not platform_raw:
         return False
 
-    merged = _merge_launcher_sources(legacy_raw, web_raw, flat_platform_raw, platform_raw)
-    changed = _launcher_storage_subset(merged) != _launcher_storage_subset(platform_raw)
+    if platform_path.is_file() and isinstance(platform_raw, dict):
+        merged = deepcopy(_LAUNCHER_DEFAULT)
+        merged.update(_launcher_storage_subset(platform_raw))
+        merged = _backfill_launcher_from_legacy(merged, legacy_raw, web_raw, flat_platform_raw)
+    else:
+        merged = _merge_launcher_sources(legacy_raw, web_raw, flat_platform_raw, platform_raw)
+
+    changed = _launcher_storage_subset(merged) != _launcher_storage_subset(platform_raw or {})
     if not platform_path.is_file() or changed:
         _write_json(platform_path, merged)
         return True
