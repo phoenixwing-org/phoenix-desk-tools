@@ -7,6 +7,7 @@ const props = defineProps<{
   busy?: boolean;
   canApply?: boolean;
   showExport?: boolean;
+  syncReferenceLabels?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -14,6 +15,7 @@ const emit = defineEmits<{
   toggleAll: [checked: boolean];
   apply: [];
   exportReport: [];
+  "update:syncReferenceLabels": [value: boolean];
 }>();
 
 function hitNeedsFix(hit: { status: string; proposed_text: string; matched_text: string }) {
@@ -99,6 +101,14 @@ const allPendingSelected = () => {
       <label v-if="scan.hosts.length" class="chk-all">
         <input type="checkbox" :checked="allPendingSelected()" @change="emit('toggleAll', ($event.target as HTMLInputElement).checked)" />
         全选待修正
+      </label>
+      <label class="chk-sync-label" title="同一第一级 Group 内多条同目标引用时加 .001 序号">
+        <input
+          type="checkbox"
+          :checked="syncReferenceLabels !== false"
+          @change="emit('update:syncReferenceLabels', ($event.target as HTMLInputElement).checked)"
+        />
+        同时修正引用名
       </label>
       <button
         type="button"
@@ -213,7 +223,8 @@ const allPendingSelected = () => {
   margin-bottom: 12px;
 }
 
-.chk-all {
+.chk-all,
+.chk-sync-label {
   display: flex;
   align-items: center;
   gap: 6px;

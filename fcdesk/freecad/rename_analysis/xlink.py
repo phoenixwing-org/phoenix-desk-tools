@@ -12,6 +12,14 @@ from fcdesk.freecad.cad_index_types import is_fcstd_filename
 from fcdesk.freecad.rename_analysis.types import HostRefGroup, RenameAnalysisError, XLinkBasenameHit
 
 XLINK_FILE_RE = re.compile(r'(<XLink\s+file=")([^"]*)(")', re.MULTILINE)
+LABEL_STRING_RE = re.compile(
+    r'(<Property\s+name="Label"\s+type="App::PropertyString"[^>]*>\s*<String\s+value=")([^"]*)(")',
+    re.DOTALL,
+)
+LINKLIST_PROPERTY_RE = re.compile(
+    r"<Property\s+name=\"[^\"]*\"\s+type=\"App::PropertyLinkList\"[^>]*>.*?</Property>",
+    re.DOTALL,
+)
 
 _SKIP_DIRS = frozenset({".git", ".phoenix", "__pycache__", "node_modules", ".venv", "venv"})
 
@@ -140,6 +148,17 @@ def patch_fcstd_xlink_attrs(fcstd_path: Path, replacements: dict[str, str]) -> i
     if xml is None:
         raise RenameAnalysisError(f"无法读取 Document.xml：{fcstd_path}")
 
+    new_xml, count = _patch_xlink_attrs_in_xml(xml, replacements)
+    if count == 0:
+        return 0
+    try:
+        _rewrite_fcstd_document_xml(fcstd_path, new_xml)
+    except OSError as e:
+        raise RenameAnalysisError(f"写回失败（可能被占用）：{fcstd_path} · {e}") from e
+    return count
+
+
+def _patch_xlink_attrs_in_xml(xml: str, replacements: dict[str, str]) -> tuple[str, int]:
     count = 0
 
     def repl(m: re.Match[str]) -> str:
@@ -151,14 +170,255 @@ def patch_fcstd_xlink_attrs(fcstd_path: Path, replacements: dict[str, str]) -> i
         count += 1
         return f"{m.group(1)}{new}{m.group(3)}"
 
-    new_xml = XLINK_FILE_RE.sub(repl, xml)
-    if count == 0:
-        return 0
+    return XLINK_FILE_RE.sub(repl, xml), count
+
+
+def resolve_fcstd_display_label(fcstd_path: Path) -> str:
+    """读取 FCStd 挂载对象的显示 Label（Document → 索引字段组合 → 文件名兜底）。"""
+    from fcdesk.freecad.fcstd_embedded_attrs import FcdeskFcstdEmbeddedError, read_embedded_bom_attrs
+    from fcdesk.freecad.fcstd_mapping import compose_fcstd_body_label_display, infer_fcstd_name_suffix
+
     try:
-        _rewrite_fcstd_document_xml(fcstd_path, new_xml)
+        attrs = read_embedded_bom_attrs(fcstd_path)
+    except FcdeskFcstdEmbeddedError:
+        attrs = {}
+    label = (attrs.get("label") or "").strip()
+    if label:
+        return label
+    composed = compose_fcstd_body_label_display(
+        part_number=attrs.get("PartNumber", ""),
+        part_version=attrs.get("PartVersion", ""),
+        part_name=attrs.get("PartName", ""),
+        label_fallback=label,
+    )
+    if composed:
+        return composed
+    name = fcstd_path.name
+    suffix = infer_fcstd_name_suffix(name)
+    if name.casefold().endswith(suffix.casefold()):
+        stem = name[: -len(suffix)]
+        if stem:
+            return stem
+    return Path(name).stem
+
+
+def _resolve_target_fcstd_for_hit(
+    repo_root: Path,
+    host_repo_rel: str,
+    old_attr: str,
+    proposed_attr: str,
+) -> Path | None:
+    for attr in (proposed_attr, old_attr):
+        resolved = resolve_xlink_attr_to_abs(repo_root, host_repo_rel, attr)
+        if resolved is not None and resolved.is_file():
+            return resolved
+    from fcdesk.freecad.phoenix_store import find_present_repo_rel_by_filename
+
+    for base in (Path(proposed_attr.replace("\\", "/")).name, Path(old_attr.replace("\\", "/")).name):
+        rel = find_present_repo_rel_by_filename(repo_root, base)
+        if not rel:
+            continue
+        candidate = (repo_root / rel).resolve(strict=False)
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _find_object_block_span(xml: str, pos: int) -> tuple[int, int] | None:
+    """返回 ``ObjectData`` 内含 ``pos`` 的最内层 ``<Object>…</Object>`` 区间。"""
+    objdata_start = xml.find("<ObjectData")
+    if objdata_start < 0 or pos < objdata_start:
+        return None
+    objdata_end = xml.find("</ObjectData>", objdata_start)
+    if objdata_end < 0:
+        objdata_end = len(xml)
+
+    best: tuple[int, int] | None = None
+    search_from = objdata_start
+    while search_from < objdata_end:
+        open_at = xml.find("<Object", search_from, objdata_end)
+        if open_at < 0:
+            break
+        if not (xml.startswith("<Object ", open_at) or xml.startswith("<Object>", open_at)):
+            search_from = open_at + 7
+            continue
+        depth = 0
+        i = open_at
+        while i < objdata_end:
+            if xml.startswith("<Object ", i) or xml.startswith("<Object>", i):
+                depth += 1
+                gt = xml.find(">", i)
+                if gt < 0:
+                    break
+                i = gt + 1
+                continue
+            if xml.startswith("</Object>", i):
+                depth -= 1
+                end = i + len("</Object>")
+                if depth == 0:
+                    if open_at <= pos < end and (best is None or open_at > best[0]):
+                        best = (open_at, end)
+                    break
+                i = end
+                continue
+            i += 1
+        search_from = open_at + 7
+    return best
+
+
+def _is_direct_objectdata_object(xml: str, obj_start: int) -> bool:
+    """``Object`` 块是否为 ``ObjectData`` 的直接子节点（非嵌套）。"""
+    objdata_start = xml.find("<ObjectData")
+    if objdata_start < 0 or obj_start < objdata_start:
+        return False
+    content_start = xml.find(">", objdata_start)
+    if content_start < 0:
+        return False
+    content_start += 1
+    segment = xml[content_start:obj_start]
+    opens = len(re.findall(r"<Object(?:\s|>)", segment))
+    closes = segment.count("</Object>")
+    return opens == closes
+
+
+def _find_first_level_linklist_span(xml: str, pos: int) -> tuple[int, int] | None:
+    """含 ``pos`` 的第一级 ``PropertyLinkList`` 区间（``ObjectData`` 直接子对象的 Group 等）。"""
+    obj_block = _find_object_block_span(xml, pos)
+    if obj_block is None:
+        return None
+    obj_start, obj_end = obj_block
+    if not _is_direct_objectdata_object(xml, obj_start):
+        return None
+
+    best: tuple[int, int] | None = None
+    for m in LINKLIST_PROPERTY_RE.finditer(xml, obj_start, obj_end):
+        if m.start() <= pos < m.end():
+            if best is None or m.start() > best[0]:
+                best = (m.start(), m.end())
+    return best
+
+
+def _plan_reference_label_updates(
+    xml: str,
+    hits: list[XLinkBasenameHit],
+    *,
+    repo_root: Path,
+    host_repo_rel: str,
+) -> dict[tuple[int, int], str]:
+    """单引用用目标 Label；同一第一级 ``PropertyLinkList`` 内多引用追加 ``.001`` 起序号。"""
+    replacements = {
+        h.xlink_file_attr: h.proposed_new_attr
+        for h in hits
+        if h.proposed_new_attr != h.xlink_file_attr
+    }
+    if not replacements:
+        return {}
+
+    entries: list[tuple[int, str, str]] = []
+    for m in XLINK_FILE_RE.finditer(xml):
+        old = m.group(2)
+        if old not in replacements:
+            continue
+        entries.append((m.start(), old, replacements[old]))
+
+    if not entries:
+        return {}
+
+    # 编号范围：同一第一级 PropertyLinkList + 同一目标 basename
+    by_scope: dict[tuple[tuple[int, int], str], list[tuple[int, str, str]]] = {}
+    for pos, old_attr, proposed in entries:
+        scope = _find_first_level_linklist_span(xml, pos)
+        target_key = Path(proposed.replace("\\", "/")).name.casefold()
+        if scope is None:
+            scope = (-1, pos)
+        by_scope.setdefault((scope, target_key), []).append((pos, old_attr, proposed))
+
+    block_labels: dict[tuple[int, int], str] = {}
+    for (_scope, _target_key), group in by_scope.items():
+        group.sort(key=lambda item: item[0])
+        target_path = _resolve_target_fcstd_for_hit(
+            repo_root,
+            host_repo_rel,
+            group[0][1],
+            group[0][2],
+        )
+        if target_path is not None:
+            base_label = resolve_fcstd_display_label(target_path)
+        else:
+            base_label = Path(group[0][2].replace("\\", "/")).name
+            for suffix in (".drawing.fcstd", ".assy.fcstd", ".fcstd"):
+                if base_label.casefold().endswith(suffix):
+                    base_label = base_label[: -len(suffix)]
+                    break
+
+        use_suffix = _scope[0] >= 0 and len(group) > 1
+        for idx, (pos, _old, _proposed) in enumerate(group, start=1):
+            label = base_label if not use_suffix else f"{base_label}.{idx:03d}"
+            block = _find_object_block_span(xml, pos)
+            if block is None:
+                continue
+            block_labels[block] = label
+    return block_labels
+
+
+def _patch_reference_labels_in_xml(
+    xml: str,
+    block_labels: dict[tuple[int, int], str],
+) -> tuple[str, int]:
+    if not block_labels:
+        return xml, 0
+    count = 0
+    for (start, end), label in sorted(block_labels.items(), key=lambda item: item[0][0], reverse=True):
+        block = xml[start:end]
+        m = LABEL_STRING_RE.search(block)
+        if m is None or m.group(2) == label:
+            continue
+        new_block = block[: m.start(2)] + label + block[m.end(2) :]
+        xml = xml[:start] + new_block + xml[end:]
+        count += 1
+    return xml, count
+
+
+def patch_fcstd_host_corrections(
+    fcstd_path: Path,
+    hits: list[XLinkBasenameHit],
+    *,
+    repo_root: Path,
+    host_repo_rel: str,
+    sync_reference_labels: bool = True,
+) -> tuple[int, int]:
+    """写回 XLink ``file``，可选同步装配内引用实例 ``Label``。返回 ``(xlink_patches, label_patches)``。"""
+    replacements = {
+        h.xlink_file_attr: h.proposed_new_attr
+        for h in hits
+        if h.proposed_new_attr != h.xlink_file_attr
+    }
+    if not replacements and not sync_reference_labels:
+        return 0, 0
+
+    xml = _read_document_xml_from_fcstd(fcstd_path)
+    if xml is None:
+        raise RenameAnalysisError(f"无法读取 Document.xml：{fcstd_path}")
+
+    label_count = 0
+    if sync_reference_labels:
+        block_labels = _plan_reference_label_updates(
+            xml,
+            hits,
+            repo_root=repo_root,
+            host_repo_rel=host_repo_rel,
+        )
+        xml, label_count = _patch_reference_labels_in_xml(xml, block_labels)
+
+    xml, xlink_count = _patch_xlink_attrs_in_xml(xml, replacements)
+
+    if xlink_count == 0 and label_count == 0:
+        return 0, 0
+    try:
+        _rewrite_fcstd_document_xml(fcstd_path, xml)
     except OSError as e:
         raise RenameAnalysisError(f"写回失败（可能被占用）：{fcstd_path} · {e}") from e
-    return count
+    return xlink_count, label_count
 
 
 def scan_fcstd_host_hits(
@@ -241,11 +501,21 @@ def apply_host_xlink_corrections(
     repo_root: Path,
     host_repo_rel_path: str,
     hits: list[XLinkBasenameHit],
-) -> int:
-    """对单个宿主文件应用一组 XLink 替换。"""
+    *,
+    sync_reference_labels: bool = True,
+) -> tuple[int, int]:
+    """对单个宿主文件应用 XLink 替换，可选同步引用实例 Label。"""
     rr = repo_root.expanduser().resolve(strict=False)
     host = (rr / host_repo_rel_path).resolve(strict=False)
     if not host.is_file():
         raise RenameAnalysisError(f"宿主文件不存在：{host_repo_rel_path}")
-    replacements = {h.xlink_file_attr: h.proposed_new_attr for h in hits}
-    return patch_fcstd_xlink_attrs(host, replacements)
+    pending = [h for h in hits if h.proposed_new_attr != h.xlink_file_attr]
+    if not pending and not sync_reference_labels:
+        return 0, 0
+    return patch_fcstd_host_corrections(
+        host,
+        pending,
+        repo_root=rr,
+        host_repo_rel=host_repo_rel_path,
+        sync_reference_labels=sync_reference_labels,
+    )

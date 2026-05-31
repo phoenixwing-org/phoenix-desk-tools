@@ -247,6 +247,7 @@ class FileRenameApplyBody(BaseModel):
     exclude_repo_rel: str | None = None
     target_repo_rel: str | None = None
     transitive: bool | None = True
+    sync_reference_labels: bool | None = True
     host_repo_rel_paths: list[str]
 
 
@@ -605,6 +606,9 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
                 target_repo_rel=body.target_repo_rel,
                 transitive=body.transitive if body.transitive is not None else True,
                 host_repo_rel_paths=body.host_repo_rel_paths,
+                sync_reference_labels=(
+                    body.sync_reference_labels if body.sync_reference_labels is not None else True
+                ),
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
@@ -648,6 +652,9 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
                 target_repo_rel=body.target_repo_rel,
                 transitive=body.transitive if body.transitive is not None else True,
                 host_repo_rel_paths=body.host_repo_rel_paths,
+                sync_reference_labels=(
+                    body.sync_reference_labels if body.sync_reference_labels is not None else True
+                ),
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e

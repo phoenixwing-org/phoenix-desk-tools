@@ -34,10 +34,30 @@ _HOST_XML = """<?xml version="1.0"?>
  </Objects>
  <ObjectData Count="1">
   <Object name="Asm">
-   <Properties Count="1">
+   <Properties Count="2">
+    <Property name="Label" type="App::PropertyString" status="134217728">
+     <String value="child-old"/>
+    </Property>
     <Property name="Group" type="App::PropertyLinkList">
      <XLink file="child.FCStd"/>
      <XLink file="../parts/child.FCStd"/>
+    </Property>
+   </Properties>
+  </Object>
+ </ObjectData>
+</Document>
+"""
+
+_CHILD_XML = """<?xml version="1.0"?>
+<Document>
+ <Objects Count="1">
+  <Object type="PartDesign::Body" name="Body" id="1"/>
+ </Objects>
+ <ObjectData Count="1">
+  <Object name="Body">
+   <Properties Count="1">
+    <Property name="Label" type="App::PropertyString" status="134217728">
+     <String value="100001.001-子件"/>
     </Property>
    </Properties>
   </Object>
@@ -61,7 +81,7 @@ class TestRenameRefFix(unittest.TestCase):
     def test_scan_and_patch_host(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            _write_fcstd(root / "child.FCStd", "<Document/>")
+            _write_fcstd(root / "child.FCStd", _CHILD_XML)
             _write_fcstd(root / "asm.FCStd", _HOST_XML)
 
             groups = analyze_workspace_xlink_refs(
@@ -72,12 +92,14 @@ class TestRenameRefFix(unittest.TestCase):
             self.assertEqual(len(groups), 1)
             self.assertEqual(groups[0].hit_count, 2)
 
-            n = apply_host_xlink_corrections(
+            n_x, n_l = apply_host_xlink_corrections(
                 root,
                 groups[0].host_repo_rel_path,
                 list(groups[0].hits),
+                sync_reference_labels=False,
             )
-            self.assertEqual(n, 2)
+            self.assertEqual(n_x, 2)
+            self.assertEqual(n_l, 0)
 
             xml = zipfile.ZipFile(root / "asm.FCStd").read("Document.xml").decode("utf-8")
             self.assertIn('file="new.FCStd"', xml)
@@ -87,7 +109,7 @@ class TestRenameRefFix(unittest.TestCase):
     def test_rename_service_flow(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            _write_fcstd(root / "child.FCStd", "<Document/>")
+            _write_fcstd(root / "child.FCStd", _CHILD_XML)
             _write_fcstd(root / "asm.FCStd", _HOST_XML)
             from fcdesk.services.fcstd_map_service import run_fcstd_map_scan
 
@@ -120,7 +142,7 @@ class TestRenameRefFix(unittest.TestCase):
     def test_manual_analyze_and_apply_without_rename_log(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            _write_fcstd(root / "child.FCStd", "<Document/>")
+            _write_fcstd(root / "child.FCStd", _CHILD_XML)
             _write_fcstd(root / "asm.FCStd", _HOST_XML)
             from fcdesk.services.fcstd_map_service import run_fcstd_map_scan
 
@@ -167,6 +189,117 @@ class TestRenameRefFix(unittest.TestCase):
                 rename_log_id=logs["entries"][0]["id"],
             )
             self.assertTrue(Path(report["report_path"]).is_file())
+
+
+    def test_apply_syncs_reference_label_single(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_fcstd(root / "child.FCStd", _CHILD_XML)
+            _write_fcstd(root / "asm-single.FCStd", """<?xml version="1.0"?>
+<Document>
+ <ObjectData Count="1">
+  <Object name="Asm">
+   <Properties Count="2">
+    <Property name="Label" type="App::PropertyString">
+     <String value="child-old"/>
+    </Property>
+    <Property name="Group" type="App::PropertyLinkList">
+     <XLink file="child.FCStd"/>
+    </Property>
+   </Properties>
+  </Object>
+ </ObjectData>
+</Document>""")
+
+            groups = analyze_workspace_xlink_refs(
+                root,
+                old_basename="child.FCStd",
+                new_basename="new-child.FCStd",
+            )
+            n_x, n_l = apply_host_xlink_corrections(
+                root,
+                groups[0].host_repo_rel_path,
+                list(groups[0].hits),
+                sync_reference_labels=True,
+            )
+            self.assertEqual(n_x, 1)
+            self.assertEqual(n_l, 1)
+            xml = zipfile.ZipFile(root / "asm-single.FCStd").read("Document.xml").decode("utf-8")
+            self.assertIn('String value="100001.001-子件"', xml)
+
+    def test_apply_syncs_reference_label_multi_suffix(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_fcstd(root / "child.FCStd", _CHILD_XML)
+            _write_fcstd(
+                root / "asm-multi.FCStd",
+                """<?xml version="1.0"?>
+<Document>
+ <ObjectData Count="2">
+  <Object name="Link1">
+   <Properties Count="2">
+    <Property name="Label" type="App::PropertyString">
+     <String value="child-old-1"/>
+    </Property>
+    <Property name="Group" type="App::PropertyLinkList">
+     <XLink file="child.FCStd"/>
+    </Property>
+   </Properties>
+  </Object>
+  <Object name="Link2">
+   <Properties Count="2">
+    <Property name="Label" type="App::PropertyString">
+     <String value="child-old-2"/>
+    </Property>
+    <Property name="Group" type="App::PropertyLinkList">
+     <XLink file="../parts/child.FCStd"/>
+    </Property>
+   </Properties>
+  </Object>
+ </ObjectData>
+</Document>""",
+            )
+            (root / "parts").mkdir()
+            (root / "parts" / "child.FCStd").write_bytes((root / "child.FCStd").read_bytes())
+
+            groups = analyze_workspace_xlink_refs(
+                root,
+                old_basename="child.FCStd",
+                new_basename="new-child.FCStd",
+            )
+            n_x, n_l = apply_host_xlink_corrections(
+                root,
+                groups[0].host_repo_rel_path,
+                list(groups[0].hits),
+                sync_reference_labels=True,
+            )
+            self.assertEqual(n_x, 2)
+            self.assertEqual(n_l, 2)
+            xml = zipfile.ZipFile(root / "asm-multi.FCStd").read("Document.xml").decode("utf-8")
+            self.assertIn('String value="100001.001-子件"', xml)
+            self.assertNotIn('String value="100001.001-子件.001"', xml)
+
+    def test_apply_syncs_reference_label_same_first_level_group(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_fcstd(root / "child.FCStd", _CHILD_XML)
+            _write_fcstd(root / "asm-dual.FCStd", _HOST_XML)
+
+            groups = analyze_workspace_xlink_refs(
+                root,
+                old_basename="child.FCStd",
+                new_basename="new-child.FCStd",
+            )
+            n_x, n_l = apply_host_xlink_corrections(
+                root,
+                groups[0].host_repo_rel_path,
+                list(groups[0].hits),
+                sync_reference_labels=True,
+            )
+            self.assertEqual(n_x, 2)
+            self.assertEqual(n_l, 1)
+            xml = zipfile.ZipFile(root / "asm-dual.FCStd").read("Document.xml").decode("utf-8")
+            self.assertIn('String value="100001.001-子件.002"', xml)
 
 
 if __name__ == "__main__":

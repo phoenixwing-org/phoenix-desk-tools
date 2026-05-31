@@ -59,6 +59,7 @@ const panelMode = ref<PanelMode>("history");
 const newBasename = ref("");
 const excludeRepoRel = ref("");
 const renameLogs = ref<RenameLog[]>([]);
+const syncReferenceLabels = ref(true);
 const loading = ref(false);
 const busy = ref(false);
 const pageError = ref("");
@@ -456,7 +457,7 @@ async function onApplyRefs() {
   }
   if (
     !window.confirm(
-      `将修正 ${hosts.length} 个宿主文件内的 XLink（仅替换 file 属性中的旧 basename）。\n\n请确认 FreeCAD 等已关闭占用。`,
+      `将修正 ${hosts.length} 个宿主文件内的 XLink${syncReferenceLabels.value ? "，并同步装配树引用名（Label）" : ""}。\n\n请确认 FreeCAD 等已关闭占用。`,
     )
   ) {
     return;
@@ -475,6 +476,7 @@ async function onApplyRefs() {
           (panelMode.value === "manual" ? newBasename.value.trim() : undefined),
         targetRepoRel: pickedRel.value.trim() || undefined,
         transitive: includeTransitive.value,
+        syncReferenceLabels: syncReferenceLabels.value,
       });
       scan.value = data.scan;
       selectPendingHosts();
@@ -486,6 +488,7 @@ async function onApplyRefs() {
       }
       shell.setStatus(
         `已修正 ${data.applied_hosts.length} 个宿主 · ${data.xlink_patches} 处 XLink` +
+          (data.label_patches ? ` · ${data.label_patches} 处引用名` : "") +
           (data.failed.length ? ` · ${data.failed.length} 失败` : ""),
       );
     } else {
@@ -495,6 +498,7 @@ async function onApplyRefs() {
         newBasename: scan.value?.new_basename ?? newFilename.value.trim(),
         targetRepoRel: rel.value.trim() || undefined,
         transitive: includeTransitive.value,
+        syncReferenceLabels: syncReferenceLabels.value,
       });
       scan.value = data.scan;
       selectPendingHosts();
@@ -506,6 +510,7 @@ async function onApplyRefs() {
       }
       shell.setStatus(
         `已修正 ${data.applied_hosts.length} 个宿主 · ${data.xlink_patches} 处 XLink` +
+          (data.label_patches ? ` · ${data.label_patches} 处引用名` : "") +
           (data.failed.length ? ` · ${data.failed.length} 失败` : ""),
       );
     }
@@ -554,6 +559,9 @@ async function hydratePageSession(snap: Record<string, unknown>): Promise<boolea
     queryText.value = String(snap.oldBasename ?? "");
     newBasename.value = String(snap.newBasename ?? "");
     excludeRepoRel.value = String(snap.excludeRepoRel ?? "");
+    if (snap.syncReferenceLabels != null) {
+      syncReferenceLabels.value = Boolean(snap.syncReferenceLabels);
+    }
   }
 
   if (!rel.value) return true;
@@ -601,6 +609,7 @@ usePageSession(props.workbenchTabId, {
     oldBasename: queryText.value,
     newBasename: newBasename.value,
     excludeRepoRel: excludeRepoRel.value,
+    syncReferenceLabels: syncReferenceLabels.value,
   }),
   hydrate: hydratePageSession,
   isDirty: hasPageDirty,
@@ -665,6 +674,7 @@ watch(
     queryText,
     newBasename,
     excludeRepoRel,
+    syncReferenceLabels,
   ],
   () => shell.scheduleWorkbenchSave(),
   { deep: true },
@@ -768,6 +778,7 @@ onUnmounted(() => {
       </section>
 
       <RenameAnalysisPanel
+        v-model:sync-reference-labels="syncReferenceLabels"
         :scan="scan"
         :selected-hosts="selectedHosts"
         :busy="busy"
@@ -815,6 +826,7 @@ onUnmounted(() => {
       </section>
 
       <RenameAnalysisPanel
+        v-model:sync-reference-labels="syncReferenceLabels"
         :scan="scan"
         :selected-hosts="selectedHosts"
         :busy="busy"

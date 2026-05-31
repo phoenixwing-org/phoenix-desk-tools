@@ -448,6 +448,7 @@ export function applyFileRenameRefs(
     newBasename?: string;
     targetRepoRel?: string;
     transitive?: boolean;
+    syncReferenceLabels?: boolean;
   },
 ) {
   return applyRenameAnalysisCorrections(hostRepoRelPaths, opts);
@@ -483,6 +484,7 @@ export function applyRenameAnalysisCorrections(
     excludeRepoRel?: string;
     targetRepoRel?: string;
     transitive?: boolean;
+    syncReferenceLabels?: boolean;
   },
 ) {
   return jsonFetch<{
@@ -492,6 +494,7 @@ export function applyRenameAnalysisCorrections(
     applied_hosts: string[];
     failed: Array<{ host_repo_rel_path: string; error: string }>;
     xlink_patches: number;
+    label_patches?: number;
     scan: RefScanPayload;
   }>("/api/rename-analysis/apply", {
     method: "POST",
@@ -503,6 +506,7 @@ export function applyRenameAnalysisCorrections(
       exclude_repo_rel: opts.excludeRepoRel,
       target_repo_rel: opts.targetRepoRel,
       transitive: opts.transitive,
+      sync_reference_labels: opts.syncReferenceLabels ?? true,
       host_repo_rel_paths: hostRepoRelPaths,
     }),
   });

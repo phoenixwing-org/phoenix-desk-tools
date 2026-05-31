@@ -81,6 +81,7 @@ def apply_rename_analysis_corrections(
     new_repo_rel_path: str | None = None,
     transitive: bool = True,
     host_repo_rel_paths: list[str],
+    sync_reference_labels: bool = True,
 ) -> dict[str, Any]:
     """按分析结果，对勾选的宿主文件写回 XLink 修正。"""
     rr = repo_root.expanduser().resolve(strict=False)
@@ -89,7 +90,12 @@ def apply_rename_analysis_corrections(
         raise ValueError("请至少选择一个宿主文件")
 
     if rename_log_id is not None:
-        return _apply_from_rename_log(rr, rename_log_id=rename_log_id, selected=selected)
+        return _apply_from_rename_log(
+            rr,
+            rename_log_id=rename_log_id,
+            selected=selected,
+            sync_reference_labels=sync_reference_labels,
+        )
 
     old_basename, new_basename, exclude_repo_rel = _resolve_analysis_names(
         rr,
@@ -112,10 +118,11 @@ def apply_rename_analysis_corrections(
         _expand_selected_for_indirect_apply(selected, groups) if transitive else selected
     )
 
-    applied_hosts, failed, total_patches = _apply_hits_for_hosts(
+    applied_hosts, failed, total_patches, total_label_patches = _apply_hits_for_hosts(
         rr,
         selected=apply_targets,
         host_map=host_map,
+        sync_reference_labels=sync_reference_labels,
     )
 
     if applied_hosts:
@@ -128,6 +135,7 @@ def apply_rename_analysis_corrections(
                 "new_basename": new_basename,
                 "hosts": len(applied_hosts),
                 "xlink_patches": total_patches,
+                "label_patches": total_label_patches,
                 "failed": len(failed),
             },
         )
@@ -150,6 +158,7 @@ def apply_rename_analysis_corrections(
         "applied_hosts": applied_hosts,
         "failed": failed,
         "xlink_patches": total_patches,
+        "label_patches": total_label_patches,
         "scan": scan_payload,
     }
 
@@ -219,6 +228,7 @@ def _apply_from_rename_log(
     *,
     rename_log_id: int,
     selected: list[str],
+    sync_reference_labels: bool = True,
 ) -> dict[str, Any]:
     rr = repo_root.expanduser().resolve(strict=False)
     row = get_rename_log(rr, rename_log_id)
@@ -242,6 +252,7 @@ def _apply_from_rename_log(
     applied_hosts: list[str] = []
     failed: list[dict[str, str]] = []
     total_patches = 0
+    total_label_patches = 0
 
     for host_rel in apply_targets:
         host_key = _norm_host_path(host_rel)
@@ -275,8 +286,14 @@ def _apply_from_rename_log(
         if not hits:
             continue
         try:
-            n = apply_host_xlink_corrections(rr, host_key, hits)
-            total_patches += n
+            n_x, n_l = apply_host_xlink_corrections(
+                rr,
+                host_key,
+                hits,
+                sync_reference_labels=sync_reference_labels,
+            )
+            total_patches += n_x
+            total_label_patches += n_l
             applied_hosts.append(host_key)
         except (RenameAnalysisError, OSError) as ex:
             failed.append({"host_repo_rel_path": host_key, "error": str(ex)})
@@ -289,6 +306,7 @@ def _apply_from_rename_log(
                 "rename_log_id": rename_log_id,
                 "hosts": len(applied_hosts),
                 "xlink_patches": total_patches,
+                "label_patches": total_label_patches,
                 "failed": len(failed),
             },
         )
@@ -311,6 +329,7 @@ def _apply_from_rename_log(
         "applied_hosts": applied_hosts,
         "failed": failed,
         "xlink_patches": total_patches,
+        "label_patches": total_label_patches,
         "scan": refreshed,
     }
 
@@ -347,10 +366,12 @@ def _apply_hits_for_hosts(
     *,
     selected: list[str],
     host_map: dict[str, HostRefGroup],
-) -> tuple[list[str], list[dict[str, str]], int]:
+    sync_reference_labels: bool = True,
+) -> tuple[list[str], list[dict[str, str]], int, int]:
     applied_hosts: list[str] = []
     failed: list[dict[str, str]] = []
     total_patches = 0
+    total_label_patches = 0
 
     for host_rel in selected:
         group = host_map.get(host_rel)
@@ -365,13 +386,19 @@ def _apply_hits_for_hosts(
         if not hits:
             continue
         try:
-            n = apply_host_xlink_corrections(repo_root, host_rel, hits)
-            total_patches += n
+            n_x, n_l = apply_host_xlink_corrections(
+                repo_root,
+                host_rel,
+                hits,
+                sync_reference_labels=sync_reference_labels,
+            )
+            total_patches += n_x
+            total_label_patches += n_l
             applied_hosts.append(host_rel)
         except (RenameAnalysisError, OSError) as ex:
             failed.append({"host_repo_rel_path": host_rel, "error": str(ex)})
 
-    return applied_hosts, failed, total_patches
+    return applied_hosts, failed, total_patches, total_label_patches
 
 
 def _build_scan_payload(

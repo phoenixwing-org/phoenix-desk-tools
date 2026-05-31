@@ -22,4 +22,4 @@ API 参阅：[Python scripting tutorial](https://wiki.freecad.org/Python_scripti
 
 **属性面板里的「拆分单词」**：FreeCAD 按大写字母前插空格做展示。**若希望显示成整齐的「Part Number」这类词组，内部名应使用以大写字母开头的大驼峰（PascalCase），例如 `PartNumber`。** 小驼峰 **`partNumber`** 往往会变成 **`part`** + **`Number`** 两段，观感不如 PascalCase。**`fcstd_map.json`、属性回写字段零件号为键名 `PartNumber`**（与大驼峰 Property 同源）；路径类仍为 `repo_rel_path` / `filename`。
 
-导航 **「BOM 列表」**（`bom_export`）展示装配一层子件表格，见 **[BOM列表页设计.md](BOM列表页设计.md)**。FreeCAD 内多级 BOM 导出仍待方案。
+导航 **「BOM 列表」**（`bom_export`）展示装配一层子件表格，见 **[BOM列表页设计.md](BOM列表页设计.md)**。入向引用、改名分析与 XLink 写回见 **[改名与引用-归档说明.md](改名与引用-归档说明.md)**（导航 **「改名与引用」**）。FreeCAD 内多级 BOM 导出仍待方案。
