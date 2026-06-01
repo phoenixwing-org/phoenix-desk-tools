@@ -69,10 +69,13 @@ async function onSave() {
 
 async function onScan() {
   scanning.value = true;
+  shell.appendLog(`[零件查重] 扫描 ${scanDir.value.trim()}…`, { source: "part_dedup", open: true });
   try {
     scanResult.value = await scanPartDedup(prefsPayload());
+    shell.appendLog(scanResult.value.summary, { source: "part_dedup" });
     shell.setStatus(scanResult.value.summary);
   } catch (e) {
+    shell.appendLog(String(e), { source: "part_dedup" });
     shell.setStatus(String(e));
   } finally {
     scanning.value = false;
@@ -81,10 +84,13 @@ async function onScan() {
 
 async function onExport() {
   exporting.value = true;
+  shell.appendLog("[零件查重] 导出 CSV…", { source: "part_dedup", open: true });
   try {
     const data = await exportPartDedupCsv(scanResult.value?.results);
+    shell.appendLog(`已导出 ${data.path_display}`, { source: "part_dedup" });
     shell.setStatus(`已导出 ${data.path_display}`);
   } catch (e) {
+    shell.appendLog(String(e), { source: "part_dedup" });
     shell.setStatus(String(e));
   } finally {
     exporting.value = false;

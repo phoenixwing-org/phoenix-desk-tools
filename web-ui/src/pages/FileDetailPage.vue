@@ -1,0 +1,385 @@
+<script setup lang="ts">
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from "vue";
+import type { BomFields, BomPreview } from "../api";
+import { fetchBom, fetchBomXrefIncoming, fetchBomXrefOutgoing } from "../api";
+import FileOverviewPanel from "../components/file-detail/FileOverviewPanel.vue";
+import FileAttributesPanel from "../components/file-detail/FileAttributesPanel.vue";
+import FileXrefPanel from "../components/file-detail/FileXrefPanel.vue";
+import FileRenamePanel from "../components/file-detail/FileRenamePanel.vue";
+import { provideFileDetailContext } from "../composables/useFileDetailContext";
+import { useAppShell } from "../composables/useAppShell";
+import { usePageSession } from "../composables/usePageSession";
+import { promptChoice } from "../composables/choiceDialog";
+import type { FileDetailSubTab } from "../types/fileDetail";
+import { normalizeFileDetailSubTab } from "../types/fileDetail";
+
+const props = defineProps<{
+  workbenchTabId?: string;
+}>();
+
+const SESSION_V = 1;
+
+const shell = useAppShell();
+const rel = ref("");
+const preview = ref<BomPreview | null>(null);
+const form = ref<Partial<BomFields>>({});
+const baseline = ref<Partial<BomFields>>({});
+const originalFilename = ref("");
+const loading = ref(false);
+const pageError = ref("");
+const activeSubTab = ref<FileDetailSubTab>("overview");
+const incomingCount = ref(0);
+const outgoingCount = ref(0);
+const preferredRenameFilename = ref("");
+
+const fileName = computed(() => rel.value.split("/").pop() ?? "");
+
+async function refreshXrefCounts() {
+  if (!rel.value.trim()) {
+    incomingCount.value = 0;
+    outgoingCount.value = 0;
+    return;
+  }
+  try {
+    const [inc, out] = await Promise.all([
+      fetchBomXrefIncoming({ rel: rel.value, transitive: true, limit: 500 }),
+      fetchBomXrefOutgoing(rel.value, 500),
+    ]);
+    incomingCount.value = inc.count;
+    outgoingCount.value = out.count;
+  } catch {
+    incomingCount.value = 0;
+    outgoingCount.value = 0;
+  }
+}
+
+function switchSubTab(tab: FileDetailSubTab) {
+  activeSubTab.value = tab;
+  if (tab === "rename") {
+    const name = (form.value.filename ?? originalFilename.value).trim();
+    if (name) preferredRenameFilename.value = name;
+  }
+}
+
+async function reloadFile(targetRel?: string) {
+  const path = (targetRel ?? rel.value).trim();
+  if (!path) return;
+  loading.value = true;
+  pageError.value = "";
+  try {
+    const data = await fetchBom(path);
+    rel.value = path;
+    preview.value = data;
+    originalFilename.value = data.fields.filename || path.split("/").pop() || "";
+    form.value = { ...data.fields };
+    baseline.value = { ...data.fields };
+    if (props.workbenchTabId) {
+      shell.updateTab(props.workbenchTabId, {
+        title: originalFilename.value,
+        subtitle: path,
+      });
+    }
+    await refreshXrefCounts();
+    shell.setStatus(data.embedded_warning ? `警告: ${data.embedded_warning}` : data.source_note);
+  } catch (e) {
+    pageError.value = String(e);
+    preview.value = null;
+  } finally {
+    loading.value = false;
+  }
+}
+
+function hasUnsavedAttrs() {
+  const keys = ["PartNumber", "PartVersion", "TypeCode", "ModelSeries", "PartName", "label"] as const;
+  for (const k of keys) {
+    if (String(form.value[k] ?? "").trim() !== String(baseline.value[k] ?? "").trim()) return true;
+  }
+  return false;
+}
+
+async function confirmSwitchFile(targetRel: string): Promise<boolean> {
+  if (!rel.value || targetRel === rel.value) return true;
+  if (!hasUnsavedAttrs()) return true;
+  const name = rel.value.split("/").pop() ?? "当前文件";
+  const next = targetRel.split("/").pop() ?? targetRel;
+  const choice = await promptChoice({
+    title: "切换文件",
+    message: `「${name}」有尚未写入的属性。\n\n要打开「${next}」？`,
+    choices: [
+      { id: "discard", label: "放弃修改并切换", variant: "danger" },
+      { id: "cancel", label: "取消切换" },
+    ],
+  });
+  return choice === "discard";
+}
+
+async function onTreeSelect(targetRel: string) {
+  if (targetRel === rel.value) return;
+  if (!(await confirmSwitchFile(targetRel))) return;
+  activeSubTab.value = "overview";
+  await reloadFile(targetRel);
+}
+
+function registerTreeHandler() {
+  if (!props.workbenchTabId) return;
+  shell.registerTreeSelect(props.workbenchTabId, (path) => {
+    void onTreeSelect(path);
+  });
+}
+
+function unregisterTreeHandler() {
+  if (!props.workbenchTabId) return;
+  shell.registerTreeSelect(props.workbenchTabId, null);
+}
+
+function applyOpenPayload() {
+  if (!props.workbenchTabId) return;
+  const payload = shell.consumeTabPayload(props.workbenchTabId);
+  const detail = payload?.fileDetail;
+  const legacyRel = payload?.bomRel?.trim() || payload?.fileRename?.rel?.trim();
+  const openRel = detail?.rel?.trim() || legacyRel;
+  if (!openRel) return;
+  if (detail?.subTab) activeSubTab.value = normalizeFileDetailSubTab(detail.subTab);
+  if (detail?.preferredNewFilename) preferredRenameFilename.value = detail.preferredNewFilename;
+  if (payload?.fileRename?.form) {
+    form.value = { ...payload.fileRename.form };
+    baseline.value = { ...(payload.fileRename.baseline ?? payload.fileRename.form) };
+  }
+  void reloadFile(openRel);
+}
+
+provideFileDetailContext({
+  rel,
+  preview,
+  form,
+  baseline,
+  originalFilename,
+  loading,
+  pageError,
+  activeSubTab,
+  incomingCount,
+  outgoingCount,
+  switchSubTab,
+  reloadFile,
+  refreshXrefCounts,
+});
+
+async function hydratePageSession(snap: Record<string, unknown>): Promise<boolean> {
+  if (snap.v !== SESSION_V) return false;
+  if (snap.subTab) activeSubTab.value = normalizeFileDetailSubTab(snap.subTab);
+  const savedRel = String(snap.rel ?? "").trim();
+  if (!savedRel) return true;
+  form.value = { ...(snap.form as Partial<BomFields>) };
+  baseline.value = { ...(snap.baseline as Partial<BomFields>) };
+  await reloadFile(savedRel);
+  return true;
+}
+
+usePageSession(props.workbenchTabId, {
+  serialize: () => ({
+    v: SESSION_V,
+    rel: rel.value,
+    subTab: activeSubTab.value,
+    form: form.value,
+    baseline: baseline.value,
+  }),
+  hydrate: hydratePageSession,
+  isDirty: hasUnsavedAttrs,
+});
+
+watch([rel, form, baseline, activeSubTab], () => shell.scheduleWorkbenchSave(), { deep: true });
+
+watch(
+  () => hasUnsavedAttrs(),
+  (dirty) => {
+    if (props.workbenchTabId) shell.setTabDirty(props.workbenchTabId, dirty);
+  },
+  { immediate: true },
+);
+
+onMounted(() => {
+  applyOpenPayload();
+  registerTreeHandler();
+});
+
+onActivated(() => {
+  applyOpenPayload();
+  registerTreeHandler();
+});
+onDeactivated(() => {});
+
+onUnmounted(() => {
+  unregisterTreeHandler();
+  if (props.workbenchTabId) shell.setTabDirty(props.workbenchTabId, false);
+});
+</script>
+
+<template>
+  <div class="page file-detail-page">
+    <header class="page-head">
+      <div class="head-row">
+        <h1 class="page-title">文件详情</h1>
+        <h2 v-if="rel && preview" class="file-name mono">{{ fileName }}</h2>
+      </div>
+    </header>
+
+    <div v-if="pageError" class="banner err">{{ pageError }}</div>
+
+    <div v-if="!rel && !loading" class="empty">在右侧工作空间树中选择 .FCStd 文件</div>
+    <div v-else-if="loading && !preview" class="empty">载入中…</div>
+
+    <template v-else-if="rel && preview">
+      <nav class="sub-tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          class="sub-tab"
+          :class="{ active: activeSubTab === 'overview' }"
+          @click="switchSubTab('overview')"
+        >
+          属性
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="sub-tab"
+          :class="{ active: activeSubTab === 'edit' }"
+          @click="switchSubTab('edit')"
+        >
+          编辑属性
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="sub-tab"
+          :class="{ active: activeSubTab === 'xref' }"
+          @click="switchSubTab('xref')"
+        >
+          引用
+          <span v-if="incomingCount + outgoingCount" class="tab-badge">{{ incomingCount + outgoingCount }}</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="sub-tab"
+          :class="{ active: activeSubTab === 'rename' }"
+          @click="switchSubTab('rename')"
+        >
+          改名
+        </button>
+      </nav>
+
+      <div class="sub-panel">
+        <FileOverviewPanel v-show="activeSubTab === 'overview'" />
+        <FileAttributesPanel v-show="activeSubTab === 'edit'" />
+        <FileXrefPanel v-show="activeSubTab === 'xref'" />
+        <FileRenamePanel
+          v-show="activeSubTab === 'rename'"
+          :workbench-tab-id="workbenchTabId"
+          :preferred-filename="preferredRenameFilename"
+          @renamed="refreshXrefCounts(); switchSubTab('xref')"
+        />
+      </div>
+    </template>
+  </div>
+</template>
+
+<style scoped>
+.file-detail-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  padding: 16px 20px;
+  max-width: 960px;
+}
+
+.page-head {
+  flex-shrink: 0;
+  margin-bottom: 12px;
+}
+
+.head-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.file-name {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-align: right;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty {
+  padding: 32px 0;
+  color: var(--muted);
+}
+
+.sub-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0;
+}
+
+.sub-tab {
+  padding: 8px 14px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  font-size: 0.85rem;
+  cursor: pointer;
+  color: var(--muted);
+  margin-bottom: -1px;
+}
+
+.sub-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+.tab-badge {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.sub-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.banner.err {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 0.85rem;
+  margin-bottom: 10px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+</style>

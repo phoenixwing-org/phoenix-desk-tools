@@ -82,6 +82,7 @@ from fcdesk.services.rename_ref_service import execute_file_rename, load_file_re
 from fcdesk.services.bom_xref_service import (
     load_bom_xref_payload,
     rebuild_bom_xrefs_from_last_scan,
+    search_bom_xref_edges,
     search_incoming_refs,
     search_outgoing_refs,
 )
@@ -430,6 +431,8 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
             "is_fcstd": preview.is_fcstd,
             "document_kinds": preview.document_kinds,
             "embedded_warning": preview.embedded_warning,
+            "file_size_bytes": preview.file_size_bytes,
+            "file_size_display": preview.file_size_display,
         }
 
     @app.put("/api/bom")
@@ -792,6 +795,22 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
     ) -> dict:
         try:
             return search_outgoing_refs(get_workspace(), rel, limit=limit)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.get("/api/bom-xrefs/edges")
+    def api_bom_xrefs_edges(
+        offset: int = Query(0, ge=0),
+        limit: int = Query(100, ge=1, le=500),
+        search: str | None = Query(None),
+    ) -> dict:
+        try:
+            return search_bom_xref_edges(
+                get_workspace(),
+                offset=offset,
+                limit=limit,
+                search=search,
+            )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 

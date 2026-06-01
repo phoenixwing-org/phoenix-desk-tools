@@ -29,7 +29,7 @@ python -m fcdesk              # 配置工作空间，点「打开 Web 版」
 
 ```bash
 pip install -e ".[web]"
-cd web-ui && pnpm install && cd ..
+pnpm install
 
 # 首次或改过 Vue 源码后：构建前端并启动
 python -m fcdesk.web --build -w /path/to/CAD/workspace
@@ -38,17 +38,19 @@ python -m fcdesk.web --build -w /path/to/CAD/workspace
 python -m fcdesk.web -w /path/to/CAD/workspace
 ```
 
+前端构建也可在仓库根目录执行 `pnpm build`（无需 `cd web-ui`）。
+
 `-w` 可省略，会使用启动器里「最近的工作空间」（`…/phoenix-wing/fcdesk/launcher.json`）。更多选项（自动打开浏览器、换端口等）见 [web-ui/README.md](web-ui/README.md)。
 
-### `python -m fcdesk.web` 和 `pnpm dev` 有什么区别？
+### 三种启动方式
 
-| 方式 | 用途 | 说明 |
+| 方式 | 命令 | 说明 |
 | --- | --- | --- |
-| **`python -m fcdesk.web`** | **正式运行 Web 版** | 单端口；静态页来自 `web-ui/dist`；改 Vue 后需 `pnpm build` 再重启（或 `--build`） |
-| **`pnpm dev`**（在 `web-ui/` 下） | **仅前端开发预览** | Vite 热更新，改 `.vue` / `.ts` 即时刷新；**不能代替** Python 服务，API 仍要另开 `python -m fcdesk.web --api-only` |
-| **`pnpm preview`** | 预览构建结果 | 只托管 `dist`，无 API，一般不用 |
+| **`python -m fcdesk.web`** | 单端口 **5173** | **正式运行**：API + `web-ui/dist`；改 Vue 后需 `pnpm build` |
+| **`python -m fcdesk.web --dev`** | Vite **5173** + API **8765** | **前端开发**：热更新，无需 build；一条命令起双进程 |
+| **`pnpm dev`** | 仅 Vite **5173** | 须另开 API；或直接用 `--dev`。根目录 `pnpm dev` 即可 |
 
-结论：**平时用 Web 界面请用 `python -m fcdesk.web`**。`pnpm dev` 是给改前端界面的人用的在线编辑预览，且需双进程（前端 + API），当前仓库**不推荐**作为默认启动方式；详见 [web-ui/README.md](web-ui/README.md) 的「开发前端」一节。
+结论：**平时用 `python -m fcdesk.web`**；**改界面用 `python -m fcdesk.web --dev`**。详见 [web-ui/README.md](web-ui/README.md)。
 
 ## 命名
 

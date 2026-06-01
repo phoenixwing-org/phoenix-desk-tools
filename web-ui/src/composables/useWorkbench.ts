@@ -187,7 +187,12 @@ export function createWorkbench(appConfig: Ref<AppConfig | null>) {
     if (snapshot.version !== 1 || !snapshot.tabs.length) return false;
     tabs.value = snapshot.tabs.map((t) => ({
       id: t.id,
-      pageId: t.pageId === "rename_analysis" ? "file_rename" : t.pageId,
+      pageId:
+        t.pageId === "rename_analysis"
+          ? "file_rename"
+          : t.pageId === "bom_apply"
+            ? "file_detail"
+            : t.pageId,
       title: t.title,
       subtitle: t.subtitle,
       contextKey: t.contextKey,

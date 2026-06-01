@@ -6,7 +6,9 @@ settings:
 
 importers:
 
-  .:
+  .: {}
+
+  web-ui:
     dependencies:
       vue:
         specifier: ^3.5.13

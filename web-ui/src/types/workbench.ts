@@ -1,7 +1,13 @@
 import type { BomFields } from "../api";
+import type { FileDetailSubTab } from "./fileDetail";
 
 export type WorkbenchTabPayload = {
   bomRel?: string;
+  fileDetail?: {
+    rel: string;
+    subTab?: FileDetailSubTab;
+    preferredNewFilename?: string;
+  };
   partKey?: {
     partNumber: string;
     partVersion: string;

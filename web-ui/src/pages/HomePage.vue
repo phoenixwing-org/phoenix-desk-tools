@@ -87,10 +87,13 @@ async function switchRecent(path: string) {
     return;
   }
   if (!window.confirm(`切换到以下工作空间？\n\n${path}`)) return;
+  shell.appendLog(`切换工作空间：${path}`, { source: "config", open: true });
   try {
     await shell.switchWorkspace(path);
     await refreshFields();
+    shell.appendLog(`已切换到 ${path}`, { source: "config" });
   } catch (e) {
+    shell.appendLog(String(e), { source: "config" });
     alert(String(e));
   }
 }
@@ -134,12 +137,16 @@ async function removeRecent(path: string, event: MouseEvent) {
 
 async function pruneRecentList() {
   if (!window.confirm("清理最近列表中的临时目录与无效路径？")) return;
+  shell.appendLog("清理最近工作空间列表…", { source: "config", open: true });
   try {
     const data = await pruneRecentWorkspaces();
     await shell.reloadLauncher();
     const n = data.pruned_count ?? 0;
-    shell.setStatus(n > 0 ? `已清理 ${n} 条记录` : "无需清理");
+    const msg = n > 0 ? `已清理 ${n} 条记录` : "无需清理";
+    shell.appendLog(msg, { source: "config" });
+    shell.setStatus(msg);
   } catch (e) {
+    shell.appendLog(String(e), { source: "config" });
     alert(String(e));
   }
 }

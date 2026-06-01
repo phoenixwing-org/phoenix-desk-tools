@@ -31,15 +31,15 @@
     },
     {
       "id": "bom_apply",
-      "label": "属性回写",
-      "page": "bom_apply",
-      "description": "按表格更新 FreeCAD 属性"
+      "label": "文件详情",
+      "page": "file_detail",
+      "description": "FCStd 文件详情：属性回写、引用关系、改名与引用写回（页内子 Tab）"
     },
     {
       "id": "file_rename",
-      "label": "改名与引用",
+      "label": "改名分析",
       "page": "file_rename",
-      "description": "重命名 FCStd、分析/修正 XLink、只读引用查询"
+      "description": "改名历史的引用影响分析与写回（磁盘改名在文件详情 · 改名子 Tab）"
     },
     {
       "id": "xlink_fix",
@@ -77,6 +77,7 @@
     "default_max_tabs": 1,
     "pages": {
       "bom_apply": { "max_tabs": 8, "tab_enabled": true },
+      "file_detail": { "max_tabs": 8, "tab_enabled": true },
       "file_rename": { "max_tabs": 8, "tab_enabled": true },
       "part_key_detail": { "max_tabs": 8, "tab_enabled": true },
       "fcstd_map": { "max_tabs": 1 },

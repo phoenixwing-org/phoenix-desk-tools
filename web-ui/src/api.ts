@@ -62,6 +62,8 @@ export type BomPreview = {
     recommended_suffix: string;
   } | null;
   embedded_warning: string | null;
+  file_size_bytes: number | null;
+  file_size_display: string | null;
 };
 
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
@@ -687,8 +689,31 @@ export function fetchBomXrefOutgoing(rel: string, limit?: number) {
   );
 }
 
+export function fetchBomXrefEdges(opts?: { offset?: number; limit?: number; search?: string }) {
+  const q = new URLSearchParams();
+  if (opts?.offset != null) q.set("offset", String(opts.offset));
+  if (opts?.limit != null) q.set("limit", String(opts.limit));
+  if (opts?.search?.trim()) q.set("search", opts.search.trim());
+  const qs = q.toString();
+  return jsonFetch<{
+    offset: number;
+    limit: number;
+    total: number;
+    count: number;
+    refs: BomXrefEdge[];
+  }>(`/api/bom-xrefs/edges${qs ? `?${qs}` : ""}`);
+}
+
 export function rebuildBomXrefs() {
-  return jsonFetch<BomXrefMeta & { scan_id?: number }>("/api/bom-xrefs/rebuild", { method: "POST" });
+  return jsonFetch<
+    BomXrefMeta & {
+      scan_id?: number;
+      log?: string;
+      host_files_scanned?: number;
+      hosts_with_xlink?: number;
+      hosts_without_xlink?: number;
+    }
+  >("/api/bom-xrefs/rebuild", { method: "POST" });
 }
 
 export type PartKeyEntry = {

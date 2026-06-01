@@ -49,14 +49,16 @@ function setStatus(msg: string) {
 
 async function refreshList() {
   loading.value = true;
+  shell.appendLog("[零件目录] 刷新列表…", { source: "part_catalog", open: true });
   try {
     listData.value = await fetchPartKeys();
-    setStatus(
-      listData.value.exists
-        ? `零件目录 ${listData.value.stats.total_keys} 键 · ${listData.value.stats.total_files} 文件`
-        : "尚无零件目录，请先执行 CAD 索引扫描",
-    );
+    const msg = listData.value.exists
+      ? `零件目录 ${listData.value.stats.total_keys} 键 · ${listData.value.stats.total_files} 文件`
+      : "尚无零件目录，请先执行 CAD 索引扫描";
+    shell.appendLog(msg, { source: "part_catalog" });
+    setStatus(msg);
   } catch (e) {
+    shell.appendLog(String(e), { source: "part_catalog" });
     setStatus(String(e));
   } finally {
     loading.value = false;

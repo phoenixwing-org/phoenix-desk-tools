@@ -1,11 +1,42 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { useAppShell } from "../composables/useAppShell";
 
 const shell = useAppShell();
 
 const tabs = computed(() => shell.tabBarTabs.value);
 const activeId = computed(() => shell.activeTabId.value);
+
+const scrollEl = ref<HTMLElement | null>(null);
+const tabEls = new Map<string, HTMLElement>();
+
+function setTabRef(tabId: string, el: Element | null) {
+  if (el instanceof HTMLElement) tabEls.set(tabId, el);
+  else tabEls.delete(tabId);
+}
+
+function scrollActiveIntoView(behavior: ScrollBehavior = "smooth") {
+  const id = activeId.value;
+  if (!id) return;
+  const container = scrollEl.value;
+  const el = tabEls.get(id);
+  if (!container || !el) return;
+
+  const pad = 6;
+  const tabLeft = el.offsetLeft;
+  const tabRight = tabLeft + el.offsetWidth;
+  const viewLeft = container.scrollLeft;
+  const viewRight = viewLeft + container.clientWidth;
+
+  if (tabLeft < viewLeft + pad) {
+    container.scrollTo({ left: Math.max(0, tabLeft - pad), behavior });
+  } else if (tabRight > viewRight - pad) {
+    container.scrollTo({
+      left: tabRight - container.clientWidth + pad,
+      behavior,
+    });
+  }
+}
 
 function onSelect(tabId: string) {
   shell.activateTab(tabId);
@@ -31,25 +62,44 @@ const canAdd = computed(() => {
   if (!tab) return false;
   return shell.canOpenNewTab(tab.pageId);
 });
+
+watch(activeId, () => {
+  void nextTick(() => scrollActiveIntoView());
+});
+
+watch(
+  tabs,
+  () => {
+    void nextTick(() => scrollActiveIntoView("auto"));
+  },
+  { deep: true },
+);
+
+onMounted(() => {
+  void nextTick(() => scrollActiveIntoView("auto"));
+});
 </script>
 
 <template>
-  <div class="tab-bar" role="tablist">
-    <button
-      v-for="tab in tabs"
-      :key="tab.id"
-      type="button"
-      class="tab-item"
-      :class="{ active: tab.id === activeId, dirty: tab.dirty }"
-      role="tab"
-      :aria-selected="tab.id === activeId"
-      :title="tab.subtitle || tab.title"
-      @click="onSelect(tab.id)"
-    >
-      <span class="tab-title">{{ tab.title }}</span>
-      <span v-if="tab.dirty" class="tab-dot" aria-label="未保存">●</span>
-      <span class="tab-close" title="关闭 Tab" @click="onClose(tab.id, $event)">×</span>
-    </button>
+  <div class="tab-bar">
+    <div ref="scrollEl" class="tab-scroll" role="tablist">
+      <button
+        v-for="tab in tabs"
+        :key="tab.id"
+        :ref="(el) => setTabRef(tab.id, el as Element | null)"
+        type="button"
+        class="tab-item"
+        :class="{ active: tab.id === activeId, dirty: tab.dirty }"
+        role="tab"
+        :aria-selected="tab.id === activeId"
+        :title="tab.subtitle || tab.title"
+        @click="onSelect(tab.id)"
+      >
+        <span class="tab-title">{{ tab.title }}</span>
+        <span v-if="tab.dirty" class="tab-dot" aria-label="未保存">●</span>
+        <span class="tab-close" title="关闭 Tab" @click="onClose(tab.id, $event)">×</span>
+      </button>
+    </div>
     <button
       v-if="canAdd"
       type="button"
@@ -67,16 +117,38 @@ const canAdd = computed(() => {
   flex-shrink: 0;
   display: flex;
   align-items: stretch;
-  gap: 2px;
+  gap: 0;
   min-height: 36px;
   padding: 4px 8px 0;
   background: var(--shell-bg, #f1f5f9);
   border-bottom: 1px solid var(--border, #e2e8f0);
+  overflow: hidden;
+}
+
+.tab-scroll {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
   overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  padding-right: 2px;
+}
+
+.tab-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+
+.tab-scroll::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.45);
+  border-radius: 4px;
 }
 
 .tab-item {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 4px;
   max-width: 220px;
@@ -138,13 +210,14 @@ const canAdd = computed(() => {
   align-self: center;
   width: 28px;
   height: 28px;
-  margin-left: 4px;
+  margin-left: 6px;
   border: 1px dashed var(--border, #cbd5e1);
   border-radius: 6px;
-  background: transparent;
+  background: var(--shell-bg, #f1f5f9);
   color: var(--muted, #64748b);
   font-size: 1.1rem;
   cursor: pointer;
+  box-shadow: -6px 0 8px -4px var(--shell-bg, #f1f5f9);
 }
 
 .tab-add:hover {

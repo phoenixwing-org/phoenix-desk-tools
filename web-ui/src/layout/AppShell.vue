@@ -6,7 +6,7 @@ import StatusBar from "./StatusBar.vue";
 import WorkspaceTreeSidebar from "./WorkspaceTreeSidebar.vue";
 import WorkbenchTabBar from "./WorkbenchTabBar.vue";
 import HomePage from "../pages/HomePage.vue";
-import BomApplyPage from "../pages/BomApplyPage.vue";
+import FileDetailPage from "../pages/FileDetailPage.vue";
 import FcstdMapPage from "../pages/FcstdMapPage.vue";
 import XlinkFixPage from "../pages/XlinkFixPage.vue";
 import PartDedupPage from "../pages/PartDedupPage.vue";
@@ -33,7 +33,8 @@ const rightWidth = computed(() =>
 
 const PAGE_COMPONENTS: Record<string, Component> = {
   home: HomePage,
-  bom_apply: BomApplyPage,
+  bom_apply: FileDetailPage,
+  file_detail: FileDetailPage,
   file_rename: FileRenamePage,
   rename_analysis: FileRenamePage,
   fcstd_map: FcstdMapPage,

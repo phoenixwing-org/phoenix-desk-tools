@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from fcdesk.freecad.cad_index_types import is_fcstd_filename
 from fcdesk.bom_apply_prefs import (
     load_bom_apply_field_defaults,
     recommend_field_fill_values,
@@ -124,10 +125,14 @@ def _kinds_to_dict(k: FcstdDocumentKinds | None) -> dict[str, object] | None:
     }
 
 
+def _path_is_fcstd(full: Path) -> bool:
+    return full.is_file() and is_fcstd_filename(full.name)
+
+
 def _ensure_fcstd_file(repo_root: Path, rel: Path) -> Path:
     rr = repo_root.expanduser().resolve(strict=False)
     full = rr / rel
-    if not full.is_file() or full.suffix.casefold() != ".fcstd":
+    if not _path_is_fcstd(full):
         raise ValueError("仅支持 .FCStd 文件")
     return full
 
@@ -161,6 +166,26 @@ def _recommended_suffix(
     return infer_fcstd_name_suffix(name or "x.FCStd")
 
 
+def _format_file_size(size: int) -> str:
+    if size < 1024:
+        return f"{size} B"
+    if size < 1024 * 1024:
+        return f"{size / 1024:.1f} KB"
+    if size < 1024 * 1024 * 1024:
+        return f"{size / (1024 * 1024):.2f} MB"
+    return f"{size / (1024 * 1024 * 1024):.2f} GB"
+
+
+def _read_file_size(full: Path) -> tuple[int | None, str | None]:
+    if not full.is_file():
+        return None, None
+    try:
+        nbytes = full.stat().st_size
+    except OSError:
+        return None, None
+    return nbytes, _format_file_size(nbytes)
+
+
 @dataclass
 class BomPreview:
     rel_path: str
@@ -170,6 +195,8 @@ class BomPreview:
     is_fcstd: bool
     document_kinds: dict[str, object] | None
     embedded_warning: str | None
+    file_size_bytes: int | None = None
+    file_size_display: str | None = None
 
 
 def get_bom_apply_prefs(repo_root: Path) -> dict[str, object]:
@@ -198,7 +225,7 @@ def load_bom_preview(repo_root: Path, rel: Path) -> BomPreview:
     embedded: dict[str, str] = {}
     warning: str | None = None
     kinds: FcstdDocumentKinds | None = None
-    is_fcstd = full.is_file() and full.suffix.casefold() == ".fcstd"
+    is_fcstd = _path_is_fcstd(full)
 
     if is_fcstd:
         kinds = read_fcstd_document_kinds(full)
@@ -210,6 +237,7 @@ def load_bom_preview(repo_root: Path, rel: Path) -> BomPreview:
             warning = str(ex)
 
     merged = _merged_with_partname_coerce(_merge_embedded_over(plain, embedded))
+    size_bytes, size_display = _read_file_size(full)
 
     return BomPreview(
         rel_path=rel.as_posix(),
@@ -219,6 +247,8 @@ def load_bom_preview(repo_root: Path, rel: Path) -> BomPreview:
         is_fcstd=is_fcstd,
         document_kinds=_kinds_to_dict(kinds),
         embedded_warning=warning,
+        file_size_bytes=size_bytes,
+        file_size_display=size_display,
     )
 
 
@@ -366,7 +396,7 @@ def recommend_filename_for_values(
         filled = list(payload["filled_keys"])
 
     kinds: FcstdDocumentKinds | None = None
-    if full.is_file() and full.suffix.casefold() == ".fcstd":
+    if _path_is_fcstd(full):
         kinds = read_fcstd_document_kinds(full)
         _ensure_kinds_allow(kinds, filters, "推荐文件名")
 
@@ -552,7 +582,7 @@ def recommend_bom_field(
     merged = _coerce_form_values(values)
     mapped = try_load_fcstd_entry_from_workspace_map(repo_root=rr, rel_workspace=rel)
     full = rr / rel
-    is_fcstd = full.is_file() and full.suffix.casefold() == ".fcstd"
+    is_fcstd = _path_is_fcstd(full)
     pn, pv = _resolve_part_key_triple(merged, mapped, rel)
 
     if key == "filename":

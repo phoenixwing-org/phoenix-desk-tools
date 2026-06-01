@@ -60,12 +60,14 @@ async function onSave() {
 
 async function onPreview() {
   previewing.value = true;
+  shell.appendLog("STEP 批量转换预览…", { source: "step_batch", open: true });
   try {
     preview.value = await previewStepBatch(prefsPayload());
-    shell.setStatus(
-      `待转换 ${preview.value.batch_count} 个 STEP（顶层 ${preview.value.top_level} · 深层 ${preview.value.deep_total}）`,
-    );
+    const msg = `待转换 ${preview.value.batch_count} 个 STEP（顶层 ${preview.value.top_level} · 深层 ${preview.value.deep_total}）`;
+    shell.appendLog(msg, { source: "step_batch" });
+    shell.setStatus(msg);
   } catch (e) {
+    shell.appendLog(String(e), { source: "step_batch" });
     shell.setStatus(String(e));
   } finally {
     previewing.value = false;
@@ -74,7 +76,7 @@ async function onPreview() {
 
 async function onRun() {
   running.value = true;
-  shell.appendLog("freecadcmd 批量转换…（可能需要数分钟）", { source: "step_batch" });
+  shell.appendLog("freecadcmd 批量转换…（可能需要数分钟）", { source: "step_batch", open: true });
   try {
     const data = await runStepBatch(prefsPayload());
     shell.appendLog(data.log, { source: "step_batch" });

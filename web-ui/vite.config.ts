@@ -1,14 +1,17 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 
+/** 双进程开发：Vite 5173，API 由 ``python -m fcdesk.web --dev`` 监听此端口。 */
+const apiPort = Number(process.env.FCDESK_API_PORT || 8765);
+
 export default defineConfig({
   plugins: [vue()],
-    server: {
+  server: {
     port: 5173,
-    // 遗留：双进程开发时 proxy 到 API；推荐 python -m fcdesk.web --build（单端口）
+    strictPort: true,
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:5173",
+        target: `http://127.0.0.1:${apiPort}`,
         changeOrigin: true,
       },
     },

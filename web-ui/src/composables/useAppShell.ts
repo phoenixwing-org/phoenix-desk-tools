@@ -60,6 +60,15 @@ export type AppShellContext = {
     opts?: { partName?: string; label?: string },
   ) => void;
   openBomApplyForRel: (repoRelPath: string) => void;
+  openFileDetailForRel: (
+    repoRelPath: string,
+    opts?: {
+      subTab?: import("../types/fileDetail").FileDetailSubTab;
+      preferredNewFilename?: string;
+      form?: Partial<BomFields>;
+      baseline?: Partial<BomFields>;
+    },
+  ) => void;
   openFileRenameForRel: (
     repoRelPath: string,
     form: Partial<BomFields>,
@@ -215,38 +224,69 @@ export function provideAppShell(): AppShellContext {
     }
   }
 
-  function openBomApplyForRel(repoRelPath: string) {
-    const rel = repoRelPath.trim();
-    if (!rel) return;
-    try {
-      wb.openTab({
-        pageId: "bom_apply",
-        title: wb.basename(rel),
-        subtitle: rel,
-        contextKey: rel,
-        payload: { bomRel: rel },
-        forceNew: true,
-      });
-    } catch (e) {
-      setStatus(String(e));
-    }
-  }
-
-  function openFileRenameForRel(
+  function openFileDetailForRel(
     repoRelPath: string,
-    form: Partial<BomFields>,
-    baseline: Partial<BomFields>,
+    opts?: {
+      subTab?: import("../types/fileDetail").FileDetailSubTab;
+      preferredNewFilename?: string;
+      form?: Partial<BomFields>;
+      baseline?: Partial<BomFields>;
+    },
   ) {
     const rel = repoRelPath.trim();
     if (!rel) return;
+    const existing = wb.tabs.value.find(
+      (t) =>
+        (t.pageId === "file_detail" || t.pageId === "bom_apply") &&
+        t.contextKey === rel,
+    );
+    if (existing) {
+      existing.title = wb.basename(rel);
+      existing.subtitle = rel;
+      existing.contextKey = rel;
+      if (opts?.subTab || opts?.preferredNewFilename || opts?.form) {
+        existing.payload = {
+          fileDetail: {
+            rel,
+            subTab: opts?.subTab,
+            preferredNewFilename: opts?.preferredNewFilename,
+          },
+          ...(opts?.form
+            ? {
+                fileRename: {
+                  rel,
+                  form: { ...opts.form },
+                  baseline: { ...(opts.baseline ?? opts.form) },
+                },
+              }
+            : {}),
+        };
+        existing.payloadConsumed = false;
+      }
+      wb.activateTab(existing.id);
+      return;
+    }
     try {
       wb.openTab({
-        pageId: "file_rename",
+        pageId: "file_detail",
         title: wb.basename(rel),
         subtitle: rel,
         contextKey: rel,
         payload: {
-          fileRename: { rel, form: { ...form }, baseline: { ...baseline } },
+          fileDetail: {
+            rel,
+            subTab: opts?.subTab,
+            preferredNewFilename: opts?.preferredNewFilename,
+          },
+          ...(opts?.form
+            ? {
+                fileRename: {
+                  rel,
+                  form: { ...opts.form },
+                  baseline: { ...(opts.baseline ?? opts.form) },
+                },
+              }
+            : {}),
         },
         forceNew: true,
       });
@@ -255,8 +295,26 @@ export function provideAppShell(): AppShellContext {
     }
   }
 
+  function openBomApplyForRel(repoRelPath: string) {
+    openFileDetailForRel(repoRelPath, { subTab: "edit" });
+  }
+
+  function openFileRenameForRel(
+    repoRelPath: string,
+    form: Partial<BomFields>,
+    baseline: Partial<BomFields>,
+  ) {
+    const preferred = String(form.filename ?? "").trim() || undefined;
+    openFileDetailForRel(repoRelPath, {
+      subTab: "rename",
+      preferredNewFilename: preferred,
+      form,
+      baseline,
+    });
+  }
+
   function openRenameAnalysis(opts?: PendingRenameAnalysis) {
-    const title = opts?.renameLogId != null ? `改名 #${opts.renameLogId}` : "文件改名";
+    const title = opts?.renameLogId != null ? `改名 #${opts.renameLogId}` : "改名分析";
     try {
       wb.openTab({
         pageId: "file_rename",
@@ -387,18 +445,7 @@ export function provideAppShell(): AppShellContext {
       return;
     }
     if (page === "file_rename" && rel) {
-      try {
-        wb.openTab({
-          pageId: "file_rename",
-          title: wb.basename(rel),
-          subtitle: rel,
-          contextKey: rel,
-          payload: { fileRename: { rel, form: {}, baseline: {} } },
-          forceNew: true,
-        });
-      } catch (e) {
-        setStatus(String(e));
-      }
+      openFileDetailForRel(rel, { subTab: "rename" });
       return;
     }
     if (page === "rename_analysis" || (page === "file_rename" && params.get("rename_log_id"))) {
@@ -442,6 +489,7 @@ export function provideAppShell(): AppShellContext {
     goToPage,
     openPartKeyDetail,
     openBomApplyForRel,
+    openFileDetailForRel,
     openFileRenameForRel,
     openRenameAnalysis,
     switchWorkspace,

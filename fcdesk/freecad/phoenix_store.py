@@ -1594,6 +1594,48 @@ def query_bom_xrefs_incoming(
     return [_bom_xref_row_to_dict(r) for r in rows]
 
 
+def query_bom_xref_edges_paged(
+    repo_root: Path,
+    *,
+    offset: int = 0,
+    limit: int = 100,
+    search: str | None = None,
+) -> tuple[list[dict[str, Any]], int]:
+    """分页列出 ``bom_xref`` 引用边（可选关键词过滤宿主/子件路径）。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    if not cad_database_path(rr).is_file():
+        return [], 0
+    cap = max(1, min(int(limit), 500))
+    off = max(0, int(offset))
+    where = ""
+    params: list[Any] = []
+    q = (search or "").strip()
+    if q:
+        like = f"%{q}%"
+        where = """
+            WHERE host_repo_rel_path LIKE ? COLLATE NOCASE
+               OR target_basename LIKE ? COLLATE NOCASE
+               OR COALESCE(target_repo_rel_path, '') LIKE ? COLLATE NOCASE
+        """
+        params.extend([like, like, like])
+    with connect(rr) as conn:
+        total_row = conn.execute(
+            f"SELECT COUNT(*) AS n FROM bom_xref {where}",
+            params,
+        ).fetchone()
+        total = int(total_row["n"]) if total_row else 0
+        rows = conn.execute(
+            f"""
+            SELECT * FROM bom_xref
+            {where}
+            ORDER BY host_repo_rel_path, target_basename, xlink_file_attr
+            LIMIT ? OFFSET ?
+            """,
+            [*params, cap, off],
+        ).fetchall()
+    return [_bom_xref_row_to_dict(r) for r in rows], total
+
+
 def query_bom_xrefs_outgoing(
     repo_root: Path,
     host_repo_rel: str,

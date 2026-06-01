@@ -13,11 +13,19 @@ const emit = defineEmits<{
 }>();
 
 const pad = `${(props.depth ?? 0) * 14 + 8}px`;
+
+function treeKindTag(kind?: string) {
+  const k = (kind ?? "").trim();
+  if (!k) return "?";
+  if (k === "FCStd" || k === "FC") return "FC";
+  if (k.startsWith("SW")) return "SW";
+  return k.length <= 4 ? k.toUpperCase() : k.slice(0, 4);
+}
 </script>
 
 <template>
   <div v-if="node.type === 'file'" class="tree-file" :class="{ active: selected === node.path }" :style="{ paddingLeft: pad }" @click="emit('selectFile', node.path)">
-    [{{ node.kind ?? "?" }}] {{ node.name }}
+    <span class="tree-kind">[{{ treeKindTag(node.kind) }}]</span> {{ node.name }}
   </div>
   <div v-else class="tree-dir">
     <div class="tree-dir-label" :style="{ paddingLeft: pad }">{{ node.name || "/" }}</div>
@@ -39,6 +47,17 @@ const pad = `${(props.depth ?? 0) * 14 + 8}px`;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-size: 0.82rem;
+}
+
+.tree-kind {
+  display: inline-block;
+  min-width: 2.4em;
+  margin-right: 2px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #64748b;
+  letter-spacing: -0.02em;
 }
 
 .tree-file:hover {

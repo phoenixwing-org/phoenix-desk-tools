@@ -1,0 +1,10 @@
+{
+  "name": "phoenix-freecad-desktop",
+  "private": true,
+  "description": "FreeCAD 管理工具 — 根目录 pnpm 命令转发至 web-ui",
+  "scripts": {
+    "dev": "pnpm -C web-ui dev",
+    "build": "pnpm -C web-ui build",
+    "preview": "pnpm -C web-ui preview"
+  }
+}

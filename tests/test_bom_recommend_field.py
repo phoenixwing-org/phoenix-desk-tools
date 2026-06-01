@@ -126,6 +126,38 @@ class TestRecommendBomField(unittest.TestCase):
             self.assertEqual(out["value"], "100001.001-表单名")
             self.assertIn("编号公式", str(out["source_note"]))
 
+    def test_assy_suffix_recognized_as_fcstd(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            rel = Path("parts/100001.001-H-本体.ASSY.FCStd")
+            fcstd = root / rel
+            _write_fcstd(fcstd, label="100001.001-本体")
+
+            from fcdesk.services.bom_apply_service import load_bom_preview
+
+            preview = load_bom_preview(root, rel)
+            self.assertTrue(preview.is_fcstd)
+            self.assertIsNotNone(preview.file_size_bytes)
+            self.assertGreater(preview.file_size_bytes or 0, 0)
+            self.assertTrue(preview.file_size_display)
+
+            out = recommend_bom_field(
+                root,
+                rel,
+                "label",
+                {
+                    "PartNumber": "100001",
+                    "PartVersion": "001",
+                    "TypeCode": "H",
+                    "ModelSeries": "",
+                    "PartName": "本体",
+                    "label": "",
+                    "filename": fcstd.name,
+                },
+            )
+            self.assertTrue(out["filled"])
+            self.assertEqual(out["value"], "100001.001-本体")
+
     def test_label_formula_uses_part_name_only(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

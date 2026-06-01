@@ -53,11 +53,15 @@ async function onSave() {
 
 async function onPreview() {
   previewing.value = true;
+  shell.appendLog("SW→STEP 预览模型数量…", { source: "sw_step_export", open: true });
   try {
     const data = await previewSwStepExport(prefsPayload());
     modelCount.value = data.model_count;
-    shell.setStatus(`${data.source_display} · ${data.model_count} 个模型`);
+    const msg = `${data.source_display} · ${data.model_count} 个模型`;
+    shell.appendLog(msg, { source: "sw_step_export" });
+    shell.setStatus(msg);
   } catch (e) {
+    shell.appendLog(String(e), { source: "sw_step_export" });
     shell.setStatus(String(e));
   } finally {
     previewing.value = false;
@@ -66,7 +70,7 @@ async function onPreview() {
 
 async function onRun() {
   running.value = true;
-  shell.appendLog("SolidWorks COM 导出…", { source: "sw_step_export" });
+  shell.appendLog("SolidWorks COM 导出…", { source: "sw_step_export", open: true });
   try {
     const data = await runSwStepExport(prefsPayload());
     shell.appendLog(data.log, { source: "sw_step_export" });

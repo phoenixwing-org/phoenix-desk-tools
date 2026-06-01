@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 
 import uvicorn
@@ -15,9 +17,11 @@ from fcdesk.web.app import create_app, set_workspace
 from fcdesk.web.browser_open import find_ide_cli, open_in_ide_browser, print_terminal_link
 from fcdesk.web.paths import (
     build_web_ui,
+    default_api_dev_port,
     default_static_dir,
     default_web_port,
     default_workspace_path,
+    repo_root,
     resolve_static_dir,
 )
 
@@ -55,6 +59,66 @@ def _schedule_open_browser(url: str, *, use_system: bool = False, delay_s: float
     threading.Timer(delay_s, _open).start()
 
 
+def _resolve_workspace_path(raw: str) -> Path:
+    if raw.strip():
+        return Path(raw)
+    migrate_launcher_prefs_to_web()
+    return default_workspace_path()
+
+
+def _run_dev_mode(
+    *,
+    ws_path: Path,
+    host: str,
+    api_port: int,
+    vite_port: int,
+    no_open: bool,
+    open_system: bool,
+) -> None:
+    root = repo_root()
+    ui_dir = root / "web-ui"
+    if not (ui_dir / "package.json").is_file():
+        print(f"未找到前端工程: {ui_dir}", file=sys.stderr)
+        sys.exit(1)
+    pnpm_cwd = root if (root / "package.json").is_file() else ui_dir
+
+    ws = set_workspace(ws_path)
+    app = create_app(static_dir=None)
+    api_url = f"http://{host}:{api_port}"
+    vite_url = f"http://{host}:{vite_port}"
+
+    api_error: list[BaseException] = []
+
+    def _serve_api() -> None:
+        try:
+            uvicorn.run(app, host=host, port=api_port, log_level="info")
+        except BaseException as exc:
+            api_error.append(exc)
+
+    api_thread = threading.Thread(target=_serve_api, daemon=True)
+    api_thread.start()
+    time.sleep(0.6)
+    if api_error:
+        print(f"API 启动失败: {api_error[0]}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"开发模式 · 工作空间: {ws}")
+    print(f"API:  {api_url}/api/health")
+    print(f"Vite: {vite_url} （热更新，/api 代理到 {api_port}）")
+    print("改 Vue/TS 即时刷新，无需 pnpm build。Ctrl+C 退出。")
+
+    if not no_open:
+        _schedule_open_browser(vite_url, use_system=open_system)
+
+    env = os.environ.copy()
+    env["FCDESK_API_PORT"] = str(api_port)
+    try:
+        subprocess.run(["pnpm", "dev"], cwd=str(pnpm_cwd), env=env, check=False)
+    except FileNotFoundError:
+        print("未找到 pnpm。请先在仓库根目录执行: pnpm install", file=sys.stderr)
+        sys.exit(1)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="FreeCAD 管理工具（Web：单服务 API + 静态前端，默认端口 5173）",
@@ -83,6 +147,17 @@ def main() -> None:
         help="仅 API，不托管前端静态文件",
     )
     parser.add_argument(
+        "--dev",
+        action="store_true",
+        help="开发模式：API 8765 + Vite 5173 热更新（无需 build，双进程）",
+    )
+    parser.add_argument(
+        "--api-port",
+        type=int,
+        default=default_api_dev_port(),
+        help=f"--dev 时 API 端口（默认 {default_api_dev_port()}；Vite 固定 5173）",
+    )
+    parser.add_argument(
         "--no-open",
         action="store_true",
         help="不自动打开浏览器（默认托管前端时在 Cursor/VS Code 内置浏览器打开）",
@@ -94,6 +169,22 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    ws_path = _resolve_workspace_path(args.workspace)
+
+    if args.dev:
+        if args.build or args.api_only:
+            print("--dev 与 --build / --api-only 不能同时使用", file=sys.stderr)
+            sys.exit(2)
+        _run_dev_mode(
+            ws_path=ws_path,
+            host=args.host,
+            api_port=args.api_port,
+            vite_port=default_web_port(),
+            no_open=args.no_open,
+            open_system=args.open_system,
+        )
+        return
+
     static_dir: Path | None = None
     if not args.api_only:
         static_dir = resolve_static_dir(args.static.strip() or None)
@@ -104,18 +195,12 @@ def main() -> None:
             except (FileNotFoundError, subprocess.CalledProcessError) as e:
                 print(f"构建失败: {e}", file=sys.stderr)
                 if not static_dir.is_dir():
-                    print("提示: cd web-ui && pnpm install && pnpm build", file=sys.stderr)
+                    print("提示: pnpm install && pnpm build（仓库根目录即可）", file=sys.stderr)
                     sys.exit(1)
         if not static_dir.is_dir():
             print(f"缺少前端构建目录: {static_dir}", file=sys.stderr)
             print("请运行: python -m fcdesk.web --build", file=sys.stderr)
             sys.exit(1)
-
-    if args.workspace.strip():
-        ws_path = Path(args.workspace)
-    else:
-        migrate_launcher_prefs_to_web()
-        ws_path = default_workspace_path()
 
     ws = set_workspace(ws_path)
     app = create_app(static_dir=static_dir)

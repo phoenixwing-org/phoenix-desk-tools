@@ -21,6 +21,7 @@ from fcdesk.freecad.phoenix_store import (
     list_present_fcstd_file_assets,
     load_bom_xref_meta,
     query_all_bom_xref_edges,
+    query_bom_xref_edges_paged,
     query_bom_xrefs_for_rename_basename,
     query_bom_xrefs_incoming,
     query_bom_xrefs_outgoing,
@@ -36,12 +37,60 @@ from fcdesk.freecad.rename_analysis.xlink import (
 )
 
 
+def _format_bom_xref_rebuild_log(
+    *,
+    repo_root: Path,
+    scan_root: Path,
+    scan_id: int,
+    host_files: int,
+    hosts_with_xlink: int,
+    stats: dict[str, int],
+    prev_edge_count: int = 0,
+    prev_host_count: int = 0,
+) -> str:
+    """人类可读的 BOM 引用表重建摘要。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    root = scan_root.expanduser().resolve(strict=False)
+    hosts_no_xlink = max(0, host_files - hosts_with_xlink)
+    lines = [
+        "重建内容: bom_xref 引用表（清空后按 CAD 索引重写）",
+        "提取方式: 读取各 FCStd 的 Document.xml · XLink file 属性",
+        f"扫描根: {format_resolved_under_workspace(root, rr)}",
+        f"CAD 索引 scan_id: {scan_id}",
+        "",
+        f"读取 FCStd（present）: {host_files} 个",
+        f"  · 含出向 XLink: {hosts_with_xlink} 个宿主",
+        f"  · 无出向 XLink: {hosts_no_xlink} 个",
+        "",
+        f"写入引用边: {stats['edge_count']} 条 · 涉及宿主 {stats['host_count']} 个",
+        f"  · 目标已解析: {stats['target_resolved']}",
+        f"  · 目标歧义: {stats['target_ambiguous']}",
+        f"  · 目标缺失/非 FCStd: {stats['target_missing']}",
+    ]
+    if prev_edge_count or prev_host_count:
+        lines.extend(
+            [
+                "",
+                f"较上次: 边 {prev_edge_count} → {stats['edge_count']}"
+                f" · 宿主 {prev_host_count} → {stats['host_count']}",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            f"数据库: {format_resolved_under_workspace(cad_database_path(rr), rr)}",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def rebuild_bom_xrefs(repo_root: Path, *, scan_id: int, scan_root: Path) -> dict[str, Any]:
     """在 CAD 索引扫描后，从各 FCStd 提取 XLink 并写入 ``bom_xref`` 表。"""
     from fcdesk.services.fcstd_map_service import scan_cad_basename_map
 
     rr = repo_root.expanduser().resolve(strict=False)
     root = scan_root.expanduser().resolve(strict=False)
+    prev = load_bom_xref_meta(rr)
     basename_map = scan_cad_basename_map(root, anchor=rr)
     assets = list_present_fcstd_file_assets(rr)
     path_to_id = {a["repo_rel_path"]: a["id"] for a in assets}
@@ -57,12 +106,27 @@ def rebuild_bom_xrefs(repo_root: Path, *, scan_id: int, scan_root: Path) -> dict
             )
         )
 
+    hosts_with_xlink = len({e["host_repo_rel_path"] for e in edges})
     stats = replace_bom_xrefs(rr, scan_id=scan_id, edges=edges)
+    log = _format_bom_xref_rebuild_log(
+        repo_root=rr,
+        scan_root=root,
+        scan_id=scan_id,
+        host_files=len(assets),
+        hosts_with_xlink=hosts_with_xlink,
+        stats=stats,
+        prev_edge_count=int(prev.get("edge_count") or 0),
+        prev_host_count=int(prev.get("host_count") or 0),
+    )
     return {
         "scan_id": scan_id,
         "database_path": str(cad_database_path(rr)),
         "database_path_display": format_resolved_under_workspace(cad_database_path(rr), rr),
+        "host_files_scanned": len(assets),
+        "hosts_with_xlink": hosts_with_xlink,
+        "hosts_without_xlink": max(0, len(assets) - hosts_with_xlink),
         **stats,
+        "log": log,
     }
 
 
@@ -470,6 +534,32 @@ def search_outgoing_refs(
     rows = query_bom_xrefs_outgoing(repo_root, rel, limit=limit)
     return {
         "host_repo_rel_path": rel,
+        "count": len(rows),
+        "refs": rows,
+    }
+
+
+def search_bom_xref_edges(
+    repo_root: Path,
+    *,
+    offset: int = 0,
+    limit: int = 100,
+    search: str | None = None,
+) -> dict[str, Any]:
+    """分页返回全部 ``bom_xref`` 引用边。"""
+    ensure_bom_xref_built(repo_root)
+    cap = max(1, min(int(limit), 500))
+    off = max(0, int(offset))
+    rows, total = query_bom_xref_edges_paged(
+        repo_root,
+        offset=off,
+        limit=cap,
+        search=search,
+    )
+    return {
+        "offset": off,
+        "limit": cap,
+        "total": total,
         "count": len(rows),
         "refs": rows,
     }

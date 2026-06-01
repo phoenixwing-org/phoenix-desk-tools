@@ -519,6 +519,7 @@ def run_fcstd_map_scan(
     )
     scan_id = save_fcstd_document(rr, doc, scan_root=scan_root_stored, stats=stats)
     xref_stats = rebuild_bom_xrefs(rr, scan_id=scan_id, scan_root=scan)
+    xref_log = (xref_stats.get("log") or "").strip()
 
     payload = load_fcstd_map_payload(rr)
     payload["scan_log"] = (
@@ -529,12 +530,8 @@ def run_fcstd_map_scan(
         f"CAD {stats['cad_file_count']}（FCStd {stats['fcstd_file_count']} · "
         f"MD {stats['markdown_file_count']} · PDF {stats['pdf_file_count']} · "
         f"DXF/DWG {stats['cad_exchange_file_count']} · 图片 {stats['image_file_count']}） · "
-        f"重名种类 {stats['duplicate_filename_kinds']}\n"
-        f"BOM 引用: {xref_stats.get('edge_count', 0)} 条 · "
-        f"{xref_stats.get('host_count', 0)} 个宿主 · "
-        f"已解析 {xref_stats.get('target_resolved', 0)} · "
-        f"歧义 {xref_stats.get('target_ambiguous', 0)} · "
-        f"缺失 {xref_stats.get('target_missing', 0)}"
+        f"重名种类 {stats['duplicate_filename_kinds']}"
+        + (f"\n\n{xref_log}" if xref_log else "")
     )
     payload["bom_xref"] = xref_stats
     return payload

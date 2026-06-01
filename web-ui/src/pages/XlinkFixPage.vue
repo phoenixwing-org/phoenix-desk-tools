@@ -48,7 +48,7 @@ async function onSave() {
 async function onRun() {
   running.value = true;
   result.value = null;
-  shell.appendLog("XLink 路径修正…", { source: "xlink_fix" });
+  shell.appendLog("XLink 路径修正…", { source: "xlink_fix", open: true });
   try {
     const data = await runXlinkFix(prefsPayload());
     result.value = data;

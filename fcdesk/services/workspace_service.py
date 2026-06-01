@@ -21,9 +21,9 @@ def scan_workspace_files(
 def _file_kind(suffix: str) -> str:
     s = suffix.casefold()
     if s == FCSTD_SUFFIX:
-        return "FCStd"
+        return "FC"
     if s == SW_PART_SUFFIX:
-        return "SW·prt"
+        return "SW"
     return s.lstrip(".") or "file"
 
 

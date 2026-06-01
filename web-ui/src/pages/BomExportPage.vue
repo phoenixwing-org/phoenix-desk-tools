@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref } from "vue";
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from "vue";
 import {
+  fetchBomXrefEdges,
   fetchBomXrefMeta,
   fetchBomXrefOutgoing,
   fetchFcstdMap,
@@ -9,13 +10,20 @@ import {
   type BomXrefMeta,
   type FcstdMapEntry,
 } from "../api";
+import ResizableDataTable from "../components/ResizableDataTable.vue";
 import { useAppShell } from "../composables/useAppShell";
+import { usePageSession } from "../composables/usePageSession";
+import type { TableColumnDef } from "../composables/useResizableTable";
 import { useWorkspaceFileQuery } from "../composables/useWorkspaceFileQuery";
 import { basenameFromRel, normalizeRepoRel, normalizeRepoRelForApi, resolveOutgoingHostQuery } from "../utils/workspaceFileQuery";
 
 const props = defineProps<{
   workbenchTabId?: string;
 }>();
+
+const SESSION_V = 1;
+type PageSubTab = "assembly" | "all" | "settings";
+const PAGE_SIZES = [50, 100, 200] as const;
 
 const shell = useAppShell();
 const {
@@ -29,6 +37,8 @@ const {
 
 type BomRow = {
   index: number;
+  hostBasename: string;
+  hostRel: string;
   PartNumber: string;
   PartVersion: string;
   TypeCode: string;
@@ -38,14 +48,42 @@ type BomRow = {
   resolveStatus: string;
 };
 
+const assemblyColumns: TableColumnDef[] = [
+  { key: "index", label: "#", width: 44, minWidth: 40, headerClass: "col-index" },
+  { key: "partKey", label: "PartKey", width: 108, minWidth: 80 },
+  { key: "typeCode", label: "TypeCode", width: 72, minWidth: 56 },
+  { key: "partName", label: "PartName", width: 120, minWidth: 80 },
+  { key: "file", label: "文件名", width: 180, minWidth: 100 },
+  { key: "path", label: "相对路径", width: 160, minWidth: 100 },
+  { key: "resolve", label: "解析", width: 72, minWidth: 56 },
+];
+
+const allColumns: TableColumnDef[] = [
+  { key: "index", label: "#", width: 44, minWidth: 40, headerClass: "col-index" },
+  { key: "host", label: "宿主文件", width: 160, minWidth: 100 },
+  { key: "partKey", label: "PartKey", width: 108, minWidth: 80 },
+  { key: "typeCode", label: "TypeCode", width: 72, minWidth: 56 },
+  { key: "partName", label: "PartName", width: 120, minWidth: 80 },
+  { key: "file", label: "子件文件名", width: 160, minWidth: 100 },
+  { key: "path", label: "子件路径", width: 160, minWidth: 100 },
+  { key: "resolve", label: "解析", width: 72, minWidth: 56 },
+];
+
+const activeSubTab = ref<PageSubTab>("assembly");
 const meta = ref<BomXrefMeta | null>(null);
 const hostRel = ref("");
 const refs = ref<BomXrefEdge[]>([]);
+const allRefs = ref<BomXrefEdge[]>([]);
+const allTotal = ref(0);
+const allOffset = ref(0);
+const pageSize = ref(100);
+const allSearch = ref("");
 const mapEntries = ref<FcstdMapEntry[]>([]);
 const loading = ref(false);
+const loadingAll = ref(false);
 const rebuilding = ref(false);
-const pageError = ref("");
-const listSummary = ref("");
+const assemblyError = ref("");
+const allRefsError = ref("");
 
 const hasIndex = computed(() => (meta.value?.edge_count ?? 0) > 0);
 
@@ -57,22 +95,40 @@ const mapByRel = computed(() => {
   return m;
 });
 
+function enrichTarget(edge: BomXrefEdge) {
+  const rel = edge.target_repo_rel_path ? normalizeRepoRel(edge.target_repo_rel_path) : "";
+  const entry = rel ? mapByRel.value.get(rel) : undefined;
+  return {
+    PartNumber: entry?.PartNumber || "—",
+    PartVersion: entry?.PartVersion || "—",
+    TypeCode: entry?.TypeCode || "—",
+    PartName: entry?.PartName || "—",
+    filename: edge.target_basename,
+    repoRel: edge.target_repo_rel_path || "—",
+    resolveStatus: edge.resolve_status,
+  };
+}
+
 const bomRows = computed((): BomRow[] => {
-  return refs.value.map((row, i) => {
-    const rel = row.target_repo_rel_path ? normalizeRepoRel(row.target_repo_rel_path) : "";
-    const entry = rel ? mapByRel.value.get(rel) : undefined;
-    return {
-      index: i + 1,
-      PartNumber: entry?.PartNumber || "—",
-      PartVersion: entry?.PartVersion || "—",
-      TypeCode: entry?.TypeCode || "—",
-      PartName: entry?.PartName || "—",
-      filename: row.target_basename,
-      repoRel: row.target_repo_rel_path || "—",
-      resolveStatus: row.resolve_status,
-    };
-  });
+  return refs.value.map((row, i) => ({
+    index: i + 1,
+    hostBasename: basenameFromRel(hostRel.value),
+    hostRel: hostRel.value,
+    ...enrichTarget(row),
+  }));
 });
+
+const allRows = computed((): BomRow[] => {
+  return allRefs.value.map((row, i) => ({
+    index: allOffset.value + i + 1,
+    hostBasename: basenameFromRel(row.host_repo_rel_path),
+    hostRel: row.host_repo_rel_path,
+    ...enrichTarget(row),
+  }));
+});
+
+const totalPages = computed(() => Math.max(1, Math.ceil(allTotal.value / pageSize.value)));
+const currentPage = computed(() => Math.floor(allOffset.value / pageSize.value) + 1);
 
 async function loadMeta() {
   meta.value = await fetchBomXrefMeta();
@@ -104,16 +160,40 @@ function statusLabel(status: string) {
   return map[status] ?? status;
 }
 
+function partKeyLabel(row: BomRow) {
+  if (!row.PartNumber?.trim() || row.PartNumber === "—") return "";
+  if (!row.PartVersion?.trim() || row.PartVersion === "—") return "";
+  return `${row.PartNumber}.${row.PartVersion}`;
+}
+
+function canOpenFileDetailRel(rel: string) {
+  const r = rel?.trim();
+  if (!r || r === "—") return false;
+  return /\.fcstd$/i.test(basenameFromRel(r));
+}
+
+function openFileDetailRel(rel: string) {
+  const r = normalizeRepoRelForApi(rel);
+  if (!r || !canOpenFileDetailRel(r)) return;
+  shell.openFileDetailForRel(r);
+}
+
+function openPartKeyFromRow(row: BomRow) {
+  const pk = partKeyLabel(row);
+  if (!pk) return;
+  shell.openPartKeyDetail(row.PartNumber, row.PartVersion, {
+    partName: row.PartName !== "—" ? row.PartName : undefined,
+  });
+}
+
 async function onLoadBom() {
-  pageError.value = "";
-  listSummary.value = "";
+  assemblyError.value = "";
   refs.value = [];
   hostRel.value = "";
 
   const q = resolveHostQuery();
   if (!q) {
     const msg = "请填写装配路径，或在右侧树中点击总成/装配文件";
-    pageError.value = msg;
     shell.setStatus(msg);
     return;
   }
@@ -123,25 +203,74 @@ async function onLoadBom() {
   }
 
   loading.value = true;
+  shell.appendLog(`[BOM列表] 加载装配 BOM：${q.rel}`, { source: "bom_xref", open: true });
   try {
     const data = await fetchBomXrefOutgoing(q.rel);
     hostRel.value = data.host_repo_rel_path;
     refs.value = data.refs;
-    const text = `BOM 列表：${basenameFromRel(hostRel.value)} · ${data.count} 个子件引用`;
-    listSummary.value = text;
-    shell.setStatus(text);
-    shell.appendLog(`[BOM列表] ${text}`, { source: "bom_xref", open: true });
+    shell.appendLog(
+      `[BOM列表] 完成：${basenameFromRel(hostRel.value)} · ${data.count} 个子件`,
+      { source: "bom_xref" },
+    );
+    shell.setStatus(`BOM：${basenameFromRel(hostRel.value)} · ${data.count} 个子件`);
   } catch (e) {
-    pageError.value = String(e);
+    assemblyError.value = String(e);
+    shell.appendLog(`[BOM列表] ${String(e)}`, { source: "bom_xref" });
     shell.setStatus(String(e));
   } finally {
     loading.value = false;
   }
 }
 
+async function loadAllEdges(resetOffset = false) {
+  if (resetOffset) allOffset.value = 0;
+  loadingAll.value = true;
+  allRefsError.value = "";
+  const searchHint = allSearch.value.trim() ? ` · 搜索「${allSearch.value.trim()}」` : "";
+  shell.appendLog(`[BOM列表] 加载全部引用边${searchHint}…`, { source: "bom_xref", open: true });
+  try {
+    const data = await fetchBomXrefEdges({
+      offset: allOffset.value,
+      limit: pageSize.value,
+      search: allSearch.value,
+    });
+    allRefs.value = data.refs;
+    allTotal.value = data.total;
+    shell.appendLog(
+      `[BOM列表] 共 ${data.total} 条 · 本页 ${data.count} 条（第 ${Math.floor(allOffset.value / pageSize.value) + 1} 页）`,
+      { source: "bom_xref" },
+    );
+    shell.setStatus(`全部引用：${data.total} 条 · 本页 ${data.count} 条`);
+  } catch (e) {
+    const msg = String(e);
+    allRefsError.value =
+      msg === "Not Found"
+        ? "无法加载引用边（API 未就绪）。请重启 python -m fcdesk.web --dev 后重试。"
+        : msg;
+    shell.appendLog(`[BOM列表] ${allRefsError.value}`, { source: "bom_xref" });
+    allRefs.value = [];
+    allTotal.value = 0;
+  } finally {
+    loadingAll.value = false;
+  }
+}
+
+function goPrevPage() {
+  if (allOffset.value <= 0) return;
+  allOffset.value = Math.max(0, allOffset.value - pageSize.value);
+  void loadAllEdges();
+}
+
+function goNextPage() {
+  if (allOffset.value + pageSize.value >= allTotal.value) return;
+  allOffset.value += pageSize.value;
+  void loadAllEdges();
+}
+
 async function onTreeSelect(repoRel: string) {
   applyTreeSelection(repoRel);
-  pageError.value = "";
+  assemblyError.value = "";
+  activeSubTab.value = "assembly";
   await onLoadBom();
 }
 
@@ -155,23 +284,105 @@ function unregisterTreeHandler() {
 
 async function onRebuild() {
   rebuilding.value = true;
-  pageError.value = "";
+  assemblyError.value = "";
+  allRefsError.value = "";
+  shell.appendLog(
+    "[BOM列表] 重建 BOM 引用表（从 CAD 索引 present FCStd 提取 XLink）…",
+    { source: "bom_xref", open: true },
+  );
   try {
     const out = await rebuildBomXrefs();
     await loadMeta();
-    shell.setStatus(`BOM 引用已重建：${out.edge_count} 条 · ${out.host_count} 个宿主`);
+    shell.appendLog(out.log ?? `[BOM列表] 完成：${out.edge_count} 条 · ${out.host_count} 个宿主`, {
+      source: "bom_xref",
+    });
+    shell.setStatus(
+      `引用表已重建：${out.edge_count} 条边 · ${out.host_count} 个宿主` +
+        (out.hosts_with_xlink != null
+          ? ` · 扫描 ${out.host_files_scanned ?? "?"} 个 FCStd`
+          : ""),
+    );
+    if (activeSubTab.value === "all") {
+      await loadAllEdges(true);
+    } else if (hostRel.value) {
+      await onLoadBom();
+    }
   } catch (e) {
-    pageError.value = String(e);
+    const msg = String(e);
+    shell.appendLog(`[BOM列表] ${msg}`, { source: "bom_xref" });
+    if (activeSubTab.value === "all") allRefsError.value = msg;
+    else assemblyError.value = msg;
   } finally {
     rebuilding.value = false;
   }
 }
 
-onMounted(() => {
+async function hydratePageSession(snap: Record<string, unknown>): Promise<boolean> {
+  if (snap.v !== SESSION_V) return false;
+  if (snap.subTab === "assembly" || snap.subTab === "all" || snap.subTab === "settings") {
+    activeSubTab.value = snap.subTab;
+  }
+  if (snap.queryText != null) queryText.value = String(snap.queryText);
+  if (snap.allSearch != null) allSearch.value = String(snap.allSearch);
+  if (typeof snap.pageSize === "number" && PAGE_SIZES.includes(snap.pageSize as (typeof PAGE_SIZES)[number])) {
+    pageSize.value = snap.pageSize;
+  }
+  if (typeof snap.allOffset === "number") allOffset.value = snap.allOffset;
+  await loadMeta();
+  await loadMapIndex();
+  if (activeSubTab.value === "all") await loadAllEdges();
+  return true;
+}
+
+function applyInitialTabState() {
+  if (!props.workbenchTabId) {
+    void loadMeta().catch((e) => {
+      assemblyError.value = String(e);
+    });
+    void loadMapIndex();
+    return;
+  }
+  const pageState = shell.consumeTabPageState(props.workbenchTabId);
+  if (pageState) {
+    void hydratePageSession(pageState);
+    return;
+  }
   void loadMeta().catch((e) => {
-    pageError.value = String(e);
+    assemblyError.value = String(e);
   });
   void loadMapIndex();
+}
+
+usePageSession(props.workbenchTabId, {
+  serialize: () => ({
+    v: SESSION_V,
+    subTab: activeSubTab.value,
+    queryText: queryText.value,
+    allSearch: allSearch.value,
+    pageSize: pageSize.value,
+    allOffset: allOffset.value,
+  }),
+  hydrate: hydratePageSession,
+  isDirty: () => false,
+});
+
+watch([activeSubTab, queryText, allSearch, pageSize, allOffset], () => shell.scheduleWorkbenchSave());
+
+watch(activeSubTab, (tab) => {
+  if (tab === "all") {
+    assemblyError.value = "";
+    if (!allRefs.value.length && hasIndex.value) void loadAllEdges(true);
+  } else if (tab === "assembly") {
+    allRefsError.value = "";
+  }
+});
+
+watch(pageSize, () => {
+  if (activeSubTab.value === "all") void loadAllEdges(true);
+});
+
+onMounted(() => {
+  applyInitialTabState();
   registerTreeHandler();
 });
 
@@ -179,9 +390,7 @@ onActivated(() => {
   registerTreeHandler();
 });
 
-onDeactivated(() => {
-  /* handler 保留在 Tab map 中 */
-});
+onDeactivated(() => {});
 
 onUnmounted(() => {
   unregisterTreeHandler();
@@ -191,246 +400,455 @@ onUnmounted(() => {
 <template>
   <div class="page bom-list-page">
     <header class="page-head">
-      <h1 class="page-title">BOM 列表</h1>
-      <p class="page-desc">
-        选择<strong>装配/总成 FCStd</strong>，列出其 XLink 引用的子件；属性列来自 CAD 索引。引用关系需先构建引用表。
-      </p>
+      <div class="head-row">
+        <h1 class="page-title">BOM 列表</h1>
+        <p v-if="meta" class="head-meta">
+          引用边 {{ meta.edge_count }} · 宿主 {{ meta.host_count }}
+          <span v-if="meta.last_bom_xref_at"> · {{ meta.last_bom_xref_at }}</span>
+        </p>
+      </div>
     </header>
 
-    <div v-if="pageError" class="banner err">{{ pageError }}</div>
+    <p v-if="!hasIndex" class="warn-line">
+      引用表为空。请先在「CAD 索引」扫描，或在「引用设置」中重建引用表。
+    </p>
 
-    <section class="meta-block">
-      <p v-if="meta" class="meta-line">
-        引用边 {{ meta.edge_count }} · 宿主 {{ meta.host_count }}
-        <span v-if="meta.last_bom_xref_at"> · 更新 {{ meta.last_bom_xref_at }}</span>
-      </p>
-      <p v-if="!hasIndex" class="meta-line warn">
-        引用表为空。请先在「CAD 索引」执行工程内搜索，或点击下方「重建引用表」。
-      </p>
-      <button type="button" class="btn" :disabled="rebuilding" @click="onRebuild">
-        {{ rebuilding ? "…" : "重建引用表" }}
+    <nav class="sub-tabs" role="tablist">
+      <button
+        type="button"
+        role="tab"
+        class="sub-tab"
+        :class="{ active: activeSubTab === 'assembly' }"
+        @click="activeSubTab = 'assembly'"
+      >
+        装配 BOM
       </button>
-    </section>
+      <button
+        type="button"
+        role="tab"
+        class="sub-tab"
+        :class="{ active: activeSubTab === 'all' }"
+        @click="activeSubTab = 'all'"
+      >
+        全部引用
+        <span v-if="meta?.edge_count" class="tab-badge">{{ meta.edge_count }}</span>
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="sub-tab"
+        :class="{ active: activeSubTab === 'settings' }"
+        @click="activeSubTab = 'settings'"
+      >
+        引用设置
+      </button>
+    </nav>
 
-    <section class="search-block">
-      <div class="fields">
-        <label class="field">
-          <span class="label">装配文件</span>
-          <input
-            v-model="queryText"
-            class="mono"
-            spellcheck="false"
-            placeholder="相对路径或文件名；或右侧树点击装配"
-            @input="clearPickedOnInput"
-            @keydown.enter.prevent="onLoadBom"
-          />
+    <!-- 装配一层 BOM -->
+    <div v-show="activeSubTab === 'assembly'" class="sub-panel">
+      <section class="toolbar">
+        <input
+          v-model="queryText"
+          class="search-input mono"
+          spellcheck="false"
+          placeholder="装配路径或文件名；或右侧树点击"
+          @input="clearPickedOnInput"
+          @keydown.enter.prevent="onLoadBom"
+        />
+        <button type="button" class="btn primary" :disabled="loading" @click="onLoadBom">
+          {{ loading ? "加载中…" : "加载 BOM" }}
+        </button>
+      </section>
+      <div v-if="assemblyError" class="banner err">{{ assemblyError }}</div>
+      <p v-if="pickedRel" class="picked-hint mono">已从树选择：{{ pickedRel }}</p>
+      <p v-if="hostRel" class="host-line mono">
+        {{ hostRel }} · {{ bomRows.length }} 个子件
+      </p>
+
+      <ResizableDataTable
+        v-if="bomRows.length"
+        :columns="assemblyColumns"
+        wrap-class="table-grow"
+        table-class="bom-table"
+      >
+        <tbody>
+          <tr v-for="row in bomRows" :key="`${row.index}-${row.filename}`">
+            <td class="col-index">{{ row.index }}</td>
+            <td>
+              <button
+                v-if="partKeyLabel(row)"
+                type="button"
+                class="link-key"
+                @click="openPartKeyFromRow(row)"
+              >
+                {{ partKeyLabel(row) }}
+              </button>
+              <span v-else>{{ row.PartNumber }}</span>
+            </td>
+            <td>{{ row.TypeCode }}</td>
+            <td>{{ row.PartName }}</td>
+            <td class="mono">
+              <button
+                v-if="canOpenFileDetailRel(row.repoRel)"
+                type="button"
+                class="link-key"
+                :title="row.repoRel"
+                @click="openFileDetailRel(row.repoRel)"
+              >
+                {{ row.filename }}
+              </button>
+              <span v-else>{{ row.filename }}</span>
+            </td>
+            <td class="mono muted">{{ row.repoRel }}</td>
+            <td>
+              <span class="tag" :class="row.resolveStatus">{{ statusLabel(row.resolveStatus) }}</span>
+            </td>
+          </tr>
+        </tbody>
+      </ResizableDataTable>
+      <div v-else-if="hostRel && !loading" class="empty-wrap table-grow">
+        <p class="empty">该装配暂无出向 XLink 引用。</p>
+      </div>
+      <div v-else-if="!hostRel && !loading" class="empty-wrap table-grow">
+        <p class="empty">选择装配文件并点击「加载 BOM」。</p>
+      </div>
+    </div>
+
+    <!-- 全部引用边 -->
+    <div v-show="activeSubTab === 'all'" class="sub-panel">
+      <section class="toolbar">
+        <input
+          v-model="allSearch"
+          class="search-input"
+          type="search"
+          spellcheck="false"
+          placeholder="搜索宿主、子件文件名、路径…"
+          @keydown.enter.prevent="loadAllEdges(true)"
+        />
+        <button type="button" class="btn primary" :disabled="loadingAll" @click="loadAllEdges(true)">
+          {{ loadingAll ? "…" : "搜索" }}
+        </button>
+        <label class="page-size">
+          每页
+          <select v-model.number="pageSize">
+            <option v-for="n in PAGE_SIZES" :key="n" :value="n">{{ n }}</option>
+          </select>
         </label>
-        <p v-if="pickedRel" class="picked-hint mono">已从树选择：{{ pickedRel }}</p>
+        <div class="pager">
+          <button type="button" class="btn mini" :disabled="loadingAll || allOffset <= 0" @click="goPrevPage">
+            上一页
+          </button>
+          <span class="page-info">
+            第 {{ currentPage }} / {{ totalPages }} 页 · 共 {{ allTotal }} 条
+          </span>
+          <button
+            type="button"
+            class="btn mini"
+            :disabled="loadingAll || allOffset + pageSize >= allTotal"
+            @click="goNextPage"
+          >
+            下一页
+          </button>
+        </div>
+      </section>
+
+      <div v-if="allRefsError" class="banner err">{{ allRefsError }}</div>
+
+      <ResizableDataTable
+        v-if="allRows.length"
+        :columns="allColumns"
+        wrap-class="table-grow"
+        table-class="bom-table"
+      >
+        <tbody>
+          <tr v-for="row in allRows" :key="`${row.hostRel}-${row.index}-${row.filename}`">
+            <td class="col-index">{{ row.index }}</td>
+            <td class="mono">
+              <button
+                v-if="canOpenFileDetailRel(row.hostRel)"
+                type="button"
+                class="link-key"
+                :title="row.hostRel"
+                @click="openFileDetailRel(row.hostRel)"
+              >
+                {{ row.hostBasename }}
+              </button>
+              <span v-else :title="row.hostRel">{{ row.hostBasename }}</span>
+            </td>
+            <td>
+              <button
+                v-if="partKeyLabel(row)"
+                type="button"
+                class="link-key"
+                @click="openPartKeyFromRow(row)"
+              >
+                {{ partKeyLabel(row) }}
+              </button>
+              <span v-else>—</span>
+            </td>
+            <td>{{ row.TypeCode }}</td>
+            <td>{{ row.PartName }}</td>
+            <td class="mono">
+              <button
+                v-if="canOpenFileDetailRel(row.repoRel)"
+                type="button"
+                class="link-key"
+                :title="row.repoRel"
+                @click="openFileDetailRel(row.repoRel)"
+              >
+                {{ row.filename }}
+              </button>
+              <span v-else>{{ row.filename }}</span>
+            </td>
+            <td class="mono muted">{{ row.repoRel }}</td>
+            <td>
+              <span class="tag" :class="row.resolveStatus">{{ statusLabel(row.resolveStatus) }}</span>
+            </td>
+          </tr>
+        </tbody>
+      </ResizableDataTable>
+      <div v-else-if="loadingAll" class="empty-wrap table-grow">
+        <p class="empty">加载中…</p>
       </div>
-      <button type="button" class="btn primary" :disabled="loading" @click="onLoadBom">
-        {{ loading ? "加载中…" : "加载 BOM" }}
-      </button>
-    </section>
-
-    <p v-if="listSummary" class="summary">{{ listSummary }}</p>
-
-    <section v-if="hostRel && !loading && !bomRows.length" class="empty-block">
-      <p class="empty">该装配暂无出向 XLink 引用（0 行）。</p>
-    </section>
-
-    <section v-if="bomRows.length" class="results">
-      <h2 class="section-title mono">{{ hostRel }}</h2>
-      <div class="table-wrap">
-        <table class="bom-table">
-          <thead>
-            <tr>
-              <th class="col-no">#</th>
-              <th>PartNumber</th>
-              <th>PartVersion</th>
-              <th>TypeCode</th>
-              <th>PartName</th>
-              <th>文件名</th>
-              <th>相对路径</th>
-              <th>解析</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in bomRows" :key="`${row.index}-${row.filename}`">
-              <td class="col-no">{{ row.index }}</td>
-              <td>{{ row.PartNumber }}</td>
-              <td>{{ row.PartVersion }}</td>
-              <td>{{ row.TypeCode }}</td>
-              <td>{{ row.PartName }}</td>
-              <td class="mono">{{ row.filename }}</td>
-              <td class="mono muted">{{ row.repoRel }}</td>
-              <td>
-                <span class="tag" :class="row.resolveStatus">{{ statusLabel(row.resolveStatus) }}</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <div v-else class="empty-wrap table-grow">
+        <p class="empty">{{ hasIndex ? "无匹配引用边" : "尚无引用表，请先在「引用设置」重建" }}</p>
       </div>
-    </section>
+    </div>
+
+    <!-- 设置与说明 -->
+    <div v-show="activeSubTab === 'settings'" class="sub-panel settings-panel">
+      <section class="settings-block">
+        <h2 class="block-title">说明</h2>
+        <p class="block-desc">
+          选择<strong>装配/总成 FCStd</strong>，在「装配 BOM」列出其 XLink 直接子件；属性列来自 CAD 索引。
+          「全部引用」展示数据库中所有引用边（分页）。引用关系需先构建引用表。
+        </p>
+      </section>
+      <section class="settings-block">
+        <h2 class="block-title">引用表</h2>
+        <button type="button" class="btn primary" :disabled="rebuilding" @click="onRebuild">
+          {{ rebuilding ? "重建中…" : "重建引用表" }}
+        </button>
+        <p v-if="meta?.database_path_display" class="meta-line">数据库：{{ meta.database_path_display }}</p>
+      </section>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .bom-list-page {
-  padding: 20px 24px 24px;
-  max-width: 1100px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 16px 20px;
   height: 100%;
-  overflow: auto;
 }
 
 .page-head {
-  margin-bottom: 16px;
+  flex-shrink: 0;
+  margin-bottom: 10px;
+}
+
+.head-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .page-title {
-  margin: 0 0 4px;
-  font-size: 1.15rem;
+  margin: 0;
+  font-size: 1.1rem;
 }
 
-.page-desc {
+.head-meta {
   margin: 0;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   color: var(--muted);
-  line-height: 1.5;
 }
 
 .banner.err {
   background: #fef2f2;
   color: #b91c1c;
-  padding: 10px 12px;
+  padding: 8px 12px;
   border-radius: 6px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   font-size: 0.85rem;
+  flex-shrink: 0;
 }
 
-.meta-block {
-  margin-bottom: 16px;
-}
-
-.meta-line {
+.warn-line {
   margin: 0 0 8px;
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-.meta-line.warn {
-  color: #b45309;
-}
-
-.search-block {
-  margin-bottom: 16px;
-  padding: 14px 16px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--panel-bg, #fafafa);
-}
-
-.fields {
-  display: grid;
-  gap: 10px;
-  margin-bottom: 12px;
-  max-width: 560px;
-}
-
-.field {
-  display: grid;
-  grid-template-columns: 72px 1fr;
-  align-items: center;
-  gap: 8px;
-}
-
-.field .label {
   font-size: 0.82rem;
-  color: var(--muted);
-  text-align: right;
+  color: #b45309;
+  flex-shrink: 0;
 }
 
-.field input {
-  padding: 8px 10px;
+.sub-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.sub-tab {
+  padding: 8px 14px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  font-size: 0.85rem;
+  cursor: pointer;
+  color: var(--muted);
+  margin-bottom: -1px;
+}
+
+.sub-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+.tab-badge {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.sub-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+
+.search-input {
+  flex: 1;
+  min-width: 200px;
+  padding: 7px 10px;
   border: 1px solid var(--border-strong);
   border-radius: 6px;
   font-size: 0.85rem;
 }
 
 .picked-hint {
-  margin: 0 0 0 80px;
+  margin: 0 0 6px;
   font-size: 0.78rem;
   color: #1d4ed8;
+  flex-shrink: 0;
 }
 
-.summary {
-  margin: 0 0 12px;
-  font-size: 0.85rem;
-  color: #047857;
-}
-
-.empty-block {
-  padding: 16px;
-  border: 1px dashed var(--border);
-  border-radius: 8px;
-}
-
-.empty-block .empty {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.section-title {
+.host-line {
   margin: 0 0 8px;
-  font-size: 0.88rem;
-  font-weight: 600;
+  font-size: 0.82rem;
+  color: var(--muted);
+  flex-shrink: 0;
 }
 
-.table-wrap {
+.page-size {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.page-size select {
+  padding: 4px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.page-info {
+  font-size: 0.82rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.settings-panel {
   overflow: auto;
+  gap: 16px;
+}
+
+.settings-block {
+  padding: 14px 16px;
   border: 1px solid var(--border);
   border-radius: 8px;
+  background: #fff;
 }
 
-.bom-table {
-  width: 100%;
-  border-collapse: collapse;
+.block-title {
+  margin: 0 0 8px;
+  font-size: 0.92rem;
+}
+
+.block-desc {
+  margin: 0 0 12px;
   font-size: 0.82rem;
-  min-width: 720px;
-}
-
-.bom-table th,
-.bom-table td {
-  border-bottom: 1px solid var(--border);
-  padding: 7px 10px;
-  text-align: left;
-  vertical-align: top;
-}
-
-.bom-table th {
-  background: var(--panel-bg, #f3f4f6);
-  font-weight: 600;
-  position: sticky;
-  top: 0;
-}
-
-.bom-table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.col-no {
-  width: 40px;
-  text-align: center;
   color: var(--muted);
+  line-height: 1.5;
+}
+
+.meta-line {
+  margin: 10px 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.table-grow {
+  flex: 1;
+  min-height: 0;
+}
+
+.empty-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.empty {
+  padding: 28px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 0.85rem;
 }
 
 .btn {
-  padding: 6px 12px;
+  padding: 7px 12px;
   border-radius: 6px;
   border: 1px solid var(--border-strong);
   background: var(--btn-bg);
   font-size: 0.82rem;
   cursor: pointer;
+}
+
+.btn.mini {
+  padding: 5px 10px;
+  font-size: 0.78rem;
 }
 
 .btn.primary {
@@ -444,7 +862,7 @@ onUnmounted(() => {
 }
 
 .mono {
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 0.8rem;
 }
 
@@ -468,5 +886,27 @@ onUnmounted(() => {
 .tag.ambiguous {
   background: #fef3c7;
   color: #b45309;
+}
+
+.link-key {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #1d4ed8;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.link-key:hover {
+  color: #1e40af;
+}
+
+:deep(.col-index),
+:deep(td.col-index) {
+  text-align: right;
+  color: var(--muted);
 }
 </style>

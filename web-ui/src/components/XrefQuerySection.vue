@@ -79,9 +79,10 @@ async function onSearch() {
   if (searchMode.value === "incoming") {
     logIncoming(
       `引用查询 · ${modeLabel} · ${describeIncomingQuery(q)} · ${transitiveLabel()}`,
+      { open: true },
     );
   } else {
-    logIncoming(`引用查询 · ${modeLabel} · rel=${q.rel}`);
+    logIncoming(`引用查询 · ${modeLabel} · rel=${q.rel}`, { open: true });
   }
 
   loading.value = true;

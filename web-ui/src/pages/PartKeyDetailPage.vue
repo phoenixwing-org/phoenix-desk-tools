@@ -12,13 +12,18 @@ import {
 import AssemblyTreeTable from "../components/AssemblyTreeTable.vue";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
 import { useAppShell } from "../composables/useAppShell";
+import { usePageSession } from "../composables/usePageSession";
 import type { TableColumnDef } from "../composables/useResizableTable";
 
 const props = defineProps<{
   workbenchTabId?: string;
 }>();
 
+const SESSION_V = 1;
+type PageSubTab = "attributes" | "assembly";
+
 const shell = useAppShell();
+const activeSubTab = ref<PageSubTab>("attributes");
 
 const fileColumns: TableColumnDef[] = [
   { key: "disk", label: "磁盘", width: 56, minWidth: 48 },
@@ -163,6 +168,7 @@ async function savePartMeta() {
   const pv = partVersion.value.trim();
   if (!pn || !pv) return;
   saving.value = true;
+  shell.appendLog(`[零件] 保存属性 ${pn}.${pv}…`, { source: "part_key", open: true });
   try {
     detail.value = await patchPartKey(pn, pv, { ...editForm.value });
     if (props.workbenchTabId) {
@@ -170,8 +176,11 @@ async function savePartMeta() {
         subtitle: detail.value.PartName || detail.value.label || undefined,
       });
     }
-    setStatus(`已保存零件 ${detail.value.part_key}`);
+    const msg = `已保存零件 ${detail.value.part_key}`;
+    shell.appendLog(msg, { source: "part_key" });
+    setStatus(msg);
   } catch (e) {
+    shell.appendLog(String(e), { source: "part_key" });
     setStatus(String(e));
   } finally {
     saving.value = false;
@@ -183,18 +192,23 @@ async function onFileLinkPatch(file: PartKeyFile, patch: Partial<PartKeyFile>) {
   const pv = partVersion.value.trim();
   if (!pn || !pv) return;
   saving.value = true;
+  shell.appendLog(`[零件] 更新文件关联 ${file.filename}…`, { source: "part_key", open: true });
   try {
     detail.value = await patchPartFileLink(pn, pv, file.id, patch);
-    setStatus(`已更新文件 ${file.filename}`);
+    const msg = `已更新文件 ${file.filename}`;
+    shell.appendLog(msg, { source: "part_key" });
+    setStatus(msg);
   } catch (e) {
+    shell.appendLog(String(e), { source: "part_key" });
     setStatus(String(e));
   } finally {
     saving.value = false;
   }
 }
 
-function openBom(file: PartKeyFile) {
-  shell.openBomApplyForRel(file.repo_rel_path);
+function openFileDetail(file: PartKeyFile) {
+  if (file.file_status !== "present") return;
+  shell.openFileDetailForRel(file.repo_rel_path);
 }
 
 function initPage() {
@@ -211,6 +225,30 @@ watch(selectedAssemblyRel, () => {
   void loadAssemblyTree();
 });
 
+watch(showAssemblySection, (has) => {
+  if (!has && activeSubTab.value === "assembly") {
+    activeSubTab.value = "attributes";
+  }
+});
+
+function hydratePageSession(snap: Record<string, unknown>): Promise<boolean> {
+  if (snap.v !== SESSION_V) return Promise.resolve(false);
+  if (snap.subTab === "attributes" || snap.subTab === "assembly") {
+    activeSubTab.value = snap.subTab;
+  }
+  return Promise.resolve(true);
+}
+
+usePageSession(props.workbenchTabId, {
+  serialize: () => ({ v: SESSION_V, subTab: activeSubTab.value }),
+  hydrate: hydratePageSession,
+  isDirty: () => false,
+});
+
+watch(activeSubTab, () => {
+  if (props.workbenchTabId) shell.scheduleWorkbenchSave();
+});
+
 onMounted(initPage);
 onActivated(initPage);
 </script>
@@ -222,141 +260,189 @@ onActivated(initPage);
         零件 <span class="mono">{{ detail?.part_key ?? `${partNumber}.${partVersion}` }}</span>
       </h1>
       <p v-if="detail?.PartName" class="page-sub">{{ detail.PartName }}</p>
-      <p class="page-desc">维护 PartKey 属性、关联文件；装配体可查看 BOM 下级树（可折叠）。</p>
     </header>
 
     <div v-if="pageError" class="banner err">{{ pageError }}</div>
     <div v-if="loading && !detail" class="empty">载入中…</div>
 
     <template v-else-if="detail">
-      <section class="detail-meta">
-        <div class="meta-grid">
-          <label>
-            <span>TypeCode</span>
-            <input v-model="editForm.TypeCode" spellcheck="false" />
-          </label>
-          <label>
-            <span>ModelSeries</span>
-            <input v-model="editForm.ModelSeries" spellcheck="false" />
-          </label>
-          <label>
-            <span>PartName</span>
-            <input v-model="editForm.PartName" spellcheck="false" />
-          </label>
-          <label>
-            <span>label</span>
-            <input v-model="editForm.label" spellcheck="false" />
-          </label>
-          <label class="wide">
-            <span>备注</span>
-            <input v-model="editForm.notes" spellcheck="false" />
-          </label>
-          <label>
-            <span>零件状态</span>
-            <select v-model="editForm.status">
-              <option value="active">有效</option>
-              <option value="obsolete">失效</option>
-            </select>
-          </label>
-        </div>
-        <button type="button" class="btn primary" :disabled="saving" @click="savePartMeta">
-          {{ saving ? "保存中…" : "保存零件属性" }}
+      <nav class="sub-tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          class="sub-tab"
+          :class="{ active: activeSubTab === 'attributes' }"
+          @click="activeSubTab = 'attributes'"
+        >
+          属性
+          <span v-if="detail.file_count" class="tab-badge">{{ detail.file_count }}</span>
         </button>
-      </section>
+        <button
+          type="button"
+          role="tab"
+          class="sub-tab"
+          :class="{ active: activeSubTab === 'assembly' }"
+          :disabled="!showAssemblySection"
+          @click="activeSubTab = 'assembly'"
+        >
+          装配结构
+        </button>
+      </nav>
 
-      <section v-if="showAssemblySection" class="assembly-block">
-        <div class="section-head">
-          <h2 class="section-title">装配结构</h2>
-          <div class="section-controls">
-            <label v-if="assemblyFiles.length > 1" class="ctl">
-              <span>装配文件</span>
-              <select v-model="selectedAssemblyRel">
-                <option v-for="file in assemblyFiles" :key="file.id" :value="file.repo_rel_path">
-                  {{ file.filename }}
-                </option>
+      <!-- 属性 + 关联文件 -->
+      <div v-show="activeSubTab === 'attributes'" class="sub-panel">
+        <section class="detail-meta">
+          <div class="meta-grid">
+            <label>
+              <span>TypeCode</span>
+              <input v-model="editForm.TypeCode" spellcheck="false" />
+            </label>
+            <label>
+              <span>ModelSeries</span>
+              <input v-model="editForm.ModelSeries" spellcheck="false" />
+            </label>
+            <label>
+              <span>PartName</span>
+              <input v-model="editForm.PartName" spellcheck="false" />
+            </label>
+            <label>
+              <span>label</span>
+              <input v-model="editForm.label" spellcheck="false" />
+            </label>
+            <label class="wide">
+              <span>备注</span>
+              <input v-model="editForm.notes" spellcheck="false" />
+            </label>
+            <label>
+              <span>零件状态</span>
+              <select v-model="editForm.status">
+                <option value="active">有效</option>
+                <option value="obsolete">失效</option>
               </select>
             </label>
-            <label class="mode-opt">
-              <input v-model="treeMode" type="radio" value="first" />
-              第一级
-            </label>
-            <label class="mode-opt">
-              <input v-model="treeMode" type="radio" value="full" />
-              全部层级
-            </label>
           </div>
-        </div>
-        <AssemblyTreeTable :nodes="treeNodes" :loading="treeLoading" />
-      </section>
+          <button type="button" class="btn primary" :disabled="saving" @click="savePartMeta">
+            {{ saving ? "保存中…" : "保存零件属性" }}
+          </button>
+        </section>
 
-      <section class="files-block">
-        <h2 class="section-title">关联文件</h2>
-        <ResizableDataTable
-          v-if="detail.files.length"
-          :columns="fileColumns"
-          table-class="files-table"
-          wrap-class="table-grow"
-        >
-          <tbody>
-            <tr
-              v-for="file in detail.files"
-              :key="file.id"
-              :class="[file.file_status, file.link_status]"
-            >
-              <td>{{ fileStatusLabel(file) }}</td>
-              <td>{{ assetKindLabel(file.asset_kind) }}</td>
-              <td class="mono">{{ file.filename }}</td>
-              <td>
-                <select
-                  :value="file.file_role"
-                  @change="
-                    onFileLinkPatch(file, {
-                      file_role: ($event.target as HTMLSelectElement).value,
-                    })
-                  "
-                >
-                  <option value="part">零件</option>
-                  <option value="drawing">工程图</option>
-                  <option value="assembly">装配</option>
+        <section class="files-block">
+          <h2 class="section-title">关联文件</h2>
+          <ResizableDataTable
+            v-if="detail.files.length"
+            :columns="fileColumns"
+            table-class="files-table"
+            wrap-class="table-grow"
+          >
+            <tbody>
+              <tr
+                v-for="file in detail.files"
+                :key="file.id"
+                :class="[file.file_status, file.link_status]"
+              >
+                <td>{{ fileStatusLabel(file) }}</td>
+                <td>{{ assetKindLabel(file.asset_kind) }}</td>
+                <td class="mono">
+                  <button
+                    v-if="file.file_status === 'present'"
+                    type="button"
+                    class="file-link"
+                    :title="file.repo_rel_path"
+                    @click="openFileDetail(file)"
+                  >
+                    {{ file.filename }}
+                  </button>
+                  <span v-else>{{ file.filename }}</span>
+                </td>
+                <td>
+                  <select
+                    :value="file.file_role"
+                    @change="
+                      onFileLinkPatch(file, {
+                        file_role: ($event.target as HTMLSelectElement).value,
+                      })
+                    "
+                  >
+                    <option value="part">零件</option>
+                    <option value="drawing">工程图</option>
+                    <option value="assembly">装配</option>
+                  </select>
+                </td>
+                <td>
+                  <select
+                    :value="file.link_status"
+                    @change="
+                      onFileLinkPatch(file, {
+                        link_status: ($event.target as HTMLSelectElement).value,
+                      })
+                    "
+                  >
+                    <option value="active">有效</option>
+                    <option value="obsolete">失效</option>
+                  </select>
+                </td>
+                <td>
+                  <input
+                    class="note-input"
+                    :value="file.link_notes"
+                    placeholder="备注"
+                    spellcheck="false"
+                    @change="
+                      onFileLinkPatch(file, {
+                        link_notes: ($event.target as HTMLInputElement).value,
+                      })
+                    "
+                  />
+                </td>
+                <td class="mono">{{ relDir(file.repo_rel_path) }}</td>
+                <td class="actions">
+                  <button
+                    v-if="file.file_status === 'present'"
+                    type="button"
+                    class="btn mini"
+                    @click="openFileDetail(file)"
+                  >
+                    详情
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </ResizableDataTable>
+          <div v-else class="table-wrap empty-wrap">
+            <p class="empty">该零件键下暂无关联文件</p>
+          </div>
+        </section>
+      </div>
+
+      <!-- 装配 BOM 树 -->
+      <div v-show="activeSubTab === 'assembly'" class="sub-panel">
+        <section v-if="showAssemblySection" class="assembly-block">
+          <div class="section-head">
+            <div class="section-controls">
+              <label v-if="assemblyFiles.length > 1" class="ctl">
+                <span>装配文件</span>
+                <select v-model="selectedAssemblyRel">
+                  <option v-for="file in assemblyFiles" :key="file.id" :value="file.repo_rel_path">
+                    {{ file.filename }}
+                  </option>
                 </select>
-              </td>
-              <td>
-                <select
-                  :value="file.link_status"
-                  @change="
-                    onFileLinkPatch(file, {
-                      link_status: ($event.target as HTMLSelectElement).value,
-                    })
-                  "
-                >
-                  <option value="active">有效</option>
-                  <option value="obsolete">失效</option>
-                </select>
-              </td>
-              <td>
-                <input
-                  class="note-input"
-                  :value="file.link_notes"
-                  placeholder="备注"
-                  spellcheck="false"
-                  @change="
-                    onFileLinkPatch(file, {
-                      link_notes: ($event.target as HTMLInputElement).value,
-                    })
-                  "
-                />
-              </td>
-              <td class="mono">{{ relDir(file.repo_rel_path) }}</td>
-              <td class="actions">
-                <button type="button" class="btn mini" @click="openBom(file)">属性回写</button>
-              </td>
-            </tr>
-          </tbody>
-        </ResizableDataTable>
-        <div v-else class="table-wrap empty-wrap">
-          <p class="empty">该零件键下暂无关联文件</p>
+              </label>
+              <label class="mode-opt">
+                <input v-model="treeMode" type="radio" value="first" />
+                第一级
+              </label>
+              <label class="mode-opt">
+                <input v-model="treeMode" type="radio" value="full" />
+                全部层级
+              </label>
+            </div>
+          </div>
+          <AssemblyTreeTable :nodes="treeNodes" :loading="treeLoading" />
+        </section>
+        <div v-else class="empty-wrap table-grow">
+          <p class="empty">该零件无装配 FCStd，无法展开 BOM 树。</p>
         </div>
-      </section>
+      </div>
     </template>
   </div>
 </template>
@@ -365,33 +451,73 @@ onActivated(initPage);
 .part-detail-page {
   display: flex;
   flex-direction: column;
-  overflow: auto;
-  padding: 20px 22px 16px;
+  overflow: hidden;
+  padding: 16px 20px;
   height: 100%;
   box-sizing: border-box;
 }
 
 .page-head {
   flex-shrink: 0;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .page-title {
   margin: 0 0 4px;
-  font-size: 1.15rem;
+  font-size: 1.1rem;
 }
 
 .page-sub {
-  margin: 0 0 4px;
+  margin: 0;
   color: var(--muted);
-  font-size: 0.88rem;
+  font-size: 0.85rem;
 }
 
-.page-desc {
-  margin: 0;
+.sub-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.sub-tab {
+  padding: 8px 14px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
   font-size: 0.85rem;
+  cursor: pointer;
   color: var(--muted);
-  line-height: 1.55;
+  margin-bottom: -1px;
+}
+
+.sub-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+.sub-tab:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.tab-badge {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.sub-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .banner {
@@ -443,9 +569,19 @@ onActivated(initPage);
   color: inherit;
 }
 
-.assembly-block,
+.assembly-block {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .files-block {
-  margin-bottom: 16px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-top: 4px;
 }
 
 .section-head {
@@ -454,6 +590,7 @@ onActivated(initPage);
   align-items: center;
   gap: 12px;
   margin-bottom: 8px;
+  flex-shrink: 0;
 }
 
 .section-title {
@@ -525,7 +662,14 @@ onActivated(initPage);
 }
 
 .table-grow {
-  min-height: 120px;
+  flex: 1;
+  min-height: 160px;
+}
+
+.empty-wrap.table-grow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .empty-wrap {
@@ -547,6 +691,22 @@ onActivated(initPage);
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
   font-size: 0.76rem;
+}
+
+.file-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent, #2563eb);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+}
+
+.file-link:hover {
+  text-decoration: underline;
 }
 
 .actions {

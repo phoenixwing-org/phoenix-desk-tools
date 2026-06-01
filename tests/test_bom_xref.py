@@ -92,6 +92,26 @@ class TestBomXref(unittest.TestCase):
             outgoing = search_outgoing_refs(root, "./asm.FCStd")
             self.assertEqual(outgoing["count"], 2)
 
+            log = str(xref.get("log") or "")
+            self.assertIn("重建内容: bom_xref", log)
+            self.assertIn("写入引用边:", log)
+            self.assertIn("读取 FCStd（present）:", log)
+
+    def test_rebuild_log_includes_before_after(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_fcstd(root / "child.FCStd", "<Document/>")
+            _write_fcstd(root / "asm.FCStd", _HOST_XML)
+            run_fcstd_map_scan(root)
+
+            first = rebuild_bom_xrefs(root, scan_id=1, scan_root=root)
+            self.assertIn("较上次:", first["log"])
+            self.assertEqual(first["host_files_scanned"], 2)
+            self.assertEqual(first["hosts_with_xlink"], 1)
+
+            second = rebuild_bom_xrefs(root, scan_id=1, scan_root=root)
+            self.assertIn("较上次: 边 2 → 2", second["log"])
+
     def test_nested_assembly_refs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

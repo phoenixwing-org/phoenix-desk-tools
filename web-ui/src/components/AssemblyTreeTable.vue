@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import type { AssemblyTreeNode } from "../api";
+import { useAppShell } from "../composables/useAppShell";
 
 const props = defineProps<{
   nodes: AssemblyTreeNode[];
   loading?: boolean;
 }>();
+
+const shell = useAppShell();
 
 type FlatRow = { node: AssemblyTreeNode; depth: number };
 
@@ -59,6 +62,19 @@ function roleLabel(role: string) {
   return map[role] ?? role;
 }
 
+function openFileDetail(node: AssemblyTreeNode) {
+  const rel = node.repo_rel_path?.trim();
+  if (!rel) return;
+  shell.openFileDetailForRel(rel);
+}
+
+function openPartKey(node: AssemblyTreeNode) {
+  const pn = node.part_number?.trim();
+  const pv = node.part_version?.trim();
+  if (!pn || !pv) return;
+  shell.openPartKeyDetail(pn, pv, { partName: node.PartName?.trim() || undefined });
+}
+
 watch(
   () => props.nodes,
   (nodes) => {
@@ -89,7 +105,7 @@ watch(
       <table class="asm-tree-table">
         <thead>
           <tr>
-            <th>名称 / 路径</th>
+            <th>名称</th>
             <th>PartKey</th>
             <th>类型</th>
             <th>角色</th>
@@ -110,11 +126,29 @@ watch(
                 >
                   {{ hasChildren(node) ? (expanded.has(node.id) ? "▾" : "▸") : "·" }}
                 </button>
-                <span class="basename mono">{{ node.basename }}</span>
-                <span class="path mono muted">{{ node.repo_rel_path }}</span>
+                <button
+                  v-if="node.repo_rel_path"
+                  type="button"
+                  class="basename mono file-link"
+                  :title="node.repo_rel_path"
+                  @click="openFileDetail(node)"
+                >
+                  {{ node.basename }}
+                </button>
+                <span v-else class="basename mono">{{ node.basename }}</span>
               </div>
             </td>
-            <td class="mono">{{ node.part_key || "—" }}</td>
+            <td class="mono">
+              <button
+                v-if="node.part_number && node.part_version"
+                type="button"
+                class="file-link"
+                @click="openPartKey(node)"
+              >
+                {{ node.part_key || `${node.part_number}.${node.part_version}` }}
+              </button>
+              <span v-else>{{ node.part_key || "—" }}</span>
+            </td>
             <td>{{ node.TypeCode || "—" }}</td>
             <td>{{ roleLabel(node.file_role) }}</td>
             <td>{{ node.resolve_status }}</td>
@@ -220,13 +254,25 @@ watch(
 }
 
 .basename {
-  flex-shrink: 0;
-}
-
-.path {
+  flex-shrink: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.file-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent, #2563eb);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.file-link:hover {
+  text-decoration: underline;
 }
 
 .mono {
