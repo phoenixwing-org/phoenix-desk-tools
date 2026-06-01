@@ -159,7 +159,6 @@ class BomApplyPage(BasePage):
         self._var_kind_part = ctk.BooleanVar(value=True)
         self._var_kind_assembly = ctk.BooleanVar(value=True)
         self._var_kind_drawing = ctk.BooleanVar(value=True)
-        self._var_kind_drawing_assy = ctk.BooleanVar(value=True)
 
         kind_row = ctk.CTkFrame(wrap, fg_color="transparent")
         kind_row.grid(row=2, column=0, sticky="ew", pady=(0, 8))
@@ -176,7 +175,6 @@ class BomApplyPage(BasePage):
             ("零件", self._var_kind_part),
             ("装配", self._var_kind_assembly),
             ("图纸", self._var_kind_drawing),
-            ("图纸+装配", self._var_kind_drawing_assy),
         ):
             ctk.CTkCheckBox(kind_row, text=text, variable=var, width=88).pack(side="left", padx=(0, 8))
         ctk.CTkButton(
@@ -500,7 +498,6 @@ class BomApplyPage(BasePage):
             part=bool(self._var_kind_part.get()),
             assembly=bool(self._var_kind_assembly.get()),
             drawing=bool(self._var_kind_drawing.get()),
-            drawing_and_assembly=bool(self._var_kind_drawing_assy.get()),
         )
 
     def _update_doc_kind_label(self) -> None:

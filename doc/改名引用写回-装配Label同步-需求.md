@@ -1,7 +1,7 @@
 # 改名引用写回 — 装配 Label 同步需求
 
 > [文档索引](文档索引.md) · 状态：**已实现**（默认勾选「同时修正引用名」）  
-> 关联：[改名与引用-归档说明.md](改名与引用-归档说明.md) · [Fcdesk嵌入式BOM属性约定.md](Fcdesk嵌入式BOM属性约定.md)  
+> 关联：[改名与XLink引用修正-规划讨论.md](改名与XLink引用修正-规划讨论.md) · [Fcdesk嵌入式BOM属性约定.md](Fcdesk嵌入式BOM属性约定.md)  
 > 入口：Web「改名与引用」→ **修正选中引用** / **修正引用名**（`POST /api/rename-analysis/apply`，`labels_only`）
 
 ---

@@ -6,6 +6,15 @@ import { useAppShell } from "../../composables/useAppShell";
 const { preview, form, incomingCount, outgoingCount, switchSubTab } = useFileDetailContext();
 const shell = useAppShell();
 
+const bomReadonly = computed(() => preview.value?.bom_readonly ?? false);
+const bomSourceRel = computed(() => preview.value?.bom_source_rel ?? null);
+
+function openSourceModel() {
+  const src = bomSourceRel.value;
+  if (!src) return;
+  shell.openFileDetailForRel(src, { subTab: "edit" });
+}
+
 const partKey = computed(() => {
   const pn = String(form.value.PartNumber ?? "").trim();
   const pv = String(form.value.PartVersion ?? "").trim();
@@ -56,6 +65,13 @@ const summaryRows = computed(() => {
         入向宿主 {{ incomingCount }} · 出向引用 {{ outgoingCount }}
       </p>
       <p v-if="preview.source_note" class="source muted">{{ preview.source_note }}</p>
+      <p v-if="bomReadonly" class="readonly-note">
+        BOM 只读（图纸 · App::Link）
+        <template v-if="bomSourceRel">
+          · 来源
+          <button type="button" class="link-btn mono" @click="openSourceModel">{{ bomSourceRel }}</button>
+        </template>
+      </p>
       <p v-if="preview.embedded_warning" class="warn">{{ preview.embedded_warning }}</p>
     </section>
 
@@ -91,6 +107,14 @@ const summaryRows = computed(() => {
         @click="openPartKey"
       >
         {{ partKey }}
+      </button>
+      <button
+        v-if="bomReadonly && bomSourceRel"
+        type="button"
+        class="btn"
+        @click="openSourceModel"
+      >
+        打开模型
       </button>
       <button type="button" class="btn" @click="switchSubTab('edit')">编辑属性</button>
       <button
@@ -146,6 +170,25 @@ const summaryRows = computed(() => {
 .source {
   margin: 8px 0 0;
   font-size: 0.78rem;
+}
+
+.readonly-note {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  color: #1e40af;
+}
+
+.link-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent, #2563eb);
+  cursor: pointer;
+  font: inherit;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
 }
 
 .warn {

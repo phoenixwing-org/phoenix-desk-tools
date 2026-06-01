@@ -23,6 +23,7 @@ from fcdesk.fcstd_mapping import (
     normalize_repo_rel_path_for_map,
     resolve_label_for_index_scan,
     resolve_part_name_for_scan,
+    strip_accidental_fcstd_suffix_from_name_segment,
     refine_inferred_part_name,
 )
 
@@ -289,6 +290,16 @@ class TestRecommendedFilename(unittest.TestCase):
             ".ASSY.FCStd",
         )
         self.assertEqual(infer_fcstd_name_suffix("a.Drawing.FCStd"), ".Drawing.FCStd")
+
+    def test_strip_accidental_fcstd_suffix_from_name_segment(self) -> None:
+        self.assertEqual(
+            strip_accidental_fcstd_suffix_from_name_segment("滑轨.Drawing.FCStd"),
+            "滑轨",
+        )
+        self.assertEqual(
+            strip_accidental_fcstd_suffix_from_name_segment("foo.ASSY.FCStd"),
+            "foo",
+        )
 
 
 class TestRenameWorkspaceFcstd(unittest.TestCase):

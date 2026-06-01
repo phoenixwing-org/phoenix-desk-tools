@@ -9,6 +9,7 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 from fcdesk.freecad.fcstd_document_bom_props import DOCUMENT_XML
+from fcdesk.freecad.fcstd_mapping import infer_fcstd_name_suffix
 
 _XLINK_TAG_RE = re.compile(r"<XLink\s+file=", re.IGNORECASE)
 
@@ -20,10 +21,6 @@ class FcstdDocumentKinds:
     part: bool = False
     assembly: bool = False
     drawing: bool = False
-
-    @property
-    def drawing_and_assembly(self) -> bool:
-        return self.drawing and self.assembly
 
     def label_parts(self) -> list[str]:
         out: list[str] = []
@@ -39,8 +36,6 @@ class FcstdDocumentKinds:
         parts = self.label_parts()
         if not parts:
             return "未识别"
-        if self.drawing_and_assembly:
-            return "、".join(parts) + "（图纸+装配）"
         return "、".join(parts)
 
 
@@ -51,10 +46,9 @@ class FcstdKindFilters:
     part: bool = True
     assembly: bool = True
     drawing: bool = True
-    drawing_and_assembly: bool = True
 
     def any_enabled(self) -> bool:
-        return self.part or self.assembly or self.drawing or self.drawing_and_assembly
+        return self.part or self.assembly or self.drawing
 
 
 def classify_document_xml(xml_text: str) -> FcstdDocumentKinds:
@@ -112,15 +106,20 @@ def kinds_match_filters(kinds: FcstdDocumentKinds, filters: FcstdKindFilters) ->
         return True
     if filters.drawing and kinds.drawing:
         return True
-    if filters.drawing_and_assembly and kinds.drawing_and_assembly:
-        return True
     return False
 
 
-def recommend_fcstd_filename_suffix(kinds: FcstdDocumentKinds) -> str:
-    """按文档类别推荐 FCStd 族后缀：装配 → ``.ASSY.FCStd``，图纸 → ``.Drawing.FCStd``，否则 ``.FCStd``。"""
-    if kinds.assembly:
-        return ".ASSY.FCStd"
+def recommend_fcstd_filename_suffix(kinds: FcstdDocumentKinds, *, filename: str = "") -> str:
+    """按文档类别推荐 FCStd 族后缀：图纸 → ``.Drawing.FCStd``，装配 → ``.ASSY.FCStd``，否则 ``.FCStd``。
+
+    若当前文件名已是 ``.Drawing.FCStd`` / ``.ASSY.FCStd``，优先保留。
+    同时识别为图纸与装配时，图纸后缀优先于装配。
+    """
+    on_disk = infer_fcstd_name_suffix(filename) if filename.strip() else ""
+    if on_disk in (".Drawing.FCStd", ".ASSY.FCStd"):
+        return on_disk
     if kinds.drawing:
         return ".Drawing.FCStd"
+    if kinds.assembly:
+        return ".ASSY.FCStd"
     return ".FCStd"

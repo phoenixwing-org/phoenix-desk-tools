@@ -1,0 +1,1498 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!--
+ FreeCAD Document, see https://www.freecad.org for more information...
+-->
+<Document SchemaVersion="4" ProgramVersion="1.1R20260325 (Git shallow)" FileVersion="1" StringHasher="1">
+    <StringHasher saveall="0" threshold="0" count="0"></StringHasher>
+    <Properties Count="17" TransientCount="3">
+        <_Property name="FileName" type="App::PropertyString" status="50331649"/>
+        <_Property name="Tip" type="App::PropertyLink" status="33554433"/>
+        <_Property name="TransientDir" type="App::PropertyString" status="50331649"/>
+        <Property name="Comment" type="App::PropertyString" status="1">
+            <String value=""/>
+        </Property>
+        <Property name="Company" type="App::PropertyString">
+            <String value=""/>
+        </Property>
+        <Property name="CreatedBy" type="App::PropertyString">
+            <String value=""/>
+        </Property>
+        <Property name="CreationDate" type="App::PropertyString" status="16777217">
+            <String value="2026-02-22T11:10:23+08:00"/>
+        </Property>
+        <Property name="Id" type="App::PropertyString">
+            <String value=""/>
+        </Property>
+        <Property name="Label" type="App::PropertyString" status="16777217">
+            <String value="LinkPart"/>
+        </Property>
+        <Property name="LastModifiedBy" type="App::PropertyString">
+            <String value=""/>
+        </Property>
+        <Property name="LastModifiedDate" type="App::PropertyString" status="16777217">
+            <String value="2026-06-01T08:14:05+08:00"/>
+        </Property>
+        <Property name="License" type="App::PropertyString" status="1">
+            <String value="All rights reserved"/>
+        </Property>
+        <Property name="LicenseURL" type="App::PropertyString" status="1">
+            <String value="https://en.wikipedia.org/wiki/All_rights_reserved"/>
+        </Property>
+        <Property name="Material" type="App::PropertyMap" status="1">
+            <Map count="0">
+            </Map>
+        </Property>
+        <Property name="Meta" type="App::PropertyMap" status="1">
+            <Map count="0">
+            </Map>
+        </Property>
+        <Property name="ShowHidden" type="App::PropertyBool" status="1">
+            <Bool value="false"/>
+        </Property>
+        <Property name="TipName" type="App::PropertyString" status="83886080">
+            <String value=""/>
+        </Property>
+        <Property name="Uid" type="App::PropertyUUID" status="16777217">
+            <Uuid value="dba32bc8-9681-4bfd-b172-34ee28d91975"/>
+        </Property>
+        <Property name="UnitSystem" type="App::PropertyEnumeration" status="1">
+            <Integer value="0" CustomEnum="true"/>
+            <CustomEnumList count="10">
+                <Enum value="标准 (mm, kg, s, °)"/>
+                <Enum value="公制 (m, kg, s, °)"/>
+                <Enum value="美制 (in, lb)"/>
+                <Enum value="英制 (in, lb)"/>
+                <Enum value="欧规 (cm, m², m³)"/>
+                <Enum value="美制 (ft-in, sqft, cft)"/>
+                <Enum value="公制小零件与数控 (mm, mm/min)"/>
+                <Enum value="土木工程英制单位(ft, lb, mph)"/>
+                <Enum value="FEM (mm, N, s)"/>
+                <Enum value="米 (m, m², m³)"/>
+            </CustomEnumList>
+        </Property>
+        <Property name="UseHasher" type="App::PropertyBool" status="67108865">
+            <Bool value="true"/>
+        </Property>
+    </Properties>
+    <Objects Count="14" Dependencies="1">
+        <ObjectDeps Name="Link" Count="0"/>
+        <ObjectDeps Name="Page" Count="8">
+            <Dep Name="Template"/>
+            <Dep Name="ProjGroup"/>
+            <Dep Name="Dimension"/>
+            <Dep Name="Dimension001"/>
+            <Dep Name="Dimension002"/>
+            <Dep Name="Dimension003"/>
+            <Dep Name="Dimension004"/>
+            <Dep Name="Dimension005"/>
+        </ObjectDeps>
+        <ObjectDeps Name="Template" Count="0"/>
+        <ObjectDeps Name="View" Count="1">
+            <Dep Name="Link"/>
+        </ObjectDeps>
+        <ObjectDeps Name="ProjGroup" Count="6">
+            <Dep Name="Link"/>
+            <Dep Name="View"/>
+            <Dep Name="View"/>
+            <Dep Name="ProjItem"/>
+            <Dep Name="ProjItem001"/>
+            <Dep Name="ProjItem002"/>
+        </ObjectDeps>
+        <ObjectDeps Name="ProjItem" Count="1">
+            <Dep Name="Link"/>
+        </ObjectDeps>
+        <ObjectDeps Name="ProjItem001" Count="1">
+            <Dep Name="Link"/>
+        </ObjectDeps>
+        <ObjectDeps Name="ProjItem002" Count="1">
+            <Dep Name="Link"/>
+        </ObjectDeps>
+        <ObjectDeps Name="Dimension" Count="1">
+            <Dep Name="ProjItem001"/>
+        </ObjectDeps>
+        <ObjectDeps Name="Dimension001" Count="2">
+            <Dep Name="View"/>
+            <Dep Name="View"/>
+        </ObjectDeps>
+        <ObjectDeps Name="Dimension002" Count="2">
+            <Dep Name="View"/>
+            <Dep Name="View"/>
+        </ObjectDeps>
+        <ObjectDeps Name="Dimension003" Count="1">
+            <Dep Name="View"/>
+        </ObjectDeps>
+        <ObjectDeps Name="Dimension004" Count="2">
+            <Dep Name="View"/>
+            <Dep Name="View"/>
+        </ObjectDeps>
+        <ObjectDeps Name="Dimension005" Count="1">
+            <Dep Name="View"/>
+        </ObjectDeps>
+        <Object type="App::Link" name="Link" id="2039" />
+        <Object type="TechDraw::DrawPage" name="Page" id="2040" />
+        <Object type="TechDraw::DrawSVGTemplate" name="Template" id="2041" />
+        <Object type="TechDraw::DrawProjGroupItem" name="View" id="2042" />
+        <Object type="TechDraw::DrawProjGroup" name="ProjGroup" id="2043" />
+        <Object type="TechDraw::DrawProjGroupItem" name="ProjItem" id="2044" />
+        <Object type="TechDraw::DrawProjGroupItem" name="ProjItem001" id="2045" />
+        <Object type="TechDraw::DrawProjGroupItem" name="ProjItem002" id="2046" />
+        <Object type="TechDraw::DrawViewDimension" name="Dimension" id="2048" />
+        <Object type="TechDraw::DrawViewDimension" name="Dimension001" id="2050" />
+        <Object type="TechDraw::DrawViewDimension" name="Dimension002" id="2052" />
+        <Object type="TechDraw::DrawViewDimension" name="Dimension003" id="2054" />
+        <Object type="TechDraw::DrawViewDimension" name="Dimension004" id="2056" />
+        <Object type="TechDraw::DrawViewDimension" name="Dimension005" id="2060" />
+    </Objects>
+    <ObjectData Count="14">
+        <Object name="Link" Extensions="True">
+            <Extensions Count="1">
+                <Extension type="App::LinkExtension" name="LinkExtension">
+                </Extension>
+            </Extensions>
+            <Properties Count="24" TransientCount="0">
+                <Property name="ColoredElements" type="App::PropertyLinkSubHidden" status="67109120">
+                    <LinkSub value="" count="0">
+                    </LinkSub>
+                </Property>
+                <Property name="ElementCount" type="App::PropertyIntegerConstraint" status="256">
+                    <Integer value="0"/>
+                </Property>
+                <Property name="ElementList" type="App::PropertyLinkList" status="266">
+                    <LinkList count="0">
+                    </LinkList>
+                </Property>
+                <Property name="ExpressionEngine" type="App::PropertyExpressionEngine" status="67108864">
+                    <ExpressionEngine count="0">
+                    </ExpressionEngine>
+                </Property>
+                <Property name="Label" type="App::PropertyString" status="134217728">
+                    <String value="8003.001-滑轨"/>
+                </Property>
+                <Property name="Label2" type="App::PropertyString" status="67108992">
+                    <String value=""/>
+                </Property>
+                <Property name="LinkClaimChild" type="App::PropertyBool" status="256">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="LinkCopyOnChange" type="App::PropertyEnumeration" status="256">
+                    <Integer value="0"/>
+                </Property>
+                <Property name="LinkCopyOnChangeGroup" type="App::PropertyLink" status="264">
+                    <Link value=""/>
+                </Property>
+                <Property name="LinkCopyOnChangeSource" type="App::PropertyXLink" status="264">
+                    <XLink file="" stamp="" name=""/>
+                </Property>
+                <Property name="LinkCopyOnChangeTouched" type="App::PropertyBool" status="264">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="LinkExecute" type="App::PropertyString" status="256">
+                    <String value=""/>
+                </Property>
+                <Property name="LinkPlacement" type="App::PropertyPlacement" status="264">
+                    <PropertyPlacement Px="0.0000000000000000" Py="0.0000000000000000" Pz="0.0000000000000000" Q0="0.0000000000000000" Q1="0.0000000000000000" Q2="0.0000000000000000" Q3="1.0000000000000000" A="0.0000000000000000" Ox="0.0000000000000000" Oy="0.0000000000000000" Oz="1.0000000000000000"/>
+                </Property>
+                <Property name="LinkTransform" type="App::PropertyBool" status="256">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="LinkedObject" type="App::PropertyXLink" status="256">
+                    <XLink file="8003.001-H-PHOENIX-滑轨.FCStd" stamp="2026-05-31T18:04:50+08:00" name="Body"/>
+                </Property>
+                <Property name="Placement" type="App::PropertyPlacement" status="256">
+                    <PropertyPlacement Px="0.0000000000000000" Py="0.0000000000000000" Pz="0.0000000000000000" Q0="0.0000000000000000" Q1="0.0000000000000000" Q2="0.0000000000000000" Q3="1.0000000000000000" A="0.0000000000000000" Ox="0.0000000000000000" Oy="0.0000000000000000" Oz="1.0000000000000000"/>
+                </Property>
+                <Property name="PlacementList" type="App::PropertyPlacementList" status="256">
+                    <PlacementList file="PlacementList"/>
+                </Property>
+                <Property name="Scale" type="App::PropertyFloat" status="256">
+                    <Float value="1.0000000000000000"/>
+                </Property>
+                <Property name="ScaleList" type="App::PropertyVectorList" status="256">
+                    <VectorList file="ScaleList"/>
+                </Property>
+                <Property name="ScaleVector" type="App::PropertyVector" status="67109120">
+                    <PropertyVector valueX="1.0000000000000000" valueY="1.0000000000000000" valueZ="1.0000000000000000"/>
+                </Property>
+                <Property name="ShowElement" type="App::PropertyBool" status="256">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="Visibility" type="App::PropertyBool" status="648">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="VisibilityList" type="App::PropertyBoolList" status="266">
+                    <BoolList value=""/>
+                </Property>
+                <Property name="_LinkOwner" type="App::PropertyInteger" status="201326592">
+                    <Integer value="0"/>
+                </Property>
+            </Properties>
+        </Object>
+        <Object name="Page">
+            <Properties Count="10" TransientCount="0">
+                <Property name="ExpressionEngine" type="App::PropertyExpressionEngine" status="67108864">
+                    <ExpressionEngine count="0">
+                    </ExpressionEngine>
+                </Property>
+                <Property name="KeepUpdated" type="App::PropertyBool" status="134217728">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="Label" type="App::PropertyString" status="134217728">
+                    <String value="8003.001-零件图"/>
+                </Property>
+                <Property name="Label2" type="App::PropertyString" status="67108992">
+                    <String value=""/>
+                </Property>
+                <Property name="NextBalloonIndex" type="App::PropertyInteger">
+                    <Integer value="1"/>
+                </Property>
+                <Property name="ProjectionType" type="App::PropertyEnumeration">
+                    <Integer value="0"/>
+                </Property>
+                <Property name="Scale" type="App::PropertyFloatConstraint">
+                    <Float value="1.0000000000000000"/>
+                </Property>
+                <Property name="Template" type="App::PropertyLink">
+                    <Link value="Template"/>
+                </Property>
+                <Property name="Views" type="App::PropertyLinkList">
+                    <LinkList count="7">
+                        <Link value="ProjGroup"/>
+                        <Link value="Dimension"/>
+                        <Link value="Dimension001"/>
+                        <Link value="Dimension002"/>
+                        <Link value="Dimension003"/>
+                        <Link value="Dimension004"/>
+                        <Link value="Dimension005"/>
+                    </LinkList>
+                </Property>
+                <Property name="Visibility" type="App::PropertyBool" status="648">
+                    <Bool value="true"/>
+                </Property>
+            </Properties>
+        </Object>
+        <Object name="Template">
+            <Properties Count="10" TransientCount="0">
+                <Property name="EditableTexts" type="App::PropertyMap">
+                    <Map count="16">
+                        <Item key="approval_person" value="B. Hecate"/>
+                        <Item key="creator" value="A. Nemesis"/>
+                        <Item key="date_of_issue" value="1 Jun 2026"/>
+                        <Item key="document_type" value="Component Drawing"/>
+                        <Item key="drawing_number" value="DN"/>
+                        <Item key="general_tolerances" value="ISO 2768-m"/>
+                        <Item key="language_code" value="EN"/>
+                        <Item key="legal_owner_1" value=""/>
+                        <Item key="legal_owner_2" value=""/>
+                        <Item key="legal_owner_3" value=""/>
+                        <Item key="legal_owner_4" value=""/>
+                        <Item key="part_material" value="Stainless steel Mat.No. 1.4301"/>
+                        <Item key="revision_index" value="AAA"/>
+                        <Item key="scale" value="1 : 1"/>
+                        <Item key="sheet_number" value="1 / 1"/>
+                        <Item key="title" value="LinkPart"/>
+                    </Map>
+                </Property>
+                <Property name="ExpressionEngine" type="App::PropertyExpressionEngine" status="67108864">
+                    <ExpressionEngine count="0">
+                    </ExpressionEngine>
+                </Property>
+                <Property name="Height" type="App::PropertyLength" status="4">
+                    <Float value="297.0000000000000000"/>
+                </Property>
+                <Property name="Label" type="App::PropertyString" status="134217728">
+                    <String value="模板"/>
+                </Property>
+                <Property name="Label2" type="App::PropertyString" status="67108992">
+                    <String value=""/>
+                </Property>
+                <Property name="Orientation" type="App::PropertyEnumeration" status="4">
+                    <Integer value="1"/>
+                </Property>
+                <Property name="PageResult" type="App::PropertyFileIncluded" status="134217728">
+                    <FileIncluded file="A2_Landscape_ISO5457_minimal.svg"/>
+                </Property>
+                <Property name="Template" type="App::PropertyFile">
+                    <String value="/Applications/FreeCAD.app/Contents/Resources/share/Mod/TechDraw/Templates/ISO/A3_Landscape_ISO5457_minimal.svg"/>
+                </Property>
+                <Property name="Visibility" type="App::PropertyBool" status="648">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="Width" type="App::PropertyLength" status="4">
+                    <Float value="420.0000000000000000"/>
+                </Property>
+            </Properties>
+        </Object>
+        <Object name="View" Extensions="True">
+            <Extensions Count="1">
+                <Extension type="TechDraw::CosmeticExtension" name="CosmeticExtension">
+                </Extension>
+            </Extensions>
+            <Properties Count="33" TransientCount="0">
+                <Property name="Caption" type="App::PropertyString" status="134217728">
+                    <String value=""/>
+                </Property>
+                <Property name="CenterLines" type="TechDraw::PropertyCenterLineList" status="134217728">
+                    <CenterLineList count="0">
+                    </CenterLineList>
+                </Property>
+                <Property name="CoarseView" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="CosmeticEdges" type="TechDraw::PropertyCosmeticEdgeList" status="134217728">
+                    <CosmeticEdgeList count="0">
+                    </CosmeticEdgeList>
+                </Property>
+                <Property name="CosmeticVertexes" type="TechDraw::PropertyCosmeticVertexList" status="134217728">
+                    <CosmeticVertexList count="0">
+                    </CosmeticVertexList>
+                </Property>
+                <Property name="Direction" type="App::PropertyVector">
+                    <PropertyVector valueX="0.0000000000000000" valueY="-1.0000000000000000" valueZ="0.0000000000000000"/>
+                </Property>
+                <Property name="ExpressionEngine" type="App::PropertyExpressionEngine" status="67108864">
+                    <ExpressionEngine count="0">
+                    </ExpressionEngine>
+                </Property>
+                <Property name="Focus" type="App::PropertyDistance">
+                    <Float value="100.0000000000000000"/>
+                </Property>
+                <Property name="GeomFormats" type="TechDraw::PropertyGeomFormatList" status="134217728">
+                    <GeomFormatList count="0">
+                    </GeomFormatList>
+                </Property>
+                <Property name="HardHidden" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="IsoCount" type="App::PropertyInteger">
+                    <Integer value="0"/>
+                </Property>
+                <Property name="IsoHidden" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="IsoVisible" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Label" type="App::PropertyString" status="134217728">
+                    <String value="Front"/>
+                </Property>
+                <Property name="Label2" type="App::PropertyString" status="67108992">
+                    <String value=""/>
+                </Property>
+                <Property name="LockPosition" type="App::PropertyBool" status="134217732">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="Perspective" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Rotation" type="App::PropertyAngle" status="134217728">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="RotationVector" type="App::PropertyVector" status="4">
+                    <PropertyVector valueX="1.0000000000000000" valueY="0.0000000000000000" valueZ="0.0000000000000000"/>
+                </Property>
+                <Property name="Scale" type="App::PropertyFloatConstraint" status="8">
+                    <Float value="1.0000000000000000"/>
+                </Property>
+                <Property name="ScaleType" type="App::PropertyEnumeration" status="134217736">
+                    <Integer value="2"/>
+                </Property>
+                <Property name="ScrubCount" type="App::PropertyInteger">
+                    <Integer value="1"/>
+                </Property>
+                <Property name="SeamHidden" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="SeamVisible" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="SmoothHidden" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="SmoothVisible" type="App::PropertyBool">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="Source" type="App::PropertyLinkList">
+                    <LinkList count="0">
+                    </LinkList>
+                </Property>
+                <Property name="Type" type="App::PropertyEnumeration">
+                    <Integer value="0"/>
+                </Property>
+                <Property name="Visibility" type="App::PropertyBool" status="648">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="X" type="App::PropertyDistance" status="4">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="XDirection" type="App::PropertyVector">
+                    <PropertyVector valueX="1.0000000000000000" valueY="0.0000000000000000" valueZ="0.0000000000000000"/>
+                </Property>
+                <Property name="XSource" type="App::PropertyXLinkList">
+                    <XLinkSubList count="1">
+                        <XLink file="" stamp="" name="Link"/>
+                    </XLinkSubList>
+                </Property>
+                <Property name="Y" type="App::PropertyDistance" status="4">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+            </Properties>
+        </Object>
+        <Object name="ProjGroup">
+            <Properties Count="19" TransientCount="0">
+                <Property name="Anchor" type="App::PropertyLink">
+                    <Link value="View"/>
+                </Property>
+                <Property name="AutoDistribute" type="App::PropertyBool">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="Caption" type="App::PropertyString" status="134217736">
+                    <String value=""/>
+                </Property>
+                <Property name="ExpressionEngine" type="App::PropertyExpressionEngine" status="67108864">
+                    <ExpressionEngine count="0">
+                    </ExpressionEngine>
+                </Property>
+                <Property name="Label" type="App::PropertyString" status="134217728">
+                    <String value="ProjGroup"/>
+                </Property>
+                <Property name="Label2" type="App::PropertyString" status="67108992">
+                    <String value=""/>
+                </Property>
+                <Property name="LockPosition" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="ProjectionType" type="App::PropertyEnumeration">
+                    <Integer value="0"/>
+                </Property>
+                <Property name="Rotation" type="App::PropertyAngle" status="134217736">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="Scale" type="App::PropertyFloatConstraint" status="4">
+                    <Float value="1.0000000000000000"/>
+                </Property>
+                <Property name="ScaleType" type="App::PropertyEnumeration" status="134217728">
+                    <Integer value="0"/>
+                </Property>
+                <Property name="Source" type="App::PropertyLinkList">
+                    <LinkList count="0">
+                    </LinkList>
+                </Property>
+                <Property name="Views" type="App::PropertyLinkList">
+                    <LinkList count="4">
+                        <Link value="View"/>
+                        <Link value="ProjItem"/>
+                        <Link value="ProjItem001"/>
+                        <Link value="ProjItem002"/>
+                    </LinkList>
+                </Property>
+                <Property name="Visibility" type="App::PropertyBool" status="648">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="X" type="App::PropertyDistance">
+                    <Float value="109.4925860000000029"/>
+                </Property>
+                <Property name="XSource" type="App::PropertyXLinkList">
+                    <XLinkSubList count="1">
+                        <XLink file="" stamp="" name="Link"/>
+                    </XLinkSubList>
+                </Property>
+                <Property name="Y" type="App::PropertyDistance">
+                    <Float value="228.0730039999999974"/>
+                </Property>
+                <Property name="spacingX" type="App::PropertyLength">
+                    <Float value="15.0000000000000000"/>
+                </Property>
+                <Property name="spacingY" type="App::PropertyLength">
+                    <Float value="15.0000000000000000"/>
+                </Property>
+            </Properties>
+        </Object>
+        <Object name="ProjItem" Extensions="True">
+            <Extensions Count="1">
+                <Extension type="TechDraw::CosmeticExtension" name="CosmeticExtension">
+                </Extension>
+            </Extensions>
+            <Properties Count="33" TransientCount="0">
+                <Property name="Caption" type="App::PropertyString" status="134217728">
+                    <String value=""/>
+                </Property>
+                <Property name="CenterLines" type="TechDraw::PropertyCenterLineList" status="134217728">
+                    <CenterLineList count="0">
+                    </CenterLineList>
+                </Property>
+                <Property name="CoarseView" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="CosmeticEdges" type="TechDraw::PropertyCosmeticEdgeList" status="134217728">
+                    <CosmeticEdgeList count="0">
+                    </CosmeticEdgeList>
+                </Property>
+                <Property name="CosmeticVertexes" type="TechDraw::PropertyCosmeticVertexList" status="134217728">
+                    <CosmeticVertexList count="0">
+                    </CosmeticVertexList>
+                </Property>
+                <Property name="Direction" type="App::PropertyVector">
+                    <PropertyVector valueX="-1.0000000000000000" valueY="-0.0000000000000001" valueZ="0.0000000000000000"/>
+                </Property>
+                <Property name="ExpressionEngine" type="App::PropertyExpressionEngine" status="67108864">
+                    <ExpressionEngine count="0">
+                    </ExpressionEngine>
+                </Property>
+                <Property name="Focus" type="App::PropertyDistance">
+                    <Float value="100.0000000000000000"/>
+                </Property>
+                <Property name="GeomFormats" type="TechDraw::PropertyGeomFormatList" status="134217728">
+                    <GeomFormatList count="0">
+                    </GeomFormatList>
+                </Property>
+                <Property name="HardHidden" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="IsoCount" type="App::PropertyInteger">
+                    <Integer value="0"/>
+                </Property>
+                <Property name="IsoHidden" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="IsoVisible" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Label" type="App::PropertyString" status="134217728">
+                    <String value="左视"/>
+                </Property>
+                <Property name="Label2" type="App::PropertyString" status="67108992">
+                    <String value=""/>
+                </Property>
+                <Property name="LockPosition" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Perspective" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Rotation" type="App::PropertyAngle" status="134217728">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="RotationVector" type="App::PropertyVector" status="4">
+                    <PropertyVector valueX="1.0000000000000000" valueY="0.0000000000000000" valueZ="0.0000000000000000"/>
+                </Property>
+                <Property name="Scale" type="App::PropertyFloatConstraint" status="4">
+                    <Float value="1.0000000000000000"/>
+                </Property>
+                <Property name="ScaleType" type="App::PropertyEnumeration" status="134217728">
+                    <Integer value="0"/>
+                </Property>
+                <Property name="ScrubCount" type="App::PropertyInteger">
+                    <Integer value="1"/>
+                </Property>
+                <Property name="SeamHidden" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="SeamVisible" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="SmoothHidden" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="SmoothVisible" type="App::PropertyBool">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="Source" type="App::PropertyLinkList">
+                    <LinkList count="0">
+                    </LinkList>
+                </Property>
+                <Property name="Type" type="App::PropertyEnumeration">
+                    <Integer value="1"/>
+                </Property>
+                <Property name="Visibility" type="App::PropertyBool" status="648">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="X" type="App::PropertyDistance">
+                    <Float value="101.5685424949238183"/>
+                </Property>
+                <Property name="XDirection" type="App::PropertyVector">
+                    <PropertyVector valueX="0.0000000000000001" valueY="-1.0000000000000000" valueZ="0.0000000000000000"/>
+                </Property>
+                <Property name="XSource" type="App::PropertyXLinkList">
+                    <XLinkSubList count="1">
+                        <XLink file="" stamp="" name="Link"/>
+                    </XLinkSubList>
+                </Property>
+                <Property name="Y" type="App::PropertyDistance">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+            </Properties>
+        </Object>
+        <Object name="ProjItem001" Extensions="True">
+            <Extensions Count="1">
+                <Extension type="TechDraw::CosmeticExtension" name="CosmeticExtension">
+                </Extension>
+            </Extensions>
+            <Properties Count="33" TransientCount="0">
+                <Property name="Caption" type="App::PropertyString" status="134217728">
+                    <String value=""/>
+                </Property>
+                <Property name="CenterLines" type="TechDraw::PropertyCenterLineList" status="134217728">
+                    <CenterLineList count="0">
+                    </CenterLineList>
+                </Property>
+                <Property name="CoarseView" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="CosmeticEdges" type="TechDraw::PropertyCosmeticEdgeList" status="134217728">
+                    <CosmeticEdgeList count="0">
+                    </CosmeticEdgeList>
+                </Property>
+                <Property name="CosmeticVertexes" type="TechDraw::PropertyCosmeticVertexList" status="134217728">
+                    <CosmeticVertexList count="0">
+                    </CosmeticVertexList>
+                </Property>
+                <Property name="Direction" type="App::PropertyVector">
+                    <PropertyVector valueX="-0.0000000000000000" valueY="0.0000000000000000" valueZ="1.0000000000000000"/>
+                </Property>
+                <Property name="ExpressionEngine" type="App::PropertyExpressionEngine" status="67108864">
+                    <ExpressionEngine count="0">
+                    </ExpressionEngine>
+                </Property>
+                <Property name="Focus" type="App::PropertyDistance">
+                    <Float value="100.0000000000000000"/>
+                </Property>
+                <Property name="GeomFormats" type="TechDraw::PropertyGeomFormatList" status="134217728">
+                    <GeomFormatList count="0">
+                    </GeomFormatList>
+                </Property>
+                <Property name="HardHidden" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="IsoCount" type="App::PropertyInteger">
+                    <Integer value="0"/>
+                </Property>
+                <Property name="IsoHidden" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="IsoVisible" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Label" type="App::PropertyString" status="134217728">
+                    <String value="俯视"/>
+                </Property>
+                <Property name="Label2" type="App::PropertyString" status="67108992">
+                    <String value=""/>
+                </Property>
+                <Property name="LockPosition" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Perspective" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Rotation" type="App::PropertyAngle" status="134217728">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="RotationVector" type="App::PropertyVector" status="4">
+                    <PropertyVector valueX="1.0000000000000000" valueY="0.0000000000000000" valueZ="0.0000000000000000"/>
+                </Property>
+                <Property name="Scale" type="App::PropertyFloatConstraint" status="4">
+                    <Float value="1.0000000000000000"/>
+                </Property>
+                <Property name="ScaleType" type="App::PropertyEnumeration" status="134217728">
+                    <Integer value="0"/>
+                </Property>
+                <Property name="ScrubCount" type="App::PropertyInteger">
+                    <Integer value="1"/>
+                </Property>
+                <Property name="SeamHidden" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="SeamVisible" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="SmoothHidden" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="SmoothVisible" type="App::PropertyBool">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="Source" type="App::PropertyLinkList">
+                    <LinkList count="0">
+                    </LinkList>
+                </Property>
+                <Property name="Type" type="App::PropertyEnumeration">
+                    <Integer value="4"/>
+                </Property>
+                <Property name="Visibility" type="App::PropertyBool" status="648">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="X" type="App::PropertyDistance">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="XDirection" type="App::PropertyVector">
+                    <PropertyVector valueX="1.0000000000000000" valueY="0.0000000000000000" valueZ="0.0000000000000000"/>
+                </Property>
+                <Property name="XSource" type="App::PropertyXLinkList">
+                    <XLinkSubList count="1">
+                        <XLink file="" stamp="" name="Link"/>
+                    </XLinkSubList>
+                </Property>
+                <Property name="Y" type="App::PropertyDistance">
+                    <Float value="-102.1547606649408522"/>
+                </Property>
+            </Properties>
+        </Object>
+        <Object name="ProjItem002" Extensions="True">
+            <Extensions Count="1">
+                <Extension type="TechDraw::CosmeticExtension" name="CosmeticExtension">
+                </Extension>
+            </Extensions>
+            <Properties Count="33" TransientCount="0">
+                <Property name="Caption" type="App::PropertyString" status="134217728">
+                    <String value=""/>
+                </Property>
+                <Property name="CenterLines" type="TechDraw::PropertyCenterLineList" status="134217728">
+                    <CenterLineList count="0">
+                    </CenterLineList>
+                </Property>
+                <Property name="CoarseView" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="CosmeticEdges" type="TechDraw::PropertyCosmeticEdgeList" status="134217728">
+                    <CosmeticEdgeList count="0">
+                    </CosmeticEdgeList>
+                </Property>
+                <Property name="CosmeticVertexes" type="TechDraw::PropertyCosmeticVertexList" status="134217728">
+                    <CosmeticVertexList count="0">
+                    </CosmeticVertexList>
+                </Property>
+                <Property name="Direction" type="App::PropertyVector">
+                    <PropertyVector valueX="-0.5773502691896258" valueY="-0.5773502691896258" valueZ="0.5773502691896258"/>
+                </Property>
+                <Property name="ExpressionEngine" type="App::PropertyExpressionEngine" status="67108864">
+                    <ExpressionEngine count="0">
+                    </ExpressionEngine>
+                </Property>
+                <Property name="Focus" type="App::PropertyDistance">
+                    <Float value="100.0000000000000000"/>
+                </Property>
+                <Property name="GeomFormats" type="TechDraw::PropertyGeomFormatList" status="134217728">
+                    <GeomFormatList count="0">
+                    </GeomFormatList>
+                </Property>
+                <Property name="HardHidden" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="IsoCount" type="App::PropertyInteger">
+                    <Integer value="0"/>
+                </Property>
+                <Property name="IsoHidden" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="IsoVisible" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Label" type="App::PropertyString" status="134217728">
+                    <String value="前左上"/>
+                </Property>
+                <Property name="Label2" type="App::PropertyString" status="67108992">
+                    <String value=""/>
+                </Property>
+                <Property name="LockPosition" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Perspective" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Rotation" type="App::PropertyAngle" status="134217728">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="RotationVector" type="App::PropertyVector" status="4">
+                    <PropertyVector valueX="1.0000000000000000" valueY="0.0000000000000000" valueZ="0.0000000000000000"/>
+                </Property>
+                <Property name="Scale" type="App::PropertyFloatConstraint" status="4">
+                    <Float value="1.0000000000000000"/>
+                </Property>
+                <Property name="ScaleType" type="App::PropertyEnumeration" status="134217728">
+                    <Integer value="0"/>
+                </Property>
+                <Property name="ScrubCount" type="App::PropertyInteger">
+                    <Integer value="1"/>
+                </Property>
+                <Property name="SeamHidden" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="SeamVisible" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="SmoothHidden" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="SmoothVisible" type="App::PropertyBool">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="Source" type="App::PropertyLinkList">
+                    <LinkList count="0">
+                    </LinkList>
+                </Property>
+                <Property name="Type" type="App::PropertyEnumeration">
+                    <Integer value="6"/>
+                </Property>
+                <Property name="Visibility" type="App::PropertyBool" status="648">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="X" type="App::PropertyDistance">
+                    <Float value="101.5685424949238183"/>
+                </Property>
+                <Property name="XDirection" type="App::PropertyVector">
+                    <PropertyVector valueX="0.7071067811865475" valueY="-0.7071067811865475" valueZ="0.0000000000000000"/>
+                </Property>
+                <Property name="XSource" type="App::PropertyXLinkList">
+                    <XLinkSubList count="1">
+                        <XLink file="" stamp="" name="Link"/>
+                    </XLinkSubList>
+                </Property>
+                <Property name="Y" type="App::PropertyDistance">
+                    <Float value="-102.1547606649408522"/>
+                </Property>
+            </Properties>
+        </Object>
+        <Object name="Dimension">
+            <Properties Count="32" TransientCount="0">
+                <Property name="AngleOverride" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Arbitrary" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="ArbitraryTolerances" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="BoxCorners" type="App::PropertyVectorList">
+                    <VectorList file="BoxCorners"/>
+                </Property>
+                <Property name="Caption" type="App::PropertyString" status="134217736">
+                    <String value=""/>
+                </Property>
+                <Property name="EqualTolerance" type="App::PropertyBool" status="134217728">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="ExpressionEngine" type="App::PropertyExpressionEngine" status="67108864">
+                    <ExpressionEngine count="0">
+                    </ExpressionEngine>
+                </Property>
+                <Property name="ExtensionAngle" type="App::PropertyAngle" status="134217728">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="FormatSpec" type="App::PropertyString" status="134217728">
+                    <String value="%.2w"/>
+                </Property>
+                <Property name="FormatSpecOverTolerance" type="App::PropertyString" status="134217728">
+                    <String value="%+.2w"/>
+                </Property>
+                <Property name="FormatSpecUnderTolerance" type="App::PropertyString" status="134217732">
+                    <String value="%+.2w"/>
+                </Property>
+                <Property name="Inverted" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Label" type="App::PropertyString" status="134217728">
+                    <String value="尺寸标注"/>
+                </Property>
+                <Property name="Label2" type="App::PropertyString" status="67108992">
+                    <String value=""/>
+                </Property>
+                <Property name="LineAngle" type="App::PropertyAngle" status="134217728">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="LockPosition" type="App::PropertyBool" status="134217736">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="MeasureType" type="App::PropertyEnumeration">
+                    <Integer value="1"/>
+                </Property>
+                <Property name="OverTolerance" type="App::PropertyQuantityConstraint" status="134217728">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="References2D" type="App::PropertyLinkSubList" status="4">
+                    <LinkSubList count="1">
+                        <Link obj="ProjItem001" sub="Edge15"/>
+                    </LinkSubList>
+                </Property>
+                <Property name="References3D" type="App::PropertyLinkSubList" status="4">
+                    <LinkSubList count="0">
+                    </LinkSubList>
+                </Property>
+                <Property name="Rotation" type="App::PropertyAngle" status="134217740">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="SavedGeometry" type="Part::PropertyTopoShapeList" status="8192">
+                    <ShapeList count="1">
+                        <TopoShape                         file="Dimension.SavedGeometry.0.brp"/>
+                    </ShapeList>
+                </Property>
+                <Property name="Scale" type="App::PropertyFloatConstraint" status="12">
+                    <Float value="1.0000000000000000"/>
+                </Property>
+                <Property name="ScaleType" type="App::PropertyEnumeration" status="134217740">
+                    <Integer value="0"/>
+                </Property>
+                <Property name="ShowUnits" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="TheoreticalExact" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Type" type="App::PropertyEnumeration">
+                    <Integer value="2"/>
+                </Property>
+                <Property name="UnderTolerance" type="App::PropertyQuantityConstraint" status="134217732">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="UseActualArea" type="App::PropertyBool" status="134217728">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="Visibility" type="App::PropertyBool" status="648">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="X" type="App::PropertyDistance">
+                    <Float value="-45.2575369999999992"/>
+                </Property>
+                <Property name="Y" type="App::PropertyDistance">
+                    <Float value="5.7882249999999997"/>
+                </Property>
+            </Properties>
+        </Object>
+        <Object name="Dimension001">
+            <Properties Count="32" TransientCount="0">
+                <Property name="AngleOverride" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Arbitrary" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="ArbitraryTolerances" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="BoxCorners" type="App::PropertyVectorList">
+                    <VectorList file="BoxCorners1"/>
+                </Property>
+                <Property name="Caption" type="App::PropertyString" status="134217736">
+                    <String value=""/>
+                </Property>
+                <Property name="EqualTolerance" type="App::PropertyBool" status="134217728">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="ExpressionEngine" type="App::PropertyExpressionEngine" status="67108864">
+                    <ExpressionEngine count="0">
+                    </ExpressionEngine>
+                </Property>
+                <Property name="ExtensionAngle" type="App::PropertyAngle" status="134217728">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="FormatSpec" type="App::PropertyString" status="134217728">
+                    <String value="%.2w"/>
+                </Property>
+                <Property name="FormatSpecOverTolerance" type="App::PropertyString" status="134217728">
+                    <String value="%+.2w"/>
+                </Property>
+                <Property name="FormatSpecUnderTolerance" type="App::PropertyString" status="134217732">
+                    <String value="%+.2w"/>
+                </Property>
+                <Property name="Inverted" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Label" type="App::PropertyString" status="134217728">
+                    <String value="尺寸标注001"/>
+                </Property>
+                <Property name="Label2" type="App::PropertyString" status="67108992">
+                    <String value=""/>
+                </Property>
+                <Property name="LineAngle" type="App::PropertyAngle" status="134217728">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="LockPosition" type="App::PropertyBool" status="134217736">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="MeasureType" type="App::PropertyEnumeration">
+                    <Integer value="1"/>
+                </Property>
+                <Property name="OverTolerance" type="App::PropertyQuantityConstraint" status="134217728">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="References2D" type="App::PropertyLinkSubList" status="4">
+                    <LinkSubList count="2">
+                        <Link obj="View" sub="Vertex0"/>
+                        <Link obj="View" sub="Vertex5"/>
+                    </LinkSubList>
+                </Property>
+                <Property name="References3D" type="App::PropertyLinkSubList" status="4">
+                    <LinkSubList count="0">
+                    </LinkSubList>
+                </Property>
+                <Property name="Rotation" type="App::PropertyAngle" status="134217740">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="SavedGeometry" type="Part::PropertyTopoShapeList" status="8192">
+                    <ShapeList count="2">
+                        <TopoShape                         file="Dimension001.SavedGeometry.0.brp"/>
+                        <TopoShape                         file="Dimension001.SavedGeometry.1.brp"/>
+                    </ShapeList>
+                </Property>
+                <Property name="Scale" type="App::PropertyFloatConstraint" status="12">
+                    <Float value="1.0000000000000000"/>
+                </Property>
+                <Property name="ScaleType" type="App::PropertyEnumeration" status="134217740">
+                    <Integer value="0"/>
+                </Property>
+                <Property name="ShowUnits" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="TheoreticalExact" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Type" type="App::PropertyEnumeration">
+                    <Integer value="1"/>
+                </Property>
+                <Property name="UnderTolerance" type="App::PropertyQuantityConstraint" status="134217732">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="UseActualArea" type="App::PropertyBool" status="134217728">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="Visibility" type="App::PropertyBool" status="648">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="X" type="App::PropertyDistance">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="Y" type="App::PropertyDistance">
+                    <Float value="-40.4403980000000018"/>
+                </Property>
+            </Properties>
+        </Object>
+        <Object name="Dimension002">
+            <Properties Count="32" TransientCount="0">
+                <Property name="AngleOverride" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Arbitrary" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="ArbitraryTolerances" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="BoxCorners" type="App::PropertyVectorList">
+                    <VectorList file="BoxCorners2"/>
+                </Property>
+                <Property name="Caption" type="App::PropertyString" status="134217736">
+                    <String value=""/>
+                </Property>
+                <Property name="EqualTolerance" type="App::PropertyBool" status="134217728">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="ExpressionEngine" type="App::PropertyExpressionEngine" status="67108864">
+                    <ExpressionEngine count="0">
+                    </ExpressionEngine>
+                </Property>
+                <Property name="ExtensionAngle" type="App::PropertyAngle" status="134217728">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="FormatSpec" type="App::PropertyString" status="134217728">
+                    <String value="%.2w"/>
+                </Property>
+                <Property name="FormatSpecOverTolerance" type="App::PropertyString" status="134217728">
+                    <String value="%+.2w"/>
+                </Property>
+                <Property name="FormatSpecUnderTolerance" type="App::PropertyString" status="134217732">
+                    <String value="%+.2w"/>
+                </Property>
+                <Property name="Inverted" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Label" type="App::PropertyString" status="134217728">
+                    <String value="尺寸标注002"/>
+                </Property>
+                <Property name="Label2" type="App::PropertyString" status="67108992">
+                    <String value=""/>
+                </Property>
+                <Property name="LineAngle" type="App::PropertyAngle" status="134217728">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="LockPosition" type="App::PropertyBool" status="134217736">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="MeasureType" type="App::PropertyEnumeration">
+                    <Integer value="1"/>
+                </Property>
+                <Property name="OverTolerance" type="App::PropertyQuantityConstraint" status="134217728">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="References2D" type="App::PropertyLinkSubList" status="4">
+                    <LinkSubList count="2">
+                        <Link obj="View" sub="Vertex15"/>
+                        <Link obj="View" sub="Vertex0"/>
+                    </LinkSubList>
+                </Property>
+                <Property name="References3D" type="App::PropertyLinkSubList" status="4">
+                    <LinkSubList count="0">
+                    </LinkSubList>
+                </Property>
+                <Property name="Rotation" type="App::PropertyAngle" status="134217740">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="SavedGeometry" type="Part::PropertyTopoShapeList" status="8192">
+                    <ShapeList count="2">
+                        <TopoShape                         file="Dimension002.SavedGeometry.0.brp"/>
+                        <TopoShape                         file="Dimension002.SavedGeometry.1.brp"/>
+                    </ShapeList>
+                </Property>
+                <Property name="Scale" type="App::PropertyFloatConstraint" status="12">
+                    <Float value="1.0000000000000000"/>
+                </Property>
+                <Property name="ScaleType" type="App::PropertyEnumeration" status="134217740">
+                    <Integer value="0"/>
+                </Property>
+                <Property name="ShowUnits" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="TheoreticalExact" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Type" type="App::PropertyEnumeration">
+                    <Integer value="2"/>
+                </Property>
+                <Property name="UnderTolerance" type="App::PropertyQuantityConstraint" status="134217732">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="UseActualArea" type="App::PropertyBool" status="134217728">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="Visibility" type="App::PropertyBool" status="648">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="X" type="App::PropertyDistance">
+                    <Float value="-47.7648510000000002"/>
+                </Property>
+                <Property name="Y" type="App::PropertyDistance">
+                    <Float value="-7.3931339999999999"/>
+                </Property>
+            </Properties>
+        </Object>
+        <Object name="Dimension003">
+            <Properties Count="32" TransientCount="0">
+                <Property name="AngleOverride" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Arbitrary" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="ArbitraryTolerances" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="BoxCorners" type="App::PropertyVectorList">
+                    <VectorList file="BoxCorners3"/>
+                </Property>
+                <Property name="Caption" type="App::PropertyString" status="134217736">
+                    <String value=""/>
+                </Property>
+                <Property name="EqualTolerance" type="App::PropertyBool" status="134217728">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="ExpressionEngine" type="App::PropertyExpressionEngine" status="67108864">
+                    <ExpressionEngine count="0">
+                    </ExpressionEngine>
+                </Property>
+                <Property name="ExtensionAngle" type="App::PropertyAngle" status="134217728">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="FormatSpec" type="App::PropertyString" status="134217728">
+                    <String value="%.2w"/>
+                </Property>
+                <Property name="FormatSpecOverTolerance" type="App::PropertyString" status="134217728">
+                    <String value="%+.2w"/>
+                </Property>
+                <Property name="FormatSpecUnderTolerance" type="App::PropertyString" status="134217732">
+                    <String value="%+.2w"/>
+                </Property>
+                <Property name="Inverted" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Label" type="App::PropertyString" status="134217728">
+                    <String value="尺寸标注003"/>
+                </Property>
+                <Property name="Label2" type="App::PropertyString" status="67108992">
+                    <String value=""/>
+                </Property>
+                <Property name="LineAngle" type="App::PropertyAngle" status="134217728">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="LockPosition" type="App::PropertyBool" status="134217736">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="MeasureType" type="App::PropertyEnumeration">
+                    <Integer value="1"/>
+                </Property>
+                <Property name="OverTolerance" type="App::PropertyQuantityConstraint" status="134217728">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="References2D" type="App::PropertyLinkSubList" status="4">
+                    <LinkSubList count="1">
+                        <Link obj="View" sub="Edge12"/>
+                    </LinkSubList>
+                </Property>
+                <Property name="References3D" type="App::PropertyLinkSubList" status="4">
+                    <LinkSubList count="0">
+                    </LinkSubList>
+                </Property>
+                <Property name="Rotation" type="App::PropertyAngle" status="134217740">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="SavedGeometry" type="Part::PropertyTopoShapeList" status="8192">
+                    <ShapeList count="1">
+                        <TopoShape                         file="Dimension003.SavedGeometry.0.brp"/>
+                    </ShapeList>
+                </Property>
+                <Property name="Scale" type="App::PropertyFloatConstraint" status="12">
+                    <Float value="1.0000000000000000"/>
+                </Property>
+                <Property name="ScaleType" type="App::PropertyEnumeration" status="134217740">
+                    <Integer value="0"/>
+                </Property>
+                <Property name="ShowUnits" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="TheoreticalExact" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Type" type="App::PropertyEnumeration">
+                    <Integer value="1"/>
+                </Property>
+                <Property name="UnderTolerance" type="App::PropertyQuantityConstraint" status="134217732">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="UseActualArea" type="App::PropertyBool" status="134217728">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="Visibility" type="App::PropertyBool" status="648">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="X" type="App::PropertyDistance">
+                    <Float value="13.2479160000000000"/>
+                </Property>
+                <Property name="Y" type="App::PropertyDistance">
+                    <Float value="3.5015700000000001"/>
+                </Property>
+            </Properties>
+        </Object>
+        <Object name="Dimension004">
+            <Properties Count="32" TransientCount="0">
+                <Property name="AngleOverride" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Arbitrary" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="ArbitraryTolerances" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="BoxCorners" type="App::PropertyVectorList">
+                    <VectorList file="BoxCorners4"/>
+                </Property>
+                <Property name="Caption" type="App::PropertyString" status="134217736">
+                    <String value=""/>
+                </Property>
+                <Property name="EqualTolerance" type="App::PropertyBool" status="134217728">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="ExpressionEngine" type="App::PropertyExpressionEngine" status="67108864">
+                    <ExpressionEngine count="0">
+                    </ExpressionEngine>
+                </Property>
+                <Property name="ExtensionAngle" type="App::PropertyAngle" status="134217728">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="FormatSpec" type="App::PropertyString" status="134217728">
+                    <String value="%.2w"/>
+                </Property>
+                <Property name="FormatSpecOverTolerance" type="App::PropertyString" status="134217728">
+                    <String value="%+.2w"/>
+                </Property>
+                <Property name="FormatSpecUnderTolerance" type="App::PropertyString" status="134217732">
+                    <String value="%+.2w"/>
+                </Property>
+                <Property name="Inverted" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Label" type="App::PropertyString" status="134217728">
+                    <String value="尺寸标注004"/>
+                </Property>
+                <Property name="Label2" type="App::PropertyString" status="67108992">
+                    <String value=""/>
+                </Property>
+                <Property name="LineAngle" type="App::PropertyAngle" status="134217728">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="LockPosition" type="App::PropertyBool" status="134217736">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="MeasureType" type="App::PropertyEnumeration">
+                    <Integer value="1"/>
+                </Property>
+                <Property name="OverTolerance" type="App::PropertyQuantityConstraint" status="134217728">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="References2D" type="App::PropertyLinkSubList" status="4">
+                    <LinkSubList count="2">
+                        <Link obj="View" sub="Vertex11"/>
+                        <Link obj="View" sub="Vertex14"/>
+                    </LinkSubList>
+                </Property>
+                <Property name="References3D" type="App::PropertyLinkSubList" status="4">
+                    <LinkSubList count="0">
+                    </LinkSubList>
+                </Property>
+                <Property name="Rotation" type="App::PropertyAngle" status="134217740">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="SavedGeometry" type="Part::PropertyTopoShapeList" status="8192">
+                    <ShapeList count="2">
+                        <TopoShape                         file="Dimension004.SavedGeometry.0.brp"/>
+                        <TopoShape                         file="Dimension004.SavedGeometry.1.brp"/>
+                    </ShapeList>
+                </Property>
+                <Property name="Scale" type="App::PropertyFloatConstraint" status="12">
+                    <Float value="1.0000000000000000"/>
+                </Property>
+                <Property name="ScaleType" type="App::PropertyEnumeration" status="134217740">
+                    <Integer value="0"/>
+                </Property>
+                <Property name="ShowUnits" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="TheoreticalExact" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Type" type="App::PropertyEnumeration">
+                    <Integer value="1"/>
+                </Property>
+                <Property name="UnderTolerance" type="App::PropertyQuantityConstraint" status="134217732">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="UseActualArea" type="App::PropertyBool" status="134217728">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="Visibility" type="App::PropertyBool" status="648">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="X" type="App::PropertyDistance">
+                    <Float value="-0.0000000000000000"/>
+                </Property>
+                <Property name="Y" type="App::PropertyDistance">
+                    <Float value="46.0909300000000002"/>
+                </Property>
+            </Properties>
+        </Object>
+        <Object name="Dimension005">
+            <Properties Count="32" TransientCount="0">
+                <Property name="AngleOverride" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Arbitrary" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="ArbitraryTolerances" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="BoxCorners" type="App::PropertyVectorList">
+                    <VectorList file="BoxCorners5"/>
+                </Property>
+                <Property name="Caption" type="App::PropertyString" status="134217736">
+                    <String value=""/>
+                </Property>
+                <Property name="EqualTolerance" type="App::PropertyBool" status="134217728">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="ExpressionEngine" type="App::PropertyExpressionEngine" status="67108864">
+                    <ExpressionEngine count="0">
+                    </ExpressionEngine>
+                </Property>
+                <Property name="ExtensionAngle" type="App::PropertyAngle" status="134217728">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="FormatSpec" type="App::PropertyString" status="134217728">
+                    <String value="%.2w"/>
+                </Property>
+                <Property name="FormatSpecOverTolerance" type="App::PropertyString" status="134217728">
+                    <String value="%+.2w"/>
+                </Property>
+                <Property name="FormatSpecUnderTolerance" type="App::PropertyString" status="134217732">
+                    <String value="%+.2w"/>
+                </Property>
+                <Property name="Inverted" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Label" type="App::PropertyString" status="134217728">
+                    <String value="尺寸标注005"/>
+                </Property>
+                <Property name="Label2" type="App::PropertyString" status="67108992">
+                    <String value=""/>
+                </Property>
+                <Property name="LineAngle" type="App::PropertyAngle" status="134217728">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="LockPosition" type="App::PropertyBool" status="134217736">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="MeasureType" type="App::PropertyEnumeration">
+                    <Integer value="1"/>
+                </Property>
+                <Property name="OverTolerance" type="App::PropertyQuantityConstraint" status="134217728">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="References2D" type="App::PropertyLinkSubList" status="4">
+                    <LinkSubList count="1">
+                        <Link obj="View" sub="Edge7"/>
+                    </LinkSubList>
+                </Property>
+                <Property name="References3D" type="App::PropertyLinkSubList" status="4">
+                    <LinkSubList count="0">
+                    </LinkSubList>
+                </Property>
+                <Property name="Rotation" type="App::PropertyAngle" status="134217740">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="SavedGeometry" type="Part::PropertyTopoShapeList" status="8192">
+                    <ShapeList count="1">
+                        <TopoShape                         file="Dimension005.SavedGeometry.0.brp"/>
+                    </ShapeList>
+                </Property>
+                <Property name="Scale" type="App::PropertyFloatConstraint" status="12">
+                    <Float value="1.0000000000000000"/>
+                </Property>
+                <Property name="ScaleType" type="App::PropertyEnumeration" status="134217740">
+                    <Integer value="0"/>
+                </Property>
+                <Property name="ShowUnits" type="App::PropertyBool">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="TheoreticalExact" type="App::PropertyBool" status="134217728">
+                    <Bool value="false"/>
+                </Property>
+                <Property name="Type" type="App::PropertyEnumeration">
+                    <Integer value="2"/>
+                </Property>
+                <Property name="UnderTolerance" type="App::PropertyQuantityConstraint" status="134217732">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+                <Property name="UseActualArea" type="App::PropertyBool" status="134217728">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="Visibility" type="App::PropertyBool" status="648">
+                    <Bool value="true"/>
+                </Property>
+                <Property name="X" type="App::PropertyDistance">
+                    <Float value="38.8763610000000028"/>
+                </Property>
+                <Property name="Y" type="App::PropertyDistance">
+                    <Float value="0.0000000000000000"/>
+                </Property>
+            </Properties>
+        </Object>
+    </ObjectData>
+</Document>

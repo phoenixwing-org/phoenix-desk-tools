@@ -20,6 +20,7 @@ from fcdesk.freecad.fcstd_document_kind import (
     read_fcstd_document_kinds,
     recommend_fcstd_filename_suffix,
 )
+from fcdesk.freecad.fcstd_drawing_bom import resolve_drawing_bom
 from fcdesk.freecad.fcstd_embedded_attrs import (
     EDITABLE_ENTRY_ATTRS,
     FcdeskFcstdEmbeddedError,
@@ -36,6 +37,7 @@ from fcdesk.freecad.fcstd_mapping import (
     normalize_repo_rel_path_for_map,
     rename_workspace_fcstd_file,
     resolve_part_name_for_scan,
+    strip_accidental_fcstd_suffix_from_name_segment,
     try_load_fcstd_entry_from_workspace_map,
     try_update_fcstd_map_entry_rename,
 )
@@ -49,7 +51,6 @@ class KindFiltersInput:
     part: bool = True
     assembly: bool = True
     drawing: bool = True
-    drawing_and_assembly: bool = True
 
     @classmethod
     def from_mapping(cls, raw: dict[str, Any] | None) -> KindFiltersInput:
@@ -59,7 +60,6 @@ class KindFiltersInput:
             part=bool(raw.get("part", True)),
             assembly=bool(raw.get("assembly", True)),
             drawing=bool(raw.get("drawing", True)),
-            drawing_and_assembly=bool(raw.get("drawing_and_assembly", True)),
         )
 
     def to_filters(self) -> FcstdKindFilters:
@@ -67,7 +67,6 @@ class KindFiltersInput:
             part=self.part,
             assembly=self.assembly,
             drawing=self.drawing,
-            drawing_and_assembly=self.drawing_and_assembly,
         )
 
 
@@ -160,10 +159,35 @@ def _recommended_suffix(
     filters: FcstdKindFilters,
     filename: str,
 ) -> str:
-    if kinds is not None and kinds_match_filters(kinds, filters):
-        return recommend_fcstd_filename_suffix(kinds)
     name = filename.strip() or rel.name
-    return infer_fcstd_name_suffix(name or "x.FCStd")
+    on_disk = infer_fcstd_name_suffix(name or "x.FCStd")
+    if on_disk in (".Drawing.FCStd", ".ASSY.FCStd"):
+        return on_disk
+    if kinds is not None and kinds_match_filters(kinds, filters):
+        return recommend_fcstd_filename_suffix(kinds, filename=name)
+    return on_disk
+
+
+def _part_name_for_recommended_filename(
+    merged: dict[str, str],
+    *,
+    original_filename: str,
+    rel: Path,
+) -> str:
+    orig = original_filename.strip() or rel.name
+    refined = resolve_part_name_for_scan(
+        merged.get("PartName"),
+        merged.get("label"),
+        filename=orig,
+        repo_rel_path=merged.get("repo_rel_path") or rel.as_posix(),
+        part_number=merged.get("PartNumber"),
+        part_version=merged.get("PartVersion"),
+        type_code=merged.get("TypeCode"),
+        model_series=merged.get("ModelSeries"),
+        force_update=True,
+    )
+    raw = refined or (merged.get("PartName") or "").strip() or (merged.get("label") or "").strip()
+    return strip_accidental_fcstd_suffix_from_name_segment(raw)
 
 
 def _format_file_size(size: int) -> str:
@@ -197,6 +221,8 @@ class BomPreview:
     embedded_warning: str | None
     file_size_bytes: int | None = None
     file_size_display: str | None = None
+    bom_readonly: bool = False
+    bom_source_rel: str | None = None
 
 
 def get_bom_apply_prefs(repo_root: Path) -> dict[str, object]:
@@ -226,15 +252,26 @@ def load_bom_preview(repo_root: Path, rel: Path) -> BomPreview:
     warning: str | None = None
     kinds: FcstdDocumentKinds | None = None
     is_fcstd = _path_is_fcstd(full)
+    bom_readonly = False
+    bom_source_rel: str | None = None
 
     if is_fcstd:
         kinds = read_fcstd_document_kinds(full)
-        try:
-            embedded = read_embedded_bom_attrs(full)
-            if embedded:
-                note += " · 已读 Document.xml / 遗留侧车"
-        except FcdeskFcstdEmbeddedError as ex:
-            warning = str(ex)
+        drawing_res = resolve_drawing_bom(rr, rel.as_posix(), full)
+        if drawing_res is not None:
+            embedded = dict(drawing_res.values)
+            bom_readonly = drawing_res.readonly
+            bom_source_rel = drawing_res.source_repo_rel
+            note = drawing_res.note
+            if drawing_res.source_repo_rel:
+                note += f" · 模型 {drawing_res.source_repo_rel}"
+        else:
+            try:
+                embedded = read_embedded_bom_attrs(full)
+                if embedded:
+                    note += " · 已读 Document.xml / 遗留侧车"
+            except FcdeskFcstdEmbeddedError as ex:
+                warning = str(ex)
 
     merged = _merged_with_partname_coerce(_merge_embedded_over(plain, embedded))
     size_bytes, size_display = _read_file_size(full)
@@ -249,6 +286,8 @@ def load_bom_preview(repo_root: Path, rel: Path) -> BomPreview:
         embedded_warning=warning,
         file_size_bytes=size_bytes,
         file_size_display=size_display,
+        bom_readonly=bom_readonly,
+        bom_source_rel=bom_source_rel,
     )
 
 
@@ -343,6 +382,14 @@ def save_bom_to_fcstd(repo_root: Path, rel: Path, values: dict[str, str]) -> Non
     rr = repo_root.expanduser().resolve(strict=False)
     full = _ensure_fcstd_file(rr, rel)
 
+    drawing_res = resolve_drawing_bom(rr, rel.as_posix(), full)
+    if drawing_res is not None and drawing_res.readonly:
+        model_hint = drawing_res.source_repo_rel or "Link 指向的模型 FCStd"
+        raise ValueError(
+            "当前为图纸文件，BOM 属性只读（挂载于 App::Link）。"
+            f"请编辑模型文件：{model_hint}"
+        )
+
     vals = {k: str(values.get(k, "")).strip() for k in EDITABLE_ENTRY_ATTRS}
     inferred = coerce_inferred_part_name(
         vals.get("PartName"),
@@ -406,17 +453,17 @@ def recommend_filename_for_values(
         rel=rel,
         kinds=kinds,
         filters=filters,
-        filename=merged.get("filename", ""),
+        filename=merged.get("filename", "") or orig,
     )
 
-    pname = merged.get("PartName", "") or merged.get("label", "")
+    pname = _part_name_for_recommended_filename(merged, original_filename=orig, rel=rel)
     built = compose_fcstd_recommended_filename(
         part_number=merged.get("PartNumber", ""),
         part_version=merged.get("PartVersion", ""),
         type_code=merged.get("TypeCode", ""),
         model_series=merged.get("ModelSeries", ""),
         part_name=pname,
-        label_fallback=merged.get("label", ""),
+        label_fallback="",
         suffix=suffix,
     )
     if not built:
@@ -448,7 +495,7 @@ def recommend_filename_for_values(
     if kinds is not None:
         hint += (
             f"\n文档类型：{kinds.display_text()} · "
-            f"推荐后缀 {recommend_fcstd_filename_suffix(kinds)}"
+            f"推荐后缀 {recommend_fcstd_filename_suffix(kinds, filename=orig)}"
         )
 
     return {

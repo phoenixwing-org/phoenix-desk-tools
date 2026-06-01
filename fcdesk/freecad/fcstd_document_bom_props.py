@@ -1,7 +1,8 @@
 """将 BOM 可编辑字段写入 ``Document.xml`` 内可挂载对象的 ``Properties``。
 
 挂载对象优先级：**``PartDesign::Body``** → **类型名包含 ``Assembly`` 的对象**（装配/总成工作台）→ **``App::Part``**
-（常见于 Part / 总成容器）；均按 ``Document.xml`` 中 ``<Objects><Object/>`` **出现顺序**取第一个匹配的 ``name``。
+（常见于 Part / 总成容器）；若均无且文档含 **TechDraw**（图纸-primary），则取首个 **``App::Link``**。
+均按 ``Document.xml`` 中 ``<Objects><Object/>`` **出现顺序**取第一个匹配的 ``name``。
 
 遵循 FreeCAD App 序列化惯例：每条动态 ``App::PropertyString`` 在 Document 中为
 
@@ -26,7 +27,6 @@ import zipfile
 from pathlib import Path
 from typing import Mapping
 from xml.etree import ElementTree as ET
-
 
 DOCUMENT_XML = "Document.xml"
 SIDECAR_LEGACY = "FcdeskBomAttrs.xml"
@@ -86,6 +86,29 @@ def _iter_objects_typename_ordered(doc_el: ET.Element) -> list[tuple[str, str]]:
     return out
 
 
+def _has_standard_bom_mount(objs: list[tuple[str, str]]) -> bool:
+    for ctype, _ in objs:
+        if ctype == "PartDesign::Body":
+            return True
+        if "assembly" in ctype.lower():
+            return True
+        if ctype == "App::Part":
+            return True
+    return False
+
+
+def _document_has_techdraw(objs: list[tuple[str, str]]) -> bool:
+    return any(ctype.startswith("TechDraw::") for ctype, _ in objs)
+
+
+def is_drawing_primary_mount_context(doc_el: ET.Element) -> bool:
+    """无 Body/Part/Assembly 挂载、但含 TechDraw → 图纸-primary。"""
+    objs = _iter_objects_typename_ordered(doc_el)
+    if _has_standard_bom_mount(objs):
+        return False
+    return _document_has_techdraw(objs)
+
+
 def _first_bom_target_object_name(doc_el: ET.Element) -> str | None:
     """选择写入 BOM / Label 挂载到的 DocumentObject 名称。"""
     objs = _iter_objects_typename_ordered(doc_el)
@@ -102,14 +125,34 @@ def _first_bom_target_object_name(doc_el: ET.Element) -> str | None:
         if ctype == "App::Part":
             return n
 
+    if is_drawing_primary_mount_context(doc_el):
+        for ctype, n in objs:
+            if ctype == "App::Link":
+                return n
+
     return None
+
+
+def bom_mount_object_type(doc_el: ET.Element, mount_name: str | None) -> str | None:
+    if not mount_name:
+        return None
+    for ctype, n in _iter_objects_typename_ordered(doc_el):
+        if n == mount_name:
+            return ctype
+    return None
+
+
+def is_link_bom_mount(mount_type: str | None) -> bool:
+    return mount_type == "App::Link"
 
 
 def _no_bom_mount_error(path: Path, objs: list[tuple[str, str]]) -> FcdeskDocumentBomError:
     sample = ", ".join(f"{t}" for t, _ in objs[:12])
     extra = f" 已列出部分 Object.type：{sample}" if sample else ""
     return FcdeskDocumentBomError(
-        f"未发现可挂载 BOM 的对象（依次尝试 PartDesign::Body → type 中含 assembly → App::Part）：{path}.{extra}"
+        "未发现可挂载 BOM 的对象（依次尝试 PartDesign::Body → type 中含 assembly → App::Part"
+        " → 图纸-primary 时 App::Link）："
+        f"{path}.{extra}"
     )
 
 
@@ -219,7 +262,13 @@ def read_body_bom_from_document(fcstd_path: Path) -> tuple[dict[str, str], froze
     return out, frozenset(explicit)
 
 
-def _set_or_remove_custom_string_prop(properties_el: ET.Element, fc_name: str, value: str) -> None:
+def _set_or_remove_custom_string_prop(
+    properties_el: ET.Element,
+    fc_name: str,
+    value: str,
+    *,
+    readonly: bool = False,
+) -> None:
     """写入 / 清空自定义 ``App::PropertyString``（非原生 ``Label``）。
 
     **五项 BOM 自定义字段**（非 ``Label``）：``group``、``doc``（工具提示）与常量 ``FCDESK_EMBEDDED_BOM_PROPERTY_GROUP``及
@@ -237,7 +286,10 @@ def _set_or_remove_custom_string_prop(properties_el: ET.Element, fc_name: str, v
             properties_el.remove(existing)
         return
     if existing is None:
-        existing = ET.SubElement(properties_el, "Property", _new_property_wrapper_attribs(properties_el, fc_name))
+        attribs = _new_property_wrapper_attribs(properties_el, fc_name)
+        if readonly and fc_name in _BOM_STRING_PROPERTY_NAMES:
+            attribs["ro"] = "1"
+        existing = ET.SubElement(properties_el, "Property", attribs)
         s_el = ET.SubElement(existing, "String")
         s_el.set("value", trimmed)
         return
@@ -245,6 +297,8 @@ def _set_or_remove_custom_string_prop(properties_el: ET.Element, fc_name: str, v
         existing.set("group", FCDESK_EMBEDDED_BOM_PROPERTY_GROUP)
         doc_tip = _BOM_STRING_PROPERTY_DOC.get(fc_name, "")
         existing.set("doc", doc_tip)
+        if readonly:
+            existing.set("ro", "1")
     s_el = existing.find("String")
     if s_el is None:
         s_el = ET.SubElement(existing, "String")

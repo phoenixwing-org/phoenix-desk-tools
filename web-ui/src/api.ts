@@ -30,7 +30,6 @@ export type BomKindFilters = {
   part: boolean;
   assembly: boolean;
   drawing: boolean;
-  drawing_and_assembly: boolean;
 };
 
 export type BomApplyPrefs = {
@@ -64,6 +63,8 @@ export type BomPreview = {
   embedded_warning: string | null;
   file_size_bytes: number | null;
   file_size_display: string | null;
+  bom_readonly?: boolean;
+  bom_source_rel?: string | null;
 };
 
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
@@ -856,6 +857,30 @@ export type XlinkFixPrefs = {
   all_in_dir: boolean;
 };
 
+export type XlinkFixIssueRow = {
+  host_repo_rel: string;
+  host_filename: string;
+  host_display: string;
+  old_path: string;
+  new_path: string;
+  target_file: string;
+  target_display: string;
+  verdict: string;
+  note: string;
+  count: number;
+  status: "fixable" | "not_found";
+};
+
+export type XlinkFixStats = {
+  host_count: number;
+  hosts_with_issues: number;
+  issue_count: number;
+  fixable_count: number;
+  not_found_count: number;
+  skipped_count: number;
+  total_changes: number;
+};
+
 export type XlinkFixResult = {
   exit_code: number;
   log: string;
@@ -866,8 +891,10 @@ export type XlinkFixResult = {
   dry_run?: boolean;
   total_changes?: number;
   report_path?: string;
-  skipped?: unknown[];
+  skipped?: string[];
   files?: unknown[];
+  issue_rows?: XlinkFixIssueRow[];
+  stats?: XlinkFixStats;
 };
 
 export function fetchXlinkPrefs() {
@@ -879,6 +906,14 @@ export function saveXlinkPrefs(prefs: Partial<XlinkFixPrefs>) {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(prefs),
+  });
+}
+
+export function analyzeXlinkFix(opts: Pick<Partial<XlinkFixPrefs>, "batch_dir" | "all_in_dir"> = {}) {
+  return jsonFetch<XlinkFixResult>("/api/xlink-fix/analyze", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(opts),
   });
 }
 

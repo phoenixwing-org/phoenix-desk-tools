@@ -68,6 +68,17 @@ def infer_fcstd_name_suffix(filename: str) -> str:
     return ".FCStd"
 
 
+_COMPOUND_FCSTD_TAIL_RE = re.compile(r"(\.(?:Drawing|ASSY))?\.FCStd$", re.IGNORECASE)
+
+
+def strip_accidental_fcstd_suffix_from_name_segment(name: str) -> str:
+    """名称段若误含 ``.Drawing.FCStd`` / ``.ASSY.FCStd`` / ``.FCStd`` 尾巴，去掉后再拼文件名。"""
+    s = (name or "").strip()
+    if not s:
+        return ""
+    return _COMPOUND_FCSTD_TAIL_RE.sub("", s).rstrip(".")
+
+
 def compose_fcstd_recommended_filename(
     *,
     part_number: str,

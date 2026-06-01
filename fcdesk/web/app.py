@@ -68,7 +68,7 @@ from fcdesk.services.sw_step_export_service import (
     save_sw_step_prefs,
 )
 from fcdesk.services.workspace_service import build_workspace_tree, scan_workspace_files
-from fcdesk.services.xlink_fix_service import get_xlink_prefs, run_xlink_fix, save_xlink_prefs
+from fcdesk.services.xlink_fix_service import analyze_xlink_fix, get_xlink_prefs, run_xlink_fix, save_xlink_prefs
 from fcdesk.services.rename_analysis_service import (
     analyze_rename_references,
     apply_rename_analysis_corrections,
@@ -129,7 +129,6 @@ class BomKindFiltersBody(BaseModel):
     part: bool = True
     assembly: bool = True
     drawing: bool = True
-    drawing_and_assembly: bool = True
 
 
 class BomOperationBody(BomFieldsBody):
@@ -433,6 +432,8 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
             "embedded_warning": preview.embedded_warning,
             "file_size_bytes": preview.file_size_bytes,
             "file_size_display": preview.file_size_display,
+            "bom_readonly": preview.bom_readonly,
+            "bom_source_rel": preview.bom_source_rel,
         }
 
     @app.put("/api/bom")
@@ -897,6 +898,17 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
     def api_xlink_prefs_put(body: XlinkFixPrefsBody) -> dict:
         patch = body.model_dump(exclude_none=True)
         return save_xlink_prefs(get_workspace(), patch)
+
+    @app.post("/api/xlink-fix/analyze")
+    def api_xlink_analyze(body: XlinkFixRunBody = ...) -> dict:
+        ws = get_workspace()
+        patch = body.model_dump(exclude_none=True)
+        batch_dir = patch.pop("batch_dir", None)
+        all_in_dir = patch.pop("all_in_dir", None)
+        try:
+            return analyze_xlink_fix(ws, batch_dir_input=batch_dir, all_in_dir=all_in_dir)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
     @app.post("/api/xlink-fix/run")
     def api_xlink_run(body: XlinkFixRunBody = ...) -> dict:

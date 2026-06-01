@@ -67,8 +67,15 @@ class TestClassifyDocumentXml(unittest.TestCase):
     def test_assy_and_drawing(self) -> None:
         k = classify_document_xml(DOC_ASSY_DRAWING)
         self.assertTrue(k.assembly and k.drawing)
-        self.assertTrue(k.drawing_and_assembly)
-        self.assertEqual(recommend_fcstd_filename_suffix(k), ".ASSY.FCStd")
+        self.assertEqual(k.display_text(), "装配、图纸")
+        self.assertEqual(recommend_fcstd_filename_suffix(k), ".Drawing.FCStd")
+
+    def test_on_disk_suffix_wins_over_kinds(self) -> None:
+        k = classify_document_xml(DOC_XLINK_ASSY)
+        self.assertEqual(
+            recommend_fcstd_filename_suffix(k, filename="8003.001-H-PX-滑轨.Drawing.FCStd"),
+            ".Drawing.FCStd",
+        )
 
     def test_xlink_without_body_is_assembly(self) -> None:
         k = classify_document_xml(DOC_XLINK_ASSY)
@@ -76,12 +83,16 @@ class TestClassifyDocumentXml(unittest.TestCase):
 
 
 class TestKindFilters(unittest.TestCase):
-    def test_drawing_and_assembly_filter(self) -> None:
+    def test_combined_kinds_match_assembly_or_drawing_filter(self) -> None:
         k = classify_document_xml(DOC_ASSY_DRAWING)
-        f = FcstdKindFilters(part=False, assembly=False, drawing=False, drawing_and_assembly=True)
-        self.assertTrue(kinds_match_filters(k, f))
-        f2 = FcstdKindFilters(part=True, assembly=False, drawing=False, drawing_and_assembly=False)
-        self.assertFalse(kinds_match_filters(k, f2))
+        self.assertTrue(
+            kinds_match_filters(k, FcstdKindFilters(part=False, assembly=True, drawing=False))
+        )
+        self.assertTrue(
+            kinds_match_filters(k, FcstdKindFilters(part=False, assembly=False, drawing=True))
+        )
+        f_part_only = FcstdKindFilters(part=True, assembly=False, drawing=False)
+        self.assertFalse(kinds_match_filters(k, f_part_only))
 
 
 class TestReadZip(unittest.TestCase):

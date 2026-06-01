@@ -52,10 +52,17 @@ const kindFilters = ref<BomKindFilters>({
   part: true,
   assembly: true,
   drawing: true,
-  drawing_and_assembly: true,
 });
 
 const isFcstd = computed(() => preview.value?.is_fcstd ?? false);
+const bomReadonly = computed(() => preview.value?.bom_readonly ?? false);
+const bomSourceRel = computed(() => preview.value?.bom_source_rel ?? null);
+
+function openSourceModel() {
+  const src = bomSourceRel.value;
+  if (!src) return;
+  shell.openFileDetailForRel(src, { subTab: "edit" });
+}
 
 const recommendedFillLine = () => {
   const r = bomPrefs.value?.recommended_fill;
@@ -164,7 +171,7 @@ async function onRecommendAll() {
 }
 
 async function onSave() {
-  if (!rel.value || !isFcstd.value) return;
+  if (!rel.value || !isFcstd.value || bomReadonly.value) return;
   busy.value = true;
   shell.appendLog(`[文件详情] 写入 Document.xml ${rel.value}…`, { source: "file_detail", open: true });
   try {
@@ -218,12 +225,20 @@ onMounted(() => {
 <template>
   <div v-if="preview" class="attrs-panel">
     <h3 class="panel-title">编辑属性</h3>
+    <p v-if="bomReadonly" class="readonly-banner">
+      图纸文件 BOM 只读（属性挂载于 App::Link）。
+      <template v-if="bomSourceRel">
+        来源模型：
+        <button type="button" class="link-btn mono" @click="openSourceModel">{{ bomSourceRel }}</button>
+      </template>
+      <template v-else>请在 Link 指向的模型 FCStd 中编辑。</template>
+    </p>
     <section class="toolbar">
       <button type="button" class="btn" :disabled="busy" @click="onReload">重新读取</button>
       <button
         type="button"
         class="btn recommend-all"
-        :disabled="busy || recommendingAll || !isFcstd"
+        :disabled="busy || recommendingAll || !isFcstd || bomReadonly"
         @click="onRecommendAll"
       >
         {{ recommendingAll ? "推荐中…" : "全部推荐" }}
@@ -231,7 +246,12 @@ onMounted(() => {
       <button type="button" class="btn" :disabled="busy || !isFcstd" @click="onDetectKinds">
         识别类型
       </button>
-      <button type="button" class="btn primary" :disabled="busy || !isFcstd" @click="onSave">
+      <button
+        type="button"
+        class="btn primary"
+        :disabled="busy || !isFcstd || bomReadonly"
+        @click="onSave"
+      >
         {{ busy ? "…" : "写入文件" }}
       </button>
     </section>
@@ -241,7 +261,6 @@ onMounted(() => {
       <label class="chk"><input v-model="kindFilters.part" type="checkbox" /> 零件</label>
       <label class="chk"><input v-model="kindFilters.assembly" type="checkbox" /> 装配</label>
       <label class="chk"><input v-model="kindFilters.drawing" type="checkbox" /> 图纸</label>
-      <label class="chk"><input v-model="kindFilters.drawing_and_assembly" type="checkbox" /> 图纸+装配</label>
     </section>
 
     <form class="form" @submit.prevent="onSave">
@@ -261,14 +280,14 @@ onMounted(() => {
           <div class="input-row">
             <input
               v-model="form[row.key as keyof BomFields]"
-              :readonly="!row.editable"
-              :class="{ readonly: !row.editable }"
+              :readonly="!row.editable || bomReadonly"
+              :class="{ readonly: !row.editable || bomReadonly }"
             />
             <button
               v-if="row.recommend"
               type="button"
               class="btn mini"
-              :disabled="busy || recommendingAll || recommendingField === row.key"
+              :disabled="busy || recommendingAll || recommendingField === row.key || bomReadonly"
               @click="onRecommendField(row.key as EditableKey)"
             >
               {{ recommendingField === row.key ? "…" : "推荐" }}
@@ -277,7 +296,7 @@ onMounted(() => {
               v-if="row.key === 'filename'"
               type="button"
               class="btn mini"
-              :disabled="busy || !isFcstd"
+              :disabled="busy || !isFcstd || bomReadonly"
               @click="onGoRename"
             >
               去改名
@@ -299,6 +318,26 @@ onMounted(() => {
   margin: 0 0 10px;
   font-size: 0.92rem;
   font-weight: 600;
+}
+.readonly-banner {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  font-size: 0.82rem;
+  color: #1e40af;
+}
+.link-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent, #2563eb);
+  cursor: pointer;
+  font: inherit;
+}
+.link-btn:hover {
+  text-decoration: underline;
 }
 .toolbar {
   display: flex;
