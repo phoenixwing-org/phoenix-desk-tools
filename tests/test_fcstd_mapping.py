@@ -16,6 +16,7 @@ from fcdesk.fcstd_mapping import (
     hints_from_fcstd_filename,
     hints_from_fcstd_location,
     infer_fcstd_name_suffix,
+    infer_part_key_from_filename,
     infer_model_series,
     infer_part_name_from_fcstd_filename,
     legacy_flat_dict_to_document,
@@ -70,6 +71,15 @@ class TestHints(unittest.TestCase):
         self.assertEqual(h["PartNumber"], "100015")
         self.assertEqual(h["PartVersion"], "001")
         self.assertEqual(h["TypeCode"], "H")
+
+    def test_short_part_number_and_drawing_suffix(self) -> None:
+        h = hints_from_fcstd_filename("8003.001-H-PHOENIX-滑轨.FCStd")
+        self.assertEqual(h["PartNumber"], "8003")
+        self.assertEqual(h["PartVersion"], "001")
+        pn, pv = infer_part_key_from_filename("8003.001_H_PHOENIX.FCStd")
+        self.assertEqual((pn, pv), ("8003", "001"))
+        h2 = hints_from_fcstd_filename("8003.001-H-PX-滑轨.Drawing.FCStd")
+        self.assertEqual(h2["PartVersion"], "001")
 
 
 class TestRefinePartName(unittest.TestCase):

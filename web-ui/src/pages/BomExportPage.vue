@@ -401,16 +401,29 @@ onUnmounted(() => {
   <div class="page bom-list-page">
     <header class="page-head">
       <div class="head-row">
-        <h1 class="page-title">BOM 列表</h1>
-        <p v-if="meta" class="head-meta">
-          引用边 {{ meta.edge_count }} · 宿主 {{ meta.host_count }}
-          <span v-if="meta.last_bom_xref_at"> · {{ meta.last_bom_xref_at }}</span>
-        </p>
+        <div class="head-left">
+          <h1 class="page-title">BOM 列表</h1>
+          <p v-if="meta" class="head-meta">
+            引用边 {{ meta.edge_count }} · 宿主 {{ meta.host_count }}
+            <span v-if="meta.last_bom_xref_at"> · 更新 {{ meta.last_bom_xref_at }}</span>
+            <span class="head-meta-hint"> · 随 CAD 索引「工程内搜索」自动重建</span>
+          </p>
+        </div>
+        <button
+          type="button"
+          class="btn head-rebuild"
+          :disabled="rebuilding"
+          title="仅重读各 FCStd 的 XLink 并刷新引用表，不重扫 CAD 索引属性。日常请在「CAD 索引」工程内搜索；改 XLink 后若未重扫可用此按钮。"
+          @click="onRebuild"
+        >
+          {{ rebuilding ? "重建中…" : "仅重建引用表" }}
+        </button>
       </div>
+      <p v-if="meta?.database_path_display" class="head-db mono">{{ meta.database_path_display }}</p>
     </header>
 
     <p v-if="!hasIndex" class="warn-line">
-      引用表为空。请先在「CAD 索引」扫描，或在「引用设置」中重建引用表。
+      引用表为空。请先在「CAD 索引」执行「工程内搜索」（会一并重建引用表）。
     </p>
 
     <nav class="sub-tabs" role="tablist">
@@ -611,7 +624,7 @@ onUnmounted(() => {
         <p class="empty">加载中…</p>
       </div>
       <div v-else class="empty-wrap table-grow">
-        <p class="empty">{{ hasIndex ? "无匹配引用边" : "尚无引用表，请先在「引用设置」重建" }}</p>
+        <p class="empty">{{ hasIndex ? "无匹配引用边" : "尚无引用表，请先在 CAD 索引「工程内搜索」" }}</p>
       </div>
     </div>
 
@@ -626,9 +639,10 @@ onUnmounted(() => {
       </section>
       <section class="settings-block">
         <h2 class="block-title">引用表</h2>
-        <button type="button" class="btn primary" :disabled="rebuilding" @click="onRebuild">
-          {{ rebuilding ? "重建中…" : "重建引用表" }}
-        </button>
+        <p class="block-desc">
+          引用表在「CAD 索引 · 工程内搜索」结束时自动按 present 的 FCStd 重建。
+          若只改了磁盘上的 XLink（如链接路径修正）而未重扫索引，可用页顶「仅重建引用表」同步引用边，不更新 PartNumber 等属性。
+        </p>
         <p v-if="meta?.database_path_display" class="meta-line">数据库：{{ meta.database_path_display }}</p>
       </section>
     </div>
@@ -651,9 +665,17 @@ onUnmounted(() => {
 
 .head-row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
+}
+
+.head-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+  min-width: 0;
 }
 
 .page-title {
@@ -664,6 +686,20 @@ onUnmounted(() => {
 .head-meta {
   margin: 0;
   font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.head-meta-hint {
+  color: #64748b;
+}
+
+.head-rebuild {
+  flex-shrink: 0;
+}
+
+.head-db {
+  margin: 6px 0 0;
+  font-size: 0.72rem;
   color: var(--muted);
 }
 

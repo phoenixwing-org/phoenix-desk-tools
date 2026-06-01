@@ -9,9 +9,12 @@ from pathlib import Path
 
 from fcdesk.services.bom_xref_service import (
     host_ref_groups_from_db,
-    rebuild_bom_xrefs,
     search_incoming_refs,
     search_outgoing_refs,
+)
+from fcdesk.services.cad_index import (
+    rebuild_bom_xrefs,
+    refresh_bom_xref_index_for_host,
 )
 from fcdesk.services.fcstd_map_service import run_fcstd_map_scan
 from fcdesk.services.rename_analysis_service import analyze_rename_references
@@ -143,6 +146,32 @@ class TestBomXref(unittest.TestCase):
             top_out = search_outgoing_refs(root, "./top-assy.FCStd")
             targets = {r["target_basename"] for r in top_out["refs"]}
             self.assertEqual(targets, {"sub-assy.FCStd", "child.FCStd"})
+
+    def test_refresh_host_index_recursive_subtree(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_fcstd(root / "leaf.FCStd", "<Document/>")
+            _write_fcstd(root / "sub/sub-assy.FCStd", _SUB_ASM_XML)
+            _write_fcstd(root / "child.FCStd", "<Document/>")
+            _write_fcstd(root / "top-assy.FCStd", _TOP_ASM_XML)
+            run_fcstd_map_scan(root)
+
+            from fcdesk.freecad.phoenix_store import connect
+
+            with connect(root) as conn:
+                conn.execute("DELETE FROM bom_xref WHERE host_repo_rel_path = ?", ("./top-assy.FCStd",))
+
+            out = refresh_bom_xref_index_for_host(root, "./top-assy.FCStd", recursive=True)
+            self.assertGreaterEqual(out["hosts_refreshed"], 2)
+            self.assertIn("./sub/sub-assy.FCStd", out["hosts"])
+            self.assertEqual(out["outgoing_count"], 2)
+
+            listed = search_outgoing_refs(root, "./top-assy.FCStd", refresh_disk=False)
+            self.assertEqual(listed["count"], 2)
+
+            only_root = refresh_bom_xref_index_for_host(root, "./top-assy.FCStd", recursive=False)
+            self.assertEqual(only_root["hosts_refreshed"], 1)
+            self.assertEqual(only_root["hosts"], ["./top-assy.FCStd"])
 
     def test_rename_analysis_transitive_hosts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

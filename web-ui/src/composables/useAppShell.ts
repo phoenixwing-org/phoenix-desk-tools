@@ -94,6 +94,7 @@ export type AppShellContext = {
   openNewTabForPage: (pageId: string) => string;
   activateTab: (tabId: string) => void;
   closeTab: (tabId: string) => Promise<boolean>;
+  closeAllTabs: () => Promise<boolean>;
   getTab: (tabId: string) => WorkbenchTab | undefined;
   activeTab: () => WorkbenchTab | undefined;
   updateTab: (tabId: string, patch: Partial<Pick<WorkbenchTab, "title" | "subtitle" | "dirty">>) => void;
@@ -509,6 +510,7 @@ export function provideAppShell(): AppShellContext {
     openNewTabForPage: wb.openNewTabForPage,
     activateTab: wb.activateTab,
     closeTab: wb.closeTab,
+    closeAllTabs: wb.closeAllTabs,
     getTab: wb.getTab,
     activeTab: wb.activeTab,
     updateTab: wb.updateTab,

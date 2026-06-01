@@ -22,14 +22,14 @@ flowchart LR
   E --> F[页面表格]
 ```
 
-1. **引用边**：`bom_xref` 表（需先在 CAD 索引扫描后「重建引用表」）。
+1. **引用边**：`bom_xref` 表（**CAD 索引「工程内搜索」结束时自动重建**；页顶「仅重建引用表」仅在未重扫索引、只改了 XLink 时使用）。
 2. **BOM 属性**：`fcstd_map` / `file_asset` 中 PartNumber、PartVersion、TypeCode、PartName 等。
 3. **合并键**：`target_repo_rel_path`（规范化相对路径）。
 
 ## 交互
 
 1. 右侧树点击装配，或输入路径/文件名 → **加载 BOM**。
-2. 顶栏显示引用表元数据（边数、宿主数、更新时间）与 **重建引用表**。
+2. 顶栏显示引用表元数据；**工程内搜索**后引用表已与索引同步，必要时用 **仅重建引用表**（不重扫属性）。
 3. 表格展示当前装配的**一层子件**（非递归多级 BOM；多级见零件详情装配树）。
 
 ## 表格列
@@ -54,7 +54,8 @@ flowchart LR
 | GET | `/api/bom-xrefs/meta` | 引用表统计 |
 | GET | `/api/bom-xrefs/outgoing?rel=` | 装配一层子件 |
 | GET | `/api/fcstd-map` | 属性补全 |
-| POST | `/api/bom-xrefs/rebuild` | 重建引用表 |
+| POST | `/api/bom-xrefs/rebuild` | 仅重建引用表（等同上次扫描参数，不重扫 `file_asset`） |
+| POST | `/api/fcstd-map/scan`（工程内搜索） | 写 CAD 索引并 **内建** `rebuild_bom_xrefs` |
 
 ## 后续扩展（未实现）
 
@@ -65,4 +66,4 @@ flowchart LR
 ## 实现文件
 
 - 前端：`web-ui/src/pages/BomExportPage.vue`
-- 后端：`fcdesk/services/bom_xref_service.py`（`search_outgoing_refs`、索引重建）
+- 后端：`fcdesk/services/bom_xref_service.py`（查询）；`fcdesk/services/cad_index/`（引用表索引重建）

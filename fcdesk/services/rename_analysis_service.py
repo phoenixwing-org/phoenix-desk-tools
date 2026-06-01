@@ -25,7 +25,8 @@ from fcdesk.freecad.rename_analysis import (
     apply_host_reference_label_corrections,
     write_rename_analysis_report,
 )
-from fcdesk.services.bom_xref_service import host_ref_groups_from_db, refresh_bom_xrefs_for_hosts
+from fcdesk.services.bom_xref_service import host_ref_groups_from_db
+from fcdesk.services.cad_index import refresh_bom_xrefs_for_hosts
 
 LabelScope = Literal["incoming", "host_all"]
 

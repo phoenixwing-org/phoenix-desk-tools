@@ -68,7 +68,14 @@ from fcdesk.services.sw_step_export_service import (
     save_sw_step_prefs,
 )
 from fcdesk.services.workspace_service import build_workspace_tree, scan_workspace_files
-from fcdesk.services.xlink_fix_service import analyze_xlink_fix, get_xlink_prefs, run_xlink_fix, save_xlink_prefs
+from fcdesk.services.xlink_fix_service import (
+    analyze_xlink_fix,
+    apply_xlink_fix_override,
+    get_xlink_prefs,
+    list_xlink_fix_candidates,
+    run_xlink_fix,
+    save_xlink_prefs,
+)
 from fcdesk.services.rename_analysis_service import (
     analyze_rename_references,
     apply_rename_analysis_corrections,
@@ -79,9 +86,12 @@ from fcdesk.services.rename_analysis_service import (
 )
 from fcdesk.freecad.rename_analysis.types import RenameAnalysisError
 from fcdesk.services.rename_ref_service import execute_file_rename, load_file_rename_context, preview_rename_unsaved
+from fcdesk.services.cad_index import (
+    rebuild_bom_xrefs_from_last_scan,
+    refresh_bom_xref_index_for_host,
+)
 from fcdesk.services.bom_xref_service import (
     load_bom_xref_payload,
-    rebuild_bom_xrefs_from_last_scan,
     search_bom_xref_edges,
     search_incoming_refs,
     search_outgoing_refs,
@@ -228,6 +238,18 @@ class XlinkFixRunBody(BaseModel):
     batch_dir: str | None = None
     dry_run: bool | None = None
     all_in_dir: bool | None = None
+
+
+class XlinkFixOverrideBody(BaseModel):
+    host_repo_rel: str
+    old_path: str
+    target_repo_rel: str
+
+
+class BomXrefRefreshHostBody(BaseModel):
+    host_repo_rel: str
+    recursive: bool = True
+    max_hosts: int = 64
 
 
 class FileRenameScanBody(BaseModel):
@@ -793,9 +815,27 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
     def api_bom_xrefs_outgoing(
         rel: str = Query(...),
         limit: int = Query(500, ge=1, le=2000),
+        refresh_disk: bool = Query(True),
     ) -> dict:
         try:
-            return search_outgoing_refs(get_workspace(), rel, limit=limit)
+            return search_outgoing_refs(
+                get_workspace(),
+                rel,
+                limit=limit,
+                refresh_disk=refresh_disk,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post("/api/bom-xrefs/refresh-host-index")
+    def api_bom_xrefs_refresh_host_index(body: BomXrefRefreshHostBody) -> dict:
+        try:
+            return refresh_bom_xref_index_for_host(
+                get_workspace(),
+                body.host_repo_rel,
+                recursive=body.recursive,
+                max_hosts=body.max_hosts,
+            )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -917,6 +957,34 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
         batch_dir = patch.pop("batch_dir", None)
         try:
             return run_xlink_fix(ws, batch_dir_input=batch_dir, **patch)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post("/api/xlink-fix/apply-override")
+    def api_xlink_apply_override(body: XlinkFixOverrideBody) -> dict:
+        try:
+            return apply_xlink_fix_override(
+                get_workspace(),
+                host_repo_rel=body.host_repo_rel,
+                old_path=body.old_path,
+                target_repo_rel=body.target_repo_rel,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.get("/api/xlink-fix/candidates")
+    def api_xlink_candidates(
+        basename: str = "",
+        part_number: str = "",
+        part_version: str = "",
+    ) -> dict:
+        try:
+            return list_xlink_fix_candidates(
+                get_workspace(),
+                basename=basename,
+                part_number=part_number or None,
+                part_version=part_version or None,
+            )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 

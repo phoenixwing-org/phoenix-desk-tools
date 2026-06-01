@@ -335,25 +335,64 @@ class FcstdMapDocument:
         return m
 
 
+_DRAWING_STEM_SUFFIX = re.compile(r"\.drawing$", re.IGNORECASE)
+_PART_KEY_PREFIX = re.compile(r"^(\d+(?:\.\d+)?)\.(\d{2,3})(?=[\-_]|$)")
+
+
+def normalize_fcstd_filename_stem(filename: str) -> str:
+    """去掉扩展名与 ``.Drawing`` 后缀，供 Part Key / 类型码推断。"""
+    name = Path(filename.replace("\\", "/")).name
+    stem = Path(name).stem
+    return _DRAWING_STEM_SUFFIX.sub("", stem)
+
+
+def parse_part_number_version_from_stem(stem: str) -> tuple[str, str]:
+    """从文件名主干解析零件号与版本（零件号可为短号如 ``8003``，不必六位）。"""
+    m = _PART_KEY_PREFIX.match(stem)
+    if m:
+        pn = m.group(1)
+        pv = m.group(2)
+        if len(pv) < 3:
+            pv = pv.zfill(3)
+        return pn, pv
+
+    pn = ""
+    mp = re.match(r"^(\d+(?:\.\d+)?)", stem)
+    if mp:
+        pn = mp.group(1)
+
+    pv = ""
+    m_ver = re.search(r"\.(\d{2,3})(?=[\-_.]|$)", stem)
+    if m_ver:
+        pv = m_ver.group(1)
+        if len(pv) < 3:
+            pv = pv.zfill(3)
+
+    return pn, pv
+
+
+def infer_part_key_from_filename(filename: str) -> tuple[str, str]:
+    """返回 ``(part_number, part_version)``；无法推断时为空字符串。"""
+    stem = normalize_fcstd_filename_stem(filename)
+    return parse_part_number_version_from_stem(stem)
+
+
 def hints_from_fcstd_filename(filename: str) -> dict[str, Any]:
     """从文件名做轻量推断（不访问磁盘）；推断失败字段省略。
 
     适用于 FCStd 及 CAD 索引内其它类型（PDF、MD、图片等）的命名规则。
 
-    - ``PartNumber``：主干若数字开头 ``^\\d+``
-    - ``PartVersion``：与 ``fix_fcstd_xlink_paths`` 一致 ``.NNN[-.]``
+    - ``PartNumber`` / ``PartVersion``：前缀 ``编号.版本``（版本 2–3 位），后接 ``-`` / ``_``；支持 ``.Drawing`` 与短编号（如 ``8003.001``）
     - ``TypeCode``：``-X-`` /``.X.`` /``_X_`` 且 X∈HSR（大小写忽略）
     """
-    stem = Path(filename).stem
+    stem = normalize_fcstd_filename_stem(filename)
     out: dict[str, Any] = {}
 
-    mp = re.match(r"^(\d+)", stem)
-    if mp:
-        out["PartNumber"] = mp.group(1)
-
-    m_ver = re.search(r"\.(\d{3})[-.]", stem)
-    if m_ver:
-        out["PartVersion"] = m_ver.group(1)
+    pn, pv = parse_part_number_version_from_stem(stem)
+    if pn:
+        out["PartNumber"] = pn
+    if pv:
+        out["PartVersion"] = pv
 
     mt = _INFIX_TYPE.search(stem)
     if mt:

@@ -91,7 +91,7 @@ Tab 栏位于**左侧导航与右侧工作空间树之间**的主内容列顶部
 ┌──────────────────────────────────────────────────────────┐
 │ 工具栏                                                    │
 ├────┬───────────────────────────────────────────┬─────────┤
-│    │ [Tab: 属性·partA ×] [Tab: 属性·partB ×] [+]  │         │
+│    │ [Tab: 属性·partA ×] [Tab: 属性·partB ×] [全部关闭] [+]  │         │
 │导航├───────────────────────────────────────────┤ 工作空间 │
 │    │  当前 Tab 对应页面内容（KeepAlive）          │   树    │
 │    │                                              │         │
@@ -124,6 +124,7 @@ type WorkbenchTab = {
 | 树中选 FCStd / 打开文件详细页 | **文档型页允许多 Tab**（含同一 `contextKey` 开多个）；新建前若当前 Tab `dirty` → 确认 |
 | 零件目录「打开属性」 | 带 `contextKey` 作为 Tab 标题/副标题；**不强制**「同路径去重激活」 |
 | 关闭 Tab | `dirty` 时确认写入/放弃/取消 |
+| **关闭全部 Tab** | Tab 栏右侧 **「全部关闭」**（见 §4.5）；仅当 Tab 数 **> 1** 时显示 |
 | Tab 数达 `max_tabs` | 拒绝新建或关闭最久未激活 Tab（实现时二选一，默认拒绝并提示） |
 
 **KeepAlive 键：** 从 `pageId` 改为 **`tabId`**，同一 `pageId` 可有多实例。
@@ -140,6 +141,19 @@ type WorkbenchTab = {
 | **配置** | `home` | 单例 |
 
 这样 Tab 栏不会挤满，只出现在「值得并行」的工作上。
+
+### 4.5 关闭全部 Tab（已实现）
+
+**位置：** `web-ui/src/layout/WorkbenchTabBar.vue` — 可滚动 Tab 列表与 **「+」** 之间，按钮 **「全部关闭」**（不放在左侧 `NavSidebar` 的 `nav-spacer`，避免与 Tab 操作分离）。
+
+**行为：**
+
+| 项 | 说明 |
+| --- | --- |
+| 显示条件 | 当前 Tab **多于 1 个** |
+| 确认 | 应用内对话框（`promptChoice`）：将关闭 N 个 Tab 并回首页；有 dirty 时列出标题（最多 6 条 + 计数）并说明**未保存将丢弃**；点取消后状态栏提示「已取消」 |
+| 关闭后 | 清空列表并打开 **`home`**；状态栏与运行日志「已关闭 N 个 Tab，已回到首页」 |
+| 代码 | `useWorkbench.closeAllTabs()`、`tabCloseConfirm.confirmCloseAllTabs` |
 
 ### 4.4 每页 Tab 上限（后台配置）
 
@@ -265,6 +279,7 @@ export interface PageSessionApi {
 | **P0** ✅ | `KeepAlive` + bom 换文件确认 | 已上线 |
 | **P1** ✅ | `usePageSession` + DB / sessionStorage | F5 与跨会话恢复 |
 | **P2** ✅ | `WorkbenchTabBar` + `tabId` KeepAlive | 多 Tab |
+| **P2b** ✅ | Tab 栏 **「全部关闭」** | `closeAllTabs`（§4.5） |
 | **P3** ✅ | `PageSessionApi.flush` + Tab 关闭 dirty（写入/放弃/取消） | 体验闭环 |
 | **P4** ✅ | `ui_session` 表 + `/api/workbench/session` | 跨工作空间 Tab 恢复 |
 | ~~P5~~ | ~~桌面 Tk 对齐 Tab~~ | **不做** — 见 §8 |
@@ -299,6 +314,7 @@ GET/PUT /api/workbench/session   → 读写 .phoenix 内 ui_session JSON  blob
 | 3 | **每页 Tab 上限** | **后台 `app_config.workbench.pages.*.max_tabs`**；为 **1** 时不新建 Tab，**激活已有** |
 | 4 | **桌面 Tk 壳** | **不改进** Workbench / Tab / 多页并行；**仅保留**配置、打开 Web 等最基础能力；Tab 与 session 持久化为 **Web 独占** |
 | 5 | **存储与报告** | **主要数据靠数据库**（`cad-database.sqlite`）；**默认不写** `.phoenix/reports/` 等本地 Markdown 报告，仅用户「导出报告」时写盘 |
+| 6 | **关闭全部 Tab** | Tab 栏 **「全部关闭」**；`>1` Tab 时可用；批量丢弃 dirty（§4.5） |
 
 ### 8.1 仍开放（实现细节）
 

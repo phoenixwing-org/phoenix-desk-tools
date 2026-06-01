@@ -682,12 +682,39 @@ export function fetchBomXrefIncoming(opts: {
   }>(`/api/bom-xrefs/incoming${qs ? `?${qs}` : ""}`);
 }
 
-export function fetchBomXrefOutgoing(rel: string, limit?: number) {
+export function fetchBomXrefOutgoing(rel: string, limit?: number, refreshDisk = true) {
   const q = new URLSearchParams({ rel });
   if (limit != null) q.set("limit", String(limit));
+  if (!refreshDisk) q.set("refresh_disk", "false");
   return jsonFetch<{ host_repo_rel_path: string; count: number; refs: BomXrefEdge[] }>(
     `/api/bom-xrefs/outgoing?${q}`,
   );
+}
+
+export type BomXrefRefreshHostResult = {
+  host_repo_rel_path: string;
+  recursive: boolean;
+  hosts_refreshed: number;
+  hosts: string[];
+  outgoing_count: number;
+  outgoing_missing: number;
+  outgoing_ambiguous: number;
+  outgoing_resolved: number;
+  updated_hosts?: number;
+  edge_count?: number;
+  log?: string;
+};
+
+export function refreshBomXrefHostIndex(body: {
+  host_repo_rel: string;
+  recursive?: boolean;
+  max_hosts?: number;
+}) {
+  return jsonFetch<BomXrefRefreshHostResult>("/api/bom-xrefs/refresh-host-index", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 }
 
 export function fetchBomXrefEdges(opts?: { offset?: number; limit?: number; search?: string }) {
@@ -868,7 +895,21 @@ export type XlinkFixIssueRow = {
   verdict: string;
   note: string;
   count: number;
-  status: "fixable" | "not_found";
+  status: "fixable" | "not_found" | "fixed_manual";
+  basename?: string;
+  part_number?: string;
+  part_version?: string;
+  part_key?: string;
+};
+
+export type XlinkFixOverrideResult = {
+  patches: number;
+  new_path: string;
+  host_repo_rel: string;
+  old_path: string;
+  target_repo_rel: string;
+  target_display: string;
+  unchanged?: boolean;
 };
 
 export type XlinkFixStats = {
@@ -923,6 +964,47 @@ export function runXlinkFix(opts: Partial<XlinkFixPrefs> = {}) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(opts),
   });
+}
+
+export function applyXlinkFixOverride(body: {
+  host_repo_rel: string;
+  old_path: string;
+  target_repo_rel: string;
+}) {
+  return jsonFetch<XlinkFixOverrideResult>("/api/xlink-fix/apply-override", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export type XlinkFixCandidateFile = {
+  id: number;
+  repo_rel_path: string;
+  filename: string;
+  part_number: string;
+  part_version: string;
+  part_key: string;
+  file_status: string;
+};
+
+export type XlinkFixCandidatesPayload = {
+  basename: string;
+  part_number: string;
+  part_version: string;
+  part_key: string;
+  files: XlinkFixCandidateFile[];
+};
+
+export function fetchXlinkFixCandidates(opts: {
+  basename: string;
+  part_number?: string;
+  part_version?: string;
+}) {
+  const params = new URLSearchParams({ basename: opts.basename });
+  if (opts.part_number) params.set("part_number", opts.part_number);
+  if (opts.part_version) params.set("part_version", opts.part_version);
+  return jsonFetch<XlinkFixCandidatesPayload>(`/api/xlink-fix/candidates?${params}`);
 }
 
 export type PartDedupPrefs = {

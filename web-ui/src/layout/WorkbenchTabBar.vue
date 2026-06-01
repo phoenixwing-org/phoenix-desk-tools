@@ -63,6 +63,29 @@ const canAdd = computed(() => {
   return shell.canOpenNewTab(tab.pageId);
 });
 
+const canCloseAll = computed(() => tabs.value.length > 1);
+const closingAll = ref(false);
+
+async function onCloseAll() {
+  if (!canCloseAll.value || closingAll.value) return;
+  const count = tabs.value.length;
+  closingAll.value = true;
+  try {
+    const ok = await shell.closeAllTabs();
+    if (ok) {
+      const msg = `已关闭 ${count} 个 Tab，已回到首页`;
+      shell.setStatus(msg);
+      shell.appendLog(`[Tab] ${msg}`, { source: "workbench" });
+    } else {
+      shell.setStatus("已取消：未关闭 Tab");
+    }
+  } catch (e) {
+    shell.setStatus(String(e));
+  } finally {
+    closingAll.value = false;
+  }
+}
+
 watch(activeId, () => {
   void nextTick(() => scrollActiveIntoView());
 });
@@ -100,6 +123,16 @@ onMounted(() => {
         <span class="tab-close" title="关闭 Tab" @click="onClose(tab.id, $event)">×</span>
       </button>
     </div>
+    <button
+      v-if="canCloseAll"
+      type="button"
+      class="tab-close-all"
+      :disabled="closingAll"
+      title="关闭当前打开的全部 Tab（有未保存时将提示确认）"
+      @click="onCloseAll"
+    >
+      {{ closingAll ? "…" : "全部关闭" }}
+    </button>
     <button
       v-if="canAdd"
       type="button"
@@ -203,6 +236,32 @@ onMounted(() => {
 .tab-close:hover {
   opacity: 1;
   background: rgba(148, 163, 184, 0.25);
+}
+
+.tab-close-all {
+  flex-shrink: 0;
+  align-self: center;
+  height: 28px;
+  margin-left: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--border, #cbd5e1);
+  border-radius: 6px;
+  background: var(--shell-bg, #f1f5f9);
+  color: var(--muted, #64748b);
+  font-size: 0.75rem;
+  cursor: pointer;
+  box-shadow: -6px 0 8px -4px var(--shell-bg, #f1f5f9);
+}
+
+.tab-close-all:hover:not(:disabled) {
+  border-color: #f87171;
+  color: #b91c1c;
+  background: #fef2f2;
+}
+
+.tab-close-all:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .tab-add {

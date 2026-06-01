@@ -2,7 +2,7 @@ import { computed, ref, type Ref } from "vue";
 import type { AppConfig } from "../types/config";
 import type { OpenTabOptions, PageTabPolicy, WorkbenchSessionSnapshot, WorkbenchTab, WorkbenchTabPayload } from "../types/workbench";
 import { getPageSession } from "./usePageSession";
-import { confirmDirtyTabClose } from "./tabCloseConfirm";
+import { confirmCloseAllTabs, confirmDirtyTabClose } from "./tabCloseConfirm";
 
 let tabSeq = 0;
 
@@ -169,6 +169,23 @@ export function createWorkbench(appConfig: Ref<AppConfig | null>) {
     return true;
   }
 
+  async function closeAllTabs(): Promise<boolean> {
+    const list = tabs.value;
+    if (list.length <= 1) return false;
+
+    const dirtyTitles: string[] = [];
+    for (const tab of list) {
+      const api = getPageSession(tab.id);
+      if (api?.isDirty() ?? tab.dirty) dirtyTitles.push(tab.title);
+    }
+    if (!(await confirmCloseAllTabs(list.length, dirtyTitles))) return false;
+
+    tabs.value = [];
+    activeTabId.value = "";
+    openTab({ pageId: "home" });
+    return true;
+  }
+
   function ensureInitialTab(pageId: string): void {
     if (!tabs.value.length) {
       openTab({ pageId });
@@ -240,6 +257,7 @@ export function createWorkbench(appConfig: Ref<AppConfig | null>) {
     consumeTabPayload,
     canOpenNewTab,
     closeTab,
+    closeAllTabs,
     ensureInitialTab,
     consumeTabPageState,
     restoreSession,

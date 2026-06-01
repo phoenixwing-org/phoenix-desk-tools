@@ -1,4 +1,4 @@
-"""BOM XLink 引用关系 — 构建与查询（读 SQLite，不写回 FCStd）。"""
+"""BOM XLink 引用关系查询（读 SQLite）；索引构建见 ``fcdesk.services.cad_index``。"""
 
 from __future__ import annotations
 
@@ -7,25 +7,16 @@ from pathlib import Path
 from typing import Any
 
 from fcdesk.config.user_prefs import format_resolved_under_workspace
-from fcdesk.freecad.bom_xref.extract import list_fcstd_xlink_attrs_from_file
-from fcdesk.freecad.bom_xref.resolve import resolve_xlink_target
-from fcdesk.freecad.cad_index_types import is_fcstd_filename
 from fcdesk.freecad.fcstd_mapping import normalize_repo_rel_path_for_map
 from fcdesk.freecad.phoenix_store import (
     cad_database_path,
-    delete_bom_xrefs_for_hosts,
-    ensure_fcstd_scan_record,
     get_file_asset_id,
-    get_last_fcstd_scan_id,
-    insert_bom_xref_edges,
-    list_present_fcstd_file_assets,
     load_bom_xref_meta,
     query_all_bom_xref_edges,
     query_bom_xref_edges_paged,
     query_bom_xrefs_for_rename_basename,
     query_bom_xrefs_incoming,
     query_bom_xrefs_outgoing,
-    replace_bom_xrefs,
     find_present_repo_rel_by_filename,
 )
 from fcdesk.freecad.phoenix_store import _norm_key
@@ -35,187 +26,31 @@ from fcdesk.freecad.rename_analysis.xlink import (
     replace_basename_in_xlink_attr,
     xlink_attr_matches_target,
 )
+from fcdesk.services.cad_index import (
+    GRAPH_TARGET_STATUSES as _GRAPH_TARGET_STATUSES,
+    ensure_bom_xref_built,
+    ensure_bom_xref_index,
+    norm_xref_path as _norm_xref_path,
+    rebuild_bom_xrefs,
+    rebuild_bom_xrefs_from_last_scan,
+    refresh_bom_xref_index_for_host,
+    refresh_bom_xrefs_for_hosts,
+)
 
-
-def _format_bom_xref_rebuild_log(
-    *,
-    repo_root: Path,
-    scan_root: Path,
-    scan_id: int,
-    host_files: int,
-    hosts_with_xlink: int,
-    stats: dict[str, int],
-    prev_edge_count: int = 0,
-    prev_host_count: int = 0,
-) -> str:
-    """人类可读的 BOM 引用表重建摘要。"""
-    rr = repo_root.expanduser().resolve(strict=False)
-    root = scan_root.expanduser().resolve(strict=False)
-    hosts_no_xlink = max(0, host_files - hosts_with_xlink)
-    lines = [
-        "重建内容: bom_xref 引用表（清空后按 CAD 索引重写）",
-        "提取方式: 读取各 FCStd 的 Document.xml · XLink file 属性",
-        f"扫描根: {format_resolved_under_workspace(root, rr)}",
-        f"CAD 索引 scan_id: {scan_id}",
-        "",
-        f"读取 FCStd（present）: {host_files} 个",
-        f"  · 含出向 XLink: {hosts_with_xlink} 个宿主",
-        f"  · 无出向 XLink: {hosts_no_xlink} 个",
-        "",
-        f"写入引用边: {stats['edge_count']} 条 · 涉及宿主 {stats['host_count']} 个",
-        f"  · 目标已解析: {stats['target_resolved']}",
-        f"  · 目标歧义: {stats['target_ambiguous']}",
-        f"  · 目标缺失/非 FCStd: {stats['target_missing']}",
-    ]
-    if prev_edge_count or prev_host_count:
-        lines.extend(
-            [
-                "",
-                f"较上次: 边 {prev_edge_count} → {stats['edge_count']}"
-                f" · 宿主 {prev_host_count} → {stats['host_count']}",
-            ]
-        )
-    lines.extend(
-        [
-            "",
-            f"数据库: {format_resolved_under_workspace(cad_database_path(rr), rr)}",
-        ]
-    )
-    return "\n".join(lines)
-
-
-def rebuild_bom_xrefs(repo_root: Path, *, scan_id: int, scan_root: Path) -> dict[str, Any]:
-    """在 CAD 索引扫描后，从各 FCStd 提取 XLink 并写入 ``bom_xref`` 表。"""
-    from fcdesk.services.fcstd_map_service import scan_cad_basename_map
-
-    rr = repo_root.expanduser().resolve(strict=False)
-    root = scan_root.expanduser().resolve(strict=False)
-    prev = load_bom_xref_meta(rr)
-    basename_map = scan_cad_basename_map(root, anchor=rr)
-    assets = list_present_fcstd_file_assets(rr)
-    path_to_id = {a["repo_rel_path"]: a["id"] for a in assets}
-
-    edges: list[dict[str, Any]] = []
-    for asset in assets:
-        edges.extend(
-            _bom_xref_edges_for_host(
-                rr,
-                asset,
-                basename_map=basename_map,
-                path_to_id=path_to_id,
-            )
-        )
-
-    hosts_with_xlink = len({e["host_repo_rel_path"] for e in edges})
-    stats = replace_bom_xrefs(rr, scan_id=scan_id, edges=edges)
-    log = _format_bom_xref_rebuild_log(
-        repo_root=rr,
-        scan_root=root,
-        scan_id=scan_id,
-        host_files=len(assets),
-        hosts_with_xlink=hosts_with_xlink,
-        stats=stats,
-        prev_edge_count=int(prev.get("edge_count") or 0),
-        prev_host_count=int(prev.get("host_count") or 0),
-    )
-    return {
-        "scan_id": scan_id,
-        "database_path": str(cad_database_path(rr)),
-        "database_path_display": format_resolved_under_workspace(cad_database_path(rr), rr),
-        "host_files_scanned": len(assets),
-        "hosts_with_xlink": hosts_with_xlink,
-        "hosts_without_xlink": max(0, len(assets) - hosts_with_xlink),
-        **stats,
-        "log": log,
-    }
-
-
-def _bom_xref_edges_for_host(
-    repo_root: Path,
-    asset: dict[str, Any],
-    *,
-    basename_map: dict[str, list[str]],
-    path_to_id: dict[str, int],
-) -> list[dict[str, Any]]:
-    host_rel = asset["repo_rel_path"]
-    host_path = repo_root / host_rel
-    if not host_path.is_file():
-        return []
-
-    edges: list[dict[str, Any]] = []
-    for xlink in list_fcstd_xlink_attrs_from_file(host_path):
-        target_base = Path(xlink.replace("\\", "/")).name
-        resolved = resolve_xlink_target(
-            repo_root=repo_root,
-            host_repo_rel=host_rel,
-            xlink_file_attr=xlink,
-            basename_map=basename_map,
-        )
-        target_rel = resolved.target_repo_rel_path
-        target_id = path_to_id.get(target_rel) if target_rel else None
-        if target_id is None and target_rel:
-            target_id = get_file_asset_id(repo_root, target_rel)
-
-        detail = None
-        if resolved.candidate_paths:
-            detail = {"candidates": list(resolved.candidate_paths)}
-
-        edges.append(
-            {
-                "host_file_asset_id": asset["id"],
-                "host_repo_rel_path": host_rel,
-                "xlink_file_attr": xlink,
-                "target_basename": target_base,
-                "target_file_asset_id": target_id,
-                "target_repo_rel_path": target_rel,
-                "resolve_status": resolved.resolve_status,
-                "detail_json": detail,
-            }
-        )
-    return edges
-
-
-def refresh_bom_xrefs_for_hosts(repo_root: Path, host_repo_rel_paths: list[str]) -> dict[str, Any]:
-    """XLink 写回后，从磁盘重读指定宿主的引用边并更新 ``bom_xref``。"""
-    from fcdesk.config.user_prefs import load_workspace_prefs
-    from fcdesk.services.fcstd_map_service import resolve_scan_root, scan_cad_basename_map
-
-    rr = repo_root.expanduser().resolve(strict=False)
-    hosts = [_norm_xref_path(p) or str(p).strip() for p in host_repo_rel_paths if str(p).strip()]
-    hosts = sorted({h for h in hosts if h})
-    if not hosts:
-        return {"updated_hosts": 0, "edge_count": 0}
-
-    ensure_bom_xref_built(rr)
-    scan_id = ensure_fcstd_scan_record(rr) or get_last_fcstd_scan_id(rr)
-    if scan_id is None:
-        return {"updated_hosts": 0, "edge_count": 0}
-
-    ws_pref = load_workspace_prefs(rr).get("fcstd_map") or {}
-    scan_root = resolve_scan_root(rr, ws_pref.get("scan_root"))
-    basename_map = scan_cad_basename_map(scan_root, anchor=rr)
-    path_to_id = {a["repo_rel_path"]: a["id"] for a in list_present_fcstd_file_assets(rr)}
-
-    delete_bom_xrefs_for_hosts(rr, hosts)
-    edges: list[dict[str, Any]] = []
-    updated = 0
-    for host_rel in hosts:
-        asset_id = get_file_asset_id(rr, host_rel)
-        if asset_id is None:
-            continue
-        asset = {"id": asset_id, "repo_rel_path": host_rel}
-        host_edges = _bom_xref_edges_for_host(
-            rr,
-            asset,
-            basename_map=basename_map,
-            path_to_id=path_to_id,
-        )
-        if host_edges:
-            updated += 1
-        edges.extend(host_edges)
-
-    stats = insert_bom_xref_edges(rr, scan_id=scan_id, edges=edges)
-    return {"updated_hosts": updated, **stats}
+__all__ = [
+    "ensure_bom_xref_built",
+    "ensure_bom_xref_index",
+    "host_ref_groups_from_db",
+    "load_assembly_tree",
+    "load_bom_xref_payload",
+    "rebuild_bom_xrefs",
+    "rebuild_bom_xrefs_from_last_scan",
+    "refresh_bom_xref_index_for_host",
+    "refresh_bom_xrefs_for_hosts",
+    "search_bom_xref_edges",
+    "search_incoming_refs",
+    "search_outgoing_refs",
+]
 
 
 def load_bom_xref_payload(repo_root: Path) -> dict[str, Any]:
@@ -229,18 +64,9 @@ def load_bom_xref_payload(repo_root: Path) -> dict[str, Any]:
     }
 
 
-_GRAPH_TARGET_STATUSES = frozenset({"resolved", "ambiguous", "self"})
-
-
 def _looks_like_exact_basename(name: str) -> bool:
     lower = name.casefold()
     return lower.endswith(".fcstd") and "/" not in name and "\\" not in name
-
-
-def _norm_xref_path(path: str | None) -> str | None:
-    if not path:
-        return None
-    return normalize_repo_rel_path_for_map(str(path).replace("\\", "/").strip())
 
 
 def _build_xref_parent_map(edges: list[dict[str, Any]]) -> dict[str, set[str]]:
@@ -527,10 +353,13 @@ def search_outgoing_refs(
     host_repo_rel: str,
     *,
     limit: int = 500,
+    refresh_disk: bool = True,
 ) -> dict[str, Any]:
     rel = host_repo_rel.strip()
     if not rel:
         raise ValueError("请提供 host_repo_rel")
+    if refresh_disk:
+        refresh_bom_xrefs_for_hosts(repo_root, [rel])
     rows = query_bom_xrefs_outgoing(repo_root, rel, limit=limit)
     return {
         "host_repo_rel_path": rel,
@@ -872,38 +701,3 @@ def load_assembly_tree(
         "nodes": nodes,
     }
 
-
-def ensure_bom_xref_built(repo_root: Path) -> None:
-    """若引用表未构建但已有 CAD 索引，则按上次扫描自动重建。"""
-    meta = load_bom_xref_meta(repo_root)
-    if meta.get("last_bom_xref_at"):
-        return
-    scan_id = ensure_fcstd_scan_record(repo_root)
-    if scan_id is None:
-        raise RenameAnalysisError(
-            "BOM 引用表尚未构建。请先在「CAD 索引」页执行工程内搜索。"
-        )
-    try:
-        rebuild_bom_xrefs_from_last_scan(repo_root)
-    except ValueError as ex:
-        raise RenameAnalysisError(str(ex)) from ex
-
-
-def ensure_bom_xref_index(repo_root: Path) -> None:
-    ensure_bom_xref_built(repo_root)
-
-
-def rebuild_bom_xrefs_from_last_scan(repo_root: Path) -> dict[str, Any]:
-    """在已有 CAD 索引扫描记录上，仅重建 BOM 引用表（不重扫 BOM 属性）。"""
-    from fcdesk.config.user_prefs import load_workspace_prefs
-    from fcdesk.services.fcstd_map_service import resolve_scan_root
-
-    rr = repo_root.expanduser().resolve(strict=False)
-    scan_id = ensure_fcstd_scan_record(rr)
-    if scan_id is None:
-        raise ValueError("请先执行 CAD 索引扫描")
-    ws_pref = load_workspace_prefs(rr).get("fcstd_map") or {}
-    scan_root = resolve_scan_root(rr, ws_pref.get("scan_root"))
-    if not scan_root.is_dir():
-        raise ValueError(f"扫描根不是有效目录: {scan_root}")
-    return rebuild_bom_xrefs(rr, scan_id=scan_id, scan_root=scan_root)

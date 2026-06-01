@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import type { BomXrefEdge, BomXrefHost } from "../../api";
-import { fetchBomXrefIncoming, fetchBomXrefOutgoing } from "../../api";
+import { fetchBomXrefIncoming, fetchBomXrefOutgoing, refreshBomXrefHostIndex } from "../../api";
 import { useFileDetailContext } from "../../composables/useFileDetailContext";
 import { useAppShell } from "../../composables/useAppShell";
 import { basenameFromRel, normalizeRepoRelForApi } from "../../utils/workspaceFileQuery";
@@ -9,7 +9,10 @@ import { basenameFromRel, normalizeRepoRelForApi } from "../../utils/workspaceFi
 const ctx = useFileDetailContext();
 const shell = useAppShell();
 const loading = ref(false);
+const rebuilding = ref(false);
+const indexSummary = ref("");
 const includeTransitive = ref(true);
+const rebuildSubtree = ref(true);
 const incomingHosts = ref<BomXrefHost[]>([]);
 const outgoingRefs = ref<BomXrefEdge[]>([]);
 const directCount = ref(0);
@@ -45,7 +48,26 @@ function xlinkDiffersFromTarget(row: BomXrefEdge) {
 
 const showXlinkColumn = computed(() => outgoingRefs.value.some(xlinkDiffersFromTarget));
 
-async function loadTables(manual = false) {
+const outgoingStats = computed(() => {
+  let missing = 0;
+  let ambiguous = 0;
+  let resolved = 0;
+  for (const row of outgoingRefs.value) {
+    const s = row.resolve_status;
+    if (s === "missing") missing += 1;
+    else if (s === "ambiguous") ambiguous += 1;
+    else if (s === "resolved" || s === "self" || s === "present" || s === "ok") resolved += 1;
+  }
+  return { missing, ambiguous, resolved };
+});
+
+function rowClass(status: string) {
+  if (status === "missing") return "row-missing";
+  if (status === "ambiguous") return "row-ambiguous";
+  return "";
+}
+
+async function loadTables(manual = false, refreshDisk = true) {
   if (!ctx.rel.value.trim()) return;
   loading.value = true;
   if (manual) {
@@ -58,7 +80,7 @@ async function loadTables(manual = false) {
         transitive: includeTransitive.value,
         limit: 500,
       }),
-      fetchBomXrefOutgoing(ctx.rel.value, 500),
+      fetchBomXrefOutgoing(ctx.rel.value, 500, refreshDisk),
     ]);
     incomingHosts.value = inc.hosts;
     outgoingRefs.value = out.refs;
@@ -92,21 +114,58 @@ watch(
 watch(includeTransitive, () => {
   void loadTables(true);
 });
+
+async function onRebuildIndex() {
+  if (!ctx.rel.value.trim() || rebuilding.value) return;
+  rebuilding.value = true;
+  indexSummary.value = "";
+  shell.appendLog(`[文件详情] 重建引用索引 ${ctx.rel.value}…`, { source: "file_detail", open: true });
+  try {
+    const out = await refreshBomXrefHostIndex({
+      host_repo_rel: ctx.rel.value,
+      recursive: rebuildSubtree.value,
+    });
+    if (out.log) shell.appendLog(out.log, { source: "file_detail" });
+    indexSummary.value = `已索引 ${out.hosts_refreshed} 个宿主 · 出向 ${out.outgoing_count} 条（缺失 ${out.outgoing_missing} · 歧义 ${out.outgoing_ambiguous}）`;
+    shell.setStatus(indexSummary.value);
+    await loadTables(false, false);
+  } catch (e) {
+    ctx.pageError.value = String(e);
+    shell.appendLog(String(e), { source: "file_detail" });
+    shell.setStatus(String(e));
+  } finally {
+    rebuilding.value = false;
+  }
+}
 </script>
 
 <template>
   <div class="xref-panel">
     <h3 class="panel-title">引用关系</h3>
     <div class="toolbar">
+      <button
+        type="button"
+        class="btn primary"
+        :disabled="rebuilding || loading"
+        title="从磁盘重读本文件 XLink 并写入引用表；勾选下级时一并索引子装配 FCStd"
+        @click="onRebuildIndex"
+      >
+        {{ rebuilding ? "索引中…" : "重建本文件引用索引" }}
+      </button>
+      <label class="chk">
+        <input v-model="rebuildSubtree" type="checkbox" :disabled="rebuilding" />
+        含下级 FCStd
+      </label>
       <label class="chk">
         <input v-model="includeTransitive" type="checkbox" />
-        含间接宿主
+        入向含间接宿主
       </label>
-      <button type="button" class="btn" :disabled="loading" @click="loadTables(true)">
-        {{ loading ? "…" : "刷新" }}
+      <button type="button" class="btn" :disabled="loading || rebuilding" @click="loadTables(true)">
+        {{ loading ? "…" : "刷新列表" }}
       </button>
       <button type="button" class="btn" @click="ctx.switchSubTab('rename')">去改名 Tab 写回引用</button>
     </div>
+    <p v-if="indexSummary" class="index-summary">{{ indexSummary }}</p>
 
     <section class="block">
       <h3 class="sub-title">
@@ -146,7 +205,13 @@ watch(includeTransitive, () => {
     </section>
 
     <section class="block">
-      <h3 class="sub-title">本文件引用了谁（{{ outgoingCount }}）</h3>
+      <h3 class="sub-title">
+        本文件引用了谁（{{ outgoingCount }}）
+        <span v-if="outgoingStats.missing || outgoingStats.ambiguous" class="out-stats">
+          · 缺失 {{ outgoingStats.missing }}
+          <template v-if="outgoingStats.ambiguous"> · 歧义 {{ outgoingStats.ambiguous }}</template>
+        </span>
+      </h3>
       <p v-if="!loading && !outgoingRefs.length" class="empty muted">无出向引用</p>
       <table v-else class="data-table">
         <thead>
@@ -158,7 +223,7 @@ watch(includeTransitive, () => {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in outgoingRefs" :key="row.id">
+          <tr v-for="row in outgoingRefs" :key="row.id" :class="rowClass(row.resolve_status)">
             <td class="mono">
               <button
                 v-if="canOpenFileDetailRel(row.target_repo_rel_path)"
@@ -185,14 +250,17 @@ watch(includeTransitive, () => {
             <td v-if="showXlinkColumn" class="mono muted">
               {{ xlinkDiffersFromTarget(row) ? row.xlink_file_attr : "—" }}
             </td>
-            <td>{{ statusLabel(row.resolve_status) }}</td>
+            <td>
+              <span class="tag" :class="row.resolve_status">{{ statusLabel(row.resolve_status) }}</span>
+            </td>
           </tr>
         </tbody>
       </table>
     </section>
 
     <p class="hint muted">
-      修正 XLink 路径与引用名请在「改名」子 Tab 执行分析写回；本页为只读关系总览。
+      「重建本文件引用索引」从磁盘写入本文件（及可选下级）的引用边，<strong>缺失</strong>表示 CAD 索引中无目标或路径无法解析。
+      全库属性请用 CAD 索引「工程内搜索」。改 XLink 路径请到「改名」Tab 或「链接路径修正」写回后再重建索引。
     </p>
   </div>
 </template>
@@ -225,6 +293,57 @@ watch(includeTransitive, () => {
   border: 1px solid var(--border-strong);
   background: var(--btn-bg);
   font-size: 0.82rem;
+}
+
+.btn.primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.index-summary {
+  margin: 0 0 12px;
+  font-size: 0.78rem;
+  color: #0369a1;
+}
+
+.out-stats {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #b45309;
+}
+
+.data-table tr.row-missing {
+  background: #fffbeb;
+}
+
+.data-table tr.row-ambiguous {
+  background: #fff7ed;
+}
+
+.tag {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.72rem;
+}
+
+.tag.resolved,
+.tag.self,
+.tag.present,
+.tag.ok {
+  background: #d1fae5;
+  color: #047857;
+}
+
+.tag.missing {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.tag.ambiguous {
+  background: #fef3c7;
+  color: #b45309;
 }
 .block {
   margin-bottom: 20px;

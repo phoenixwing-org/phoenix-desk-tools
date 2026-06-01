@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -19,7 +18,6 @@ from fcdesk.config.user_prefs import (
 from fcdesk.freecad.cad_index_types import (
     ASSET_KIND_FCSTD,
     cad_asset_kind,
-    is_cad_index_filename,
     is_fcstd_filename,
 )
 from fcdesk.freecad.fcstd_embedded_attrs import FcdeskFcstdEmbeddedError, read_embedded_bom_attrs
@@ -42,23 +40,11 @@ from fcdesk.freecad.phoenix_store import (
     migrate_fcstd_map_json,
     save_fcstd_document,
 )
-from fcdesk.services.bom_xref_service import rebuild_bom_xrefs
-
-_SKIP_DIRS = frozenset(
-    {
-        ".git",
-        "__pycache__",
-        ".obsidian",
-        ".phoenix",
-        "node_modules",
-        ".cursor",
-        "temp",
-        ".venv",
-        ".venv-desktop",
-        "web-ui",
-        "dist",
-        "build",
-    }
+from fcdesk.services.cad_index.bom_xref_index import rebuild_bom_xrefs
+from fcdesk.services.cad_index.scan_paths import (
+    resolve_scan_root,
+    scan_cad_basename_map,
+    scan_fcstd_basename_map,
 )
 
 
@@ -68,49 +54,6 @@ def _utc_now_iso() -> str:
 
 def _norm_path_key(repo_rel_path: str) -> str:
     return normalize_repo_rel_path_for_map(repo_rel_path.replace("\\", "/").strip())
-
-
-def scan_cad_basename_map(
-    scan_root: Path,
-    *,
-    anchor: Path,
-) -> dict[str, list[str]]:
-    """``扫描根`` 下遍历 CAD 索引文件 → ``文件名 → 相对 anchor 的路径列表``。"""
-    root = scan_root.expanduser().resolve(strict=False)
-    base = anchor.expanduser().resolve(strict=False)
-    out: dict[str, list[str]] = {}
-
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
-        for name in filenames:
-            if not is_cad_index_filename(name):
-                continue
-            abs_path = Path(dirpath, name).resolve()
-            try:
-                rel = os.path.relpath(abs_path, base).replace(os.sep, "/")
-            except ValueError:
-                rel = str(abs_path)
-            rel = normalize_repo_rel_path_for_map(rel)
-            out.setdefault(name, []).append(rel)
-
-    for paths in out.values():
-        paths.sort()
-    return out
-
-
-def scan_fcstd_basename_map(
-    scan_root: Path,
-    *,
-    anchor: Path,
-) -> dict[str, list[str]]:
-    """兼容旧名：等同 ``scan_cad_basename_map``（仍返回全部 CAD 类型）。"""
-    return scan_cad_basename_map(scan_root, anchor=anchor)
-
-
-def resolve_scan_root(repo_root: Path, stored_scan_root: str | None) -> Path:
-    if stored_scan_root:
-        return resolve_workspace_path_entry(stored_scan_root, repo_root)
-    return repo_root.expanduser().resolve(strict=False)
 
 
 def get_fcstd_map_prefs(repo_root: Path) -> dict[str, str | bool]:
