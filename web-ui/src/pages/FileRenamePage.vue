@@ -5,6 +5,7 @@ import {
   analyzeRenameReferences,
   applyFileRenameRefs,
   applyRenameAnalysisCorrections,
+  applyReferenceLabelCorrections,
   executeFileRename,
   exportRenameAnalysisReport,
   fetchFileRenameContext,
@@ -59,7 +60,6 @@ const panelMode = ref<PanelMode>("history");
 const newBasename = ref("");
 const excludeRepoRel = ref("");
 const renameLogs = ref<RenameLog[]>([]);
-const syncReferenceLabels = ref(true);
 const loading = ref(false);
 const busy = ref(false);
 const pageError = ref("");
@@ -67,14 +67,29 @@ const pageError = ref("");
 const standaloneMode = computed(() => !rel.value);
 
 const canApplyRefs = computed(() => {
+  if (!scan.value) return false;
+  if ((scan.value.pending_hit_count ?? 0) > 0) return true;
   if (renameLogId.value != null) return true;
   if (standaloneMode.value) {
     if (panelMode.value === "history") return renameLogId.value != null;
-    return Boolean(queryText.value.trim() && newBasename.value.trim());
+    return Boolean(queryText.value.trim());
   }
-  const o = originalFilename.value.trim();
-  const n = newFilename.value.trim();
-  return Boolean(o && n && o !== n);
+  return Boolean(rel.value && originalFilename.value.trim());
+});
+
+const canApplyIncomingLabels = computed(() => {
+  if (!scan.value?.old_basename) return false;
+  if (standaloneMode.value) {
+    if (panelMode.value === "history") return renameLogId.value != null;
+    return Boolean(queryText.value.trim());
+  }
+  if (renameLogId.value != null) return true;
+  return Boolean(rel.value && originalFilename.value.trim());
+});
+
+const canApplyHostAllLabels = computed(() => {
+  if (scan.value?.host_count) return true;
+  return Boolean(rel.value && /\.fcstd$/i.test(rel.value));
 });
 
 const canAnalyze = computed(() => {
@@ -344,7 +359,10 @@ async function onRename() {
       `已重命名为 ${data.filename}`,
       data.map_updated ? "已更新索引库" : null,
     ].filter(Boolean);
-    shell.setStatus(parts.join(" · "));
+    shell.setStatus(
+      (parts.join(" · ") || "改名完成") +
+        " · 请「分析引用」→ 第一步「修正选中引用」→ 第二步「修正引用名」",
+    );
   } catch (e) {
     pageError.value = String(e);
   } finally {
@@ -445,6 +463,32 @@ async function onScanRefs() {
   }
 }
 
+function buildApplyOpts() {
+  if (standaloneMode.value) {
+    return {
+      renameLogId: panelMode.value === "history" ? (renameLogId.value ?? undefined) : undefined,
+      oldBasename:
+        scan.value?.old_basename ??
+        (panelMode.value === "manual" ? queryText.value.trim() : undefined),
+      newBasename:
+        scan.value?.new_basename ||
+        (panelMode.value === "manual" ? newBasename.value.trim() : "") ||
+        scan.value?.old_basename ||
+        "",
+      targetRepoRel: pickedRel.value.trim() || undefined,
+      transitive: includeTransitive.value,
+    };
+  }
+  const old = scan.value?.old_basename ?? originalFilename.value.trim();
+  return {
+    renameLogId: renameLogId.value ?? undefined,
+    oldBasename: old,
+    newBasename: scan.value?.new_basename ?? (newFilename.value.trim() || old),
+    targetRepoRel: rel.value.trim() || undefined,
+    transitive: includeTransitive.value,
+  };
+}
+
 async function onApplyRefs() {
   const hosts = [...selectedHosts.value];
   if (!hosts.length) {
@@ -457,7 +501,7 @@ async function onApplyRefs() {
   }
   if (
     !window.confirm(
-      `将修正 ${hosts.length} 个宿主文件内的 XLink${syncReferenceLabels.value ? "，并同步装配树引用名（Label）" : ""}。\n\n请确认 FreeCAD 等已关闭占用。`,
+      `将修正 ${hosts.length} 个宿主文件内的 XLink（file 路径 / 文件名）。\n\n请确认 FreeCAD 等已关闭占用。`,
     )
   ) {
     return;
@@ -465,55 +509,100 @@ async function onApplyRefs() {
   busy.value = true;
   pageError.value = "";
   try {
-    if (standaloneMode.value) {
-      const data = await applyRenameAnalysisCorrections(hosts, {
-        renameLogId: panelMode.value === "history" ? (renameLogId.value ?? undefined) : undefined,
-        oldBasename:
-          scan.value?.old_basename ??
-          (panelMode.value === "manual" ? queryText.value.trim() : undefined),
-        newBasename:
-          scan.value?.new_basename ??
-          (panelMode.value === "manual" ? newBasename.value.trim() : undefined),
-        targetRepoRel: pickedRel.value.trim() || undefined,
-        transitive: includeTransitive.value,
-        syncReferenceLabels: syncReferenceLabels.value,
-      });
-      scan.value = data.scan;
-      selectPendingHosts();
-      if (data.failed.length) {
-        shell.appendLog(
-          data.failed.map((f) => `${f.host_repo_rel_path}: ${f.error}`).join("\n"),
-          { source: "file_rename" },
-        );
-      }
-      shell.setStatus(
-        `已修正 ${data.applied_hosts.length} 个宿主 · ${data.xlink_patches} 处 XLink` +
-          (data.label_patches ? ` · ${data.label_patches} 处引用名` : "") +
-          (data.failed.length ? ` · ${data.failed.length} 失败` : ""),
-      );
-    } else {
-      const data = await applyFileRenameRefs(hosts, {
-        renameLogId: renameLogId.value ?? undefined,
-        oldBasename: scan.value?.old_basename ?? originalFilename.value.trim(),
-        newBasename: scan.value?.new_basename ?? newFilename.value.trim(),
-        targetRepoRel: rel.value.trim() || undefined,
-        transitive: includeTransitive.value,
-        syncReferenceLabels: syncReferenceLabels.value,
-      });
-      scan.value = data.scan;
-      selectPendingHosts();
-      if (data.failed.length) {
-        shell.appendLog(
-          data.failed.map((f) => `${f.host_repo_rel_path}: ${f.error}`).join("\n"),
-          { source: "file_rename" },
-        );
-      }
-      shell.setStatus(
-        `已修正 ${data.applied_hosts.length} 个宿主 · ${data.xlink_patches} 处 XLink` +
-          (data.label_patches ? ` · ${data.label_patches} 处引用名` : "") +
-          (data.failed.length ? ` · ${data.failed.length} 失败` : ""),
+    const opts = buildApplyOpts();
+    const data = standaloneMode.value
+      ? await applyRenameAnalysisCorrections(hosts, opts)
+      : await applyFileRenameRefs(hosts, opts);
+    scan.value = data.scan;
+    selectPendingHosts();
+    if (data.failed.length) {
+      shell.appendLog(
+        data.failed.map((f) => `${f.host_repo_rel_path}: ${f.error}`).join("\n"),
+        { source: "file_rename" },
       );
     }
+    shell.setStatus(
+      `第一步完成 · 已修正 ${data.applied_hosts.length} 个宿主 · ${data.xlink_patches} 处 XLink` +
+        (data.failed.length ? ` · ${data.failed.length} 失败` : "") +
+        " · 请继续第二步「修正引用名」",
+    );
+  } catch (e) {
+    pageError.value = String(e);
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function onApplyIncomingLabels() {
+  const hosts = [...selectedHosts.value];
+  if (!hosts.length) {
+    pageError.value = "请勾选至少一个宿主文件";
+    return;
+  }
+  if (!canApplyIncomingLabels.value) {
+    pageError.value = "请先执行分析并指定目标文件";
+    return;
+  }
+  if (
+    !window.confirm(
+      `【第二步】将把 ${hosts.length} 个宿主内「引用当前目标」的实例 Label 同步为 CAD 索引规则名。\n\n与 XLink 写回分开执行；文件名未改也可单独做此步。\n\n请确认 FreeCAD 等已关闭占用。`,
+    )
+  ) {
+    return;
+  }
+  await runReferenceLabelApply("incoming", hosts);
+}
+
+async function onApplyHostAllLabels() {
+  const hosts = [...selectedHosts.value];
+  if (!hosts.length) {
+    pageError.value = "请勾选至少一个宿主文件";
+    return;
+  }
+  if (!canApplyHostAllLabels.value) {
+    pageError.value = "请先执行分析或打开 FCStd 文件";
+    return;
+  }
+  if (
+    !window.confirm(
+      `将把 ${hosts.length} 个宿主文件内的全部外部引用 Label 同步为 CAD 索引规则名。\n\n请确认 FreeCAD 等已关闭占用。`,
+    )
+  ) {
+    return;
+  }
+  await runReferenceLabelApply("host_all", hosts);
+}
+
+async function onApplyCurrentFileHostLabels() {
+  if (!rel.value || !/\.fcstd$/i.test(rel.value)) return;
+  if (
+    !window.confirm(
+      `将修正当前文件内全部外部引用的 Label（按 CAD 索引规则名）。\n\n${rel.value}\n\n请确认 FreeCAD 等已关闭占用。`,
+    )
+  ) {
+    return;
+  }
+  await runReferenceLabelApply("host_all", [rel.value]);
+}
+
+async function runReferenceLabelApply(scope: "incoming" | "host_all", hosts: string[]) {
+  busy.value = true;
+  pageError.value = "";
+  try {
+    const opts = { ...buildApplyOpts(), labelScope: scope };
+    const data = await applyReferenceLabelCorrections(hosts, opts);
+    if (data.scan) scan.value = data.scan;
+    if (data.failed.length) {
+      shell.appendLog(
+        data.failed.map((f) => `${f.host_repo_rel_path}: ${f.error}`).join("\n"),
+        { source: "file_rename" },
+      );
+    }
+    const scopeLabel = scope === "host_all" ? "宿主内全部引用名" : "引用名";
+    shell.setStatus(
+      `第二步完成 · 已修正${scopeLabel} · ${data.applied_hosts.length} 个宿主 · ${data.label_patches ?? 0} 处 Label` +
+        (data.failed.length ? ` · ${data.failed.length} 失败` : ""),
+    );
   } catch (e) {
     pageError.value = String(e);
   } finally {
@@ -558,9 +647,8 @@ async function hydratePageSession(snap: Record<string, unknown>): Promise<boolea
     panelMode.value = snap.panelMode === "manual" ? "manual" : "history";
     queryText.value = String(snap.oldBasename ?? "");
     newBasename.value = String(snap.newBasename ?? "");
-    excludeRepoRel.value = String(snap.excludeRepoRel ?? "");
-    if (snap.syncReferenceLabels != null) {
-      syncReferenceLabels.value = Boolean(snap.syncReferenceLabels);
+    if (snap.excludeRepoRel != null) {
+      excludeRepoRel.value = String(snap.excludeRepoRel ?? "");
     }
   }
 
@@ -609,7 +697,6 @@ usePageSession(props.workbenchTabId, {
     oldBasename: queryText.value,
     newBasename: newBasename.value,
     excludeRepoRel: excludeRepoRel.value,
-    syncReferenceLabels: syncReferenceLabels.value,
   }),
   hydrate: hydratePageSession,
   isDirty: hasPageDirty,
@@ -674,7 +761,6 @@ watch(
     queryText,
     newBasename,
     excludeRepoRel,
-    syncReferenceLabels,
   ],
   () => shell.scheduleWorkbenchSave(),
   { deep: true },
@@ -704,7 +790,7 @@ onUnmounted(() => {
     <header class="page-head">
       <h1 class="page-title">改名与引用</h1>
       <p class="page-desc">
-        同一页完成：磁盘改名、XLink 引用分析与写回，以及只读引用查询。可从「属性回写」跳转，或在下方独立分析（不改名先扫引用）。
+        磁盘改名与引用写回分步进行：先改文件名并修正 XLink 路径（第一步），再单独点击修正装配引用名（第二步）。也可不改名，仅分析或修正引用。
       </p>
     </header>
 
@@ -778,15 +864,18 @@ onUnmounted(() => {
       </section>
 
       <RenameAnalysisPanel
-        v-model:sync-reference-labels="syncReferenceLabels"
         :scan="scan"
         :selected-hosts="selectedHosts"
         :busy="busy"
         :can-apply="canApplyRefs"
+        :can-apply-incoming-labels="canApplyIncomingLabels"
+        :can-apply-host-all-labels="canApplyHostAllLabels"
         show-export
         @toggle-host="toggleHost"
         @toggle-all="toggleAll"
         @apply="onApplyRefs"
+        @apply-incoming-labels="onApplyIncomingLabels"
+        @apply-host-all-labels="onApplyHostAllLabels"
         @export-report="onExportReport"
       />
     </template>
@@ -799,7 +888,12 @@ onUnmounted(() => {
         <p v-if="renamed && renameLogId" class="meta ok">已改名 · 记录 #{{ renameLogId }}</p>
       </section>
 
-      <section class="rename-fields rename-fields-marked">
+      <section class="workflow-block">
+        <div class="step-head">
+          <span class="step-badge">第一步</span>
+          <span class="step-label">磁盘改名</span>
+        </div>
+        <section class="rename-fields rename-fields-marked">
         <span class="rename-mark" aria-hidden="true" />
         <span class="rename-label">当前文件名</span>
         <input :value="originalFilename" readonly class="readonly mono" />
@@ -812,12 +906,15 @@ onUnmounted(() => {
         </span>
         <span class="rename-label">目标文件名</span>
         <input v-model="newFilename" class="mono" :readonly="renamed" spellcheck="false" />
+        </section>
+        <div class="step-actions">
+          <button type="button" class="btn primary" :disabled="busy || renamed || !canRename" @click="onRename">
+            {{ busy ? "…" : "执行改名" }}
+          </button>
+        </div>
       </section>
 
       <section class="toolbar">
-        <button type="button" class="btn primary" :disabled="busy || renamed || !canRename" @click="onRename">
-          {{ busy ? "…" : "执行改名" }}
-        </button>
         <label class="chk-transitive">
           <input v-model="includeTransitive" type="checkbox" />
           含间接宿主（写回子装配链 XLink）
@@ -826,15 +923,20 @@ onUnmounted(() => {
       </section>
 
       <RenameAnalysisPanel
-        v-model:sync-reference-labels="syncReferenceLabels"
         :scan="scan"
         :selected-hosts="selectedHosts"
         :busy="busy"
         :can-apply="canApplyRefs"
+        :can-apply-incoming-labels="canApplyIncomingLabels"
+        :can-apply-host-all-labels="canApplyHostAllLabels"
+        :show-current-file-host-all="Boolean(rel && /\.fcstd$/i.test(rel))"
         show-export
         @toggle-host="toggleHost"
         @toggle-all="toggleAll"
         @apply="onApplyRefs"
+        @apply-incoming-labels="onApplyIncomingLabels"
+        @apply-host-all-labels="onApplyHostAllLabels"
+        @apply-current-file-host-all="onApplyCurrentFileHostLabels"
         @export-report="onExportReport"
       />
     </template>
@@ -844,6 +946,7 @@ onUnmounted(() => {
     <section class="help-panel">
       <h3 class="help-title">说明</h3>
       <ul class="help-list">
+        <li>完整改名建议分两步：<strong>第一步</strong>执行改名并「修正选中引用」（XLink 路径）；<strong>第二步</strong>单独点击「修正引用名」（装配 Label，与 XLink 写回分开）。</li>
         <li>FreeCAD 每条 XLink 都记录相对路径；分析按<strong>文件名</strong>全库查找。间接宿主（总装配）勾选「修正选中引用」时，会写回经子装配链上待修正的 XLink。</li>
         <li>下方「引用查询」仅浏览入向/出向关系；要批量修正 XLink 请用上方「分析引用」与勾选写回。</li>
         <li>独立分析 · 手填模式：可输入<strong>部分文件名</strong>，或在右侧树点击后自动填入并分析。</li>
@@ -1014,6 +1117,40 @@ onUnmounted(() => {
 .inline-hint {
   margin: 6px 0 0;
   font-size: 0.78rem;
+}
+
+.workflow-block {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  background: #fafafa;
+}
+
+.step-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.step-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.step-label {
+  font-size: 0.84rem;
+}
+
+.step-actions {
+  margin-top: 10px;
 }
 
 .toolbar {

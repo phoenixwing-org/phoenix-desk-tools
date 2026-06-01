@@ -6,16 +6,20 @@ const props = defineProps<{
   selectedHosts: Set<string>;
   busy?: boolean;
   canApply?: boolean;
+  canApplyIncomingLabels?: boolean;
+  canApplyHostAllLabels?: boolean;
+  showCurrentFileHostAll?: boolean;
   showExport?: boolean;
-  syncReferenceLabels?: boolean;
 }>();
 
 const emit = defineEmits<{
   toggleHost: [hostRel: string, checked: boolean];
   toggleAll: [checked: boolean];
   apply: [];
+  applyIncomingLabels: [];
+  applyHostAllLabels: [];
+  applyCurrentFileHostAll: [];
   exportReport: [];
-  "update:syncReferenceLabels": [value: boolean];
 }>();
 
 function hitNeedsFix(hit: { status: string; proposed_text: string; matched_text: string }) {
@@ -46,6 +50,20 @@ function chainPendingHits(host: RefHitHost, all: RefHitHost[]) {
     }
   }
   return rows;
+}
+
+function hostIncomingLabelSelectable(h: RefHitHost) {
+  if (h.hits.length > 0) return true;
+  const all = props.scan?.hosts ?? [];
+  return chainPendingHits(h, all).length > 0;
+}
+
+function hostCheckboxEnabled(h: RefHitHost) {
+  if (props.busy) return false;
+  if (props.canApplyHostAllLabels) return true;
+  if (props.canApplyIncomingLabels && hostIncomingLabelSelectable(h)) return true;
+  if (props.canApply && hostPending(h)) return true;
+  return false;
 }
 
 function hostPending(h: RefHitHost) {
@@ -97,30 +115,68 @@ const allPendingSelected = () => {
       </span>
     </div>
 
-    <div class="scan-actions">
-      <label v-if="scan.hosts.length" class="chk-all">
-        <input type="checkbox" :checked="allPendingSelected()" @change="emit('toggleAll', ($event.target as HTMLInputElement).checked)" />
-        全选待修正
-      </label>
-      <label class="chk-sync-label" title="同一第一级 Group 内多条同目标引用时加 .001 序号">
-        <input
-          type="checkbox"
-          :checked="syncReferenceLabels !== false"
-          @change="emit('update:syncReferenceLabels', ($event.target as HTMLInputElement).checked)"
-        />
-        同时修正引用名
-      </label>
-      <button
-        type="button"
-        class="btn accent"
-        :disabled="busy || !canApply || selectedHosts.size === 0"
-        @click="emit('apply')"
-      >
-        修正选中引用
-      </button>
-      <button v-if="showExport" type="button" class="btn" :disabled="busy || !scan.host_count" @click="emit('exportReport')">
-        导出报告
-      </button>
+    <div class="scan-step step-xlink">
+      <div class="step-head">
+        <span class="step-badge">第一步</span>
+        <span class="step-label">修正 XLink 路径（<code>file</code> 属性）</span>
+      </div>
+      <div class="scan-actions">
+        <label v-if="scan.hosts.length" class="chk-all">
+          <input type="checkbox" :checked="allPendingSelected()" @change="emit('toggleAll', ($event.target as HTMLInputElement).checked)" />
+          全选待修正
+        </label>
+        <button
+          type="button"
+          class="btn accent"
+          :disabled="busy || !canApply || selectedHosts.size === 0"
+          @click="emit('apply')"
+        >
+          修正选中引用
+        </button>
+        <button v-if="showExport" type="button" class="btn" :disabled="busy || !scan.host_count" @click="emit('exportReport')">
+          导出报告
+        </button>
+      </div>
+    </div>
+
+    <div class="scan-step step-labels">
+      <div class="step-head">
+        <span class="step-badge step-badge-secondary">第二步</span>
+        <span class="step-label">修正引用名（装配 Label，须单独点击）</span>
+      </div>
+      <p class="step-hint muted">
+        与第一步分开执行：先完成改名与 XLink 写回，再勾选宿主并点此步同步装配树显示名（按 CAD 索引规则名）。
+      </p>
+      <div class="scan-actions">
+        <button
+          type="button"
+          class="btn accent-secondary"
+          :disabled="busy || !canApplyIncomingLabels || selectedHosts.size === 0"
+          title="同步引用当前目标文件的实例 Label"
+          @click="emit('applyIncomingLabels')"
+        >
+          修正引用名
+        </button>
+        <button
+          v-if="showCurrentFileHostAll"
+          type="button"
+          class="btn subtle"
+          :disabled="busy || !canApplyHostAllLabels"
+          title="修正当前打开文件内的全部外部引用 Label"
+          @click="emit('applyCurrentFileHostAll')"
+        >
+          本文件内全部
+        </button>
+        <button
+          type="button"
+          class="btn subtle"
+          :disabled="busy || !canApplyHostAllLabels || selectedHosts.size === 0"
+          title="修正勾选宿主内的全部外部 XLink 引用 Label"
+          @click="emit('applyHostAllLabels')"
+        >
+          宿主内全部
+        </button>
+      </div>
     </div>
 
     <p v-if="!scan.host_count" class="muted">未发现仍引用旧文件名的 XLink。</p>
@@ -130,7 +186,7 @@ const allPendingSelected = () => {
         <label class="host-row" :class="{ applied: !hostPending(host) }">
           <input
             type="checkbox"
-            :disabled="!hostPending(host) || !canApply"
+            :disabled="!hostCheckboxEnabled(host)"
             :checked="selectedHosts.has(host.host_repo_rel_path)"
             @change="emit('toggleHost', host.host_repo_rel_path, ($event.target as HTMLInputElement).checked)"
           />
@@ -215,6 +271,53 @@ const allPendingSelected = () => {
   font-size: 0.82rem;
 }
 
+.scan-step {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  background: #fafafa;
+}
+
+.scan-step.step-labels {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.step-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.step-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.step-badge-secondary {
+  background: #dcfce7;
+  color: #047857;
+}
+
+.step-label {
+  font-size: 0.84rem;
+  color: var(--text);
+}
+
+.step-hint {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
 .scan-actions {
   display: flex;
   flex-wrap: wrap;
@@ -223,8 +326,7 @@ const allPendingSelected = () => {
   margin-bottom: 12px;
 }
 
-.chk-all,
-.chk-sync-label {
+.chk-all {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -243,6 +345,19 @@ const allPendingSelected = () => {
   background: #047857;
   color: #fff;
   border-color: #047857;
+}
+
+.btn.accent-secondary {
+  background: #059669;
+  color: #fff;
+  border-color: #059669;
+}
+
+.btn.subtle {
+  background: transparent;
+  color: var(--muted);
+  border-color: var(--border);
+  font-size: 0.78rem;
 }
 
 .btn:disabled {

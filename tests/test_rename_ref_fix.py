@@ -302,5 +302,148 @@ class TestRenameRefFix(unittest.TestCase):
             self.assertIn('String value="100001.001-子件.002"', xml)
 
 
+    def test_apply_reference_labels_without_xlink_change(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_fcstd(root / "child.FCStd", _CHILD_XML)
+            _write_fcstd(
+                root / "asm-single.FCStd",
+                """<?xml version="1.0"?>
+<Document>
+ <ObjectData Count="1">
+  <Object name="Asm">
+   <Properties Count="2">
+    <Property name="Label" type="App::PropertyString">
+     <String value="child-old"/>
+    </Property>
+    <Property name="Group" type="App::PropertyLinkList">
+     <XLink file="child.FCStd"/>
+    </Property>
+   </Properties>
+  </Object>
+ </ObjectData>
+</Document>""",
+            )
+            from fcdesk.services.fcstd_map_service import run_fcstd_map_scan
+            from fcdesk.services.rename_analysis_service import apply_reference_label_corrections
+
+            run_fcstd_map_scan(root)
+            scan = analyze_rename_references(
+                root,
+                old_basename="child.FCStd",
+                new_basename="child.FCStd",
+                persist=False,
+            )
+            host = scan["hosts"][0]["host_repo_rel_path"]
+            out = apply_reference_label_corrections(
+                root,
+                old_basename="child.FCStd",
+                new_basename="child.FCStd",
+                host_repo_rel_paths=[host],
+            )
+            self.assertEqual(out["xlink_patches"], 0)
+            self.assertGreaterEqual(out["label_patches"], 1)
+            xml = zipfile.ZipFile(root / "asm-single.FCStd").read("Document.xml").decode("utf-8")
+            self.assertIn('String value="100001.001-子件"', xml)
+
+    def test_apply_host_all_reference_labels(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_fcstd(root / "child.FCStd", _CHILD_XML)
+            other_xml = _CHILD_XML.replace("100001.001-子件", "900001.001-其它")
+            _write_fcstd(root / "other.FCStd", other_xml)
+            _write_fcstd(
+                root / "asm-dual-target.FCStd",
+                """<?xml version="1.0"?>
+<Document>
+ <ObjectData Count="2">
+  <Object name="Link1">
+   <Properties Count="2">
+    <Property name="Label" type="App::PropertyString">
+     <String value="old-a"/>
+    </Property>
+    <Property name="Group" type="App::PropertyLinkList">
+     <XLink file="child.FCStd"/>
+    </Property>
+   </Properties>
+  </Object>
+  <Object name="Link2">
+   <Properties Count="2">
+    <Property name="Label" type="App::PropertyString">
+     <String value="old-b"/>
+    </Property>
+    <Property name="Group" type="App::PropertyLinkList">
+     <XLink file="other.FCStd"/>
+    </Property>
+   </Properties>
+  </Object>
+ </ObjectData>
+</Document>""",
+            )
+            from fcdesk.services.fcstd_map_service import run_fcstd_map_scan
+            from fcdesk.services.rename_analysis_service import apply_reference_label_corrections
+
+            run_fcstd_map_scan(root)
+            out = apply_reference_label_corrections(
+                root,
+                old_basename="child.FCStd",
+                new_basename="child.FCStd",
+                host_repo_rel_paths=["asm-dual-target.FCStd"],
+                label_scope="host_all",
+            )
+            self.assertGreaterEqual(out["label_patches"], 2)
+            xml = zipfile.ZipFile(root / "asm-dual-target.FCStd").read("Document.xml").decode("utf-8")
+            self.assertIn('String value="100001.001-子件"', xml)
+            self.assertIn('String value="900001.001-其它"', xml)
+
+    def test_apply_incoming_labels_prefers_db_rule_name(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_fcstd(root / "child.FCStd", _CHILD_XML)
+            _write_fcstd(
+                root / "asm-single.FCStd",
+                """<?xml version="1.0"?>
+<Document>
+ <ObjectData Count="1">
+  <Object name="Asm">
+   <Properties Count="2">
+    <Property name="Label" type="App::PropertyString">
+     <String value="child-old"/>
+    </Property>
+    <Property name="Group" type="App::PropertyLinkList">
+     <XLink file="child.FCStd"/>
+    </Property>
+   </Properties>
+  </Object>
+ </ObjectData>
+</Document>""",
+            )
+            from fcdesk.freecad.phoenix_store import connect
+            from fcdesk.services.fcstd_map_service import run_fcstd_map_scan
+            from fcdesk.services.rename_analysis_service import apply_reference_label_corrections
+
+            run_fcstd_map_scan(root)
+            with connect(root) as conn:
+                conn.execute(
+                    """
+                    UPDATE file_asset
+                    SET part_number = ?, part_version = ?, part_name = ?, label = ?
+                    WHERE repo_rel_path = ?
+                    """,
+                    ("200002", "002", "规则名", "", "./child.FCStd"),
+                )
+            out = apply_reference_label_corrections(
+                root,
+                old_basename="child.FCStd",
+                new_basename="child.FCStd",
+                host_repo_rel_paths=["asm-single.FCStd"],
+                label_scope="incoming",
+            )
+            self.assertGreaterEqual(out["label_patches"], 1)
+            xml = zipfile.ZipFile(root / "asm-single.FCStd").read("Document.xml").decode("utf-8")
+            self.assertIn('String value="200002.002-规则名"', xml)
+            self.assertNotIn('String value="100001.001-子件"', xml)
+
+
 if __name__ == "__main__":
     unittest.main()

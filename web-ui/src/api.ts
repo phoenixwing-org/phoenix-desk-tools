@@ -448,7 +448,8 @@ export function applyFileRenameRefs(
     newBasename?: string;
     targetRepoRel?: string;
     transitive?: boolean;
-    syncReferenceLabels?: boolean;
+    labelsOnly?: boolean;
+    labelScope?: "incoming" | "host_all";
   },
 ) {
   return applyRenameAnalysisCorrections(hostRepoRelPaths, opts);
@@ -484,7 +485,8 @@ export function applyRenameAnalysisCorrections(
     excludeRepoRel?: string;
     targetRepoRel?: string;
     transitive?: boolean;
-    syncReferenceLabels?: boolean;
+    labelsOnly?: boolean;
+    labelScope?: "incoming" | "host_all";
   },
 ) {
   return jsonFetch<{
@@ -506,9 +508,23 @@ export function applyRenameAnalysisCorrections(
       exclude_repo_rel: opts.excludeRepoRel,
       target_repo_rel: opts.targetRepoRel,
       transitive: opts.transitive,
-      sync_reference_labels: opts.syncReferenceLabels ?? true,
+      labels_only: opts.labelsOnly ?? false,
+      label_scope: opts.labelScope ?? "incoming",
       host_repo_rel_paths: hostRepoRelPaths,
     }),
+  });
+}
+
+export function applyReferenceLabelCorrections(
+  hostRepoRelPaths: string[],
+  opts: Omit<Parameters<typeof applyRenameAnalysisCorrections>[1], "labelsOnly" | "labelScope"> & {
+    labelScope?: "incoming" | "host_all";
+  },
+) {
+  return applyRenameAnalysisCorrections(hostRepoRelPaths, {
+    ...opts,
+    labelsOnly: true,
+    labelScope: opts.labelScope ?? "incoming",
   });
 }
 

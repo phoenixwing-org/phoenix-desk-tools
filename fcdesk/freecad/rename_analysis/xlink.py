@@ -202,6 +202,47 @@ def resolve_fcstd_display_label(fcstd_path: Path) -> str:
     return Path(name).stem
 
 
+def resolve_rule_display_label(
+    repo_root: Path,
+    *,
+    fcstd_path: Path | None = None,
+    repo_rel_path: str | None = None,
+) -> str:
+    """规则显示名：CAD 索引 ``file_asset`` → FCStd 内嵌属性 → 文件名兜底。"""
+    from fcdesk.freecad.fcstd_mapping import compose_fcstd_body_label_display
+    from fcdesk.freecad.phoenix_store import get_file_asset_bom_fields
+
+    rr = repo_root.expanduser().resolve(strict=False)
+    rel = (repo_rel_path or "").strip().replace("\\", "/")
+    if not rel and fcstd_path is not None:
+        try:
+            rel = os.path.relpath(fcstd_path.resolve(strict=False), rr).replace(os.sep, "/")
+        except ValueError:
+            rel = ""
+
+    if rel:
+        fields = get_file_asset_bom_fields(rr, rel)
+        if fields:
+            label = (fields.get("label") or "").strip()
+            if label:
+                return label
+            composed = compose_fcstd_body_label_display(
+                part_number=fields.get("part_number", ""),
+                part_version=fields.get("part_version", ""),
+                part_name=fields.get("part_name", ""),
+                label_fallback=label,
+            )
+            if composed:
+                return composed
+
+    if fcstd_path is not None:
+        return resolve_fcstd_display_label(fcstd_path)
+
+    if rel:
+        return Path(rel).name
+    return ""
+
+
 def _resolve_target_fcstd_for_hit(
     repo_root: Path,
     host_repo_rel: str,
@@ -306,20 +347,17 @@ def _plan_reference_label_updates(
     host_repo_rel: str,
 ) -> dict[tuple[int, int], str]:
     """单引用用目标 Label；同一第一级 ``PropertyLinkList`` 内多引用追加 ``.001`` 起序号。"""
-    replacements = {
-        h.xlink_file_attr: h.proposed_new_attr
-        for h in hits
-        if h.proposed_new_attr != h.xlink_file_attr
-    }
-    if not replacements:
+    if not hits:
         return {}
 
+    attr_to_hit = {h.xlink_file_attr: h for h in hits}
     entries: list[tuple[int, str, str]] = []
     for m in XLINK_FILE_RE.finditer(xml):
         old = m.group(2)
-        if old not in replacements:
+        hit = attr_to_hit.get(old)
+        if hit is None:
             continue
-        entries.append((m.start(), old, replacements[old]))
+        entries.append((m.start(), old, hit.proposed_new_attr))
 
     if not entries:
         return {}
@@ -342,8 +380,25 @@ def _plan_reference_label_updates(
             group[0][1],
             group[0][2],
         )
+        target_rel: str | None = None
         if target_path is not None:
-            base_label = resolve_fcstd_display_label(target_path)
+            try:
+                target_rel = os.path.relpath(target_path, repo_root).replace(os.sep, "/")
+            except ValueError:
+                target_rel = None
+        if not target_rel:
+            from fcdesk.freecad.phoenix_store import find_present_repo_rel_by_filename
+
+            target_rel = find_present_repo_rel_by_filename(
+                repo_root,
+                Path(group[0][2].replace("\\", "/")).name,
+            )
+        if target_path is not None or target_rel:
+            base_label = resolve_rule_display_label(
+                repo_root,
+                fcstd_path=target_path,
+                repo_rel_path=target_rel,
+            )
         else:
             base_label = Path(group[0][2].replace("\\", "/")).name
             for suffix in (".drawing.fcstd", ".assy.fcstd", ".fcstd"):
@@ -379,13 +434,43 @@ def _patch_reference_labels_in_xml(
     return xml, count
 
 
+def patch_fcstd_reference_labels(
+    fcstd_path: Path,
+    hits: list[XLinkBasenameHit],
+    *,
+    repo_root: Path,
+    host_repo_rel: str,
+) -> int:
+    """仅写回引用实例 ``Label``（不改 XLink ``file``）。"""
+    if not hits:
+        return 0
+    xml = _read_document_xml_from_fcstd(fcstd_path)
+    if xml is None:
+        raise RenameAnalysisError(f"无法读取 Document.xml：{fcstd_path}")
+
+    block_labels = _plan_reference_label_updates(
+        xml,
+        hits,
+        repo_root=repo_root,
+        host_repo_rel=host_repo_rel,
+    )
+    xml, label_count = _patch_reference_labels_in_xml(xml, block_labels)
+    if label_count == 0:
+        return 0
+    try:
+        _rewrite_fcstd_document_xml(fcstd_path, xml)
+    except OSError as e:
+        raise RenameAnalysisError(f"写回失败（可能被占用）：{fcstd_path} · {e}") from e
+    return label_count
+
+
 def patch_fcstd_host_corrections(
     fcstd_path: Path,
     hits: list[XLinkBasenameHit],
     *,
     repo_root: Path,
     host_repo_rel: str,
-    sync_reference_labels: bool = True,
+    sync_reference_labels: bool = False,
 ) -> tuple[int, int]:
     """写回 XLink ``file``，可选同步装配内引用实例 ``Label``。返回 ``(xlink_patches, label_patches)``。"""
     replacements = {
@@ -497,12 +582,32 @@ def analyze_workspace_xlink_refs(
     return out
 
 
+def apply_host_reference_label_corrections(
+    repo_root: Path,
+    host_repo_rel_path: str,
+    hits: list[XLinkBasenameHit],
+) -> int:
+    """对单个宿主文件仅同步引用实例 Label。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    host = (rr / host_repo_rel_path).resolve(strict=False)
+    if not host.is_file():
+        raise RenameAnalysisError(f"宿主文件不存在：{host_repo_rel_path}")
+    if not hits:
+        return 0
+    return patch_fcstd_reference_labels(
+        host,
+        hits,
+        repo_root=rr,
+        host_repo_rel=host_repo_rel_path,
+    )
+
+
 def apply_host_xlink_corrections(
     repo_root: Path,
     host_repo_rel_path: str,
     hits: list[XLinkBasenameHit],
     *,
-    sync_reference_labels: bool = True,
+    sync_reference_labels: bool = False,
 ) -> tuple[int, int]:
     """对单个宿主文件应用 XLink 替换，可选同步引用实例 Label。"""
     rr = repo_root.expanduser().resolve(strict=False)

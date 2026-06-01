@@ -2,7 +2,7 @@
 
 > [文档索引](文档索引.md) · 状态：**已实现**（默认勾选「同时修正引用名」）  
 > 关联：[改名与引用-归档说明.md](改名与引用-归档说明.md) · [Fcdesk嵌入式BOM属性约定.md](Fcdesk嵌入式BOM属性约定.md)  
-> 入口：Web「改名与引用」→ **修正选中引用**（`POST /api/rename/apply`）
+> 入口：Web「改名与引用」→ **修正选中引用** / **修正引用名**（`POST /api/rename-analysis/apply`，`labels_only`）
 
 ---
 
@@ -24,7 +24,7 @@ FreeCAD 装配树中，每个外部引用在 `Document.xml` 里还有对应对�
 
 ### 2.1 纳入
 
-- Web / 服务层 **`apply_rename_analysis_corrections`** 写回路径（含间接宿主展开后的直接宿主）
+- Web / 服务层 **`apply_reference_label_corrections`**（独立按钮）与 **`apply_rename_analysis_corrections`**（仅 XLink，默认不同步 Label）
 - 宿主 `Document.xml` 内，与本次修正 XLink **一一对应**的外部引用对象上的 **`Label`**
 - 目标 Label 来源：被引用 FCStd（改名后文件）的 **`Label`** 属性；若无则按 CAD 索引 / `compose_fcstd_body_label_display` 组合（与属性回写、索引扫描一致）
 

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fcdesk.config.user_prefs import format_resolved_under_workspace
+from fcdesk.freecad.bom_xref.extract import list_fcstd_xlink_attrs_from_file
 from fcdesk.freecad.fcstd_mapping import normalize_repo_rel_path_for_map
 from fcdesk.freecad.phoenix_store import (
     cad_database_path,
@@ -13,6 +14,7 @@ from fcdesk.freecad.phoenix_store import (
     insert_ref_patch_event,
     list_rename_logs,
     load_ref_hits_for_rename,
+    query_bom_xrefs_outgoing,
     replace_ref_hits_for_rename_scan,
 )
 from fcdesk.freecad.rename_analysis import (
@@ -20,9 +22,12 @@ from fcdesk.freecad.rename_analysis import (
     RenameAnalysisError,
     XLinkBasenameHit,
     apply_host_xlink_corrections,
+    apply_host_reference_label_corrections,
     write_rename_analysis_report,
 )
 from fcdesk.services.bom_xref_service import host_ref_groups_from_db, refresh_bom_xrefs_for_hosts
+
+LabelScope = Literal["incoming", "host_all"]
 
 
 def list_rename_logs_payload(repo_root: Path, *, limit: int = 50) -> dict[str, Any]:
@@ -81,9 +86,9 @@ def apply_rename_analysis_corrections(
     new_repo_rel_path: str | None = None,
     transitive: bool = True,
     host_repo_rel_paths: list[str],
-    sync_reference_labels: bool = True,
+    sync_reference_labels: bool = False,
 ) -> dict[str, Any]:
-    """按分析结果，对勾选的宿主文件写回 XLink 修正。"""
+    """按分析结果，对勾选的宿主文件写回 XLink 修正（默认不同步 Label）。"""
     rr = repo_root.expanduser().resolve(strict=False)
     selected = [_norm_host_path(p) for p in host_repo_rel_paths if p.strip()]
     if not selected:
@@ -163,6 +168,108 @@ def apply_rename_analysis_corrections(
     }
 
 
+def apply_reference_label_corrections(
+    repo_root: Path,
+    *,
+    rename_log_id: int | None = None,
+    old_basename: str | None = None,
+    new_basename: str | None = None,
+    exclude_repo_rel: str | None = None,
+    target_repo_rel: str | None = None,
+    new_repo_rel_path: str | None = None,
+    transitive: bool = True,
+    host_repo_rel_paths: list[str],
+    label_scope: LabelScope = "incoming",
+) -> dict[str, Any]:
+    """同步装配内引用实例 Label。
+
+    ``incoming``：仅修正指向分析目标 basename 的引用（引用当前文件的宿主内）。
+    ``host_all``：修正勾选宿主文件内的全部外部 XLink 引用名。
+    """
+    rr = repo_root.expanduser().resolve(strict=False)
+    selected = [_norm_host_path(p) for p in host_repo_rel_paths if p.strip()]
+    if not selected:
+        raise ValueError("请至少选择一个宿主文件")
+
+    if label_scope == "host_all":
+        return _apply_host_all_reference_labels(
+            rr,
+            rename_log_id=rename_log_id,
+            old_basename=old_basename,
+            new_basename=new_basename,
+            exclude_repo_rel=exclude_repo_rel,
+            target_repo_rel=target_repo_rel,
+            new_repo_rel_path=new_repo_rel_path,
+            transitive=transitive,
+            selected=selected,
+        )
+
+    if rename_log_id is not None:
+        return _apply_labels_from_rename_log(rr, rename_log_id=rename_log_id, selected=selected)
+
+    old_basename, new_basename, exclude_repo_rel = _resolve_analysis_names(
+        rr,
+        rename_log_id=None,
+        old_basename=old_basename,
+        new_basename=new_basename,
+        exclude_repo_rel=exclude_repo_rel,
+    )
+    groups = host_ref_groups_from_db(
+        rr,
+        old_basename=old_basename,
+        new_basename=new_basename,
+        exclude_repo_rel=exclude_repo_rel,
+        target_repo_rel=target_repo_rel,
+        new_repo_rel_path=new_repo_rel_path,
+        transitive=transitive,
+    )
+    host_map = {_norm_host_path(g.host_repo_rel_path): g for g in groups}
+    apply_targets = (
+        _expand_selected_for_indirect_label_apply(selected, groups) if transitive else selected
+    )
+
+    applied_hosts, failed, total_label_patches = _apply_labels_for_hosts(
+        rr,
+        selected=apply_targets,
+        host_map=host_map,
+    )
+
+    if applied_hosts:
+        insert_ref_patch_event(
+            rr,
+            stats={
+                "mode": "reference_labels",
+                "old_basename": old_basename,
+                "new_basename": new_basename,
+                "hosts": len(applied_hosts),
+                "label_patches": total_label_patches,
+                "failed": len(failed),
+            },
+        )
+
+    scan_payload = _build_scan_payload(
+        rr,
+        rename_log_id=None,
+        old_basename=old_basename,
+        new_basename=new_basename,
+        exclude_repo_rel=exclude_repo_rel,
+        target_repo_rel=target_repo_rel,
+        new_repo_rel_path=new_repo_rel_path,
+        transitive=transitive,
+    )
+
+    return {
+        "rename_log_id": None,
+        "old_basename": old_basename,
+        "new_basename": new_basename,
+        "applied_hosts": applied_hosts,
+        "failed": failed,
+        "xlink_patches": 0,
+        "label_patches": total_label_patches,
+        "scan": scan_payload,
+    }
+
+
 def load_rename_analysis(repo_root: Path, rename_log_id: int) -> dict[str, Any]:
     rr = repo_root.expanduser().resolve(strict=False)
     row = get_rename_log(rr, rename_log_id)
@@ -228,7 +335,7 @@ def _apply_from_rename_log(
     *,
     rename_log_id: int,
     selected: list[str],
-    sync_reference_labels: bool = True,
+    sync_reference_labels: bool = False,
 ) -> dict[str, Any]:
     rr = repo_root.expanduser().resolve(strict=False)
     row = get_rename_log(rr, rename_log_id)
@@ -338,6 +445,128 @@ def _host_has_pending_fixes(group: HostRefGroup) -> bool:
     return any(h.proposed_new_attr != h.xlink_file_attr for h in group.hits)
 
 
+def _host_has_reference_hits(group: HostRefGroup) -> bool:
+    return bool(group.hits)
+
+
+def _hits_for_host_all_xlinks(repo_root: Path, host_rel: str) -> list[XLinkBasenameHit]:
+    """宿主内全部 XLink（用于 ``host_all`` 引用名修正）。"""
+    edges = query_bom_xrefs_outgoing(repo_root, host_rel)
+    if edges:
+        attrs = sorted({str(e["xlink_file_attr"]) for e in edges})
+    else:
+        host_path = (repo_root / host_rel).resolve(strict=False)
+        if not host_path.is_file():
+            return []
+        attrs = list_fcstd_xlink_attrs_from_file(host_path)
+
+    return [
+        XLinkBasenameHit(
+            host_repo_rel_path=host_rel,
+            xlink_file_attr=attr,
+            proposed_new_attr=attr,
+        )
+        for attr in attrs
+    ]
+
+
+def _apply_host_all_reference_labels(
+    repo_root: Path,
+    *,
+    rename_log_id: int | None,
+    old_basename: str | None,
+    new_basename: str | None,
+    exclude_repo_rel: str | None,
+    target_repo_rel: str | None,
+    new_repo_rel_path: str | None,
+    transitive: bool,
+    selected: list[str],
+) -> dict[str, Any]:
+    applied_hosts: list[str] = []
+    failed: list[dict[str, str]] = []
+    total_label_patches = 0
+
+    for host_rel in selected:
+        hits = _hits_for_host_all_xlinks(repo_root, host_rel)
+        if not hits:
+            failed.append({"host_repo_rel_path": host_rel, "error": "宿主内无外部 XLink 引用"})
+            continue
+        try:
+            n_l = apply_host_reference_label_corrections(repo_root, host_rel, hits)
+            if n_l <= 0:
+                continue
+            total_label_patches += n_l
+            applied_hosts.append(host_rel)
+        except (RenameAnalysisError, OSError) as ex:
+            failed.append({"host_repo_rel_path": host_rel, "error": str(ex)})
+
+    if applied_hosts:
+        refresh_bom_xrefs_for_hosts(repo_root, applied_hosts)
+        insert_ref_patch_event(
+            repo_root,
+            stats={
+                "mode": "reference_labels_host_all",
+                "rename_log_id": rename_log_id,
+                "hosts": len(applied_hosts),
+                "label_patches": total_label_patches,
+                "failed": len(failed),
+            },
+        )
+
+    old_basename_resolved, new_basename_resolved, exclude_repo_rel_resolved = _resolve_analysis_names(
+        repo_root,
+        rename_log_id=rename_log_id,
+        old_basename=old_basename,
+        new_basename=new_basename,
+        exclude_repo_rel=exclude_repo_rel,
+    )
+    scan_payload = _build_scan_payload(
+        repo_root,
+        rename_log_id=rename_log_id,
+        old_basename=old_basename_resolved,
+        new_basename=new_basename_resolved,
+        exclude_repo_rel=exclude_repo_rel_resolved,
+        target_repo_rel=target_repo_rel,
+        new_repo_rel_path=new_repo_rel_path,
+        transitive=transitive,
+        persist=False,
+    )
+
+    return {
+        "rename_log_id": rename_log_id,
+        "old_basename": old_basename_resolved,
+        "new_basename": new_basename_resolved,
+        "applied_hosts": applied_hosts,
+        "failed": failed,
+        "xlink_patches": 0,
+        "label_patches": total_label_patches,
+        "scan": scan_payload,
+    }
+
+
+def _expand_selected_for_indirect_label_apply(
+    selected: list[str],
+    groups: list[HostRefGroup],
+) -> list[str]:
+    """勾选间接宿主时，展开到 via_chain 上实际含目标引用的直接宿主。"""
+    by_path = {_norm_host_path(g.host_repo_rel_path): g for g in groups}
+    expanded: set[str] = set()
+
+    for rel in selected:
+        key = _norm_host_path(rel)
+        expanded.add(key)
+        group = by_path.get(key)
+        if group is None or _host_has_reference_hits(group):
+            continue
+        for chain_rel in group.via_chain:
+            ck = _norm_host_path(str(chain_rel))
+            cg = by_path.get(ck)
+            if cg and _host_has_reference_hits(cg):
+                expanded.add(ck)
+
+    return sorted(expanded)
+
+
 def _expand_selected_for_indirect_apply(
     selected: list[str],
     groups: list[HostRefGroup],
@@ -366,7 +595,7 @@ def _apply_hits_for_hosts(
     *,
     selected: list[str],
     host_map: dict[str, HostRefGroup],
-    sync_reference_labels: bool = True,
+    sync_reference_labels: bool = False,
 ) -> tuple[list[str], list[dict[str, str]], int, int]:
     applied_hosts: list[str] = []
     failed: list[dict[str, str]] = []
@@ -399,6 +628,112 @@ def _apply_hits_for_hosts(
             failed.append({"host_repo_rel_path": host_rel, "error": str(ex)})
 
     return applied_hosts, failed, total_patches, total_label_patches
+
+
+def _apply_labels_for_hosts(
+    repo_root: Path,
+    *,
+    selected: list[str],
+    host_map: dict[str, HostRefGroup],
+) -> tuple[list[str], list[dict[str, str]], int]:
+    applied_hosts: list[str] = []
+    failed: list[dict[str, str]] = []
+    total_label_patches = 0
+
+    for host_rel in selected:
+        group = host_map.get(host_rel)
+        if group is None:
+            failed.append({"host_repo_rel_path": host_rel, "error": "未找到引用命中"})
+            continue
+        hits = list(group.hits)
+        if not hits:
+            continue
+        try:
+            n_l = apply_host_reference_label_corrections(repo_root, host_rel, hits)
+            if n_l <= 0:
+                continue
+            total_label_patches += n_l
+            applied_hosts.append(host_rel)
+        except (RenameAnalysisError, OSError) as ex:
+            failed.append({"host_repo_rel_path": host_rel, "error": str(ex)})
+
+    return applied_hosts, failed, total_label_patches
+
+
+def _apply_labels_from_rename_log(
+    repo_root: Path,
+    *,
+    rename_log_id: int,
+    selected: list[str],
+) -> dict[str, Any]:
+    rr = repo_root.expanduser().resolve(strict=False)
+    row = get_rename_log(rr, rename_log_id)
+    if row is None:
+        raise ValueError(f"未找到改名记录 #{rename_log_id}")
+
+    groups = host_ref_groups_from_db(
+        rr,
+        old_basename=row["old_basename"],
+        new_basename=row["new_basename"],
+        exclude_repo_rel=row.get("new_repo_rel_path"),
+        new_repo_rel_path=row.get("new_repo_rel_path"),
+        transitive=True,
+    )
+    group_map = {_norm_host_path(g.host_repo_rel_path): g for g in groups}
+    apply_targets = _expand_selected_for_indirect_label_apply(selected, groups)
+
+    applied_hosts: list[str] = []
+    failed: list[dict[str, str]] = []
+    total_label_patches = 0
+
+    for host_rel in apply_targets:
+        host_key = _norm_host_path(host_rel)
+        group = group_map.get(host_key)
+        if group is None or not group.hits:
+            failed.append({"host_repo_rel_path": host_key, "error": "未找到引用命中"})
+            continue
+        try:
+            n_l = apply_host_reference_label_corrections(rr, host_key, list(group.hits))
+            if n_l <= 0:
+                continue
+            total_label_patches += n_l
+            applied_hosts.append(host_key)
+        except (RenameAnalysisError, OSError) as ex:
+            failed.append({"host_repo_rel_path": host_key, "error": str(ex)})
+
+    if applied_hosts:
+        insert_ref_patch_event(
+            rr,
+            stats={
+                "mode": "reference_labels",
+                "rename_log_id": rename_log_id,
+                "hosts": len(applied_hosts),
+                "label_patches": total_label_patches,
+                "failed": len(failed),
+            },
+        )
+
+    refreshed = _build_scan_payload(
+        rr,
+        rename_log_id=rename_log_id,
+        old_basename=row["old_basename"],
+        new_basename=row["new_basename"],
+        exclude_repo_rel=row.get("new_repo_rel_path"),
+        target_repo_rel=row.get("new_repo_rel_path"),
+        new_repo_rel_path=row.get("new_repo_rel_path"),
+        transitive=True,
+        persist=True,
+    )
+    return {
+        "rename_log_id": rename_log_id,
+        "old_basename": row["old_basename"],
+        "new_basename": row["new_basename"],
+        "applied_hosts": applied_hosts,
+        "failed": failed,
+        "xlink_patches": 0,
+        "label_patches": total_label_patches,
+        "scan": refreshed,
+    }
 
 
 def _build_scan_payload(

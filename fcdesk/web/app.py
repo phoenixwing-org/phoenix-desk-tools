@@ -72,6 +72,7 @@ from fcdesk.services.xlink_fix_service import get_xlink_prefs, run_xlink_fix, sa
 from fcdesk.services.rename_analysis_service import (
     analyze_rename_references,
     apply_rename_analysis_corrections,
+    apply_reference_label_corrections,
     export_rename_analysis_report,
     list_rename_logs_payload,
     load_rename_analysis,
@@ -247,7 +248,9 @@ class FileRenameApplyBody(BaseModel):
     exclude_repo_rel: str | None = None
     target_repo_rel: str | None = None
     transitive: bool | None = True
-    sync_reference_labels: bool | None = True
+    sync_reference_labels: bool | None = False
+    labels_only: bool | None = False
+    label_scope: str | None = "incoming"
     host_repo_rel_paths: list[str]
 
 
@@ -597,6 +600,19 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
     def api_file_rename_apply_refs(body: FileRenameApplyBody) -> dict:
         ws = get_workspace()
         try:
+            if body.labels_only:
+                scope = body.label_scope if body.label_scope == "host_all" else "incoming"
+                return apply_reference_label_corrections(
+                    ws,
+                    rename_log_id=body.rename_log_id,
+                    old_basename=body.old_basename,
+                    new_basename=body.new_basename,
+                    exclude_repo_rel=body.exclude_repo_rel,
+                    target_repo_rel=body.target_repo_rel,
+                    transitive=body.transitive if body.transitive is not None else True,
+                    host_repo_rel_paths=body.host_repo_rel_paths,
+                    label_scope=scope,
+                )
             return apply_rename_analysis_corrections(
                 ws,
                 rename_log_id=body.rename_log_id,
@@ -607,7 +623,7 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
                 transitive=body.transitive if body.transitive is not None else True,
                 host_repo_rel_paths=body.host_repo_rel_paths,
                 sync_reference_labels=(
-                    body.sync_reference_labels if body.sync_reference_labels is not None else True
+                    body.sync_reference_labels if body.sync_reference_labels is not None else False
                 ),
             )
         except ValueError as e:
@@ -643,6 +659,19 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
     def api_rename_analysis_apply(body: FileRenameApplyBody) -> dict:
         ws = get_workspace()
         try:
+            if body.labels_only:
+                scope = body.label_scope if body.label_scope == "host_all" else "incoming"
+                return apply_reference_label_corrections(
+                    ws,
+                    rename_log_id=body.rename_log_id,
+                    old_basename=body.old_basename,
+                    new_basename=body.new_basename,
+                    exclude_repo_rel=body.exclude_repo_rel,
+                    target_repo_rel=body.target_repo_rel,
+                    transitive=body.transitive if body.transitive is not None else True,
+                    host_repo_rel_paths=body.host_repo_rel_paths,
+                    label_scope=scope,
+                )
             return apply_rename_analysis_corrections(
                 ws,
                 rename_log_id=body.rename_log_id,
@@ -653,10 +682,12 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
                 transitive=body.transitive if body.transitive is not None else True,
                 host_repo_rel_paths=body.host_repo_rel_paths,
                 sync_reference_labels=(
-                    body.sync_reference_labels if body.sync_reference_labels is not None else True
+                    body.sync_reference_labels if body.sync_reference_labels is not None else False
                 ),
             )
         except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except RenameAnalysisError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
     @app.get("/api/rename-analysis/load")

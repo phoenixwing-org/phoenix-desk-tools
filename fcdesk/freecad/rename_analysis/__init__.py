@@ -18,6 +18,7 @@ from fcdesk.freecad.rename_analysis.types import (
 )
 from fcdesk.freecad.rename_analysis.xlink import (
     analyze_workspace_xlink_refs,
+    apply_host_reference_label_corrections,
     apply_host_xlink_corrections,
     patch_fcstd_xlink_attrs,
     replace_basename_in_xlink_attr,
@@ -37,6 +38,7 @@ __all__ = [
     "XLinkBasenameHit",
     "analyze_workspace_xlink_refs",
     "apply_host_ref_patches",
+    "apply_host_reference_label_corrections",
     "apply_host_xlink_corrections",
     "patch_fcstd_xlink_attrs",
     "replace_basename_in_xlink_attr",

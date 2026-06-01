@@ -1272,14 +1272,30 @@ def get_file_asset_id(repo_root: Path, repo_rel_path: str) -> int | None:
         ).fetchone()
     return int(row["id"]) if row else None
 
+
+def get_file_asset_bom_fields(repo_root: Path, repo_rel_path: str) -> dict[str, str] | None:
+    """从 CAD 索引 ``file_asset`` 读取 BOM 字段（规则 Label 优先来源）。"""
     rr = repo_root.expanduser().resolve(strict=False)
+    if not cad_database_path(rr).is_file():
+        return None
     key = _norm_key(repo_rel_path)
     with connect(rr) as conn:
         row = conn.execute(
-            "SELECT id FROM file_asset WHERE repo_rel_path = ?",
+            """
+            SELECT part_number, part_version, part_name, label
+            FROM file_asset
+            WHERE repo_rel_path = ?
+            """,
             (key,),
         ).fetchone()
-    return int(row["id"]) if row else None
+    if row is None:
+        return None
+    return {
+        "part_number": str(row["part_number"] or ""),
+        "part_version": str(row["part_version"] or ""),
+        "part_name": str(row["part_name"] or ""),
+        "label": str(row["label"] or ""),
+    }
 
 
 def list_present_fcstd_file_assets(repo_root: Path) -> list[dict[str, Any]]:
