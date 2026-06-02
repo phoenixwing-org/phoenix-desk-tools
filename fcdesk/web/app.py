@@ -43,6 +43,7 @@ from fcdesk.services.launcher_service import (
     update_shell_layout,
 )
 from fcdesk.services.part_key_service import (
+    resolve_part_key_from_workspace_rel,
     load_part_assembly_tree_payload,
     load_part_key_detail_payload,
     load_part_keys_payload,
@@ -865,6 +866,14 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
     @app.get("/api/part-keys")
     def api_part_keys_list() -> dict:
         return load_part_keys_payload(get_workspace())
+
+    @app.get("/api/part-key-infer")
+    @app.get("/api/part-keys/infer-from-path")
+    def api_part_key_infer_from_path(rel: str = Query(..., min_length=1)) -> dict:
+        try:
+            return resolve_part_key_from_workspace_rel(get_workspace(), rel)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e)) from e
 
     @app.get("/api/part-keys/{part_number}/{part_version}")
     def api_part_key_detail(part_number: str, part_version: str) -> dict:

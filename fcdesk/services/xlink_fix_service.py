@@ -170,13 +170,14 @@ def _run_xlink_script(
 
 def part_hints_from_xlink_old_path(old_path: str) -> dict[str, str]:
     """从 XLink ``file`` 属性值推断 Part Key（与 CAD 索引文件名规则一致）。"""
-    basename = Path(old_path.replace("\\", "/")).name
-    pn, pv = infer_part_key_from_filename(basename)
+    from fcdesk.freecad.part_naming import PartNamingParser
+
+    h = PartNamingParser.part_key_hints_from_basename(old_path)
     return {
-        "basename": basename,
-        "part_number": pn,
-        "part_version": pv,
-        "part_key": format_part_key(pn, pv) if pn and pv else "",
+        "basename": h["basename"],
+        "part_number": h["part_number"],
+        "part_version": h["part_version"],
+        "part_key": h["part_key"],
     }
 
 

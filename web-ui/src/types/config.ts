@@ -66,6 +66,6 @@ export const DEFAULT_PAGE_ICONS: Record<string, string> = {
   file_rename: "↦",
   rename_analysis: "🔍",
   part_catalog: "◉",
-  part_key_detail: "◉",
+  part_key_detail: "◎",
   part_dedup: "≡",
 };

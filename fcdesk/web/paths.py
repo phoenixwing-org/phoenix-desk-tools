@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -35,6 +36,20 @@ def resolve_static_dir(explicit: str | None) -> Path | None:
     return cand if cand.is_dir() else cand
 
 
+def resolve_pnpm_executable() -> str:
+    """解析 pnpm 可执行文件路径（Windows 上须用完整路径，否则 subprocess 找不到 .cmd）。"""
+    for name in ("pnpm", "pnpm.cmd", "pnpm.exe"):
+        exe = shutil.which(name)
+        if exe:
+            return exe
+    raise FileNotFoundError("pnpm")
+
+
+def run_pnpm(args: list[str], *, cwd: Path | str, check: bool = False, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+    cmd = [resolve_pnpm_executable(), *args]
+    return subprocess.run(cmd, cwd=str(cwd), check=check, env=env)
+
+
 def build_web_ui(*, repo: Path | None = None) -> None:
     """执行 ``pnpm build``（优先仓库根目录，兼容仅 web-ui 旧用法）。"""
     root = repo or repo_root()
@@ -42,7 +57,7 @@ def build_web_ui(*, repo: Path | None = None) -> None:
     if not (ui / "package.json").is_file():
         raise FileNotFoundError(f"未找到前端工程: {ui}")
     cwd = root if (root / "package.json").is_file() else ui
-    subprocess.run(["pnpm", "build"], cwd=str(cwd), check=True)
+    run_pnpm(["build"], cwd=cwd, check=True)
 
 
 def default_workspace_path() -> Path:

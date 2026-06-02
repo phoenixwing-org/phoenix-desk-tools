@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onActivated, onMounted, ref, watch } from "vue";
+import { computed, onActivated, onMounted, onUnmounted, ref, watch } from "vue";
 import {
   fetchPartAssemblyTree,
   fetchPartKeyDetail,
+  inferPartKeyFromPath,
   patchPartFileLink,
   patchPartKey,
   type AssemblyTreeNode,
@@ -11,6 +12,8 @@ import {
 } from "../api";
 import AssemblyTreeTable from "../components/AssemblyTreeTable.vue";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
+import { promptChoice } from "../composables/choiceDialog";
+import { parsePartKeyText } from "../utils/partNaming";
 import { useAppShell } from "../composables/useAppShell";
 import { usePageSession } from "../composables/usePageSession";
 import type { TableColumnDef } from "../composables/useResizableTable";
@@ -38,6 +41,7 @@ const fileColumns: TableColumnDef[] = [
 
 const partNumber = ref("");
 const partVersion = ref("");
+const partKeyInput = ref("");
 const loading = ref(false);
 const saving = ref(false);
 const detail = ref<PartKeyDetail | null>(null);
@@ -50,6 +54,14 @@ const editForm = ref({
   label: "",
   notes: "",
   status: "active",
+});
+
+const baselineForm = ref({ ...editForm.value });
+
+const currentPartKey = computed(() => {
+  const pn = partNumber.value.trim();
+  const pv = partVersion.value.trim();
+  return pn && pv ? `${pn}.${pv}` : "";
 });
 
 const treeMode = ref<"first" | "full">("first");
@@ -75,6 +87,142 @@ function resolvePartKeyFromTab(): boolean {
   partNumber.value = pk.partNumber;
   partVersion.value = pk.partVersion;
   return true;
+}
+
+function syncBaselineFromEdit() {
+  baselineForm.value = { ...editForm.value };
+}
+
+function hasUnsavedEdits(): boolean {
+  const keys = ["TypeCode", "ModelSeries", "PartName", "label", "notes", "status"] as const;
+  for (const k of keys) {
+    if (String(editForm.value[k] ?? "").trim() !== String(baselineForm.value[k] ?? "").trim()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function confirmSwitchPartKey(targetKey: string): Promise<boolean> {
+  if (!currentPartKey.value || !hasUnsavedEdits()) return true;
+  await promptChoice({
+    title: "无法切换零件",
+    message: `当前零件 ${currentPartKey.value} 有尚未保存的属性修改。\n\n请先保存后再切换到 ${targetKey}。`,
+    choices: [{ id: "ok", label: "确定" }],
+  });
+  return false;
+}
+
+function parsePartKeyInput(raw: string): { pn: string; pv: string; partKey: string } | null {
+  const parsed = parsePartKeyText(raw);
+  if (!parsed) return null;
+  return { pn: parsed.part_number, pv: parsed.part_version, partKey: parsed.part_key };
+}
+
+function syncPartKeyInput() {
+  partKeyInput.value = currentPartKey.value;
+}
+
+async function switchToPartKey(
+  pn: string,
+  pv: string,
+  opts?: { source?: string; filename?: string; in_catalog?: boolean },
+) {
+  const targetKey = `${pn}.${pv}`;
+  if (pn === partNumber.value.trim() && pv === partVersion.value.trim()) {
+    shell.appendLog(`[零件] 已是当前 PartKey ${targetKey}，无需切换`, { source: "part_key" });
+    syncPartKeyInput();
+    return;
+  }
+
+  if (!(await confirmSwitchPartKey(targetKey))) {
+    shell.appendLog(`[零件] 取消切换（未保存修改）：${currentPartKey.value} → ${targetKey}`, {
+      source: "part_key",
+    });
+    syncPartKeyInput();
+    return;
+  }
+
+  const src = opts?.source ?? "manual";
+  const srcLabel =
+    src === "index"
+      ? "CAD 索引"
+      : src === "filename+index"
+        ? "文件名+索引"
+        : src === "filename"
+          ? "文件名"
+          : "检索";
+  const viaFile = opts?.filename ? `（${opts.filename}）` : "";
+  shell.appendLog(
+    `[零件] ${srcLabel} · 切换 ${currentPartKey.value || "—"} → ${targetKey}${viaFile}`,
+    { source: "part_key", open: true },
+  );
+
+  partNumber.value = pn;
+  partVersion.value = pv;
+  partKeyInput.value = targetKey;
+  activeSubTab.value = "attributes";
+  pageError.value = "";
+  await loadDetail();
+  if (!detail.value) {
+    shell.appendLog(
+      `[零件] 未找到 ${targetKey}；请确认 CAD 索引已扫描且 Part Key 正确。`,
+      { source: "part_key" },
+    );
+  } else if (opts?.in_catalog === false) {
+    shell.appendLog(
+      `[零件] 已解析 ${targetKey}，但零件目录中尚无该键；请先执行 CAD 索引扫描。`,
+      { source: "part_key" },
+    );
+  }
+}
+
+async function onSearchPartKey() {
+  const parsed = parsePartKeyInput(partKeyInput.value);
+  if (!parsed) {
+    pageError.value = "Part Key 格式：零件号.版本，例如 8001.001";
+    shell.appendLog(`[零件] 无效的 Part Key：${partKeyInput.value.trim() || "(空)"}`, {
+      source: "part_key",
+      open: true,
+    });
+    return;
+  }
+  await switchToPartKey(parsed.pn, parsed.pv, { source: "manual" });
+}
+
+async function onTreeSelect(targetRel: string) {
+  const relNorm = targetRel.replace(/\\/g, "/").trim();
+  if (!relNorm.toLowerCase().endsWith(".fcstd")) {
+    shell.appendLog(`[零件] 跳过非 FCStd：${relNorm}`, { source: "part_key" });
+    return;
+  }
+
+  let inferred;
+  try {
+    inferred = await inferPartKeyFromPath(relNorm);
+  } catch (e) {
+    const name = relNorm.split("/").pop() ?? relNorm;
+    shell.appendLog(`[零件] 无法从文件名解析 PartKey：${name} — ${e}`, {
+      source: "part_key",
+      open: true,
+    });
+    return;
+  }
+
+  const { part_number: pn, part_version: pv, source, in_catalog, filename } = inferred;
+  await switchToPartKey(pn, pv, { source, filename, in_catalog });
+}
+
+function registerTreeHandler() {
+  if (!props.workbenchTabId) return;
+  shell.registerTreeSelect(props.workbenchTabId, (path) => {
+    void onTreeSelect(path);
+  });
+}
+
+function unregisterTreeHandler() {
+  if (!props.workbenchTabId) return;
+  shell.registerTreeSelect(props.workbenchTabId, null);
 }
 
 function setStatus(msg: string) {
@@ -123,6 +271,8 @@ async function loadDetail() {
       notes: detail.value.notes,
       status: detail.value.status || "active",
     };
+    syncBaselineFromEdit();
+    syncPartKeyInput();
     if (props.workbenchTabId) {
       shell.updateTab(props.workbenchTabId, {
         title: detail.value.part_key,
@@ -171,6 +321,7 @@ async function savePartMeta() {
   shell.appendLog(`[零件] 保存属性 ${pn}.${pv}…`, { source: "part_key", open: true });
   try {
     detail.value = await patchPartKey(pn, pv, { ...editForm.value });
+    syncBaselineFromEdit();
     if (props.workbenchTabId) {
       shell.updateTab(props.workbenchTabId, {
         subtitle: detail.value.PartName || detail.value.label || undefined,
@@ -213,6 +364,7 @@ function openFileDetail(file: PartKeyFile) {
 
 function initPage() {
   if (resolvePartKeyFromTab()) {
+    syncPartKeyInput();
     void loadDetail();
   }
 }
@@ -242,24 +394,61 @@ function hydratePageSession(snap: Record<string, unknown>): Promise<boolean> {
 usePageSession(props.workbenchTabId, {
   serialize: () => ({ v: SESSION_V, subTab: activeSubTab.value }),
   hydrate: hydratePageSession,
-  isDirty: () => false,
+  isDirty: hasUnsavedEdits,
 });
+
+watch(
+  () => hasUnsavedEdits(),
+  (dirty) => {
+    if (props.workbenchTabId) shell.setTabDirty(props.workbenchTabId, dirty);
+  },
+  { immediate: true },
+);
 
 watch(activeSubTab, () => {
   if (props.workbenchTabId) shell.scheduleWorkbenchSave();
 });
 
-onMounted(initPage);
-onActivated(initPage);
+onMounted(() => {
+  initPage();
+  registerTreeHandler();
+});
+onActivated(() => {
+  initPage();
+  registerTreeHandler();
+});
+onUnmounted(() => {
+  unregisterTreeHandler();
+  if (props.workbenchTabId) shell.setTabDirty(props.workbenchTabId, false);
+});
 </script>
 
 <template>
   <div class="page part-detail-page">
     <header class="page-head">
-      <h1 class="page-title">
-        零件 <span class="mono">{{ detail?.part_key ?? `${partNumber}.${partVersion}` }}</span>
-      </h1>
-      <p v-if="detail?.PartName" class="page-sub">{{ detail.PartName }}</p>
+      <div class="head-row">
+        <h1 class="page-title">零件详情</h1>
+        <div class="part-key-bar">
+          <label class="pk-label" for="part-key-input">Part Key</label>
+          <input
+            id="part-key-input"
+            v-model="partKeyInput"
+            class="pk-input mono"
+            type="text"
+            placeholder="8001.001"
+            spellcheck="false"
+            :disabled="loading"
+            @keydown.enter="onSearchPartKey"
+          />
+          <button type="button" class="btn primary pk-btn" :disabled="loading" @click="onSearchPartKey">
+            {{ loading ? "检索中…" : "检索" }}
+          </button>
+        </div>
+      </div>
+      <p v-if="detail?.PartName || currentPartKey" class="page-sub">
+        <span v-if="currentPartKey" class="mono">{{ currentPartKey }}</span>
+        <span v-if="detail?.PartName">{{ currentPartKey ? " · " : "" }}{{ detail.PartName }}</span>
+      </p>
     </header>
 
     <div v-if="pageError" class="banner err">{{ pageError }}</div>
@@ -444,6 +633,10 @@ onActivated(initPage);
         </div>
       </div>
     </template>
+
+    <p v-else-if="!loading" class="empty">
+      输入 Part Key 后点「检索」；或在<strong>本 Tab 激活</strong>时点击右侧工作空间树中的 .FCStd（按文件名解析 PartKey）。
+    </p>
   </div>
 </template>
 
@@ -462,8 +655,42 @@ onActivated(initPage);
   margin-bottom: 10px;
 }
 
+.head-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+}
+
+.part-key-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.pk-label {
+  font-size: 0.82rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.pk-input {
+  width: 148px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.pk-btn {
+  padding: 6px 14px;
+  font-size: 0.82rem;
+}
+
 .page-title {
-  margin: 0 0 4px;
+  margin: 0;
   font-size: 1.1rem;
 }
 

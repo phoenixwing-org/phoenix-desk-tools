@@ -19,6 +19,7 @@ _DEFAULT_PAGE_ICONS: dict[str, str] = {
     "home": "⚙",
     "fcstd_map": "◫",
     "part_catalog": "◉",
+    "part_key_detail": "◎",
     "xlink_fix": "⎘",
     "step_batch": "⇩",
     "sw_step_export": "▣",

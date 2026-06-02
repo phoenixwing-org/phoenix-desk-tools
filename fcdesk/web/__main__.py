@@ -23,6 +23,7 @@ from fcdesk.web.paths import (
     default_workspace_path,
     repo_root,
     resolve_static_dir,
+    run_pnpm,
 )
 
 
@@ -113,9 +114,12 @@ def _run_dev_mode(
     env = os.environ.copy()
     env["FCDESK_API_PORT"] = str(api_port)
     try:
-        subprocess.run(["pnpm", "dev"], cwd=str(pnpm_cwd), env=env, check=False)
+        run_pnpm(["dev"], cwd=pnpm_cwd, env=env)
     except FileNotFoundError:
-        print("未找到 pnpm。请先在仓库根目录执行: pnpm install", file=sys.stderr)
+        print(
+            "未找到 pnpm（未在 PATH 中）。请先安装 Node.js / pnpm，并在仓库根目录执行: pnpm install",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
 

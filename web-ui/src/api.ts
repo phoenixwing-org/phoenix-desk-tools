@@ -802,6 +802,20 @@ export function fetchPartKeys() {
   return jsonFetch<PartKeysPayload>("/api/part-keys");
 }
 
+export type PartKeyInfer = {
+  rel: string;
+  filename: string;
+  part_number: string;
+  part_version: string;
+  part_key: string;
+  source: "filename" | "index" | "filename+index";
+  in_catalog: boolean;
+};
+
+export function inferPartKeyFromPath(rel: string) {
+  return jsonFetch<PartKeyInfer>(`/api/part-key-infer?rel=${encodeURIComponent(rel)}`);
+}
+
 export function fetchPartKeyDetail(partNumber: string, partVersion: string) {
   return jsonFetch<PartKeyDetail>(
     `/api/part-keys/${encodeURIComponent(partNumber)}/${encodeURIComponent(partVersion)}`,

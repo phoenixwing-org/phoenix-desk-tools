@@ -6,6 +6,8 @@ import { DEFAULT_PAGE_ICONS } from "../types/config";
 const shell = useAppShell();
 
 const navItems = computed(() => shell.appConfig.value?.navigation ?? []);
+const mainNavItems = computed(() => navItems.value.filter((n) => n.page !== "home"));
+const configNavItem = computed(() => navItems.value.find((n) => n.page === "home"));
 const shellLayout = computed(() => shell.shellLayout.value);
 const currentPage = computed(() => shell.currentPage.value);
 const wide = computed(() => shellLayout.value.nav_rail_mode === 1);
@@ -48,7 +50,7 @@ function hover(tip: string | null) {
     </button>
 
     <button
-      v-for="item in navItems"
+      v-for="item in mainNavItems"
       :key="item.page"
       type="button"
       class="nav-item"
@@ -63,6 +65,22 @@ function hover(tip: string | null) {
     </button>
 
     <div class="nav-spacer" />
+
+    <button
+      v-if="configNavItem"
+      type="button"
+      class="nav-item nav-config"
+      :class="{ active: currentPage === configNavItem.page }"
+      :title="configNavItem.label"
+      @click="select(configNavItem.page)"
+      @mouseenter="hover(configNavItem.label)"
+      @mouseleave="hover(null)"
+    >
+      <template v-if="wide">
+        {{ iconFor(configNavItem.page, configNavItem.icon) }} {{ configNavItem.label }}
+      </template>
+      <template v-else>{{ iconFor(configNavItem.page, configNavItem.icon) }}</template>
+    </button>
 
     <button
       type="button"
@@ -136,6 +154,13 @@ function hover(tip: string | null) {
 
 .nav-spacer {
   flex: 1;
+  min-height: 8px;
+}
+
+.nav-config {
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
 }
 
 .nav-dock {

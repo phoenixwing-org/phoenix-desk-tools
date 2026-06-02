@@ -30,6 +30,12 @@
       "description": "PartKey 零件库与关联文件"
     },
     {
+      "id": "part_key_detail",
+      "label": "零件详情",
+      "page": "part_key_detail",
+      "description": "PartKey 属性与关联文件（从零件目录或索引打开，可多 Tab）"
+    },
+    {
       "id": "bom_apply",
       "label": "文件详情",
       "page": "file_detail",
