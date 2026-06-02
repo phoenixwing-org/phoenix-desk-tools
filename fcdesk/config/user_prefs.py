@@ -44,7 +44,7 @@ _WORKSPACE_DEFAULT: dict[str, Any] = {
         "dry_run": True,
         "all_in_dir": True,
     },
-    "fcstd_map": {"scan_root": None, "force_update_part_name": False},
+    "fcstd_map": {"scan_root": None, "force_update_part_name": False},  # scan_root 已废弃，恒为 None
     "step_batch": {
         "step_dir": None,
         "out_dir": None,

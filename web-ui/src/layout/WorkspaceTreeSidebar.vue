@@ -157,7 +157,13 @@ onUnmounted(() => {
   >
     <div class="ws-tree-section">
       <div class="ws-head">
-        <span class="ws-title">{{ treeTitle }}</span>
+        <div class="ws-title-row">
+          <span class="ws-title" :title="treeTitle">{{ treeTitle }}</span>
+          <div class="ws-filters">
+            <label class="chk"><input v-model="wantFcstd" type="checkbox" @change="scan" /> FCStd</label>
+            <label class="chk"><input v-model="wantSw" type="checkbox" @change="scan" /> .sldprt</label>
+          </div>
+        </div>
         <div class="ws-search-row">
           <input
             v-model="treeFilterQuery"
@@ -166,6 +172,9 @@ onUnmounted(() => {
             spellcheck="false"
             placeholder="筛选文件名 / 路径…"
           />
+          <button type="button" class="mini" :disabled="loading" title="重新扫描工作空间树" @click="scan">
+            {{ loading ? "…" : "刷新" }}
+          </button>
           <button
             v-if="treeFilterQuery.trim()"
             type="button"
@@ -176,21 +185,15 @@ onUnmounted(() => {
             清除
           </button>
         </div>
-        <div class="ws-filters">
-          <label class="chk"><input v-model="wantFcstd" type="checkbox" @change="scan" /> FCStd</label>
-          <label class="chk"><input v-model="wantSw" type="checkbox" @change="scan" /> .sldprt</label>
-          <button type="button" class="mini" :disabled="loading" @click="scan">
-            {{ loading ? "…" : "刷新" }}
-          </button>
-        </div>
       </div>
       <div class="ws-tree">
-        <TreeBranch
-          v-if="displayTree"
-          :node="displayTree"
-          :selected="selectedRel"
-          @select-file="onSelect"
-        />
+        <div v-if="displayTree" class="ws-tree-scroll">
+          <TreeBranch
+            :node="displayTree"
+            :selected="selectedRel"
+            @select-file="onSelect"
+          />
+        </div>
         <p v-else-if="tree && treeFilterQuery.trim()" class="muted">无匹配文件</p>
         <p v-else class="muted">{{ loading ? "扫描中…" : "无数据" }}</p>
       </div>
@@ -222,6 +225,7 @@ onUnmounted(() => {
 
 .ws-tree-section {
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -234,18 +238,33 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
+.ws-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  min-width: 0;
+}
+
 .ws-title {
-  display: block;
   font-weight: 600;
   font-size: 0.85rem;
-  margin-bottom: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ws-search-row {
   display: flex;
   gap: 6px;
   align-items: center;
-  margin-bottom: 6px;
+  min-width: 0;
+}
+
+.ws-search-row .mini {
+  flex-shrink: 0;
 }
 
 .ws-search-input {
@@ -259,10 +278,11 @@ onUnmounted(() => {
 
 .ws-filters {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
+  gap: 6px;
   align-items: center;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
 }
 
 .chk {
@@ -282,9 +302,20 @@ onUnmounted(() => {
 .ws-tree {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 6px 0 12px;
   font-size: 0.84rem;
+}
+
+.ws-tree-scroll {
+  display: inline-block;
+  min-width: 100%;
+  width: max-content;
+  padding: 0 8px 0 4px;
+  box-sizing: border-box;
 }
 
 .muted {

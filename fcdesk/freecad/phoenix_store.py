@@ -584,6 +584,34 @@ def save_fcstd_document(
     return scan_id
 
 
+def delete_missing_file_assets(repo_root: Path) -> int:
+    """从 ``file_asset`` 永久删除 ``file_status=missing`` 行，并同步 ``part_key`` / ``part_file_link``。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    if not cad_database_path(rr).is_file():
+        return 0
+    with connect(rr) as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS c FROM file_asset WHERE file_status = ?",
+            (FILE_STATUS_MISSING,),
+        ).fetchone()
+        n = int(row["c"]) if row else 0
+        if n == 0:
+            return 0
+        conn.execute(
+            "DELETE FROM file_asset WHERE file_status = ?",
+            (FILE_STATUS_MISSING,),
+        )
+        sync_part_keys_from_file_assets(conn)
+    return n
+
+
+def update_scan_stats_meta(repo_root: Path, stats: Mapping[str, int]) -> None:
+    """更新 ``cad_meta.last_scan_stats``（列表页顶栏统计）。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    with connect(rr) as conn:
+        _meta_set(conn, "last_scan_stats", json.dumps(dict(stats), ensure_ascii=False))
+
+
 def find_fcstd_entry(repo_root: Path, rel_workspace: Path) -> FcstdMapEntry | None:
     doc = load_fcstd_document(repo_root)
     if doc is None:

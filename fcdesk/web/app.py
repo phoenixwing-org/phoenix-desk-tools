@@ -29,6 +29,7 @@ from fcdesk.services.fcstd_map_service import (
     export_fcstd_map_to_json,
     get_fcstd_map_prefs,
     load_fcstd_map_payload,
+    purge_missing_fcstd_map_entries,
     run_fcstd_map_scan,
     save_fcstd_map_prefs,
 )
@@ -205,12 +206,10 @@ def shell_log_since(after: int) -> dict[str, object]:
 
 
 class FcstdMapScanBody(BaseModel):
-    scan_root: str = ""
     force_update_part_name: bool | None = None
 
 
 class FcstdMapPrefsBody(BaseModel):
-    scan_root: str = ""
     force_update_part_name: bool | None = None
 
 
@@ -754,7 +753,6 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
         try:
             return save_fcstd_map_prefs(
                 get_workspace(),
-                body.scan_root,
                 force_update_part_name=body.force_update_part_name,
             )
         except ValueError as e:
@@ -766,7 +764,6 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
         try:
             return run_fcstd_map_scan(
                 ws,
-                scan_root_input=body.scan_root or None,
                 force_update_part_name=body.force_update_part_name,
             )
         except ValueError as e:
@@ -781,6 +778,14 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
             return export_fcstd_map_to_json(ws)
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e)) from e
+        except OSError as e:
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
+    @app.post("/api/fcstd-map/purge-missing")
+    def api_fcstd_map_purge_missing() -> dict:
+        ws = get_workspace()
+        try:
+            return purge_missing_fcstd_map_entries(ws)
         except OSError as e:
             raise HTTPException(status_code=500, detail=str(e)) from e
 

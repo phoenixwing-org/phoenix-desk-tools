@@ -175,6 +175,9 @@ onUnmounted(() => {
 
 .shell-pages :deep(> .page),
 .shell-pages :deep(> div) {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
   height: 100%;
   overflow: auto;
 }

@@ -4,7 +4,6 @@ import {
   fetchPartAssemblyTree,
   fetchPartKeyDetail,
   inferPartKeyFromPath,
-  patchPartFileLink,
   patchPartKey,
   type AssemblyTreeNode,
   type PartKeyDetail,
@@ -13,6 +12,9 @@ import {
 import AssemblyTreeTable from "../components/AssemblyTreeTable.vue";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
 import { promptChoice } from "../composables/choiceDialog";
+import ComboTextInput from "../components/ComboTextInput.vue";
+import { BOM_FIELD_LABELS as L, PART_KEY_META_FIELDS } from "../utils/bomFieldLabels";
+import { TYPE_CODE_OPTIONS } from "../utils/typeCodeOptions";
 import { parsePartKeyText } from "../utils/partNaming";
 import { useAppShell } from "../composables/useAppShell";
 import { usePageSession } from "../composables/usePageSession";
@@ -180,8 +182,8 @@ async function switchToPartKey(
 async function onSearchPartKey() {
   const parsed = parsePartKeyInput(partKeyInput.value);
   if (!parsed) {
-    pageError.value = "Part Key 格式：零件号.版本，例如 8001.001";
-    shell.appendLog(`[零件] 无效的 Part Key：${partKeyInput.value.trim() || "(空)"}`, {
+    pageError.value = "零件标识格式：零件号.版本，例如 8001.001";
+    shell.appendLog(`[零件] 无效的零件标识：${partKeyInput.value.trim() || "(空)"}`, {
       source: "part_key",
       open: true,
     });
@@ -244,6 +246,21 @@ function fileStatusLabel(row: PartKeyFile) {
   if (row.file_status === "missing") return "缺失";
   if (row.link_status === "obsolete") return "失效";
   return "存在";
+}
+
+function fileRoleLabel(role: string | undefined) {
+  const map: Record<string, string> = {
+    part: "零件",
+    drawing: "工程图",
+    assembly: "装配",
+  };
+  return map[role || ""] ?? role ?? "—";
+}
+
+function linkStatusLabel(status: string | undefined) {
+  if (status === "obsolete") return "失效";
+  if (status === "active") return "有效";
+  return status ?? "—";
 }
 
 function relDir(path: string): string {
@@ -338,25 +355,6 @@ async function savePartMeta() {
   }
 }
 
-async function onFileLinkPatch(file: PartKeyFile, patch: Partial<PartKeyFile>) {
-  const pn = partNumber.value.trim();
-  const pv = partVersion.value.trim();
-  if (!pn || !pv) return;
-  saving.value = true;
-  shell.appendLog(`[零件] 更新文件关联 ${file.filename}…`, { source: "part_key", open: true });
-  try {
-    detail.value = await patchPartFileLink(pn, pv, file.id, patch);
-    const msg = `已更新文件 ${file.filename}`;
-    shell.appendLog(msg, { source: "part_key" });
-    setStatus(msg);
-  } catch (e) {
-    shell.appendLog(String(e), { source: "part_key" });
-    setStatus(String(e));
-  } finally {
-    saving.value = false;
-  }
-}
-
 function openFileDetail(file: PartKeyFile) {
   if (file.file_status !== "present") return;
   shell.openFileDetailForRel(file.repo_rel_path);
@@ -427,9 +425,18 @@ onUnmounted(() => {
   <div class="page part-detail-page">
     <header class="page-head">
       <div class="head-row">
-        <h1 class="page-title">零件详情</h1>
+        <div class="head-left">
+          <h1 class="page-title">零件详情</h1>
+          <p v-if="detail?.PartName || currentPartKey" class="page-sub">
+            <span v-if="currentPartKey" class="mono">{{ currentPartKey }}</span>
+            <span v-if="detail?.PartName">{{ currentPartKey ? " · " : "" }}{{ detail.PartName }}</span>
+          </p>
+        </div>
         <div class="part-key-bar">
-          <label class="pk-label" for="part-key-input">Part Key</label>
+          <label class="pk-label" for="part-key-input">
+            <span class="cn">{{ L.partKey }}</span>
+            <span class="en">PartKey</span>
+          </label>
           <input
             id="part-key-input"
             v-model="partKeyInput"
@@ -445,10 +452,6 @@ onUnmounted(() => {
           </button>
         </div>
       </div>
-      <p v-if="detail?.PartName || currentPartKey" class="page-sub">
-        <span v-if="currentPartKey" class="mono">{{ currentPartKey }}</span>
-        <span v-if="detail?.PartName">{{ currentPartKey ? " · " : "" }}{{ detail.PartName }}</span>
-      </p>
     </header>
 
     <div v-if="pageError" class="banner err">{{ pageError }}</div>
@@ -482,29 +485,26 @@ onUnmounted(() => {
       <div v-show="activeSubTab === 'attributes'" class="sub-panel">
         <section class="detail-meta">
           <div class="meta-grid">
-            <label>
-              <span>TypeCode</span>
-              <input v-model="editForm.TypeCode" spellcheck="false" />
-            </label>
-            <label>
-              <span>ModelSeries</span>
-              <input v-model="editForm.ModelSeries" spellcheck="false" />
-            </label>
-            <label>
-              <span>PartName</span>
-              <input v-model="editForm.PartName" spellcheck="false" />
-            </label>
-            <label>
-              <span>label</span>
-              <input v-model="editForm.label" spellcheck="false" />
-            </label>
-            <label class="wide">
-              <span>备注</span>
-              <input v-model="editForm.notes" spellcheck="false" />
-            </label>
-            <label>
-              <span>零件状态</span>
-              <select v-model="editForm.status">
+            <label
+              v-for="field in PART_KEY_META_FIELDS"
+              :key="field.key"
+              :class="{ wide: field.wide, full: field.full }"
+            >
+              <span class="field-label">
+                <span class="cn">{{ field.cn }}</span>
+                <span class="en">{{ field.en }}</span>
+              </span>
+              <ComboTextInput
+                v-if="field.kind === 'typeCode'"
+                v-model="editForm.TypeCode"
+                :options="TYPE_CODE_OPTIONS"
+              />
+              <input
+                v-else-if="field.kind === 'input'"
+                v-model="editForm[field.key as 'ModelSeries' | 'PartName' | 'label' | 'notes']"
+                spellcheck="false"
+              />
+              <select v-else v-model="editForm.status">
                 <option value="active">有效</option>
                 <option value="obsolete">失效</option>
               </select>
@@ -543,45 +543,10 @@ onUnmounted(() => {
                   </button>
                   <span v-else>{{ file.filename }}</span>
                 </td>
-                <td>
-                  <select
-                    :value="file.file_role"
-                    @change="
-                      onFileLinkPatch(file, {
-                        file_role: ($event.target as HTMLSelectElement).value,
-                      })
-                    "
-                  >
-                    <option value="part">零件</option>
-                    <option value="drawing">工程图</option>
-                    <option value="assembly">装配</option>
-                  </select>
-                </td>
-                <td>
-                  <select
-                    :value="file.link_status"
-                    @change="
-                      onFileLinkPatch(file, {
-                        link_status: ($event.target as HTMLSelectElement).value,
-                      })
-                    "
-                  >
-                    <option value="active">有效</option>
-                    <option value="obsolete">失效</option>
-                  </select>
-                </td>
-                <td>
-                  <input
-                    class="note-input"
-                    :value="file.link_notes"
-                    placeholder="备注"
-                    spellcheck="false"
-                    @change="
-                      onFileLinkPatch(file, {
-                        link_notes: ($event.target as HTMLInputElement).value,
-                      })
-                    "
-                  />
+                <td>{{ fileRoleLabel(file.file_role) }}</td>
+                <td>{{ linkStatusLabel(file.link_status) }}</td>
+                <td class="note-cell" :class="{ empty: !file.link_notes?.trim() }">
+                  {{ file.link_notes?.trim() || "—" }}
                 </td>
                 <td class="mono">{{ relDir(file.repo_rel_path) }}</td>
                 <td class="actions">
@@ -635,12 +600,14 @@ onUnmounted(() => {
     </template>
 
     <p v-else-if="!loading" class="empty">
-      输入 Part Key 后点「检索」；或在<strong>本 Tab 激活</strong>时点击右侧工作空间树中的 .FCStd（按文件名解析 PartKey）。
+      输入零件标识后点「检索」；或在<strong>本 Tab 激活</strong>时点击右侧工作空间树中的 .FCStd（按文件名解析零件标识）。
     </p>
   </div>
 </template>
 
 <style scoped>
+@import "./page-shared.css";
+
 .part-detail-page {
   display: flex;
   flex-direction: column;
@@ -650,30 +617,12 @@ onUnmounted(() => {
   box-sizing: border-box;
 }
 
-.page-head {
-  flex-shrink: 0;
-  margin-bottom: 10px;
-}
-
-.head-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px 16px;
-}
-
 .part-key-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   margin-left: auto;
-}
-
-.pk-label {
-  font-size: 0.82rem;
-  color: var(--muted);
-  white-space: nowrap;
 }
 
 .pk-input {
@@ -689,15 +638,12 @@ onUnmounted(() => {
   font-size: 0.82rem;
 }
 
-.page-title {
-  margin: 0;
-  font-size: 1.1rem;
-}
-
-.page-sub {
+.head-row .page-sub {
   margin: 0;
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  min-width: 0;
 }
 
 .sub-tabs {
@@ -780,11 +726,52 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 4px;
   font-size: 0.78rem;
+}
+
+.field-label {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.field-label .cn {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.field-label .en {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.pk-label {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.pk-label .cn {
+  font-weight: 500;
+  color: var(--text);
+}
+
+.pk-label .en {
+  font-size: 0.72rem;
   color: var(--muted);
 }
 
 .meta-grid label.wide {
   grid-column: span 2;
+}
+
+.meta-grid label.full {
+  grid-column: 1 / -1;
 }
 
 .meta-grid input,
@@ -878,14 +865,13 @@ onUnmounted(() => {
   opacity: 0.55;
 }
 
-.note-input {
-  width: 100%;
-  min-width: 120px;
-  box-sizing: border-box;
-  padding: 4px 6px;
-  border: 1px solid var(--border-strong);
-  border-radius: 4px;
+.note-cell {
   font-size: 0.78rem;
+  word-break: break-word;
+}
+
+.note-cell.empty {
+  color: var(--muted);
 }
 
 .table-grow {

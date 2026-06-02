@@ -236,7 +236,7 @@ class FcstdMapDocument:
     )
     last_scan_at: str | None = None
     scan_root: str | None = None
-    """相对工作空间根的扫描根（``.`` 表示整个工作空间）。"""
+    """上次扫描范围元数据（``.`` = 工作空间根）；用户偏好中的子目录扫描根已废弃。"""
 
     scan_stats: dict[str, Any] | None = None
     """最近一次扫描统计（present / missing / 重名等）。"""

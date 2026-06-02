@@ -4,7 +4,7 @@ import type { BomXrefEdge, BomXrefHost } from "../../api";
 import { fetchBomXrefIncoming, fetchBomXrefOutgoing, refreshBomXrefHostIndex } from "../../api";
 import { useFileDetailContext } from "../../composables/useFileDetailContext";
 import { useAppShell } from "../../composables/useAppShell";
-import { basenameFromRel, normalizeRepoRelForApi } from "../../utils/workspaceFileQuery";
+import { basenameFromRel, normalizeRepoRelForApi, repoDirFromRel } from "../../utils/workspaceFileQuery";
 
 const ctx = useFileDetailContext();
 const shell = useAppShell();
@@ -217,7 +217,7 @@ async function onRebuildIndex() {
         <thead>
           <tr>
             <th>目标文件</th>
-            <th>目标路径</th>
+            <th>目标目录</th>
             <th v-if="showXlinkColumn">XLink 属性</th>
             <th>解析</th>
           </tr>
@@ -241,11 +241,14 @@ async function onRebuildIndex() {
                 v-if="canOpenFileDetailRel(row.target_repo_rel_path)"
                 type="button"
                 class="link-key muted-link"
+                :title="row.target_repo_rel_path || undefined"
                 @click="openFileDetailRel(row.target_repo_rel_path!)"
               >
-                {{ row.target_repo_rel_path }}
+                {{ repoDirFromRel(row.target_repo_rel_path || "") }}
               </button>
-              <span v-else>{{ row.target_repo_rel_path || "—" }}</span>
+              <span v-else :title="row.target_repo_rel_path || undefined">
+                {{ row.target_repo_rel_path ? repoDirFromRel(row.target_repo_rel_path) : "—" }}
+              </span>
             </td>
             <td v-if="showXlinkColumn" class="mono muted">
               {{ xlinkDiffersFromTarget(row) ? row.xlink_file_attr : "—" }}

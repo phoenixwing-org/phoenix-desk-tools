@@ -9,11 +9,7 @@ import customtkinter as ctk
 import tkinter as tk
 from tkinter import ttk
 
-from fcdesk.config.user_prefs import (
-    format_resolved_under_workspace,
-    resolve_workspace_path_entry,
-    shorten_workspace_relative_display,
-)
+from fcdesk.config.user_prefs import format_resolved_under_workspace
 from fcdesk.pages.base import BasePage
 from fcdesk.pages import form_widgets as fw
 from fcdesk.services.fcstd_map_service import (
@@ -22,7 +18,6 @@ from fcdesk.services.fcstd_map_service import (
     run_fcstd_map_scan,
     save_fcstd_map_prefs,
 )
-from fcdesk.shell.native_dialog import pick_workspace_directory
 from fcdesk.shell.state import AppState
 
 
@@ -32,45 +27,34 @@ class FcstdMapPage(BasePage):
     def __init__(self, master, state: AppState, **kwargs) -> None:
         super().__init__(master, state, **kwargs)
 
-        fw.page_title(self, text="CAD 索引").grid(row=0, column=0, columnspan=3, padx=24, pady=(20, 4), sticky="nw")
+        fw.page_title(self, text="CAD 索引").grid(row=0, column=0, columnspan=2, padx=24, pady=(20, 4), sticky="nw")
 
         fw.page_hint_label(
             self,
             (
-                "扫描根下遍历 FCStd、MD、PDF、图片、DXF/DWG 等 → 写入 .phoenix/cad-database.sqlite；"
-                "条目路径相对工作空间根（供「链接路径修正」使用）。"
+                "从当前工作空间根递归扫描 FCStd、MD、PDF、图片、DXF/DWG 等，"
+                "写入 .phoenix/cad-database.sqlite；条目路径相对工作空间根（供「链接路径修正」使用）。"
             ),
             wraplength=880,
-        ).grid(row=1, column=0, columnspan=3, padx=24, pady=(0, 10), sticky="nw")
-
-        fw.form_row_label(self, text="扫描根目录").grid(
-            row=2, column=0, padx=(24, 12), pady=8, sticky="nw"
-        )
-        self._scan_root_entry = ctk.CTkEntry(self, width=420)
-        self._scan_root_entry.grid(row=2, column=1, padx=4, pady=6, sticky="ew")
-        ctk.CTkButton(self, text="浏览…", width=80, command=self._browse).grid(
-            row=2, column=2, padx=(4, 24), pady=6
-        )
+        ).grid(row=1, column=0, columnspan=2, padx=24, pady=(0, 10), sticky="nw")
 
         self._force_part_name_var = tk.BooleanVar(value=False)
         ctk.CTkCheckBox(
             self,
             text="强制更新 PartName（智能去前缀，覆盖索引已有值）",
             variable=self._force_part_name_var,
-        ).grid(row=3, column=0, columnspan=3, padx=24, pady=(0, 4), sticky="w")
+            command=self._persist,
+        ).grid(row=2, column=0, columnspan=2, padx=24, pady=(0, 4), sticky="w")
 
         row3 = ctk.CTkFrame(self, fg_color="transparent")
-        row3.grid(row=4, column=0, columnspan=3, padx=24, pady=8, sticky="w")
-        ctk.CTkButton(row3, text="保存偏好", fg_color=("gray65", "gray35"), command=self._persist).pack(
-            side="left", padx=(0, 8)
-        )
+        row3.grid(row=3, column=0, columnspan=2, padx=24, pady=8, sticky="w")
         ctk.CTkButton(row3, text="创建索引", command=self._run).pack(side="left", padx=(0, 8))
         ctk.CTkButton(row3, text="显示表格", fg_color=("gray42", "gray32"), command=self._show_map_table).pack(
             side="left"
         )
 
         tree_wrap = ctk.CTkFrame(self, fg_color="transparent")
-        tree_wrap.grid(row=5, column=0, columnspan=3, padx=(24, 24), pady=(8, 24), sticky="nsew")
+        tree_wrap.grid(row=4, column=0, columnspan=2, padx=(24, 24), pady=(8, 24), sticky="nsew")
         tree_wrap.grid_rowconfigure(0, weight=1)
         tree_wrap.grid_columnconfigure(0, weight=1)
         self._tree_host = tk.Frame(tree_wrap, highlightthickness=0)
@@ -96,8 +80,8 @@ class FcstdMapPage(BasePage):
         self._tree_host.grid_rowconfigure(0, weight=1)
         self._tree_host.grid_columnconfigure(0, weight=1)
 
-        self.grid_rowconfigure(5, weight=2)
-        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(4, weight=2)
+        self.grid_columnconfigure(0, weight=1)
 
         self._apply_fcstd_map_tree_style()
         self._results_tree_placeholder("点击下方「显示表格」加载索引库", "")
@@ -231,55 +215,24 @@ class FcstdMapPage(BasePage):
 
     def on_show(self) -> None:
         prefs = get_fcstd_map_prefs(self.state.repo_root)
-        disp = prefs.get("scan_root") or "."
-
-        self._scan_root_entry.delete(0, "end")
-        self._scan_root_entry.insert(0, disp)
         self._force_part_name_var.set(bool(prefs.get("force_update_part_name")))
         self._apply_fcstd_map_tree_style()
 
     def _persist(self) -> None:
         save_fcstd_map_prefs(
             self.state.repo_root,
-            self._scan_root_entry.get().strip(),
             force_update_part_name=bool(self._force_part_name_var.get()),
         )
 
-    def _browse(self) -> None:
-        path = pick_workspace_directory(
-            self,
-            title="扫描根目录",
-            repo_root=self.state.repo_root,
-            path_hint=self._scan_root_entry.get(),
-        )
-        if path:
-            rr = self.state.repo_root.expanduser().resolve(strict=False)
-            self._scan_root_entry.delete(0, "end")
-            self._scan_root_entry.insert(
-                0,
-                shorten_workspace_relative_display(
-                    format_resolved_under_workspace(Path(path).expanduser(), rr),
-                ),
-            )
-            self._persist()
-
     def _run(self) -> None:
         rr = self.state.repo_root.expanduser().resolve(strict=False)
-        s = self._scan_root_entry.get().strip()
-        scan = resolve_workspace_path_entry(s, rr)
-        if not scan.is_dir():
-            self.append_log(f"错误：扫描根不存在 {scan}")
-            return
-
         self._persist()
-        scan_input = self._scan_root_entry.get().strip()
-        self.append_log(f"工程内搜索：{format_resolved_under_workspace(scan, rr)}")
+        self.append_log(f"工程内搜索：工作空间根 {format_resolved_under_workspace(rr, rr)}")
 
         def worker() -> None:
             try:
                 payload = run_fcstd_map_scan(
                     rr,
-                    scan_root_input=scan_input,
                     force_update_part_name=bool(self._force_part_name_var.get()),
                 )
                 log = payload.get("scan_log") or ""

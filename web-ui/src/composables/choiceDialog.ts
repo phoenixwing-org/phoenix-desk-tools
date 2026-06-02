@@ -10,6 +10,8 @@ export type ChoiceDialogRequest = {
   title: string;
   message: string;
   choices: ChoiceDialogOption[];
+  /** 打开时聚焦的按钮（建议危险操作用 `"cancel"`） */
+  defaultChoiceId?: string;
 };
 
 export const choiceDialogOpen = ref(false);

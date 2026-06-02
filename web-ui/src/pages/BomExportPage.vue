@@ -15,7 +15,14 @@ import { useAppShell } from "../composables/useAppShell";
 import { usePageSession } from "../composables/usePageSession";
 import type { TableColumnDef } from "../composables/useResizableTable";
 import { useWorkspaceFileQuery } from "../composables/useWorkspaceFileQuery";
-import { basenameFromRel, normalizeRepoRel, normalizeRepoRelForApi, resolveOutgoingHostQuery } from "../utils/workspaceFileQuery";
+import { BOM_FIELD_LABELS as L } from "../utils/bomFieldLabels";
+import {
+  basenameFromRel,
+  normalizeRepoRel,
+  normalizeRepoRelForApi,
+  repoDirFromRel,
+  resolveOutgoingHostQuery,
+} from "../utils/workspaceFileQuery";
 
 const props = defineProps<{
   workbenchTabId?: string;
@@ -50,22 +57,22 @@ type BomRow = {
 
 const assemblyColumns: TableColumnDef[] = [
   { key: "index", label: "#", width: 44, minWidth: 40, headerClass: "col-index" },
-  { key: "partKey", label: "PartKey", width: 108, minWidth: 80 },
-  { key: "typeCode", label: "TypeCode", width: 72, minWidth: 56 },
-  { key: "partName", label: "PartName", width: 120, minWidth: 80 },
+  { key: "partKey", label: L.partKey, width: 108, minWidth: 80 },
+  { key: "typeCode", label: L.typeCode, width: 72, minWidth: 56 },
+  { key: "partName", label: L.partName, width: 120, minWidth: 80 },
   { key: "file", label: "文件名", width: 180, minWidth: 100 },
-  { key: "path", label: "相对路径", width: 160, minWidth: 100 },
+  { key: "path", label: "相对目录", width: 160, minWidth: 100 },
   { key: "resolve", label: "解析", width: 72, minWidth: 56 },
 ];
 
 const allColumns: TableColumnDef[] = [
   { key: "index", label: "#", width: 44, minWidth: 40, headerClass: "col-index" },
   { key: "host", label: "宿主文件", width: 160, minWidth: 100 },
-  { key: "partKey", label: "PartKey", width: 108, minWidth: 80 },
-  { key: "typeCode", label: "TypeCode", width: 72, minWidth: 56 },
-  { key: "partName", label: "PartName", width: 120, minWidth: 80 },
+  { key: "partKey", label: L.partKey, width: 108, minWidth: 80 },
+  { key: "typeCode", label: L.typeCode, width: 72, minWidth: 56 },
+  { key: "partName", label: L.partName, width: 120, minWidth: 80 },
   { key: "file", label: "子件文件名", width: 160, minWidth: 100 },
-  { key: "path", label: "子件路径", width: 160, minWidth: 100 },
+  { key: "path", label: "子件目录", width: 160, minWidth: 100 },
   { key: "resolve", label: "解析", width: 72, minWidth: 56 },
 ];
 
@@ -419,7 +426,6 @@ onUnmounted(() => {
           {{ rebuilding ? "重建中…" : "仅重建引用表" }}
         </button>
       </div>
-      <p v-if="meta?.database_path_display" class="head-db mono">{{ meta.database_path_display }}</p>
     </header>
 
     <p v-if="!hasIndex" class="warn-line">
@@ -512,7 +518,7 @@ onUnmounted(() => {
               </button>
               <span v-else>{{ row.filename }}</span>
             </td>
-            <td class="mono muted">{{ row.repoRel }}</td>
+            <td class="mono muted" :title="row.repoRel">{{ repoDirFromRel(row.repoRel) }}</td>
             <td>
               <span class="tag" :class="row.resolveStatus">{{ statusLabel(row.resolveStatus) }}</span>
             </td>
@@ -613,7 +619,7 @@ onUnmounted(() => {
               </button>
               <span v-else>{{ row.filename }}</span>
             </td>
-            <td class="mono muted">{{ row.repoRel }}</td>
+            <td class="mono muted" :title="row.repoRel">{{ repoDirFromRel(row.repoRel) }}</td>
             <td>
               <span class="tag" :class="row.resolveStatus">{{ statusLabel(row.resolveStatus) }}</span>
             </td>
@@ -630,6 +636,23 @@ onUnmounted(() => {
 
     <!-- 设置与说明 -->
     <div v-show="activeSubTab === 'settings'" class="sub-panel settings-panel">
+      <section v-if="shell.workspacePath || meta" class="settings-block project-block">
+        <h2 class="block-title">当前工程</h2>
+        <dl class="project-dl">
+          <dt>工作区</dt>
+          <dd class="mono">{{ shell.workspacePath || "—" }}</dd>
+          <dt>CAD 索引库</dt>
+          <dd class="mono">{{ meta?.database_path_display || "—" }}</dd>
+          <template v-if="meta">
+            <dt>引用边</dt>
+            <dd>{{ meta.edge_count ?? "—" }}</dd>
+            <dt>宿主数</dt>
+            <dd>{{ meta.host_count ?? "—" }}</dd>
+            <dt v-if="meta.last_bom_xref_at">引用表更新</dt>
+            <dd v-if="meta.last_bom_xref_at">{{ meta.last_bom_xref_at }}</dd>
+          </template>
+        </dl>
+      </section>
       <section class="settings-block">
         <h2 class="block-title">说明</h2>
         <p class="block-desc">
@@ -643,13 +666,14 @@ onUnmounted(() => {
           引用表在「CAD 索引 · 工程内搜索」结束时自动按 present 的 FCStd 重建。
           若只改了磁盘上的 XLink（如链接路径修正）而未重扫索引，可用页顶「仅重建引用表」同步引用边，不更新 PartNumber 等属性。
         </p>
-        <p v-if="meta?.database_path_display" class="meta-line">数据库：{{ meta.database_path_display }}</p>
       </section>
     </div>
   </div>
 </template>
 
 <style scoped>
+@import "./page-shared.css";
+
 .bom-list-page {
   display: flex;
   flex-direction: column;
@@ -658,49 +682,8 @@ onUnmounted(() => {
   height: 100%;
 }
 
-.page-head {
-  flex-shrink: 0;
-  margin-bottom: 10px;
-}
-
-.head-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.head-left {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px 12px;
-  min-width: 0;
-}
-
-.page-title {
-  margin: 0;
-  font-size: 1.1rem;
-}
-
-.head-meta {
-  margin: 0;
-  font-size: 0.82rem;
-  color: var(--muted);
-}
-
-.head-meta-hint {
-  color: #64748b;
-}
-
 .head-rebuild {
   flex-shrink: 0;
-}
-
-.head-db {
-  margin: 6px 0 0;
-  font-size: 0.72rem;
-  color: var(--muted);
 }
 
 .banner.err {
@@ -845,10 +828,21 @@ onUnmounted(() => {
   line-height: 1.5;
 }
 
-.meta-line {
-  margin: 10px 0 0;
-  font-size: 0.78rem;
+.project-dl {
+  display: grid;
+  grid-template-columns: 7.5rem 1fr;
+  gap: 8px 12px;
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.project-dl dt {
+  margin: 0;
   color: var(--muted);
+}
+
+.project-dl dd {
+  margin: 0;
   word-break: break-all;
 }
 

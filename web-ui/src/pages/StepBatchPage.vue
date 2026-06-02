@@ -15,7 +15,6 @@ const stepDir = ref("");
 const outDir = ref("");
 const skipExisting = ref(true);
 const viewFit = ref("none");
-const useInboxBridge = ref(false);
 const stepRecursive = ref(false);
 
 const saving = ref(false);
@@ -29,7 +28,7 @@ function prefsPayload() {
     out_dir: outDir.value.trim(),
     skip_existing: skipExisting.value,
     view_fit: viewFit.value,
-    use_inbox_bridge: useInboxBridge.value,
+    use_inbox_bridge: false,
     step_recursive: stepRecursive.value,
   };
 }
@@ -40,7 +39,6 @@ async function loadPrefs() {
   outDir.value = prefs.out_dir;
   skipExisting.value = prefs.skip_existing;
   viewFit.value = prefs.view_fit || "none";
-  useInboxBridge.value = prefs.use_inbox_bridge;
   stepRecursive.value = prefs.step_recursive;
 }
 
@@ -109,48 +107,56 @@ onMounted(async () => {
 <template>
   <div class="page tool-page">
     <header class="page-head">
-      <h1 class="page-title">STEP 批量</h1>
-      <p class="page-desc">
-        使用 <code>freecadcmd</code> 批量将 STEP 转为 FCStd。请在「配置」页设置 FreeCAD 安装目录。
-      </p>
+      <div class="head-row">
+        <h1 class="page-title">STEP 批量</h1>
+        <p class="page-desc">
+          使用 <code>freecadcmd</code> 批量将 STEP 转为 FCStd。请在「配置」页设置 FreeCAD 安装目录。
+        </p>
+      </div>
     </header>
 
     <section class="controls">
-      <label class="field-label" for="step-dir">STEP 目录</label>
-      <input id="step-dir" v-model="stepDir" class="path-input full block" spellcheck="false" />
+      <div class="form-grid">
+        <label class="field-label" for="step-dir">STEP 目录</label>
+        <input id="step-dir" v-model="stepDir" class="path-input" spellcheck="false" />
 
-      <label class="field-label" for="out-dir">FCStd 输出目录</label>
-      <input id="out-dir" v-model="outDir" class="path-input full block" spellcheck="false" />
+        <label class="field-label" for="out-dir">FCStd 输出目录</label>
+        <input id="out-dir" v-model="outDir" class="path-input" spellcheck="false" />
 
-      <div class="checks">
-        <label><input v-model="skipExisting" type="checkbox" /> 跳过已存在 FCStd</label>
-        <label><input v-model="stepRecursive" type="checkbox" /> 递归子目录</label>
-        <label class="warn-label">
-          <input v-model="useInboxBridge" type="checkbox" /> FreeCAD 收件箱桥接（Web 暂不支持）
-        </label>
+        <span class="field-label">选项</span>
+        <div class="checks">
+          <label><input v-model="skipExisting" type="checkbox" /> 跳过已存在 FCStd</label>
+          <label><input v-model="stepRecursive" type="checkbox" /> 递归子目录</label>
+        </div>
+
+        <label class="field-label" for="view-fit">视图适应</label>
+        <select id="view-fit" v-model="viewFit" class="path-input fit-select">
+          <option value="none">不调整</option>
+          <option value="last">最后一个</option>
+          <option value="all">全部</option>
+        </select>
+
+        <span class="field-label">操作</span>
+        <div class="row">
+          <button type="button" class="btn" :disabled="saving" @click="onSave">
+            {{ saving ? "…" : "保存偏好" }}
+          </button>
+          <button type="button" class="btn" :disabled="previewing" @click="onPreview">
+            {{ previewing ? "…" : "预览数量" }}
+          </button>
+          <button type="button" class="btn primary" :disabled="running" @click="onRun">
+            {{ running ? "转换中…" : "开始转换" }}
+          </button>
+        </div>
+
+        <template v-if="preview">
+          <span class="field-label">预览结果</span>
+          <p class="meta-line">
+            {{ preview.step_dir_display }} · 批处理 {{ preview.batch_count }} 个
+            {{ preview.recursive ? "（含子目录）" : "" }}
+          </p>
+        </template>
       </div>
-
-      <label class="field-label" for="view-fit">视图适应</label>
-      <select id="view-fit" v-model="viewFit" class="path-input fit-select">
-        <option value="none">不调整</option>
-        <option value="last">最后一个</option>
-        <option value="all">全部</option>
-      </select>
-
-      <div class="row">
-        <button type="button" class="btn" :disabled="saving" @click="onSave">{{ saving ? "…" : "保存偏好" }}</button>
-        <button type="button" class="btn" :disabled="previewing" @click="onPreview">
-          {{ previewing ? "…" : "预览数量" }}
-        </button>
-        <button type="button" class="btn primary" :disabled="running || useInboxBridge" @click="onRun">
-          {{ running ? "转换中…" : "开始转换" }}
-        </button>
-      </div>
-
-      <p v-if="preview" class="meta-line">
-        {{ preview.step_dir_display }} · 批处理 {{ preview.batch_count }} 个
-        {{ preview.recursive ? "（含子目录）" : "" }}
-      </p>
     </section>
   </div>
 </template>
@@ -158,19 +164,37 @@ onMounted(async () => {
 <style scoped>
 @import "./page-shared.css";
 
-.full.block {
-  display: block;
+.form-grid {
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 1fr);
+  gap: 14px 20px;
+  align-items: center;
+}
+
+.form-grid .field-label {
+  margin: 0;
+  text-align: right;
+  align-self: center;
+}
+
+.form-grid .path-input {
   width: 100%;
-  max-width: 640px;
-  margin-bottom: 10px;
+  min-width: 0;
+}
+
+.form-grid .checks {
+  margin: 0;
+}
+
+.form-grid .row {
+  margin-top: 0;
+}
+
+.form-grid .meta-line {
+  margin: 0;
 }
 
 .fit-select {
-  max-width: 200px;
-  margin-bottom: 10px;
-}
-
-.warn-label {
-  color: #b45309;
+  max-width: 240px;
 }
 </style>

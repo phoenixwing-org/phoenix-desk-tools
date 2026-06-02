@@ -3,24 +3,91 @@
 }
 
 .page-head {
-  margin-bottom: 16px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+/* 标题与简介同一行；含右侧按钮时用 space-between */
+.head-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+  width: 100%;
+}
+
+.head-row:has(> .btn),
+.head-row:has(> .head-rebuild),
+.head-row:has(> .part-key-bar),
+.head-row:has(> .head-actions) {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.head-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+  min-width: 0;
+  flex: 1;
 }
 
 .page-title {
-  margin: 0 0 4px;
-  font-size: 1.15rem;
-}
-
-.page-desc {
   margin: 0;
-  font-size: 0.85rem;
-  color: var(--muted);
-  line-height: 1.55;
-  max-width: 880px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  flex-shrink: 0;
 }
 
-.controls {
+.page-desc,
+.head-stats,
+.head-meta {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.5;
+  flex: 1;
+  min-width: 12rem;
+}
+
+.head-meta-hint {
+  color: #64748b;
+}
+
+/* 未包 head-row 时：标题 + 简介直接挂在 page-head 下 */
+.page-head:has(> .page-title):not(:has(.head-row)) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+}
+
+/* 工具页：少量路径/选项，限制表单区宽度便于阅读；表格类页面另用全宽布局 */
+.tool-page > .controls {
+  width: 100%;
+  max-width: 880px;
+  box-sizing: border-box;
   margin-bottom: 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.tool-page > .banner.warn {
+  width: 100%;
+  max-width: 880px;
+  box-sizing: border-box;
 }
 
 .field-label {

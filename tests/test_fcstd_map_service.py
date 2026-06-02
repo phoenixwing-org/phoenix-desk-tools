@@ -22,7 +22,11 @@ from fcdesk.freecad.phoenix_store import (
     get_part_key_detail,
     migrate_fcstd_map_json,
 )
-from fcdesk.services.fcstd_map_service import load_fcstd_map_payload, run_fcstd_map_scan
+from fcdesk.services.fcstd_map_service import (
+    load_fcstd_map_payload,
+    purge_missing_fcstd_map_entries,
+    run_fcstd_map_scan,
+)
 
 _MIN_DOC = """<?xml version='1.0' encoding='utf-8'?>
 <Document SchemaVersion="4" FileVersion="1">
@@ -54,7 +58,7 @@ class TestFcstdMapService(unittest.TestCase):
             sub.mkdir()
             (sub / "b.FCStd").write_bytes(b"x")
 
-            first = run_fcstd_map_scan(td, scan_root_input=".")
+            first = run_fcstd_map_scan(td)
             self.assertEqual(first["stats"]["present"], 2)
             self.assertEqual(first["stats"]["missing"], 0)
             self.assertTrue(cad_database_path(td).is_file())
@@ -71,6 +75,29 @@ class TestFcstdMapService(unittest.TestCase):
             with sqlite3.connect(str(cad_database_path(td))) as conn:
                 n = conn.execute("SELECT COUNT(*) FROM file_asset").fetchone()[0]
                 self.assertEqual(n, 2)
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
+    def test_purge_missing_entries(self) -> None:
+        td = Path(tempfile.mkdtemp(prefix="fcstd_map_purge_"))
+        try:
+            (td / "keep.FCStd").write_bytes(b"x")
+            gone = td / "gone.FCStd"
+            gone.write_bytes(b"y")
+            run_fcstd_map_scan(td)
+            gone.unlink()
+            after_scan = run_fcstd_map_scan(td)
+            self.assertEqual(after_scan["stats"]["missing"], 1)
+
+            purged = purge_missing_fcstd_map_entries(td)
+            self.assertEqual(purged["purge_deleted"], 1)
+            self.assertEqual(purged["stats"]["missing"], 0)
+            self.assertEqual(purged["stats"]["present"], 1)
+            self.assertEqual(len(purged["entries"]), 1)
+            self.assertEqual(purged["entries"][0]["filename"], "keep.FCStd")
+
+            again = purge_missing_fcstd_map_entries(td)
+            self.assertEqual(again["purge_deleted"], 0)
         finally:
             shutil.rmtree(td, ignore_errors=True)
 
@@ -119,7 +146,7 @@ class TestFcstdMapService(unittest.TestCase):
             (docs / "layout.dxf").write_text("0\nSECTION\n", encoding="utf-8")
             (docs / "ignore.txt").write_text("skip", encoding="utf-8")
 
-            result = run_fcstd_map_scan(td, scan_root_input=".")
+            result = run_fcstd_map_scan(td)
             stats = result["stats"]
             self.assertEqual(stats["present"], 5)
             self.assertEqual(stats["cad_file_count"], 5)
@@ -141,7 +168,7 @@ class TestFcstdMapService(unittest.TestCase):
         try:
             (td / "100015.001-H-SHIELD-A.pdf").write_bytes(b"%PDF-1.4")
 
-            run_fcstd_map_scan(td, scan_root_input=".")
+            run_fcstd_map_scan(td)
             payload = load_fcstd_map_payload(td)
             row = next(e for e in payload["entries"] if e["filename"].endswith(".pdf"))
             self.assertEqual(row["PartNumber"], "100015")

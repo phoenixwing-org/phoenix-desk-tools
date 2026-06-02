@@ -5,6 +5,16 @@ export function basenameFromRel(rel: string): string {
   return p.slice(p.lastIndexOf("/") + 1) || p;
 }
 
+/** 仓库相对路径的目录部分（不含文件名），用于与文件名列并列展示时去重。 */
+export function repoDirFromRel(rel: string): string {
+  const r = rel?.trim();
+  if (!r || r === "—") return "—";
+  const p = r.replace(/\\/g, "/");
+  const idx = p.lastIndexOf("/");
+  if (idx < 0) return "./";
+  return p.slice(0, idx + 1);
+}
+
 export function normalizeRepoRel(rel: string): string {
   return rel.replace(/\\/g, "/").replace(/^\.\//, "").trim();
 }

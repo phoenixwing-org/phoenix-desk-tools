@@ -235,7 +235,7 @@ export interface PageSessionApi {
 | `bom_apply` | `rel`, `form`, `baseline`, `kindFilters`, scroll |
 | `file_rename` | `rel`, `form`, `renameLogId`, `scan`, `selectedHosts` |
 | `rename_analysis` | `inputMode`, `old/new basename`, `renameLogId`, `scan` |
-| `fcstd_map` | `scanRoot`, `filters`, `scroll`（可选） |
+| `fcstd_map` | `filters`, `scroll`（可选）；`forceUpdatePartName` |
 
 **不序列化：** 大列表全量 `entries`（CAD 索引）— 恢复时重新 `fetch` 即可。
 

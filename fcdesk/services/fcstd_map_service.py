@@ -8,12 +8,8 @@ from typing import Any
 
 from fcdesk.config.user_prefs import (
     format_resolved_under_workspace,
-    format_stored_path_for_display,
     load_workspace_prefs,
     merge_workspace_section,
-    resolve_workspace_path_entry,
-    shorten_workspace_relative_display,
-    store_path_under_repo,
 )
 from fcdesk.freecad.cad_index_types import (
     ASSET_KIND_FCSTD,
@@ -34,11 +30,13 @@ from fcdesk.freecad.fcstd_mapping import (
 )
 from fcdesk.freecad.phoenix_store import (
     cad_database_path,
+    delete_missing_file_assets,
     export_fcstd_map_json,
     fcstd_map_json_path,
     load_fcstd_document,
     migrate_fcstd_map_json,
     save_fcstd_document,
+    update_scan_stats_meta,
 )
 from fcdesk.services.cad_index.bom_xref_index import rebuild_bom_xrefs
 from fcdesk.services.cad_index.scan_paths import (
@@ -56,33 +54,24 @@ def _norm_path_key(repo_rel_path: str) -> str:
     return normalize_repo_rel_path_for_map(repo_rel_path.replace("\\", "/").strip())
 
 
-def get_fcstd_map_prefs(repo_root: Path) -> dict[str, str | bool]:
+def get_fcstd_map_prefs(repo_root: Path) -> dict[str, bool]:
+    """CAD 索引用户选项（扫描范围固定为工作空间根，不再暴露子目录扫描根）。"""
     rr = repo_root.expanduser().resolve(strict=False)
     pref = load_workspace_prefs(rr).get("fcstd_map") or {}
-    stored = pref.get("scan_root")
-    disp = shorten_workspace_relative_display(
-        format_stored_path_for_display(stored, rr) if stored else "."
-    )
+    if pref.get("scan_root") is not None:
+        merge_workspace_section("fcstd_map", {"scan_root": None}, rr)
     return {
-        "scan_root": disp,
         "force_update_part_name": bool(pref.get("force_update_part_name")),
     }
 
 
 def save_fcstd_map_prefs(
     repo_root: Path,
-    scan_root_input: str,
     *,
     force_update_part_name: bool | None = None,
-) -> dict[str, str | bool]:
+) -> dict[str, bool]:
     rr = repo_root.expanduser().resolve(strict=False)
-    s = (scan_root_input or "").strip()
-    if not s or s == ".":
-        stored = None
-    else:
-        p = resolve_workspace_path_entry(s, rr)
-        stored = None if p.resolve(strict=False) == rr.resolve(strict=False) else store_path_under_repo(p, rr)
-    patch: dict[str, Any] = {"scan_root": stored}
+    patch: dict[str, Any] = {"scan_root": None}
     if force_update_part_name is not None:
         patch["force_update_part_name"] = bool(force_update_part_name)
     merge_workspace_section("fcstd_map", patch, rr)
@@ -357,7 +346,7 @@ def load_fcstd_map_payload(repo_root: Path) -> dict[str, Any]:
             "exists": False,
             "prefs": prefs,
             "last_scan_at": "",
-            "scan_root": prefs.get("scan_root") or ".",
+            "scan_root": ".",
             "stats": empty_stats,
             "entries": [],
         }
@@ -371,7 +360,7 @@ def load_fcstd_map_payload(repo_root: Path) -> dict[str, Any]:
         "exists": True,
         "prefs": prefs,
         "last_scan_at": doc.last_scan_at or "",
-        "scan_root": doc.scan_root or prefs.get("scan_root") or ".",
+        "scan_root": doc.scan_root or ".",
         "stats": stats,
         "entries": [_entry_to_api_dict(e) for e in doc.entries],
     }
@@ -380,26 +369,23 @@ def load_fcstd_map_payload(repo_root: Path) -> dict[str, Any]:
 def run_fcstd_map_scan(
     repo_root: Path,
     *,
-    scan_root_input: str | None = None,
     force_update_part_name: bool | None = None,
 ) -> dict[str, Any]:
-    """扫描工程内 CAD 文件，写入 ``.phoenix/cad-database.sqlite``。"""
+    """从工作空间根递归扫描 CAD 文件，写入 ``.phoenix/cad-database.sqlite``。"""
     rr = repo_root.expanduser().resolve(strict=False)
-    if scan_root_input is not None:
-        save_fcstd_map_prefs(rr, scan_root_input)
+    merge_workspace_section("fcstd_map", {"scan_root": None}, rr)
 
     _ensure_index_loaded(rr)
 
-    prefs = get_fcstd_map_prefs(rr)
     ws_pref = load_workspace_prefs(rr).get("fcstd_map") or {}
     force_part_name = (
         bool(force_update_part_name)
         if force_update_part_name is not None
         else bool(ws_pref.get("force_update_part_name"))
     )
-    scan = resolve_scan_root(rr, ws_pref.get("scan_root"))
+    scan = resolve_scan_root(rr, None)
     if not scan.is_dir():
-        raise ValueError(f"扫描根不是有效目录: {scan}")
+        raise ValueError(f"工作空间根不是有效目录: {scan}")
 
     now = _utc_now_iso()
     basename_map = scan_cad_basename_map(scan, anchor=rr)
@@ -452,21 +438,19 @@ def run_fcstd_map_scan(
 
     merged.sort(key=lambda e: (_norm_path_key(e.repo_rel_path), e.file_status or ""))
     stats = _compute_stats(merged, basename_map)
-    scan_root_stored = prefs.get("scan_root") or "."
-
     doc = FcstdMapDocument(
         entries=merged,
         last_scan_at=now,
-        scan_root=scan_root_stored,
+        scan_root=".",
         scan_stats=stats,
     )
-    scan_id = save_fcstd_document(rr, doc, scan_root=scan_root_stored, stats=stats)
+    scan_id = save_fcstd_document(rr, doc, scan_root=".", stats=stats)
     xref_stats = rebuild_bom_xrefs(rr, scan_id=scan_id, scan_root=scan)
     xref_log = (xref_stats.get("log") or "").strip()
 
     payload = load_fcstd_map_payload(rr)
     payload["scan_log"] = (
-        f"扫描根: {format_resolved_under_workspace(scan, rr)}\n"
+        f"扫描范围: 工作空间根 {format_resolved_under_workspace(scan, rr)}\n"
         f"数据库: {payload['database_path_display']}\n"
         f"PartName: {'强制智能更新' if force_part_name else '仅填空时智能推断'}\n"
         f"本次: 存在 {stats['present']} · 缺失 {stats['missing']} · "
@@ -477,6 +461,20 @@ def run_fcstd_map_scan(
         + (f"\n\n{xref_log}" if xref_log else "")
     )
     payload["bom_xref"] = xref_stats
+    return payload
+
+
+def purge_missing_fcstd_map_entries(repo_root: Path) -> dict[str, Any]:
+    """从 CAD 索引库删除所有「缺失」条目（上次扫描存在、本次未找到的文件）。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    _ensure_index_loaded(rr)
+    deleted = delete_missing_file_assets(rr)
+    doc = load_fcstd_document(rr)
+    if doc and doc.entries:
+        stats = _compute_stats(doc.entries, doc.to_legacy_basename_paths())
+        update_scan_stats_meta(rr, stats)
+    payload = load_fcstd_map_payload(rr)
+    payload["purge_deleted"] = deleted
     return payload
 
 

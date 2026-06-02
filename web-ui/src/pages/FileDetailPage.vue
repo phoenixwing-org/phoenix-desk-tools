@@ -285,31 +285,21 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+@import "./page-shared.css";
+
 .file-detail-page {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
   height: 100%;
   overflow: hidden;
   padding: 16px 20px;
-  max-width: 960px;
 }
 
-.page-head {
-  flex-shrink: 0;
-  margin-bottom: 12px;
-}
-
-.head-row {
-  display: flex;
-  align-items: baseline;
+.file-detail-page .head-row {
   justify-content: space-between;
-  gap: 16px;
-}
-
-.page-title {
-  margin: 0;
-  font-size: 1.1rem;
-  flex-shrink: 0;
+  width: 100%;
 }
 
 .file-name {

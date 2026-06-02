@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed, ref } from "vue";
 import TreeBranch from "./TreeBranch.vue";
 import type { TreeNode } from "../api";
 
@@ -12,7 +13,16 @@ const emit = defineEmits<{
   selectFile: [path: string];
 }>();
 
+const expanded = ref(true);
+const childCount = computed(() => props.node.children?.length ?? 0);
+const hasChildren = computed(() => childCount.value > 0);
+
 const pad = `${(props.depth ?? 0) * 14 + 8}px`;
+
+function toggleDir() {
+  if (!hasChildren.value) return;
+  expanded.value = !expanded.value;
+}
 
 function treeKindTag(kind?: string) {
   const k = (kind ?? "").trim();
@@ -28,9 +38,21 @@ function treeKindTag(kind?: string) {
     <span class="tree-kind">[{{ treeKindTag(node.kind) }}]</span> {{ node.name }}
   </div>
   <div v-else class="tree-dir">
-    <div class="tree-dir-label" :style="{ paddingLeft: pad }">{{ node.name || "/" }}</div>
+    <button
+      type="button"
+      class="tree-dir-label"
+      :class="{ 'is-collapsed': hasChildren && !expanded }"
+      :style="{ paddingLeft: pad }"
+      :aria-expanded="hasChildren ? expanded : undefined"
+      @click="toggleDir"
+    >
+      <span v-if="hasChildren" class="tree-twistie" aria-hidden="true">{{ expanded ? "▾" : "▸" }}</span>
+      <span v-else class="tree-twistie tree-twistie-placeholder" aria-hidden="true" />
+      <span class="tree-dir-name">{{ node.name || "/" }}</span>
+    </button>
     <TreeBranch
       v-for="child in node.children ?? []"
+      v-show="expanded"
       :key="child.path + child.name + child.type"
       :node="child"
       :selected="selected"
@@ -45,8 +67,6 @@ function treeKindTag(kind?: string) {
   padding: 3px 8px 3px 0;
   cursor: pointer;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   font-size: 0.82rem;
 }
 
@@ -70,8 +90,37 @@ function treeKindTag(kind?: string) {
 }
 
 .tree-dir-label {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
   padding: 4px 8px 4px 0;
+  border: none;
+  background: transparent;
+  font: inherit;
   font-weight: 600;
   color: #334155;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tree-dir-label:hover {
+  background: #f1f5f9;
+}
+
+.tree-dir-name {
+  white-space: nowrap;
+}
+
+.tree-twistie {
+  flex-shrink: 0;
+  width: 1em;
+  font-size: 0.72rem;
+  color: #64748b;
+  line-height: 1;
+}
+
+.tree-twistie-placeholder {
+  visibility: hidden;
 }
 </style>

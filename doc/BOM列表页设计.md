@@ -39,7 +39,7 @@ flowchart LR
 | # | 序号 | 1…n |
 | PartNumber | CAD 索引 | 无则 `—` |
 | PartVersion | CAD 索引 | |
-| TypeCode | CAD 索引 | |
+| 类型码（TypeCode） | CAD 索引 | 单字母分类：**H** 一般件 · **S** 标准件 · **R** 虚拟零件（见 [Fcdesk嵌入式BOM属性约定.md](Fcdesk嵌入式BOM属性约定.md) §2.1） |
 | PartName | CAD 索引 | |
 | 文件名 | `target_basename` | XLink 目标 basename |
 | 相对路径 | `target_repo_rel_path` | 解析后的工作空间路径 |

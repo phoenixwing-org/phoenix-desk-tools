@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from fcdesk.config.user_prefs import load_workspace_prefs
 from fcdesk.freecad.phoenix_store import (
     ensure_fcstd_scan_record,
     get_last_fcstd_scan_id,
@@ -31,10 +30,9 @@ def load_bom_xref_index_context(
 ) -> BomXrefIndexContext:
     """从工作区偏好与 CAD 索引库组装引用边解析上下文。"""
     rr = repo_root.expanduser().resolve(strict=False)
-    ws_pref = load_workspace_prefs(rr).get("fcstd_map") or {}
-    scan_root = resolve_scan_root(rr, ws_pref.get("scan_root"))
+    scan_root = resolve_scan_root(rr, None)
     if not scan_root.is_dir():
-        raise ValueError(f"扫描根不是有效目录: {scan_root}")
+        raise ValueError(f"工作空间根不是有效目录: {scan_root}")
 
     scan_id = ensure_fcstd_scan_record(rr) or get_last_fcstd_scan_id(rr)
     if require_scan_id and scan_id is None:

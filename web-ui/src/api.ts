@@ -590,8 +590,9 @@ export type FcstdMapPayload = {
   map_path: string;
   map_path_display: string;
   exists: boolean;
-  prefs: { scan_root: string; force_update_part_name: boolean };
+  prefs: { force_update_part_name: boolean };
   last_scan_at: string;
+  /** 历史字段，固定为 ``.``（工作空间根） */
   scan_root: string;
   stats: FcstdMapStats;
   entries: FcstdMapEntry[];
@@ -603,19 +604,25 @@ export function fetchFcstdMap() {
   return jsonFetch<FcstdMapPayload>("/api/fcstd-map");
 }
 
-export function saveFcstdMapPrefs(scan_root: string, force_update_part_name?: boolean) {
-  return jsonFetch<{ scan_root: string; force_update_part_name: boolean }>("/api/fcstd-map/prefs", {
+export function saveFcstdMapPrefs(force_update_part_name?: boolean) {
+  return jsonFetch<{ force_update_part_name: boolean }>("/api/fcstd-map/prefs", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ scan_root, force_update_part_name }),
+    body: JSON.stringify({ force_update_part_name }),
   });
 }
 
-export function scanFcstdMap(scan_root = "", force_update_part_name?: boolean) {
+export function scanFcstdMap(force_update_part_name?: boolean) {
   return jsonFetch<FcstdMapPayload>("/api/fcstd-map/scan", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ scan_root, force_update_part_name }),
+    body: JSON.stringify({ force_update_part_name }),
+  });
+}
+
+export function purgeMissingFcstdMap() {
+  return jsonFetch<FcstdMapPayload & { purge_deleted?: number }>("/api/fcstd-map/purge-missing", {
+    method: "POST",
   });
 }
 

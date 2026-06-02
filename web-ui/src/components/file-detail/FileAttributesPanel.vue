@@ -9,6 +9,8 @@ import {
 } from "../../api";
 import { useFileDetailContext } from "../../composables/useFileDetailContext";
 import { useAppShell } from "../../composables/useAppShell";
+import ComboTextInput from "../ComboTextInput.vue";
+import { TYPE_CODE_OPTIONS } from "../../utils/typeCodeOptions";
 
 const EDITABLE_KEYS = [
   "PartNumber",
@@ -27,7 +29,7 @@ const FIELD_ROWS = [
   { key: "filename", cn: "文件名", en: "Filename", editable: true, recommend: true },
   { key: "PartNumber", cn: "零件号", en: "PartNumber", editable: true, recommend: true },
   { key: "PartVersion", cn: "版本", en: "PartVersion", editable: true, recommend: true },
-  { key: "TypeCode", cn: "类型码 (H/S/R)", en: "TypeCode", editable: true, recommend: true },
+  { key: "TypeCode", cn: "类型码", en: "TypeCode", editable: true, recommend: true },
   { key: "ModelSeries", cn: "型号系列", en: "ModelSeries", editable: true, recommend: true },
   { key: "PartName", cn: "零件名称", en: "PartName", editable: true, recommend: true },
   { key: "label", cn: "标签", en: "Label", editable: true, recommend: true },
@@ -278,7 +280,14 @@ onMounted(() => {
         <div class="col-val">
           <p v-if="row.editable" class="initial-line">初始：{{ displayInitial(row.key) }}</p>
           <div class="input-row">
+            <ComboTextInput
+              v-if="row.key === 'TypeCode'"
+              v-model="form.TypeCode"
+              :options="TYPE_CODE_OPTIONS"
+              :readonly="!row.editable || bomReadonly"
+            />
             <input
+              v-else
               v-model="form[row.key as keyof BomFields]"
               :readonly="!row.editable || bomReadonly"
               :class="{ readonly: !row.editable || bomReadonly }"
@@ -413,9 +422,12 @@ onMounted(() => {
   gap: 6px;
   align-items: center;
 }
-.input-row input {
+.input-row input,
+.input-row .combo-wrap {
   flex: 1;
   min-width: 0;
+}
+.input-row input {
   padding: 6px 10px;
   border: 1px solid var(--border-strong);
   border-radius: 6px;
@@ -423,6 +435,10 @@ onMounted(() => {
 }
 .input-row input.readonly {
   background: #f3f4f6;
+}
+.input-row :deep(.combo-text-input) {
+  font-size: 0.85rem;
+  padding: 6px 10px;
 }
 .hint {
   margin-top: 12px;

@@ -1,22 +1,23 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { fetchPartKeys, type PartKeyEntry, type PartKeysPayload } from "../api";
+import { BOM_FIELD_LABELS as L } from "../utils/bomFieldLabels";
 import { useAppShell } from "../composables/useAppShell";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
 import type { TableColumnDef } from "../composables/useResizableTable";
 
 const shell = useAppShell();
 
-const catalogColumns: TableColumnDef[] = [
-  { key: "partKey", label: "PartKey", width: 108, minWidth: 80 },
-  { key: "typeCode", label: "类型", width: 56, minWidth: 48 },
-  { key: "modelSeries", label: "型号", width: 96, minWidth: 72 },
-  { key: "partName", label: "PartName", width: 140, minWidth: 80 },
-  { key: "label", label: "label", width: 140, minWidth: 80 },
+const catalogColumns = computed<TableColumnDef[]>(() => [
+  { key: "partKey", label: L.partKey, width: 108, minWidth: 80 },
+  { key: "typeCode", label: L.typeCode, width: 56, minWidth: 48 },
+  { key: "modelSeries", label: L.modelSeries, width: 96, minWidth: 72 },
+  { key: "partName", label: L.partName, width: 140, minWidth: 80 },
+  { key: "label", label: L.label, width: 140, minWidth: 80 },
   { key: "status", label: "状态", width: 56, minWidth: 48 },
   { key: "files", label: "文件", width: 56, minWidth: 48 },
   { key: "counts", label: "存在/缺失", width: 88, minWidth: 72 },
-];
+]);
 
 const loading = ref(false);
 const listData = ref<PartKeysPayload | null>(null);
@@ -78,10 +79,12 @@ onMounted(() => refreshList());
 <template>
   <div class="page part-catalog-page">
     <header class="page-head">
-      <h1 class="page-title">零件目录</h1>
-      <p class="page-desc">
-        以 <code>PartNumber.PartVersion</code> 为唯一键聚合关联文件。点击 PartKey 在<strong>独立 Tab</strong>打开详情（可多开）。
-      </p>
+      <div class="head-row">
+        <h1 class="page-title">零件目录</h1>
+        <p class="page-desc">
+          以 <code>零件号.版本</code> 为唯一键聚合关联文件。点击<strong>零件标识</strong>在独立 Tab 打开详情（可多开）。
+        </p>
+      </div>
     </header>
 
     <section class="controls">
@@ -125,29 +128,13 @@ onMounted(() => refreshList());
 </template>
 
 <style scoped>
+@import "./page-shared.css";
+
 .part-catalog-page {
   display: flex;
   flex-direction: column;
   overflow: hidden;
   padding: 20px 22px 16px;
-}
-
-.page-head {
-  flex-shrink: 0;
-  margin-bottom: 16px;
-}
-
-.page-title {
-  margin: 0 0 4px;
-  font-size: 1.15rem;
-}
-
-.page-desc {
-  margin: 0;
-  font-size: 0.85rem;
-  color: var(--muted);
-  line-height: 1.55;
-  max-width: 880px;
 }
 
 .controls {

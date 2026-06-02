@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onUnmounted, watch } from "vue";
 import {
   choiceDialogOpen,
   choiceDialogRequest,
@@ -12,6 +12,13 @@ const request = choiceDialogRequest;
 
 const choices = computed(() => request.value?.choices ?? []);
 
+const defaultChoiceId = computed(
+  () =>
+    request.value?.defaultChoiceId ??
+    request.value?.choices.find((c) => c.id === "cancel")?.id ??
+    request.value?.choices[0]?.id,
+);
+
 function onChoose(opt: ChoiceDialogOption) {
   resolveChoice(opt.id);
 }
@@ -19,6 +26,25 @@ function onChoose(opt: ChoiceDialogOption) {
 function onCancel() {
   resolveChoice(null);
 }
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    onCancel();
+  }
+}
+
+watch(open, (isOpen) => {
+  if (isOpen) {
+    window.addEventListener("keydown", onKeydown);
+  } else {
+    window.removeEventListener("keydown", onKeydown);
+  }
+});
+
+onUnmounted(() => {
+  window.removeEventListener("keydown", onKeydown);
+});
 </script>
 
 <template>
@@ -37,6 +63,7 @@ function onCancel() {
               primary: opt.variant === 'primary',
               danger: opt.variant === 'danger',
             }"
+            :autofocus="opt.id === defaultChoiceId"
             @click="onChoose(opt)"
           >
             {{ opt.label }}

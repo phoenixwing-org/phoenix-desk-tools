@@ -41,7 +41,7 @@ PHOENIX_BOM_PROPERTY_GROUP = FCDESK_EMBEDDED_BOM_PROPERTY_GROUP  # deprecated: �
 _BOM_STRING_PROPERTY_DOC: dict[str, str] = {
     "PartNumber": "零件号",
     "PartVersion": "零件版本",
-    "TypeCode": "类型码 (H/S/R)",
+    "TypeCode": "类型码 H=一般件 S=标准件 R=虚拟零件",
     "ModelSeries": "型号系列",
     "PartName": "零件名称",
 }

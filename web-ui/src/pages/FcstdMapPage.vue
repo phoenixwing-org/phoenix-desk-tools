@@ -3,15 +3,18 @@ import { computed, onMounted, ref, watch } from "vue";
 import {
   exportFcstdMapJson,
   fetchFcstdMap,
+  purgeMissingFcstdMap,
   saveFcstdMapPrefs,
   scanFcstdMap,
   type FcstdMapEntry,
   type FcstdMapPayload,
 } from "../api";
+import { promptChoice } from "../composables/choiceDialog";
 import { useAppShell } from "../composables/useAppShell";
 import { usePageSession } from "../composables/usePageSession";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
 import type { TableColumnDef } from "../composables/useResizableTable";
+import { BOM_FIELD_LABELS as L } from "../utils/bomFieldLabels";
 
 const props = defineProps<{
   workbenchTabId?: string;
@@ -28,12 +31,12 @@ const cadColumns: TableColumnDef[] = [
   { key: "status", label: "状态", width: 52, minWidth: 44 },
   { key: "kind", label: "类型", width: 72, minWidth: 56 },
   { key: "file", label: "文件名", width: 200, minWidth: 100 },
-  { key: "partKey", label: "PartKey", width: 108, minWidth: 80 },
-  { key: "partVersion", label: "PartVersion", width: 88, minWidth: 72 },
-  { key: "typeCode", label: "TypeCode", width: 72, minWidth: 56 },
-  { key: "modelSeries", label: "ModelSeries", width: 96, minWidth: 72 },
-  { key: "partName", label: "PartName", width: 120, minWidth: 80 },
-  { key: "label", label: "label", width: 120, minWidth: 80 },
+  { key: "partKey", label: L.partKey, width: 108, minWidth: 80 },
+  { key: "partVersion", label: L.partVersion, width: 88, minWidth: 72 },
+  { key: "typeCode", label: L.typeCode, width: 72, minWidth: 56 },
+  { key: "modelSeries", label: L.modelSeries, width: 96, minWidth: 72 },
+  { key: "partName", label: L.partName, width: 120, minWidth: 80 },
+  { key: "label", label: L.label, width: 120, minWidth: 80 },
   { key: "dir", label: "相对目录", width: 140, minWidth: 80 },
   { key: "meta", label: "属性摘要", width: 220, minWidth: 120 },
 ];
@@ -50,12 +53,12 @@ const KIND_OPTIONS = [
 type KindFilter = (typeof KIND_OPTIONS)[number]["value"];
 
 const activeSubTab = ref<PageSubTab>("index");
-const scanRoot = ref(".");
 const forceUpdatePartName = ref(false);
 const loading = ref(false);
 const scanning = ref(false);
 const saving = ref(false);
 const exporting = ref(false);
+const purging = ref(false);
 const data = ref<FcstdMapPayload | null>(null);
 const statusFilter = ref<"all" | "present" | "missing">("all");
 const kindFilter = ref<KindFilter>("all");
@@ -90,11 +93,49 @@ function assetKindLabel(row: FcstdMapEntry) {
   return map[row.asset_kind] ?? row.asset_kind ?? "—";
 }
 
+async function onPurgeMissing() {
+  const n = stats.value?.missing ?? 0;
+  if (n <= 0) {
+    setStatus("当前没有缺失条目");
+    return;
+  }
+  const choice = await promptChoice({
+    title: "删除缺失记录",
+    defaultChoiceId: "cancel",
+    message:
+      `将从 CAD 索引库永久删除 ${n} 条「缺失」记录（磁盘上已不存在的文件）。\n\n` +
+      "零件目录、BOM 引用中指向这些条目的关联会一并清理。\n" +
+      "此操作不可撤销。",
+    choices: [
+      { id: "cancel", label: "取消", variant: "default" },
+      { id: "confirm", label: `删除 ${n} 条`, variant: "danger" },
+    ],
+  });
+  if (choice !== "confirm") return;
+  purging.value = true;
+  shell.appendLog(`[CAD 索引] 删除缺失记录 ${n} 条…`, { source: "fcstd_map", open: true });
+  try {
+    const out = await purgeMissingFcstdMap();
+    data.value = out;
+    const deleted = out.purge_deleted ?? 0;
+    const msg = deleted ? `已删除 ${deleted} 条缺失记录` : "没有缺失记录可删除";
+    shell.appendLog(`[CAD 索引] ${msg}`, { source: "fcstd_map" });
+    setStatus(msg);
+    if (deleted && statusFilter.value === "missing") {
+      statusFilter.value = "all";
+    }
+  } catch (e) {
+    shell.appendLog(String(e), { source: "fcstd_map" });
+    setStatus(String(e));
+  } finally {
+    purging.value = false;
+  }
+}
+
 async function refresh() {
   loading.value = true;
   try {
     data.value = await fetchFcstdMap();
-    scanRoot.value = data.value.prefs.scan_root || ".";
     forceUpdatePartName.value = Boolean(data.value.prefs.force_update_part_name);
     setStatus(data.value.exists ? `索引 ${data.value.stats.total_entries} 条` : "尚无索引库");
   } catch (e) {
@@ -104,13 +145,12 @@ async function refresh() {
   }
 }
 
-async function onSavePrefs() {
+async function onSaveScanOptions() {
   saving.value = true;
   try {
-    const prefs = await saveFcstdMapPrefs(scanRoot.value.trim(), forceUpdatePartName.value);
-    scanRoot.value = prefs.scan_root;
+    const prefs = await saveFcstdMapPrefs(forceUpdatePartName.value);
     forceUpdatePartName.value = Boolean(prefs.force_update_part_name);
-    setStatus("已保存扫描根偏好");
+    setStatus("已保存扫描选项");
   } catch (e) {
     setStatus(String(e));
   } finally {
@@ -120,10 +160,10 @@ async function onSavePrefs() {
 
 async function onScan() {
   scanning.value = true;
-  shell.appendLog(`工程内搜索：${scanRoot.value.trim()}`, { source: "fcstd_map", open: true });
+  const ws = shell.workspacePath.value || "（工作空间）";
+  shell.appendLog(`工程内搜索：工作空间根 ${ws}`, { source: "fcstd_map", open: true });
   try {
-    data.value = await scanFcstdMap(scanRoot.value.trim(), forceUpdatePartName.value);
-    scanRoot.value = data.value.prefs.scan_root || ".";
+    data.value = await scanFcstdMap(forceUpdatePartName.value);
     shell.appendLog(data.value.scan_log ?? "", { source: "fcstd_map" });
     setStatus(
       `扫描完成：存在 ${data.value.stats.present} · CAD ${data.value.stats.cad_file_count}`,
@@ -245,7 +285,6 @@ async function hydratePageSession(snap: Record<string, unknown>): Promise<boolea
   if (snap.subTab === "index" || snap.subTab === "settings") {
     activeSubTab.value = snap.subTab;
   }
-  if (snap.scanRoot != null) scanRoot.value = String(snap.scanRoot);
   if (typeof snap.forceUpdatePartName === "boolean") {
     forceUpdatePartName.value = snap.forceUpdatePartName;
   }
@@ -281,7 +320,6 @@ usePageSession(props.workbenchTabId, {
   serialize: () => ({
     v: SESSION_V,
     subTab: activeSubTab.value,
-    scanRoot: scanRoot.value,
     forceUpdatePartName: forceUpdatePartName.value,
     statusFilter: statusFilter.value,
     kindFilter: kindFilter.value,
@@ -291,7 +329,7 @@ usePageSession(props.workbenchTabId, {
   isDirty: () => false,
 });
 
-watch([scanRoot, forceUpdatePartName, statusFilter, kindFilter, searchQuery, activeSubTab], () =>
+watch([forceUpdatePartName, statusFilter, kindFilter, searchQuery, activeSubTab], () =>
   shell.scheduleWorkbenchSave(),
 );
 
@@ -308,6 +346,21 @@ onMounted(() => applyInitialTabState());
           <span class="ok">存在 {{ stats.present }}</span> ·
           <span class="warn">缺失 {{ stats.missing }}</span>
         </p>
+        <div class="head-actions">
+          <button type="button" class="btn primary" :disabled="scanning" @click="onScan">
+            {{ scanning ? "扫描中…" : "工程内搜索" }}
+          </button>
+          <button type="button" class="btn" :disabled="loading" @click="refresh">刷新</button>
+          <button
+            type="button"
+            class="btn danger"
+            :disabled="loading || purging || scanning || !(stats?.missing)"
+            :title="stats?.missing ? '从索引库移除缺失条目' : '当前无缺失条目'"
+            @click="onPurgeMissing"
+          >
+            {{ purging ? "删除中…" : `删除缺失${stats?.missing ? `（${stats.missing}）` : ""}` }}
+          </button>
+        </div>
       </div>
     </header>
 
@@ -334,25 +387,17 @@ onMounted(() => applyInitialTabState());
 
     <div v-show="activeSubTab === 'index'" class="sub-panel">
       <section class="index-toolbar">
-        <div class="search-row">
-          <input
-            id="cad-index-search"
-            v-model="searchQuery"
-            class="search-input"
-            type="search"
-            spellcheck="false"
-            placeholder="搜索文件名、PartKey、路径…"
-          />
-          <button v-if="searchQuery.trim()" type="button" class="btn mini" @click="searchQuery = ''">
-            清除
-          </button>
-        </div>
-        <div class="action-row">
-          <button type="button" class="btn primary" :disabled="scanning" @click="onScan">
-            {{ scanning ? "扫描中…" : "工程内搜索" }}
-          </button>
-          <button type="button" class="btn" :disabled="loading" @click="refresh">刷新</button>
-        </div>
+        <input
+          id="cad-index-search"
+          v-model="searchQuery"
+          class="search-input"
+          type="search"
+          spellcheck="false"
+          placeholder="搜索文件名、零件标识、路径…"
+        />
+        <button v-if="searchQuery.trim()" type="button" class="btn mini" @click="searchQuery = ''">
+          清除
+        </button>
       </section>
 
       <section class="filters">
@@ -436,25 +481,21 @@ onMounted(() => applyInitialTabState());
       <section class="settings-block">
         <h2 class="block-title">扫描</h2>
         <p class="block-desc">
-          扫描工程内 FCStd、Markdown、PDF、图片、DXF/DWG 等，写入
-          <code>.phoenix/cad-database.sqlite</code>。再次扫描时磁盘上已不存在的条目标记为缺失。
+          从<strong>当前工作空间根</strong>递归扫描 FCStd、Markdown、PDF、图片、DXF/DWG 等，写入
+          <code>.phoenix/cad-database.sqlite</code>。请使用页顶「工程内搜索」；再次扫描时磁盘上已不存在的条目标记为缺失。
         </p>
-        <label class="field-label" for="scan-root">扫描根目录</label>
-        <div class="row">
-          <input id="scan-root" v-model="scanRoot" class="path-input" spellcheck="false" placeholder="." />
-          <button type="button" class="btn" :disabled="saving" @click="onSavePrefs">
-            {{ saving ? "…" : "保存偏好" }}
-          </button>
-          <button type="button" class="btn primary" :disabled="scanning" @click="onScan">
-            {{ scanning ? "扫描中…" : "工程内搜索" }}
-          </button>
-        </div>
+        <p v-if="shell.workspacePath" class="meta-line mono">工作空间：{{ shell.workspacePath }}</p>
         <label class="force-opt">
-          <input v-model="forceUpdatePartName" type="checkbox" />
-          强制更新 PartName
+          <input
+            v-model="forceUpdatePartName"
+            type="checkbox"
+            :disabled="saving"
+            @change="onSaveScanOptions"
+          />
+          强制更新零件名
         </label>
         <p class="hint">
-          PartName 默认仅在为空时从 label/文件名推断；勾选后重新扫描会覆盖索引中已有 PartName（不写回 FCStd）。
+          零件名默认仅在为空时从标签/文件名推断；勾选变更后会自动保存；重新扫描会覆盖索引中已有零件名（不写回 FCStd）。
         </p>
       </section>
 
@@ -500,35 +541,14 @@ onMounted(() => applyInitialTabState());
 </template>
 
 <style scoped>
+@import "./page-shared.css";
+
 .fcstd-map-page {
   display: flex;
   flex-direction: column;
   overflow: hidden;
   padding: 16px 20px;
   height: 100%;
-}
-
-.page-head {
-  flex-shrink: 0;
-  margin-bottom: 10px;
-}
-
-.head-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.page-title {
-  margin: 0;
-  font-size: 1.1rem;
-}
-
-.head-stats {
-  margin: 0;
-  font-size: 0.82rem;
-  color: var(--muted);
 }
 
 .head-stats .ok {
@@ -575,33 +595,19 @@ onMounted(() => applyInitialTabState());
 .index-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
   margin-bottom: 10px;
   flex-shrink: 0;
 }
 
-.search-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.index-toolbar .search-input {
   flex: 1;
-  min-width: 220px;
-}
-
-.search-input {
-  flex: 1;
-  min-width: 160px;
+  min-width: 200px;
   padding: 7px 10px;
   border: 1px solid var(--border-strong);
   border-radius: 6px;
   font-size: 0.85rem;
-}
-
-.action-row {
-  display: flex;
-  gap: 8px;
-  flex-shrink: 0;
 }
 
 .filters {
@@ -652,7 +658,6 @@ onMounted(() => applyInitialTabState());
   font-size: 0.82rem;
   color: var(--muted);
   line-height: 1.5;
-  max-width: 720px;
 }
 
 .field-label {
@@ -692,7 +697,6 @@ onMounted(() => applyInitialTabState());
   font-size: 0.78rem;
   color: var(--muted);
   line-height: 1.45;
-  max-width: 720px;
 }
 
 .stats-grid {
@@ -749,6 +753,16 @@ onMounted(() => applyInitialTabState());
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
+}
+
+.btn.danger {
+  color: #b91c1c;
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.btn.danger:hover:not(:disabled) {
+  background: #fee2e2;
 }
 
 .btn:disabled {

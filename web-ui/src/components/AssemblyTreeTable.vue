@@ -106,8 +106,8 @@ watch(
         <thead>
           <tr>
             <th>名称</th>
-            <th>PartKey</th>
-            <th>类型</th>
+            <th>零件标识</th>
+            <th>类型码</th>
             <th>角色</th>
             <th>解析</th>
           </tr>

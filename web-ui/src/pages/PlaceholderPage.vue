@@ -21,8 +21,9 @@ const pageId = computed(() => shell.currentPage.value);
 
 <style scoped>
 .placeholder {
+  width: 100%;
+  box-sizing: border-box;
   padding: 32px 28px;
-  max-width: 640px;
 }
 
 .page-title {

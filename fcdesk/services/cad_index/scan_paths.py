@@ -27,7 +27,8 @@ _SKIP_DIRS = frozenset(
 )
 
 
-def resolve_scan_root(repo_root: Path, stored_scan_root: str | None) -> Path:
+def resolve_scan_root(repo_root: Path, stored_scan_root: str | None = None) -> Path:
+    """解析 CAD 索引遍历根目录。``stored_scan_root`` 已废弃，请传 ``None``（工作空间根）。"""
     if stored_scan_root:
         return resolve_workspace_path_entry(stored_scan_root, repo_root)
     return repo_root.expanduser().resolve(strict=False)

@@ -260,7 +260,6 @@ const navItems = () => (appConfig.value?.navigation ?? []).filter((n) => n.page 
 <style scoped>
 .home-page {
   padding: 24px 28px 40px;
-  max-width: 760px;
 }
 
 .page-title {

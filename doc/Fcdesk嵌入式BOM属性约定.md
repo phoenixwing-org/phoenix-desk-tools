@@ -27,6 +27,21 @@ fcdesk「属性回写」将可编辑 BOM 字段写入 **`.FCStd` ZIP** 内的 **
 **`EDITABLE_ENTRY_ATTRS`**：**`PartNumber`、`PartVersion`、`TypeCode`、`ModelSeries`、`PartName`、`label`**。  
 不写 Document：`repo_rel_path`、`filename`。属性回写：若 **`PartName`** 为空保存，则用当前 **`label`** 写入 Document；载入时 **`PartName`** 为空则界面用 **`label`** 预填。
 
+### 2.1 `TypeCode`（类型码）
+
+| 项 | 约定 |
+| --- | --- |
+| 含义 | 零件在 BOM / 推荐文件名中的**类型分类**，一般为**单字母**字符串 Property |
+| 常用值 | **`H`**：一般件 · **`S`**：标准件 · **`R`**：虚拟零件 |
+| 是否枚举 | **推荐**用 H/S/R，**不强制**；Web 表单可下拉选上述三项，也可手输其它值（如将来扩展码） |
+| 大小写 | 写入索引与推荐文件名时倾向 **大写**（`fcstd_mapping` 对 `TypeCode` 做 `upper`） |
+| 推荐文件名 | ``{PartNumber}.{PartVersion}[-{TypeCode}][-{ModelSeries}]-名称{suffix}``，例 ``8000.001-H-PX-所有零件预览.ASSY.FCStd``（见 `compose_fcstd_recommended_filename`） |
+| 从文件名推断 | `part_naming.hints_from_filename`：在 stem 中匹配 ``…-{H\|S\|R}-…`` 段时写入 `TypeCode` |
+| FreeCAD 提示 | 挂载对象 Property **`doc`** 文案：`类型码 (H/S/R)`（`fcstd_document_bom_props._BOM_STRING_PROPERTY_DOC`） |
+| Web 界面 | **文件详情 · 属性**、**零件详情 · 属性**：`ComboTextInput`（聚焦或点 ▾ **始终列出全部** H/S/R，可点选切换，亦可手输）；选项见 `TYPE_CODE_OPTIONS`；表头中文 **类型码**（`bomFieldLabels.ts`） |
+
+**与 `ModelSeries` 的区别**：`TypeCode` 表零件**类别**（H/S/R）；`ModelSeries` 表**型号系列**（如 `PX`、`12TB`，常从路径或文件名推断）。
+
 ## 2′. 与 FreeCAD Document 序列化对齐
 
 fcdesk **不自定义**并行格式：可编辑 BOM 五项（不含原生 ``Label``）为 **`App::PropertyString`** + 子结点 **`String/@value`**，与 FC **「添加属性」**及 **`PropertyString::Restore`**（[FreeCAD `PropertyStandard.cpp`](https://github.com/FreeCAD/FreeCAD/blob/master/src/App/PropertyStandard.cpp)）可读形态一致。五项的 **`group`** 默认为 **`CustomDefine`**（常量 **`FCDESK_EMBEDDED_BOM_PROPERTY_GROUP`**）；**`doc`** 为工具提示。**`status` / `attr` …** Bitmask 新建时尽量从参照复制；空串则从挂载对象移除该自定义属性结点；**`Label`** 始终存在于挂载对象。
@@ -40,4 +55,4 @@ fcdesk **不自定义**并行格式：可编辑 BOM 五项（不含原生 ``Labe
 
 ## 5. 改代码时请同步
 
-`FcstdMapEntry`、`compose_fcstd_body_label_display`、`EDITABLE_ENTRY_ATTRS` / **`EDITABLE_DOCUMENT_ATTRS`**、`FCDESK_EMBEDDED_BOM_PROPERTY_GROUP`（及别名 `FCDESK_BOM_PROPERTY_GROUP`、`PHOENIX_BOM_PROPERTY_GROUP`）、`_BOM_STRING_PROPERTY_DOC`、`bom_apply_page._ATTR_ROWS`、`fcdesk/fcstd_document_bom_props.py`。
+`FcstdMapEntry`、`compose_fcstd_body_label_display`、`EDITABLE_ENTRY_ATTRS` / **`EDITABLE_DOCUMENT_ATTRS`**、`FCDESK_EMBEDDED_BOM_PROPERTY_GROUP`（及别名 `FCDESK_BOM_PROPERTY_GROUP`、`PHOENIX_BOM_PROPERTY_GROUP`）、`_BOM_STRING_PROPERTY_DOC`、`TYPE_CODE_OPTIONS` / `ComboTextInput`、`bom_apply_page._ATTR_ROWS`、`fcdesk/fcstd_document_bom_props.py`。

@@ -95,10 +95,12 @@ onMounted(async () => {
 <template>
   <div class="page tool-page">
     <header class="page-head">
-      <h1 class="page-title">SW→STEP</h1>
-      <p class="page-desc">
-        SolidWorks 三维模型批量导出 STEP（Windows COM）。非 Windows 可保存偏好与预览模型数量。
-      </p>
+      <div class="head-row">
+        <h1 class="page-title">SW→STEP</h1>
+        <p class="page-desc">
+          SolidWorks 三维模型批量导出 STEP（Windows COM）。非 Windows 可保存偏好与预览模型数量。
+        </p>
+      </div>
     </header>
 
     <div v-if="prefsMeta && !prefsMeta.com_available" class="banner warn">
@@ -106,32 +108,41 @@ onMounted(async () => {
     </div>
 
     <section class="controls">
-      <label class="field-label" for="src-dir">SolidWorks 模型目录</label>
-      <input id="src-dir" v-model="sourceDir" class="path-input full block" spellcheck="false" />
+      <div class="form-grid">
+        <label class="field-label" for="src-dir">SolidWorks 模型目录</label>
+        <input id="src-dir" v-model="sourceDir" class="path-input" spellcheck="false" />
 
-      <label class="field-label" for="out-dir">STEP 输出目录</label>
-      <input id="out-dir" v-model="outStepDir" class="path-input full block" spellcheck="false" />
+        <label class="field-label" for="out-dir">STEP 输出目录</label>
+        <input id="out-dir" v-model="outStepDir" class="path-input" spellcheck="false" />
 
-      <div class="checks">
-        <label><input v-model="recursiveScan" type="checkbox" /> 递归扫描子目录</label>
+        <span class="field-label">选项</span>
+        <div class="checks">
+          <label><input v-model="recursiveScan" type="checkbox" /> 递归扫描子目录</label>
+        </div>
+
+        <span class="field-label">操作</span>
+        <div class="row">
+          <button type="button" class="btn" :disabled="saving" @click="onSave">
+            {{ saving ? "…" : "保存偏好" }}
+          </button>
+          <button type="button" class="btn" :disabled="previewing" @click="onPreview">
+            {{ previewing ? "…" : "预览数量" }}
+          </button>
+          <button
+            type="button"
+            class="btn primary"
+            :disabled="running || !prefsMeta?.com_available"
+            @click="onRun"
+          >
+            {{ running ? "导出中…" : "开始导出" }}
+          </button>
+        </div>
+
+        <template v-if="modelCount !== null">
+          <span class="field-label">预览结果</span>
+          <p class="meta-line">发现 {{ modelCount }} 个 .sldprt / .sldasm</p>
+        </template>
       </div>
-
-      <div class="row">
-        <button type="button" class="btn" :disabled="saving" @click="onSave">{{ saving ? "…" : "保存偏好" }}</button>
-        <button type="button" class="btn" :disabled="previewing" @click="onPreview">
-          {{ previewing ? "…" : "预览数量" }}
-        </button>
-        <button
-          type="button"
-          class="btn primary"
-          :disabled="running || !prefsMeta?.com_available"
-          @click="onRun"
-        >
-          {{ running ? "导出中…" : "开始导出" }}
-        </button>
-      </div>
-
-      <p v-if="modelCount !== null" class="meta-line">发现 {{ modelCount }} 个 .sldprt / .sldasm</p>
     </section>
   </div>
 </template>
@@ -139,11 +150,34 @@ onMounted(async () => {
 <style scoped>
 @import "./page-shared.css";
 
-.full.block {
-  display: block;
+.form-grid {
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 1fr);
+  gap: 14px 20px;
+  align-items: center;
+}
+
+.form-grid .field-label {
+  margin: 0;
+  text-align: right;
+  align-self: center;
+}
+
+.form-grid .path-input {
   width: 100%;
-  max-width: 640px;
-  margin-bottom: 10px;
+  min-width: 0;
+}
+
+.form-grid .checks {
+  margin: 0;
+}
+
+.form-grid .row {
+  margin-top: 0;
+}
+
+.form-grid .meta-line {
+  margin: 0;
 }
 
 .banner.warn {
@@ -154,6 +188,5 @@ onMounted(async () => {
   border-radius: 8px;
   color: #9a3412;
   font-size: 0.85rem;
-  max-width: 640px;
 }
 </style>

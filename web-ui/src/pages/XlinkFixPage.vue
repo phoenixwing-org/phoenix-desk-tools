@@ -294,40 +294,35 @@ onMounted(async () => {
     </header>
 
     <section class="card settings-card">
-      <div class="settings-head">
-        <h2 class="card-title">扫描范围</h2>
-        <div
-          v-if="analysis?.map_path_display || analysis?.batch_dir_display"
-          class="settings-meta"
-        >
-          <span
-            v-if="analysis?.map_path_display"
-            class="meta-chip mono"
-            :title="analysis.map_path_display"
-          >
-            索引库 {{ analysis.map_path_display }}
-          </span>
-          <span v-if="analysis?.batch_dir_display" class="meta-chip mono">
-            目录 {{ analysis.batch_dir_display }}
-          </span>
-        </div>
-      </div>
-
-      <div class="settings-grid">
-        <label class="dir-field" for="batch-dir">
-          <input
-            id="batch-dir"
-            v-model="batchDir"
-            class="dir-input mono"
-            spellcheck="false"
-            placeholder="修正目录，相对工作空间，如 ."
-            title="修正目录（相对工作空间）"
-          />
-        </label>
+      <div class="scope-line">
+        <label class="scope-label" for="batch-dir">扫描范围</label>
+        <input
+          id="batch-dir"
+          v-model="batchDir"
+          class="dir-input mono"
+          spellcheck="false"
+          placeholder="修正目录，相对工作空间，如 ."
+          title="修正目录（相对工作空间）"
+        />
         <label class="scope-chk">
           <input v-model="allInDir" type="checkbox" />
           <span>扫描目录内全部 FCStd（推荐）</span>
         </label>
+      </div>
+      <div
+        v-if="analysis?.map_path_display || analysis?.batch_dir_display"
+        class="settings-meta"
+      >
+        <span
+          v-if="analysis?.map_path_display"
+          class="meta-chip mono"
+          :title="analysis.map_path_display"
+        >
+          索引库 {{ analysis.map_path_display }}
+        </span>
+        <span v-if="analysis?.batch_dir_display" class="meta-chip mono">
+          目录 {{ analysis.batch_dir_display }}
+        </span>
       </div>
 
       <div class="settings-foot">
@@ -425,7 +420,7 @@ onMounted(async () => {
                     type="button"
                     class="expand-btn"
                     :aria-expanded="isExpanded(row)"
-                    title="展开：按 Part Key 选择目标 FCStd"
+                    title="展开：按零件标识选择目标 FCStd"
                     @click.stop="toggleExpand(row)"
                   >
                     {{ isExpanded(row) ? "▼" : "▶" }}
@@ -460,14 +455,14 @@ onMounted(async () => {
                 <td colspan="6">
                   <div class="expand-panel" @click.stop>
                     <div v-if="resolvedPartKey(row)" class="expand-meta">
-                      <span>Part Key</span>
+                      <span>零件标识</span>
                       <button type="button" class="link-btn mono" @click="openPartKey(row)">
                         {{ resolvedPartKey(row) }}
                       </button>
                       <span class="muted">· 从原 XLink 文件名推断（编号不必六位）</span>
                     </div>
                     <p v-else-if="!candidatesLoading[issueRowKey(row)]" class="expand-hint">
-                      无法从文件名推断 Part Key；若已加载，请从下表按文件名选择，或到 CAD 索引 / 零件目录查找。
+                      无法从文件名推断零件标识；若已加载，请从下表按文件名选择，或到 CAD 索引 / 零件目录查找。
                     </p>
 
                     <div
@@ -476,7 +471,7 @@ onMounted(async () => {
                     >
                       <p v-if="candidatesLoading[issueRowKey(row)]" class="expand-hint">加载候选…</p>
                       <p v-else-if="!fcstdCandidates(issueRowKey(row)).length" class="expand-hint">
-                        该 Part Key 下无 present 的 FCStd，请先在「CAD 索引」搜索工程。
+                        该零件标识下无 present 的 FCStd，请先在「CAD 索引」搜索工程。
                       </p>
                       <ul v-else class="candidate-list">
                         <li v-for="file in fcstdCandidates(issueRowKey(row))" :key="file.id">
@@ -526,21 +521,6 @@ onMounted(async () => {
 <style scoped>
 @import "./page-shared.css";
 
-.xlink-page .head-row {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 6px 10px;
-}
-
-.xlink-page .page-title {
-  margin: 0;
-}
-
-.xlink-page .page-desc {
-  max-width: none;
-}
-
 .xlink-page strong {
   font-weight: 600;
 }
@@ -559,19 +539,26 @@ onMounted(async () => {
   font-weight: 600;
 }
 
-.settings-head {
-  display: flex;
+.scope-line {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px 16px;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
+}
+
+.scope-label {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--text);
 }
 
 .settings-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  justify-content: flex-end;
+  margin-top: 8px;
   min-width: 0;
 }
 
@@ -588,22 +575,10 @@ onMounted(async () => {
   white-space: nowrap;
 }
 
-.settings-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px 20px;
-  align-items: end;
-}
-
-.dir-field {
-  display: block;
-  min-width: 0;
-}
-
 .dir-input {
   display: block;
   width: 100%;
-  max-width: 520px;
+  min-width: 0;
   padding: 7px 10px;
   border: 1px solid var(--border-strong);
   border-radius: 6px;
@@ -616,7 +591,6 @@ onMounted(async () => {
   align-items: center;
   gap: 6px;
   margin: 0;
-  padding-bottom: 7px;
   font-size: 0.82rem;
   color: var(--text);
   white-space: nowrap;
@@ -654,12 +628,24 @@ onMounted(async () => {
 }
 
 @media (max-width: 720px) {
-  .settings-grid {
-    grid-template-columns: 1fr;
+  .scope-line {
+    grid-template-columns: auto 1fr;
+    grid-template-areas:
+      "label input"
+      "check check";
+  }
+
+  .scope-label {
+    grid-area: label;
+  }
+
+  .scope-line .dir-input {
+    grid-area: input;
   }
 
   .scope-chk {
-    padding-bottom: 0;
+    grid-area: check;
+    white-space: normal;
   }
 
   .settings-actions {

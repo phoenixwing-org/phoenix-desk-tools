@@ -271,25 +271,6 @@ onMounted(async () => {
 <style scoped>
 @import "./page-shared.css";
 
-.dedup-page .page-head {
-  margin-bottom: 10px;
-}
-
-.dedup-page .head-row {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 6px 10px;
-}
-
-.dedup-page .page-title {
-  margin: 0;
-}
-
-.dedup-page .page-desc {
-  max-width: none;
-}
-
 .dedup-page strong {
   font-weight: 600;
 }

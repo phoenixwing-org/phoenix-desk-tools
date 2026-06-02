@@ -480,10 +480,12 @@ onUnmounted(() => {
 <template>
   <div class="page rename-page">
     <header class="page-head">
-      <h1 class="page-title">改名分析</h1>
-      <p class="page-desc">
-        针对已发生的改名，分析引用影响并写回 XLink / 引用名。磁盘改名请在<strong>文件详情 · 改名</strong> Tab。
-      </p>
+      <div class="head-row">
+        <h1 class="page-title">改名分析</h1>
+        <p class="page-desc">
+          针对已发生的改名，分析引用影响并写回 XLink / 引用名。磁盘改名请在<strong>文件详情 · 改名</strong> Tab。
+        </p>
+      </div>
     </header>
 
     <div v-if="pageError" class="banner err">{{ pageError }}</div>
@@ -591,27 +593,14 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+@import "./page-shared.css";
+
 .rename-page {
+  width: 100%;
+  box-sizing: border-box;
   padding: 16px 20px 24px;
-  max-width: 960px;
   height: 100%;
   overflow: auto;
-}
-
-.page-head {
-  margin-bottom: 12px;
-}
-
-.page-title {
-  margin: 0 0 4px;
-  font-size: 1.1rem;
-}
-
-.page-desc {
-  margin: 0;
-  font-size: 0.82rem;
-  color: var(--muted);
-  line-height: 1.5;
 }
 
 .banner.err {

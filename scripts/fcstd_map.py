@@ -119,7 +119,7 @@ def main() -> None:
     parser.add_argument(
         "--root",
         default=None,
-        help="扫描根目录（默认：本仓库根）",
+        help="扫描根目录（默认：本仓库根；fcdesk 桌面/Web 应用内固定为当前工作空间根）",
     )
     parser.add_argument(
         "--relative-to",

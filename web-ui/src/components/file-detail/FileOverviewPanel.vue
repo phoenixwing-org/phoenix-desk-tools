@@ -78,7 +78,7 @@ const summaryRows = computed(() => {
     <section class="attrs-block">
       <h3 class="section-title">BOM 属性摘要</h3>
       <dl class="summary-grid">
-        <dt>PartKey</dt>
+        <dt>零件标识</dt>
         <dd>
           <button
             v-if="canOpenPart"
