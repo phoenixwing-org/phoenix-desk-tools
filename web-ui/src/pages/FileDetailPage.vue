@@ -53,12 +53,26 @@ async function refreshXrefCounts() {
   }
 }
 
-function switchSubTab(tab: FileDetailSubTab) {
-  activeSubTab.value = tab;
-  if (tab === "rename") {
-    const name = (form.value.filename ?? originalFilename.value).trim();
-    if (name) preferredRenameFilename.value = name;
+function openRenameTab(target?: string): boolean {
+  const disk = originalFilename.value.trim();
+  const fromForm = (form.value.filename ?? "").trim();
+  const next = (target ?? fromForm).trim();
+  if (!next) {
+    pageError.value = "请先填写或「推荐」生成目标文件名";
+    return false;
   }
+  preferredRenameFilename.value = next;
+  activeSubTab.value = "rename";
+  pageError.value = "";
+  return true;
+}
+
+function switchSubTab(tab: FileDetailSubTab) {
+  if (tab === "rename") {
+    openRenameTab();
+    return;
+  }
+  activeSubTab.value = tab;
 }
 
 async function reloadFile(targetRel?: string) {
@@ -160,6 +174,7 @@ provideFileDetailContext({
   incomingCount,
   outgoingCount,
   switchSubTab,
+  openRenameTab,
   reloadFile,
   refreshXrefCounts,
 });
@@ -277,7 +292,7 @@ onUnmounted(() => {
           v-show="activeSubTab === 'rename'"
           :workbench-tab-id="workbenchTabId"
           :preferred-filename="preferredRenameFilename"
-          @renamed="refreshXrefCounts(); switchSubTab('xref')"
+          @renamed="refreshXrefCounts()"
         />
       </div>
     </template>

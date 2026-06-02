@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import type { RefScanPayload } from "../../api";
+import type { RefScanPayload, RenameLog } from "../../api";
 import {
   analyzeRenameReferences,
-  applyReferenceLabelCorrections,
   applyRenameAnalysisCorrections,
   executeFileRename,
 } from "../../api";
@@ -29,6 +28,7 @@ const {
   pageError,
   reloadFile,
   refreshXrefCounts,
+  switchSubTab,
 } = useFileDetailContext();
 const shell = useAppShell();
 const incoming = useIncomingRefQuery(props.workbenchTabId, "file_rename");
@@ -37,6 +37,7 @@ const { includeTransitive, formatHostSummary, logIncoming, transitiveLabel } = i
 const newFilename = ref("");
 const renamed = ref(false);
 const renameLogId = ref<number | null>(null);
+const lastRenameLog = ref<RenameLog | null>(null);
 const scan = ref<RefScanPayload | null>(null);
 const selectedHosts = ref<Set<string>>(new Set());
 const busy = ref(false);
@@ -49,22 +50,51 @@ const canRename = computed(
 );
 
 const canApplyRefs = computed(() => Boolean(scan.value && (scan.value.pending_hit_count ?? 0) > 0));
-const canApplyIncomingLabels = computed(() => Boolean(scan.value?.old_basename && rel.value));
-const canApplyHostAllLabels = computed(() => Boolean(scan.value?.host_count || rel.value));
+
+function applyRenameTargets() {
+  const disk = originalFilename.value.trim();
+  const pref = props.preferredFilename?.trim();
+  if (pref && pref !== disk) renamed.value = false;
+  if (!renamed.value) {
+    newFilename.value = pref && pref !== disk ? pref : newFilename.value.trim() || disk;
+  }
+}
+
+function resetRenameWorkflow() {
+  renamed.value = false;
+  renameLogId.value = null;
+  lastRenameLog.value = null;
+  scan.value = null;
+  selectedHosts.value = new Set();
+  applyRenameTargets();
+}
+
+function isSameDirPathRename(prev: string, next: string) {
+  const norm = (p: string) => p.replace(/\\/g, "/").trim();
+  const a = norm(prev);
+  const b = norm(next);
+  if (a === b) return true;
+  const slash = (s: string) => (s.includes("/") ? s.lastIndexOf("/") : -1);
+  const ai = slash(a);
+  const bi = slash(b);
+  const ad = ai >= 0 ? a.slice(0, ai) : "";
+  const bd = bi >= 0 ? b.slice(0, bi) : "";
+  return ad === bd;
+}
 
 watch(
-  () => originalFilename.value,
-  (name) => {
-    if (!renamed.value) newFilename.value = props.preferredFilename?.trim() || name;
+  () => rel.value,
+  (path, prev) => {
+    if (!prev || path === prev) return;
+    if (renamed.value && isSameDirPathRename(prev, path)) return;
+    resetRenameWorkflow();
   },
-  { immediate: true },
 );
 
 watch(
-  () => props.preferredFilename,
-  (name) => {
-    if (name?.trim() && !renamed.value) newFilename.value = name.trim();
-  },
+  () => [originalFilename.value, props.preferredFilename] as const,
+  () => applyRenameTargets(),
+  { immediate: true },
 );
 
 function hasUnsavedDocumentAttrs() {
@@ -90,9 +120,13 @@ function toggleAll(checked: boolean) {
 }
 
 function buildApplyOpts() {
+  const log = lastRenameLog.value;
+  const oldBasename = log?.old_basename ?? originalFilename.value.trim();
+  const newBasename =
+    log?.new_basename ?? (newFilename.value.trim() || originalFilename.value.trim());
   return {
-    oldBasename: originalFilename.value.trim(),
-    newBasename: newFilename.value.trim() || originalFilename.value.trim(),
+    oldBasename,
+    newBasename,
     targetRepoRel: rel.value.trim(),
     transitive: includeTransitive.value,
     renameLogId: renameLogId.value ?? undefined,
@@ -129,6 +163,7 @@ async function onRename() {
       { writeAttrsFirst },
     );
     renamed.value = true;
+    lastRenameLog.value = data.rename_log ?? null;
     renameLogId.value = data.rename_log_id ?? data.rename_log?.id ?? null;
     originalFilename.value = data.filename;
     form.value = { ...form.value, filename: data.filename };
@@ -137,10 +172,11 @@ async function onRename() {
     scan.value = null;
     selectedHosts.value = new Set();
     shell.requestTreeRescan(data.rel_path);
-    const msg = `已重命名为 ${data.filename} · 请「分析引用」并修正 XLink / 引用名`;
+    const msg = `已重命名为 ${data.filename} · 正在按旧名扫描引用…`;
     logIncoming(msg);
     shell.setStatus(msg);
     emit("renamed");
+    await onScanRefs();
   } catch (e) {
     pageError.value = String(e);
     logIncoming(`重命名失败：${String(e)}`);
@@ -154,16 +190,21 @@ async function onScanRefs() {
   busy.value = true;
   logIncoming(`开始扫描（${transitiveLabel()}）…`);
   try {
-    const old = originalFilename.value.trim();
-    const neu = newFilename.value.trim() || old;
-    const data = await analyzeRenameReferences({
-      old_basename: old,
-      new_basename: neu,
-      old_repo_rel_path: rel.value,
+    const log = lastRenameLog.value;
+    const body: Parameters<typeof analyzeRenameReferences>[0] = {
       target_repo_rel: rel.value,
       transitive: includeTransitive.value,
-      persist: false,
-    });
+      persist: Boolean(renameLogId.value),
+    };
+    if (renameLogId.value) {
+      body.rename_log_id = renameLogId.value;
+    } else {
+      body.old_basename = originalFilename.value.trim();
+      body.new_basename = newFilename.value.trim() || originalFilename.value.trim();
+      body.old_repo_rel_path = rel.value;
+    }
+    if (log?.new_repo_rel_path) body.new_repo_rel_path = log.new_repo_rel_path;
+    const data = await analyzeRenameReferences(body);
     scan.value = data;
     selectedHosts.value = new Set(data.hosts.map((h) => h.host_repo_rel_path));
     const summary = formatHostSummary({
@@ -203,31 +244,6 @@ async function onApplyRefs() {
   }
 }
 
-async function runLabelApply(scope: "incoming" | "host_all", hostsOverride?: string[]) {
-  const hosts = hostsOverride?.length ? hostsOverride : [...selectedHosts.value];
-  if (!hosts.length) return;
-  busy.value = true;
-  const scopeLabel = scope === "host_all" ? "宿主内全部引用名" : "引用名";
-  logIncoming(`开始修正${scopeLabel} · ${hosts.length} 个宿主…`);
-  try {
-    const data = await applyReferenceLabelCorrections(hosts, { ...buildApplyOpts(), labelScope: scope });
-    if (data.scan) scan.value = data.scan;
-    const msg = `已修正${scopeLabel} · ${data.label_patches ?? 0} 处 Label`;
-    logIncoming(msg);
-    shell.setStatus(msg);
-    await refreshXrefCounts();
-  } catch (e) {
-    pageError.value = String(e);
-    logIncoming(`失败：${String(e)}`);
-  } finally {
-    busy.value = false;
-  }
-}
-
-function applyCurrentFileHostLabels() {
-  if (!rel.value) return;
-  void runLabelApply("host_all", [rel.value]);
-}
 </script>
 
 <template>
@@ -235,21 +251,41 @@ function applyCurrentFileHostLabels() {
     <section class="rename-block">
       <h3 class="block-title">磁盘改名</h3>
       <div class="rename-grid">
-        <span class="label">当前文件名</span>
+        <span class="label">磁盘当前名</span>
         <input :value="originalFilename" readonly class="readonly mono" />
         <span class="label">目标文件名</span>
-        <input v-model="newFilename" class="mono" :readonly="renamed" spellcheck="false" />
+        <input v-model="newFilename" class="mono" :readonly="renamed || busy" spellcheck="false" />
       </div>
       <div class="actions">
         <button type="button" class="btn primary" :disabled="busy || renamed || !canRename" @click="onRename">
           {{ busy ? "…" : "执行改名" }}
         </button>
-        <span v-if="renamed && renameLogId" class="ok">已改名 · 记录 #{{ renameLogId }}</span>
+        <button
+          v-if="renamed"
+          type="button"
+          class="btn"
+          :disabled="busy"
+          title="若目标名填错或要继续改新名，解锁后可编辑"
+          @click="resetRenameWorkflow"
+        >
+          再次改名
+        </button>
+        <span v-if="renamed && renameLogId" class="ok">本页已执行过改名 · 记录 #{{ renameLogId }}</span>
       </div>
+      <p v-if="renamed && newFilename.trim() === originalFilename.trim()" class="rename-warn muted">
+        目标名与磁盘当前名相同。若属性里填了新的文件名，请点「再次改名」或回「编辑属性」确认后重新点「去改名」。
+      </p>
     </section>
 
     <section class="refs-block">
       <h3 class="block-title">引用写回</h3>
+      <p v-if="renamed && lastRenameLog" class="next-step">
+        磁盘已改为 <strong class="mono">{{ lastRenameLog.new_basename }}</strong>。
+        请用下方「分析引用」查找仍引用旧名
+        <strong class="mono">{{ lastRenameLog.old_basename }}</strong>
+        的装配，勾选后写回 XLink。
+        <button type="button" class="link-inline" @click="switchSubTab('xref')">显示名同步请到「引用」Tab →</button>
+      </p>
       <div class="toolbar">
         <label class="chk">
           <input v-model="includeTransitive" type="checkbox" />
@@ -263,15 +299,10 @@ function applyCurrentFileHostLabels() {
         :selected-hosts="selectedHosts"
         :busy="busy"
         :can-apply="canApplyRefs"
-        :can-apply-incoming-labels="canApplyIncomingLabels"
-        :can-apply-host-all-labels="canApplyHostAllLabels"
-        :show-current-file-host-all="Boolean(rel)"
+        label-sync-ui="off"
         @toggle-host="toggleHost"
         @toggle-all="toggleAll"
         @apply="onApplyRefs"
-        @apply-incoming-labels="runLabelApply('incoming')"
-        @apply-host-all-labels="runLabelApply('host_all')"
-        @apply-current-file-host-all="applyCurrentFileHostLabels"
       />
     </section>
   </div>
@@ -342,6 +373,36 @@ function applyCurrentFileHostLabels() {
 .ok {
   font-size: 0.82rem;
   color: #047857;
+}
+.next-step {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: #0f172a;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+}
+.next-step strong.mono {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+.rename-warn {
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: #b45309;
+}
+.link-inline {
+  margin-left: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #1d4ed8;
+  font-size: inherit;
+  text-decoration: underline;
+  cursor: pointer;
 }
 .mono {
   font-family: var(--font-mono);

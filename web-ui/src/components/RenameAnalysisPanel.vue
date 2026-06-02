@@ -1,16 +1,23 @@
 <script setup lang="ts">
 import type { RefHitHost, RefScanPayload } from "../api";
 
-const props = defineProps<{
-  scan: RefScanPayload | null;
-  selectedHosts: Set<string>;
-  busy?: boolean;
-  canApply?: boolean;
-  canApplyIncomingLabels?: boolean;
-  canApplyHostAllLabels?: boolean;
-  showCurrentFileHostAll?: boolean;
-  showExport?: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    scan: RefScanPayload | null;
+    selectedHosts: Set<string>;
+    busy?: boolean;
+    canApply?: boolean;
+    canApplyIncomingLabels?: boolean;
+    canApplyHostAllLabels?: boolean;
+    showCurrentFileHostAll?: boolean;
+    showExport?: boolean;
+    /** off=不展示；incoming-only=仅「勾选装配内对本文件」；full=三项高级（改名与引用页） */
+    labelSyncUi?: "off" | "incoming-only" | "full";
+    /** incoming-only 时展示的目标短名（如刚改名的文件） */
+    targetLabel?: string;
+  }>(),
+  { labelSyncUi: "full" },
+);
 
 const emit = defineEmits<{
   toggleHost: [hostRel: string, checked: boolean];
@@ -139,43 +146,67 @@ const allPendingSelected = () => {
       </div>
     </div>
 
-    <div class="scan-step step-labels">
+    <div v-if="labelSyncUi !== 'off'" class="scan-step step-labels">
       <div class="step-head">
-        <span class="step-badge step-badge-secondary">第二步</span>
-        <span class="step-label">修正引用名（装配 Label，须单独点击）</span>
+        <span class="step-badge step-badge-secondary">可选</span>
+        <span class="step-label">同步装配树显示名（Label）</span>
       </div>
-      <p class="step-hint muted">
-        与第一步分开执行：先完成改名与 XLink 写回，再勾选宿主并点此步同步装配树显示名（按 CAD 索引规则名）。
+      <p v-if="labelSyncUi === 'incoming-only'" class="step-hint muted">
+        在<strong>已勾选</strong>的装配/图纸里，只改「引用
+        <template v-if="targetLabel || scan?.new_basename">
+          <span class="mono">{{ targetLabel || scan?.new_basename }}</span>
+        </template>
+        <template v-else>本目标文件</template>
+        」那一项的树节点名（不改 XLink 路径）。日常维护请用<strong>文件详情 → 引用</strong>。
       </p>
+      <template v-else>
+        <ul class="label-legend muted">
+          <li>
+            <strong>勾选装配内对本文件</strong> — 只改引用当前目标文件的那几条显示名（改名后常用）。
+          </li>
+          <li v-if="showCurrentFileHostAll">
+            <strong>当前文件内全部</strong> — 当前打开的是装配/图纸时，改其内部<strong>所有</strong>外链显示名。
+          </li>
+          <li>
+            <strong>勾选装配内全部</strong> — 在每个勾选的装配里，改<strong>所有</strong>外链显示名（不限于本文件）。
+          </li>
+        </ul>
+      </template>
       <div class="scan-actions">
         <button
           type="button"
           class="btn accent-secondary"
           :disabled="busy || !canApplyIncomingLabels || selectedHosts.size === 0"
-          title="同步引用当前目标文件的实例 Label"
+          title="仅同步勾选宿主内指向本目标文件的引用实例 Label"
           @click="emit('applyIncomingLabels')"
         >
-          修正引用名
+          {{
+            labelSyncUi === "incoming-only"
+              ? "同步勾选装配内对本文件的显示名"
+              : "勾选装配内对本文件"
+          }}
         </button>
-        <button
-          v-if="showCurrentFileHostAll"
-          type="button"
-          class="btn subtle"
-          :disabled="busy || !canApplyHostAllLabels"
-          title="修正当前打开文件内的全部外部引用 Label"
-          @click="emit('applyCurrentFileHostAll')"
-        >
-          本文件内全部
-        </button>
-        <button
-          type="button"
-          class="btn subtle"
-          :disabled="busy || !canApplyHostAllLabels || selectedHosts.size === 0"
-          title="修正勾选宿主内的全部外部 XLink 引用 Label"
-          @click="emit('applyHostAllLabels')"
-        >
-          宿主内全部
-        </button>
+        <template v-if="labelSyncUi === 'full'">
+          <button
+            v-if="showCurrentFileHostAll"
+            type="button"
+            class="btn subtle"
+            :disabled="busy || !canApplyHostAllLabels"
+            title="当前打开文件作为装配/图纸宿主，同步其内部全部外部引用 Label"
+            @click="emit('applyCurrentFileHostAll')"
+          >
+            当前文件内全部
+          </button>
+          <button
+            type="button"
+            class="btn subtle"
+            :disabled="busy || !canApplyHostAllLabels || selectedHosts.size === 0"
+            title="在每个勾选的装配/图纸内，同步其全部外部引用 Label"
+            @click="emit('applyHostAllLabels')"
+          >
+            勾选装配内全部
+          </button>
+        </template>
       </div>
     </div>
 
@@ -316,6 +347,17 @@ const allPendingSelected = () => {
   margin: 0 0 8px;
   font-size: 0.78rem;
   line-height: 1.45;
+}
+
+.label-legend {
+  margin: 0 0 10px;
+  padding-left: 1.2em;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.label-legend li + li {
+  margin-top: 4px;
 }
 
 .scan-actions {

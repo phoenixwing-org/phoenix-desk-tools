@@ -10,6 +10,7 @@ import {
   type PartKeyFile,
 } from "../api";
 import AssemblyTreeTable from "../components/AssemblyTreeTable.vue";
+import ReferenceLabelSyncBar from "../components/ReferenceLabelSyncBar.vue";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
 import { promptChoice } from "../composables/choiceDialog";
 import ComboTextInput from "../components/ComboTextInput.vue";
@@ -591,6 +592,14 @@ onUnmounted(() => {
               </label>
             </div>
           </div>
+          <ReferenceLabelSyncBar
+            v-if="selectedAssemblyRel"
+            compact
+            :target-repo-rel="selectedAssemblyRel"
+            :show-incoming="false"
+            @done="(msg) => shell.setStatus(msg)"
+            @error="(msg) => { pageError = msg; shell.setStatus(msg); }"
+          />
           <AssemblyTreeTable :nodes="treeNodes" :loading="treeLoading" />
         </section>
         <div v-else class="empty-wrap table-grow">

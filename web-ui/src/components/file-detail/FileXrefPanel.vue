@@ -3,6 +3,7 @@ import { computed, ref, watch } from "vue";
 import type { BomXrefEdge, BomXrefHost } from "../../api";
 import { fetchBomXrefIncoming, fetchBomXrefOutgoing, refreshBomXrefHostIndex } from "../../api";
 import { useFileDetailContext } from "../../composables/useFileDetailContext";
+import { useReferenceLabelSync } from "../../composables/useReferenceLabelSync";
 import { useAppShell } from "../../composables/useAppShell";
 import { basenameFromRel, normalizeRepoRelForApi, repoDirFromRel } from "../../utils/workspaceFileQuery";
 
@@ -14,6 +15,7 @@ const indexSummary = ref("");
 const includeTransitive = ref(true);
 const rebuildSubtree = ref(true);
 const incomingHosts = ref<BomXrefHost[]>([]);
+const selectedIncoming = ref<Set<string>>(new Set());
 const outgoingRefs = ref<BomXrefEdge[]>([]);
 const directCount = ref(0);
 const incomingCount = computed(() => ctx.incomingCount.value);
@@ -83,6 +85,7 @@ async function loadTables(manual = false, refreshDisk = true) {
       fetchBomXrefOutgoing(ctx.rel.value, 500, refreshDisk),
     ]);
     incomingHosts.value = inc.hosts;
+    selectedIncoming.value = new Set(inc.hosts.map((h) => h.host_repo_rel_path));
     outgoingRefs.value = out.refs;
     directCount.value = inc.direct_count ?? inc.count;
     ctx.incomingCount.value = inc.count;
@@ -96,6 +99,7 @@ async function loadTables(manual = false, refreshDisk = true) {
   } catch (e) {
     ctx.pageError.value = String(e);
     incomingHosts.value = [];
+    selectedIncoming.value = new Set();
     outgoingRefs.value = [];
     if (manual) shell.appendLog(String(e), { source: "file_detail" });
   } finally {
@@ -137,6 +141,73 @@ async function onRebuildIndex() {
     rebuilding.value = false;
   }
 }
+
+const selectedIncomingPaths = computed(() => [...selectedIncoming.value]);
+const selectedIncomingCount = computed(() => selectedIncomingPaths.value.length);
+const canSyncIncomingLabels = computed(
+  () => selectedIncomingCount.value > 0 && Boolean(ctx.rel.value.trim()),
+);
+const canSyncHostAllLabels = computed(
+  () => outgoingRefs.value.length > 0 && Boolean(ctx.rel.value.trim()),
+);
+
+const { syncing: labelSyncing, syncIncomingLabels, syncHostAllLabels } = useReferenceLabelSync(
+  () => ctx.rel.value,
+);
+
+function toggleIncoming(hostRel: string, checked: boolean) {
+  const next = new Set(selectedIncoming.value);
+  if (checked) next.add(hostRel);
+  else next.delete(hostRel);
+  selectedIncoming.value = next;
+}
+
+function toggleAllIncoming(checked: boolean) {
+  selectedIncoming.value = checked
+    ? new Set(incomingHosts.value.map((h) => h.host_repo_rel_path))
+    : new Set();
+}
+
+const allIncomingSelected = computed(
+  () =>
+    incomingHosts.value.length > 0 &&
+    incomingHosts.value.every((h) => selectedIncoming.value.has(h.host_repo_rel_path)),
+);
+
+function onLabelSyncDone(msg: string) {
+  shell.setStatus(msg);
+  shell.appendLog(`[文件详情] ${msg}`, { source: "file_detail" });
+  void loadTables(false, false);
+  void ctx.refreshXrefCounts();
+}
+
+function onLabelSyncError(msg: string) {
+  ctx.pageError.value = msg;
+  shell.appendLog(`[文件详情] ${msg}`, { source: "file_detail" });
+}
+
+async function onSyncIncomingLabels() {
+  if (!canSyncIncomingLabels.value) return;
+  try {
+    const data = await syncIncomingLabels(selectedIncomingPaths.value, includeTransitive.value);
+    const n = data.label_patches ?? 0;
+    const h = data.applied_hosts?.length ?? 0;
+    onLabelSyncDone(`已更新勾选装配内对本文件的显示名 · ${h} 个装配 · ${n} 处`);
+  } catch (e) {
+    onLabelSyncError(String(e));
+  }
+}
+
+async function onSyncHostAllLabels() {
+  if (!canSyncHostAllLabels.value) return;
+  try {
+    const data = await syncHostAllLabels();
+    const n = data.label_patches ?? 0;
+    onLabelSyncDone(`已更新本文件内全部子件显示名 · ${n} 处`);
+  } catch (e) {
+    onLabelSyncError(String(e));
+  }
+}
 </script>
 
 <template>
@@ -163,21 +234,51 @@ async function onRebuildIndex() {
       <button type="button" class="btn" :disabled="loading || rebuilding" @click="loadTables(true)">
         {{ loading ? "…" : "刷新列表" }}
       </button>
-      <button type="button" class="btn" @click="ctx.switchSubTab('rename')">去改名 Tab 写回引用</button>
+      <button type="button" class="btn" @click="ctx.switchSubTab('rename')">改名后修正 XLink…</button>
     </div>
     <p v-if="indexSummary" class="index-summary">{{ indexSummary }}</p>
 
     <section class="block">
-      <h3 class="sub-title">
-        谁引用了本文件（{{ incomingCount }}）
-        <span v-if="includeTransitive && directCount < incomingCount" class="muted">
-          · 直接 {{ directCount }} · 间接 {{ incomingCount - directCount }}
-        </span>
-      </h3>
+      <div class="sub-title-row">
+        <h3 class="sub-title">
+          谁引用了本文件（{{ incomingCount }}）
+          <span v-if="includeTransitive && directCount < incomingCount" class="muted">
+            · 直接 {{ directCount }} · 间接 {{ incomingCount - directCount }}
+          </span>
+        </h3>
+        <button
+          type="button"
+          class="btn-label-sync"
+          :disabled="labelSyncing || !canSyncIncomingLabels"
+          :title="
+            canSyncIncomingLabels
+              ? '在下方勾选的装配/图纸里，只改引用本文件那一项的树节点名（Label）'
+              : '请先在下方勾选至少一个宿主装配'
+          "
+          @click="onSyncIncomingLabels"
+        >
+          {{
+            labelSyncing
+              ? "…"
+              : `勾选装配 · 同步对本文件的显示名${selectedIncomingCount ? `（${selectedIncomingCount}）` : ""}`
+          }}
+        </button>
+      </div>
+      <p class="section-hint muted">
+        改的是装配树里「这一零件」的显示名，不改文件路径；改路径请到「改名」Tab。
+      </p>
       <p v-if="!loading && !incomingHosts.length" class="empty muted">无入向宿主</p>
       <table v-else class="data-table">
         <thead>
           <tr>
+            <th class="col-chk">
+              <input
+                type="checkbox"
+                :checked="allIncomingSelected"
+                :disabled="loading"
+                @change="toggleAllIncoming(($event.target as HTMLInputElement).checked)"
+              />
+            </th>
             <th>宿主装配</th>
             <th>关系</th>
             <th>经子装配</th>
@@ -185,6 +286,13 @@ async function onRebuildIndex() {
         </thead>
         <tbody>
           <tr v-for="row in incomingHosts" :key="row.host_repo_rel_path">
+            <td class="col-chk">
+              <input
+                type="checkbox"
+                :checked="selectedIncoming.has(row.host_repo_rel_path)"
+                @change="toggleIncoming(row.host_repo_rel_path, ($event.target as HTMLInputElement).checked)"
+              />
+            </td>
             <td class="mono">
               <button
                 v-if="canOpenFileDetailRel(row.host_repo_rel_path)"
@@ -205,13 +313,31 @@ async function onRebuildIndex() {
     </section>
 
     <section class="block">
-      <h3 class="sub-title">
-        本文件引用了谁（{{ outgoingCount }}）
-        <span v-if="outgoingStats.missing || outgoingStats.ambiguous" class="out-stats">
-          · 缺失 {{ outgoingStats.missing }}
-          <template v-if="outgoingStats.ambiguous"> · 歧义 {{ outgoingStats.ambiguous }}</template>
-        </span>
-      </h3>
+      <div class="sub-title-row">
+        <h3 class="sub-title">
+          本文件引用了谁（{{ outgoingCount }}）
+          <span v-if="outgoingStats.missing || outgoingStats.ambiguous" class="out-stats">
+            · 缺失 {{ outgoingStats.missing }}
+            <template v-if="outgoingStats.ambiguous"> · 歧义 {{ outgoingStats.ambiguous }}</template>
+          </span>
+        </h3>
+        <button
+          type="button"
+          class="btn-label-sync subtle"
+          :disabled="labelSyncing || !canSyncHostAllLabels"
+          :title="
+            canSyncHostAllLabels
+              ? '当前文件是装配或图纸时，将其内部全部外链的树节点名同步为各目标文件的规则名'
+              : '无出向引用：当前文件不是装配/图纸宿主，无需此项'
+          "
+          @click="onSyncHostAllLabels"
+        >
+          {{ labelSyncing ? "…" : "本装配/图纸 · 同步全部子件显示名" }}
+        </button>
+      </div>
+      <p v-if="!canSyncHostAllLabels && !loading" class="section-hint muted">
+        当前为零件文件或无子件引用时，只需用上方「勾选装配」按钮。
+      </p>
       <p v-if="!loading && !outgoingRefs.length" class="empty muted">无出向引用</p>
       <table v-else class="data-table">
         <thead>
@@ -262,8 +388,8 @@ async function onRebuildIndex() {
     </section>
 
     <p class="hint muted">
-      「重建本文件引用索引」从磁盘写入本文件（及可选下级）的引用边，<strong>缺失</strong>表示 CAD 索引中无目标或路径无法解析。
-      全库属性请用 CAD 索引「工程内搜索」。改 XLink 路径请到「改名」Tab 或「链接路径修正」写回后再重建索引。
+      本页展示 CAD 索引中的入向/出向关系。「重建本文件引用索引」从磁盘写入引用边；
+      <strong>缺失</strong>表示索引中无目标或路径无法解析。磁盘改名后请先在「改名」Tab 写回 XLink，再重建索引。
     </p>
   </div>
 </template>
@@ -276,6 +402,46 @@ async function onRebuildIndex() {
   margin: 0 0 10px;
   font-size: 0.92rem;
   font-weight: 600;
+}
+
+.sub-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.sub-title-row .sub-title {
+  margin: 0;
+}
+
+.section-hint {
+  margin: 0 0 10px;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.btn-label-sync {
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid #059669;
+  background: #059669;
+  color: #fff;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.btn-label-sync.subtle {
+  background: #fff;
+  color: #047857;
+  border-color: #86efac;
+}
+
+.btn-label-sync:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 .toolbar {
   display: flex;
@@ -308,6 +474,10 @@ async function onRebuildIndex() {
   margin: 0 0 12px;
   font-size: 0.78rem;
   color: #0369a1;
+}
+
+.col-chk {
+  width: 36px;
 }
 
 .out-stats {

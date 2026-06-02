@@ -514,24 +514,39 @@ def _apply_host_all_reference_labels(
             },
         )
 
-    old_basename_resolved, new_basename_resolved, exclude_repo_rel_resolved = _resolve_analysis_names(
-        repo_root,
-        rename_log_id=rename_log_id,
-        old_basename=old_basename,
-        new_basename=new_basename,
-        exclude_repo_rel=exclude_repo_rel,
-    )
-    scan_payload = _build_scan_payload(
-        repo_root,
-        rename_log_id=rename_log_id,
-        old_basename=old_basename_resolved,
-        new_basename=new_basename_resolved,
-        exclude_repo_rel=exclude_repo_rel_resolved,
-        target_repo_rel=target_repo_rel,
-        new_repo_rel_path=new_repo_rel_path,
-        transitive=transitive,
-        persist=False,
-    )
+    # 通用「宿主内全部」同步不必做改名分析扫描；无 rename_log / basename 时勿调用 _resolve_analysis_names
+    if rename_log_id is not None or (old_basename and new_basename):
+        old_basename_resolved, new_basename_resolved, exclude_repo_rel_resolved = _resolve_analysis_names(
+            repo_root,
+            rename_log_id=rename_log_id,
+            old_basename=old_basename,
+            new_basename=new_basename,
+            exclude_repo_rel=exclude_repo_rel,
+        )
+        scan_payload = _build_scan_payload(
+            repo_root,
+            rename_log_id=rename_log_id,
+            old_basename=old_basename_resolved,
+            new_basename=new_basename_resolved,
+            exclude_repo_rel=exclude_repo_rel_resolved,
+            target_repo_rel=target_repo_rel,
+            new_repo_rel_path=new_repo_rel_path,
+            transitive=transitive,
+            persist=False,
+        )
+    else:
+        host_base = Path(selected[0]).name if selected else ""
+        old_basename_resolved = host_base
+        new_basename_resolved = host_base
+        scan_payload = {
+            "rename_log_id": None,
+            "old_basename": host_base,
+            "new_basename": host_base,
+            "host_count": 0,
+            "hit_count": 0,
+            "pending_hit_count": 0,
+            "hosts": [],
+        }
 
     return {
         "rename_log_id": rename_log_id,

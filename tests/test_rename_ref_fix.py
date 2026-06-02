@@ -396,6 +396,23 @@ class TestRenameRefFix(unittest.TestCase):
             self.assertIn('String value="100001.001-子件"', xml)
             self.assertIn('String value="900001.001-其它"', xml)
 
+    def test_apply_host_all_without_basename_args(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_fcstd(root / "child.FCStd", _CHILD_XML)
+            _write_fcstd(root / "asm-single.FCStd", _HOST_XML)
+            from fcdesk.services.fcstd_map_service import run_fcstd_map_scan
+            from fcdesk.services.rename_analysis_service import apply_reference_label_corrections
+
+            run_fcstd_map_scan(root)
+            out = apply_reference_label_corrections(
+                root,
+                host_repo_rel_paths=["asm-single.FCStd"],
+                label_scope="host_all",
+            )
+            self.assertGreaterEqual(out["label_patches"], 1)
+            self.assertEqual(out["scan"]["host_count"], 0)
+
     def test_apply_incoming_labels_prefers_db_rule_name(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

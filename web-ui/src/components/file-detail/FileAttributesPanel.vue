@@ -42,7 +42,7 @@ const {
   baseline,
   pageError,
   reloadFile,
-  switchSubTab,
+  openRenameTab,
 } = useFileDetailContext();
 const shell = useAppShell();
 const bomPrefs = ref<BomApplyPrefs | null>(null);
@@ -213,10 +213,10 @@ async function onDetectKinds() {
 function onGoRename() {
   const name = (form.value.filename ?? "").trim();
   if (!name) {
-    pageError.value = "请先填写目标文件名";
+    pageError.value = "请先填写目标文件名，或点「推荐」生成";
     return;
   }
-  switchSubTab("rename");
+  openRenameTab(name);
 }
 
 onMounted(() => {

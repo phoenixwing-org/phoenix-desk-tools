@@ -303,7 +303,7 @@ async function onApplyRefs() {
     const msg =
       `第一步完成 · 已修正 ${data.applied_hosts.length} 个宿主 · ${data.xlink_patches} 处 XLink` +
       (data.failed.length ? ` · ${data.failed.length} 失败` : "") +
-      " · 请继续第二步「修正引用名」";
+      " · 可选：同步引用显示名，或到文件详情·引用操作";
     logIncoming(msg);
     shell.setStatus(msg);
   } catch (e) {
@@ -326,7 +326,7 @@ async function onApplyIncomingLabels() {
   }
   if (
     !window.confirm(
-      `【第二步】将把 ${hosts.length} 个宿主内「引用当前目标」的实例 Label 同步为 CAD 索引规则名。\n\n请确认 FreeCAD 等已关闭占用。`,
+      `将把 ${hosts.length} 个宿主内「引用当前目标」的实例 Label 同步为 CAD 索引规则名。\n\n请确认 FreeCAD 等已关闭占用。`,
     )
   ) {
     return;
@@ -369,7 +369,7 @@ async function runReferenceLabelApply(scope: "incoming" | "host_all", hosts: str
       );
     }
     const msg =
-      `第二步完成 · 已修正${scopeLabel} · ${data.applied_hosts.length} 个宿主 · ${data.label_patches ?? 0} 处 Label` +
+      `已同步${scopeLabel} · ${data.applied_hosts.length} 个宿主 · ${data.label_patches ?? 0} 处 Label` +
       (data.failed.length ? ` · ${data.failed.length} 失败` : "");
     logIncoming(msg);
     shell.setStatus(msg);
@@ -572,6 +572,8 @@ onUnmounted(() => {
       :can-apply="canApplyRefs()"
       :can-apply-incoming-labels="canApplyIncomingLabels()"
       :can-apply-host-all-labels="canApplyHostAllLabels()"
+      :target-label="scan?.new_basename"
+      label-sync-ui="incoming-only"
       show-export
       @toggle-host="toggleHost"
       @toggle-all="toggleAll"
@@ -584,7 +586,7 @@ onUnmounted(() => {
     <details class="help-panel">
       <summary class="help-summary">说明</summary>
       <ul class="help-list">
-        <li>写回分两步：修正 XLink 路径 → 修正引用名（Label）。</li>
+        <li>改名写回：先修正 XLink 路径；显示名（Label）可在「文件详情 → 引用」随时同步，改名页亦可操作。</li>
         <li>手填模式用于无历史时的预览；日常请在文件详情中对当前文件改名。</li>
         <li>右侧树选文件时会自动带入路径，被改名文件本身不会作为宿主。</li>
       </ul>
