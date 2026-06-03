@@ -40,6 +40,9 @@ from fcdesk.services.cad_index import (
     refresh_bom_xrefs_for_hosts,
 )
 
+# 装配树在 resolved/ambiguous/self 之外也展示 missing，便于在层级里对照断链
+_ASSEMBLY_TREE_STATUSES = _GRAPH_TARGET_STATUSES | frozenset({"missing"})
+
 __all__ = [
     "apply_explicit_link_labels",
     "ensure_bom_xref_built",
@@ -416,6 +419,14 @@ def search_bom_xref_edges(
         limit=cap,
         search=search,
     )
+    label_cache: dict[str, dict[str, str]] = {}
+    for row in rows:
+        host = str(row.get("host_repo_rel_path") or "").strip()
+        if not host:
+            continue
+        if host not in label_cache:
+            label_cache[host] = read_host_reference_labels(repo_root, host)
+        _enrich_outgoing_ref_row(repo_root, host, row, label_map=label_cache[host])
     return {
         "offset": off,
         "limit": cap,
@@ -609,10 +620,19 @@ def _host_groups_from_hit_map(hit_map: dict[str, list[XLinkBasenameHit]]) -> lis
 
 
 def _enrich_tree_node(repo_root: Path, node: dict[str, Any]) -> None:
+    from fcdesk.freecad.fcstd_mapping import infer_part_key_from_filename
     from fcdesk.freecad.phoenix_store import connect, format_part_key, infer_part_file_role
 
     rel = str(node.get("repo_rel_path") or "").strip()
     if not rel:
+        base = str(node.get("basename") or "").strip()
+        if base:
+            pn, pv = infer_part_key_from_filename(base)
+            if pn and pv:
+                node["part_number"] = pn
+                node["part_version"] = pv
+                node["part_key"] = format_part_key(pn, pv)
+        node["file_role"] = infer_part_file_role(base)
         return
     rr = repo_root.expanduser().resolve(strict=False)
     with connect(rr) as conn:
@@ -664,12 +684,15 @@ def load_assembly_tree(
     host_repo_rel: str,
     *,
     full: bool = False,
+    refresh_disk: bool = False,
     max_depth: int = 16,
     limit_per_host: int = 500,
 ) -> dict[str, Any]:
     """从 ``bom_xref`` 读取装配的直接或完整下级树。"""
     ensure_bom_xref_built(repo_root)
     host = normalize_repo_rel_path_for_map(host_repo_rel.strip())
+    if refresh_disk:
+        refresh_bom_xrefs_for_hosts(repo_root, [host])
     if not host:
         raise ValueError("请提供 host_repo_rel")
 
@@ -687,36 +710,53 @@ def load_assembly_tree(
 
         for row in rows:
             status = str(row.get("resolve_status") or "")
-            if status not in _GRAPH_TARGET_STATUSES:
+            if status not in _ASSEMBLY_TREE_STATUSES:
                 continue
             target_rel = _norm_xref_path(row.get("target_repo_rel_path"))
-            if not target_rel:
+            attr = str(row.get("xlink_file_attr") or "").strip()
+            if target_rel:
+                group_key = f"target:{target_rel}"
+            elif status == "missing" and attr:
+                group_key = f"missing:{attr}"
+            elif status == "ambiguous" and attr:
+                group_key = f"ambiguous:{attr}"
+            else:
                 continue
-            if target_rel not in grouped:
-                grouped[target_rel] = []
-                group_order.append(target_rel)
-            grouped[target_rel].append(row)
+            if group_key not in grouped:
+                grouped[group_key] = []
+                group_order.append(group_key)
+            grouped[group_key].append(row)
 
-        for target_rel in group_order:
-            row_group = grouped[target_rel]
+        for group_key in group_order:
+            row_group = grouped[group_key]
             first_row = row_group[0]
+            target_rel = _norm_xref_path(first_row.get("target_repo_rel_path"))
+            status = str(first_row.get("resolve_status") or "")
             xref_instances: list[dict[str, str]] = []
             link_labels: list[str] = []
             for r in row_group:
-                attr = str(r.get("xlink_file_attr") or "")
-                lbl = label_map.get(attr, "")
-                xref_instances.append({"xlink_file_attr": attr, "link_label": lbl})
+                r_attr = str(r.get("xlink_file_attr") or "")
+                lbl = label_map.get(r_attr, "")
+                xref_instances.append({"xlink_file_attr": r_attr, "link_label": lbl})
                 if lbl:
                     link_labels.append(lbl)
 
-            rule_label = resolve_rule_display_label(repo_root, repo_rel_path=target_rel)
+            rule_label = (
+                resolve_rule_display_label(repo_root, repo_rel_path=target_rel) if target_rel else ""
+            )
+            attr = str(first_row.get("xlink_file_attr") or "")
+            basename = str(first_row.get("target_basename") or "").strip()
+            if not basename and attr:
+                basename = Path(attr.replace("\\", "/")).name
+            if not basename:
+                basename = "（缺失引用）"
 
             node: dict[str, Any] = {
                 "host_repo_rel": key,
-                "repo_rel_path": target_rel,
-                "basename": str(first_row.get("target_basename") or Path(target_rel).name),
-                "resolve_status": str(first_row.get("resolve_status") or ""),
-                "xlink_file_attr": str(first_row.get("xlink_file_attr") or ""),
+                "repo_rel_path": target_rel or "",
+                "basename": basename,
+                "resolve_status": status,
+                "xlink_file_attr": attr,
                 "link_label": link_labels[0] if link_labels else "",
                 "link_labels": link_labels,
                 "xref_instances": xref_instances,
@@ -734,11 +774,14 @@ def load_assembly_tree(
             }
             _enrich_tree_node(repo_root, node)
 
-            if full and depth < max_depth:
+            if full and depth < max_depth and target_rel:
                 child_rows = query_bom_xrefs_outgoing(repo_root, target_rel, limit=limit_per_host)
                 has_sub = any(
-                    str(r.get("resolve_status") or "") in _GRAPH_TARGET_STATUSES
-                    and _norm_xref_path(r.get("target_repo_rel_path"))
+                    str(r.get("resolve_status") or "") in _ASSEMBLY_TREE_STATUSES
+                    and (
+                        _norm_xref_path(r.get("target_repo_rel_path"))
+                        or str(r.get("resolve_status") or "") == "missing"
+                    )
                     for r in child_rows
                 )
                 if has_sub:
@@ -779,16 +822,26 @@ def apply_explicit_link_labels(
     applied_hosts: list[str] = []
     failed: list[dict[str, str]] = []
     total_patches = 0
+    label_changes: list[dict[str, str]] = []
     for host, attr_labels in sorted(by_host.items()):
         path = (rr / host).resolve(strict=False)
         if not path.is_file():
             failed.append({"host_repo_rel": host, "error": "宿主文件不存在"})
             continue
         try:
-            n = patch_fcstd_reference_labels_explicit(path, attr_labels)
+            n, changes = patch_fcstd_reference_labels_explicit(path, attr_labels)
             if n > 0:
                 total_patches += n
                 applied_hosts.append(host)
+                for ch in changes:
+                    label_changes.append(
+                        {
+                            "host_repo_rel": host,
+                            "xlink_file_attr": ch.get("xlink_file_attr", ""),
+                            "old_label": ch.get("old_label", ""),
+                            "new_label": ch.get("new_label", ""),
+                        }
+                    )
         except RenameAnalysisError as e:
             failed.append({"host_repo_rel": host, "error": str(e)})
 
@@ -799,5 +852,6 @@ def apply_explicit_link_labels(
         "label_patches": total_patches,
         "applied_hosts": applied_hosts,
         "failed": failed,
+        "label_changes": label_changes,
     }
 

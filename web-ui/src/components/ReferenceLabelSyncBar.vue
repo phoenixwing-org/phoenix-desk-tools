@@ -98,7 +98,7 @@ async function onHostAll() {
       {{ syncing ? "…" : "按规则名更新树中名称" }}
     </button>
     <span v-if="!compact" class="bar-hint muted">
-      只改装配树 Link.Label，不改路径。表格「子件零件名」列应与「规则名」一致。
+      只改装配树 Link.Label，不改路径。「链接标签（子件名）」列应与「规则名」一致。
     </span>
   </div>
 </template>

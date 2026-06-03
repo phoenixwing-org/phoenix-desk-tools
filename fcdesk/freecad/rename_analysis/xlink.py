@@ -466,22 +466,22 @@ def plan_explicit_reference_label_updates(
 def patch_fcstd_reference_labels_explicit(
     fcstd_path: Path,
     attr_labels: dict[str, str],
-) -> int:
-    """仅写回指定 XLink 引用实例的 ``Label``。"""
+) -> tuple[int, list[dict[str, str]]]:
+    """仅写回指定 XLink 引用实例的 ``Label``。返回 ``(变更数, 变更明细)``。"""
     if not attr_labels:
-        return 0
+        return 0, []
     xml = _read_document_xml_from_fcstd(fcstd_path)
     if xml is None:
         raise RenameAnalysisError(f"无法读取 Document.xml：{fcstd_path}")
     block_labels = plan_explicit_reference_label_updates(xml, attr_labels)
-    xml, label_count, _changes = _patch_reference_labels_in_xml(xml, block_labels)
+    xml, label_count, changes = _patch_reference_labels_in_xml(xml, block_labels)
     if label_count == 0:
-        return 0
+        return 0, []
     try:
         _rewrite_fcstd_document_xml(fcstd_path, xml)
     except OSError as e:
         raise RenameAnalysisError(f"写回失败（可能被占用）：{fcstd_path} · {e}") from e
-    return label_count
+    return label_count, changes
 
 
 def _patch_reference_labels_in_xml(

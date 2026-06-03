@@ -164,11 +164,12 @@ async function applyAnalysisPayload(payload: {
   if (payload.autoAnalyze) await onScanRefs();
 }
 
-async function onTreeSelect(repoRel: string) {
-  if (panelMode.value !== "manual") return;
+async function onTreeSelect(repoRel: string): Promise<boolean> {
+  if (panelMode.value !== "manual") return false;
   applyTreeSelection(repoRel);
   pageError.value = "";
   await onScanRefs();
+  return true;
 }
 
 function registerTreeHandler() {

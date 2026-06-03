@@ -18,11 +18,11 @@ export function useWorkspaceFileQuery(workbenchTabId?: string) {
     queryText.value = basenameFromRel(norm);
   }
 
-  function registerTreeSelectHandler(handler: (rel: string) => void | Promise<void>) {
+  function registerTreeSelectHandler(
+    handler: (rel: string) => void | boolean | Promise<void | boolean>,
+  ) {
     if (!workbenchTabId) return;
-    shell.registerTreeSelect(workbenchTabId, (rel) => {
-      void handler(rel);
-    });
+    shell.registerTreeSelect(workbenchTabId, (rel) => handler(rel));
   }
 
   function unregisterTreeSelectHandler() {

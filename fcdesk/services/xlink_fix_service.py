@@ -230,6 +230,7 @@ def list_xlink_fix_candidates(
     basename: str,
     part_number: str | None = None,
     part_version: str | None = None,
+    exclude_repo_rel: str | None = None,
 ) -> dict[str, Any]:
     """未找到 XLink 的手选候选：优先 Part Key 关联 FCStd，否则按文件名查索引。"""
     rr = repo_root.expanduser().resolve(strict=False)
@@ -242,12 +243,19 @@ def list_xlink_fix_candidates(
         pn, pv = infer_part_key_from_filename(base)
 
     part_key = format_part_key(pn, pv) if pn and pv else ""
+    exclude_norm = (
+        normalize_repo_rel_path_for_map(exclude_repo_rel.strip())
+        if exclude_repo_rel and exclude_repo_rel.strip()
+        else ""
+    )
     files: list[dict[str, Any]] = []
     seen: set[str] = set()
 
     def add_unique(items: list[dict[str, Any]]) -> None:
         for item in items:
             rel = item["repo_rel_path"]
+            if exclude_norm and rel == exclude_norm:
+                continue
             if rel in seen:
                 continue
             seen.add(rel)

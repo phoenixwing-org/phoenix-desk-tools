@@ -496,6 +496,11 @@ class TestRenameRefFix(unittest.TestCase):
                 ],
             )
             self.assertEqual(out["label_patches"], 1)
+            self.assertEqual(len(out["label_changes"]), 1)
+            ch = out["label_changes"][0]
+            self.assertEqual(ch["host_repo_rel"], "asm-single.FCStd")
+            self.assertEqual(ch["old_label"], "手工旧名")
+            self.assertEqual(ch["new_label"], "自定义标签")
             xml = zipfile.ZipFile(root / "asm-single.FCStd").read("Document.xml").decode("utf-8")
             self.assertIn('String value="自定义标签"', xml)
             self.assertNotIn("手工旧名", xml)

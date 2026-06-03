@@ -759,6 +759,9 @@ def _part_key_row_to_dict(row: sqlite3.Row, *, file_count: int = 0, present_coun
         "file_count": file_count,
         "present_count": present_count,
         "missing_count": missing_count,
+        "primary_repo_rel": str(row["primary_repo_rel"] or "").strip()
+        if "primary_repo_rel" in row.keys()
+        else "",
         "created_at": row["created_at"] or "",
         "updated_at": row["updated_at"] or "",
     }
@@ -776,14 +779,23 @@ def list_part_keys(repo_root: Path) -> list[dict[str, Any]]:
             SELECT pk.*,
                    COUNT(pfl.id) AS file_count,
                    SUM(CASE WHEN fa.file_status = ? THEN 1 ELSE 0 END) AS present_count,
-                   SUM(CASE WHEN fa.file_status = ? THEN 1 ELSE 0 END) AS missing_count
+                   SUM(CASE WHEN fa.file_status = ? THEN 1 ELSE 0 END) AS missing_count,
+                   (
+                     SELECT fa2.repo_rel_path
+                     FROM part_file_link pfl2
+                     JOIN file_asset fa2 ON fa2.id = pfl2.file_asset_id
+                     WHERE pfl2.part_key_id = pk.id
+                       AND fa2.file_status = ?
+                     ORDER BY fa2.repo_rel_path
+                     LIMIT 1
+                   ) AS primary_repo_rel
             FROM part_key pk
             LEFT JOIN part_file_link pfl ON pfl.part_key_id = pk.id
             LEFT JOIN file_asset fa ON fa.id = pfl.file_asset_id
             GROUP BY pk.id
             ORDER BY pk.part_number, pk.part_version
             """,
-            (FILE_STATUS_PRESENT, FILE_STATUS_MISSING),
+            (FILE_STATUS_PRESENT, FILE_STATUS_MISSING, FILE_STATUS_PRESENT),
         ).fetchall()
 
     out: list[dict[str, Any]] = []

@@ -3,17 +3,18 @@ import { computed, onMounted, ref } from "vue";
 import { fetchPartKeys, type PartKeyEntry, type PartKeysPayload } from "../api";
 import { BOM_FIELD_LABELS as L } from "../utils/bomFieldLabels";
 import { useAppShell } from "../composables/useAppShell";
+import { basenameFromRel, normalizeRepoRelForApi } from "../utils/workspaceFileQuery";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
 import type { TableColumnDef } from "../composables/useResizableTable";
 
 const shell = useAppShell();
 
 const catalogColumns = computed<TableColumnDef[]>(() => [
+  { key: "label", label: L.label, width: 160, minWidth: 100 },
   { key: "partKey", label: L.partKey, width: 108, minWidth: 80 },
   { key: "typeCode", label: L.typeCode, width: 56, minWidth: 48 },
   { key: "modelSeries", label: L.modelSeries, width: 96, minWidth: 72 },
   { key: "partName", label: L.partName, width: 140, minWidth: 80 },
-  { key: "label", label: L.label, width: 140, minWidth: 80 },
   { key: "status", label: "状态", width: 56, minWidth: 48 },
   { key: "files", label: "文件", width: 56, minWidth: 48 },
   { key: "counts", label: "存在/缺失", width: 88, minWidth: 72 },

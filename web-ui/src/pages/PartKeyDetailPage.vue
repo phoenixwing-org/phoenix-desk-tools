@@ -179,11 +179,11 @@ async function onSearchPartKey() {
   await switchToPartKey(parsed.pn, parsed.pv, { source: "manual" });
 }
 
-async function onTreeSelect(targetRel: string) {
+async function onTreeSelect(targetRel: string): Promise<boolean> {
   const relNorm = targetRel.replace(/\\/g, "/").trim();
   if (!relNorm.toLowerCase().endsWith(".fcstd")) {
     shell.appendLog(`[零件] 跳过非 FCStd：${relNorm}`, { source: "part_key" });
-    return;
+    return false;
   }
 
   let inferred;
@@ -195,18 +195,17 @@ async function onTreeSelect(targetRel: string) {
       source: "part_key",
       open: true,
     });
-    return;
+    return false;
   }
 
   const { part_number: pn, part_version: pv, source, in_catalog, filename } = inferred;
   await switchToPartKey(pn, pv, { source, filename, in_catalog });
+  return true;
 }
 
 function registerTreeHandler() {
   if (!props.workbenchTabId) return;
-  shell.registerTreeSelect(props.workbenchTabId, (path) => {
-    void onTreeSelect(path);
-  });
+  shell.registerTreeSelect(props.workbenchTabId, (path) => onTreeSelect(path));
 }
 
 function unregisterTreeHandler() {

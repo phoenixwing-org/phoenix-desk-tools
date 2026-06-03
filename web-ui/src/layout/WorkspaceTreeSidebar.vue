@@ -87,9 +87,9 @@ async function scan() {
   }
 }
 
-function onSelect(rel: string) {
+async function onSelect(rel: string) {
   selectedRel.value = rel;
-  shell.treeSelectHandler.value?.(rel);
+  await shell.dispatchTreeSelect(rel);
 }
 
 function onLogResizeStart(e: MouseEvent) {
@@ -134,7 +134,7 @@ watch(
     const pick = shell.treeSelectAfterRescan.value;
     if (pick) {
       selectedRel.value = pick;
-      shell.treeSelectHandler.value?.(pick);
+      await shell.dispatchTreeSelect(pick);
       shell.treeSelectAfterRescan.value = null;
     }
   },

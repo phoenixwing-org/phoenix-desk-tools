@@ -1,17 +1,17 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { nextTick, onActivated, onMounted, ref, watch } from "vue";
 import { fetchAssemblyTreeByHost, patchLinkLabels, type AssemblyTreeNode } from "../../api";
 import AssemblyTreeTable from "../AssemblyTreeTable.vue";
-import ReferenceLabelSyncBar from "../ReferenceLabelSyncBar.vue";
 import { useAppShell } from "../../composables/useAppShell";
 import { useFileDetailContext } from "../../composables/useFileDetailContext";
+import { logReferenceLabelApply } from "../../utils/referenceLabelLog";
 
 const emit = defineEmits<{
   "edits-change": [dirty: boolean];
 }>();
 
 const shell = useAppShell();
-const { rel, pageError } = useFileDetailContext();
+const { rel, pageError, activeSubTab, outgoingCount } = useFileDetailContext();
 
 const treeMode = ref<"first" | "full">("first");
 const treeLoading = ref(false);
@@ -20,41 +20,78 @@ const assemblyTreeRef = ref<InstanceType<typeof AssemblyTreeTable> | null>(null)
 const savingLabels = ref(false);
 const labelEdits = ref(false);
 
-async function loadAssemblyTree() {
+/** 避免并发请求时较早的空结果覆盖较新的数据 */
+let loadSeq = 0;
+
+async function loadAssemblyTree(opts?: {
+  refreshDisk?: boolean;
+  allowEmptyRetry?: boolean;
+}) {
   const host = rel.value.trim();
   if (!host) {
     treeNodes.value = [];
     return;
   }
 
+  const seq = ++loadSeq;
   treeLoading.value = true;
   try {
-    const data = await fetchAssemblyTreeByHost(host, treeMode.value === "full");
-    treeNodes.value = data.nodes;
+    const full = treeMode.value === "full";
+    let data = await fetchAssemblyTreeByHost(host, full, opts?.refreshDisk ?? false);
+    if (seq !== loadSeq) return;
+
+    if (
+      opts?.allowEmptyRetry &&
+      !data.nodes.length &&
+      outgoingCount.value > 0
+    ) {
+      await new Promise((r) => setTimeout(r, 450));
+      if (seq !== loadSeq) return;
+      data = await fetchAssemblyTreeByHost(host, full, false);
+    }
+
+    if (seq === loadSeq) treeNodes.value = data.nodes;
   } catch (e) {
-    treeNodes.value = [];
+    if (seq === loadSeq) treeNodes.value = [];
     shell.setStatus(String(e));
   } finally {
-    treeLoading.value = false;
+    if (seq === loadSeq) treeLoading.value = false;
   }
+}
+
+function reloadAssemblyIfVisible(opts?: { refreshDisk?: boolean }) {
+  if (activeSubTab.value !== "assembly" || !rel.value.trim()) return;
+  void loadAssemblyTree({ refreshDisk: opts?.refreshDisk, allowEmptyRetry: true });
 }
 
 async function saveAssemblyLabels() {
   const patches = assemblyTreeRef.value?.getPendingPatches() ?? [];
   if (!patches.length) return;
+  const pendingChanges = assemblyTreeRef.value?.getPendingLabelChanges() ?? [];
   savingLabels.value = true;
   pageError.value = "";
-  shell.appendLog(`[文件] 保存装配子件零件名 ${patches.length} 处…`, { source: "file_detail", open: true });
+  shell.appendLog(`[文件] 保存装配链接标签 ${patches.length} 处…`, { source: "file_detail", open: true });
   try {
     const data = await patchLinkLabels(patches);
     const failed = data.failed ?? [];
     if (failed.length) {
       const msg = failed.map((f) => `${f.host_repo_rel}: ${f.error}`).join("；");
       pageError.value = msg;
-      shell.appendLog(msg, { source: "file_detail" });
     }
-    const msg = `已保存子件零件名 · ${data.label_patches ?? 0} 处 · ${data.applied_hosts?.length ?? 0} 个宿主`;
-    shell.appendLog(msg, { source: "file_detail" });
+    const msg = logReferenceLabelApply(
+      shell.appendLog,
+      {
+        label_patches: data.label_patches,
+        label_changes:
+          data.label_changes?.length ? data.label_changes : pendingChanges,
+        applied_hosts: data.applied_hosts,
+        failed: failed.map((f) => ({
+          host_repo_rel_path: f.host_repo_rel,
+          error: f.error,
+        })),
+      },
+      { source: "file_detail", title: "已保存链接标签" },
+    );
     shell.setStatus(msg);
     assemblyTreeRef.value?.resetEdits();
     labelEdits.value = false;
@@ -79,19 +116,59 @@ function onAssemblyEditsChange(dirty: boolean) {
   emit("edits-change", dirty);
 }
 
-function onSyncDone(msg: string) {
-  shell.setStatus(msg);
-  void loadAssemblyTree();
+function onApplyRuleLabelsPreview() {
+  const stats = assemblyTreeRef.value?.applyRuleLabelsPreview();
+  if (!stats) return;
+  if (stats.filled > 0) {
+    shell.setStatus(`已按规则填入 ${stats.filled} 处，请点「应用」写回 FCStd`);
+    return;
+  }
+  if (stats.unchanged > 0) {
+    shell.setStatus(`共 ${stats.unchanged} 处标签已与规则名一致，无需修改`);
+    return;
+  }
+  shell.setStatus(
+    stats.noRule > 0
+      ? "无法推算规则名（缺零件标识或索引），请先重建引用索引"
+      : "当前树无子件可填",
+  );
 }
 
-function onSyncError(msg: string) {
-  pageError.value = msg;
-  shell.setStatus(msg);
+async function onExpandAllTree() {
+  if (treeMode.value !== "full") {
+    treeMode.value = "full";
+    await loadAssemblyTree();
+  }
+  await nextTick();
+  await assemblyTreeRef.value?.expandAllTree(treeNodes.value);
 }
+
+watch(rel, (host) => {
+  if (!host.trim()) treeNodes.value = [];
+});
 
 watch([rel, treeMode], () => {
-  void loadAssemblyTree();
-}, { immediate: true });
+  reloadAssemblyIfVisible();
+});
+
+watch(
+  () => activeSubTab.value,
+  (tab) => {
+    if (tab === "assembly") reloadAssemblyIfVisible({ refreshDisk: true });
+  },
+);
+
+watch(outgoingCount, () => {
+  reloadAssemblyIfVisible();
+});
+
+onMounted(() => {
+  reloadAssemblyIfVisible({ refreshDisk: true });
+});
+
+onActivated(() => {
+  reloadAssemblyIfVisible({ refreshDisk: true });
+});
 
 defineExpose({
   hasLabelEdits: () => Boolean(assemblyTreeRef.value?.getPendingPatches().length),
@@ -102,6 +179,15 @@ defineExpose({
 <template>
   <section class="assembly-block">
     <div class="section-head">
+      <button
+        type="button"
+        class="btn subtle"
+        :disabled="treeLoading || !treeNodes.length"
+        title="将规则名填入各行链接标签文本框，不写盘"
+        @click="onApplyRuleLabelsPreview"
+      >
+        按规则填入标签
+      </button>
       <div class="section-controls">
         <label class="mode-opt">
           <input v-model="treeMode" type="radio" value="first" />
@@ -113,28 +199,22 @@ defineExpose({
         </label>
       </div>
     </div>
-    <ReferenceLabelSyncBar
-      v-if="rel"
-      compact
-      :target-repo-rel="rel"
-      :show-incoming="false"
-      @done="onSyncDone"
-      @error="onSyncError"
-    />
-    <div v-if="labelEdits" class="label-save-bar">
-      <span class="label-save-hint">子件零件名已修改，尚未写回 FCStd</span>
-      <button type="button" class="btn" :disabled="savingLabels" @click="discardAssemblyLabelEdits">
-        放弃
-      </button>
-      <button type="button" class="btn primary" :disabled="savingLabels" @click="saveAssemblyLabels">
-        {{ savingLabels ? "保存中…" : "保存子件零件名" }}
-      </button>
-    </div>
+    <p class="asm-hint muted">
+      链接标签列仿 FreeCAD 零件树（图标 + 可编辑名）；目标文件单独一列。<strong>缺失</strong>行不可改标签，请用「改链接」；歧义在标签下显示 ⚠。
+      「按规则填入标签」只改已解析行，确认后点底部「应用」写回。
+    </p>
     <AssemblyTreeTable
       ref="assemblyTreeRef"
       :nodes="treeNodes"
       :loading="treeLoading"
+      :tree-depth="treeMode"
+      :label-edits="labelEdits"
+      :saving-labels="savingLabels"
+      @need-full-depth="onExpandAllTree"
       @edits-change="onAssemblyEditsChange"
+      @xref-replaced="loadAssemblyTree"
+      @discard-label-edits="discardAssemblyLabelEdits"
+      @apply-label-edits="saveAssemblyLabels"
     />
   </section>
 </template>
@@ -147,6 +227,13 @@ defineExpose({
   flex-direction: column;
 }
 
+.asm-hint {
+  margin: 0 0 8px;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  flex-shrink: 0;
+}
+
 .section-head {
   display: flex;
   flex-wrap: wrap;
@@ -154,6 +241,26 @@ defineExpose({
   gap: 12px;
   margin-bottom: 8px;
   flex-shrink: 0;
+}
+
+.section-head .btn.subtle {
+  padding: 5px 12px;
+  font-size: 0.78rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  color: #047857;
+  cursor: pointer;
+}
+
+.section-head .btn.subtle:hover:not(:disabled) {
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.section-head .btn.subtle:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .section-controls {
@@ -171,37 +278,4 @@ defineExpose({
   font-size: 0.82rem;
 }
 
-.label-save-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  padding: 8px 10px;
-  border: 1px solid #fcd34d;
-  border-radius: 8px;
-  background: #fffbeb;
-  flex-shrink: 0;
-}
-
-.label-save-hint {
-  flex: 1;
-  min-width: 160px;
-  font-size: 0.78rem;
-  color: #92400e;
-}
-
-.label-save-bar .btn {
-  padding: 5px 12px;
-  font-size: 0.78rem;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  background: var(--btn-bg);
-}
-
-.label-save-bar .btn.primary {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
-}
 </style>

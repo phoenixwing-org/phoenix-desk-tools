@@ -13,9 +13,18 @@ function basenameFromAttr(attr: string): string {
   return i >= 0 ? norm.slice(i + 1) : norm;
 }
 
+function basenameFromRel(rel: string): string {
+  const norm = rel.replace(/\\/g, "/").trim();
+  const i = norm.lastIndexOf("/");
+  return i >= 0 ? norm.slice(i + 1) : norm;
+}
+
 export function formatReferenceLabelChange(row: ReferenceLabelChange): string {
   const target = basenameFromAttr(row.xlink_file_attr);
-  return `${target} · ${row.old_label} → ${row.new_label}`;
+  const host = row.host_repo_rel?.trim() ? `${basenameFromRel(row.host_repo_rel)} · ` : "";
+  const oldL = row.old_label?.trim() || "（空）";
+  const newL = row.new_label?.trim() || "（空）";
+  return `${host}${target}：${oldL} → ${newL}`;
 }
 
 export function logReferenceLabelApply(
@@ -41,8 +50,10 @@ export function logReferenceLabelApply(
     appendLog(`  ✗ ${f.host_repo_rel_path}: ${f.error}`, { source: opts.source });
   }
 
+  const hosts = data.applied_hosts?.length ?? 0;
   const summary =
     `${opts.title} · ${count} 处` +
+    (hosts ? ` · ${hosts} 个宿主` : "") +
     (failed.length ? ` · ${failed.length} 失败` : "");
   return summary;
 }

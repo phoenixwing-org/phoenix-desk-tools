@@ -15,7 +15,7 @@ import { useAppShell } from "../composables/useAppShell";
 import { usePageSession } from "../composables/usePageSession";
 import type { TableColumnDef } from "../composables/useResizableTable";
 import { useWorkspaceFileQuery } from "../composables/useWorkspaceFileQuery";
-import { BOM_FIELD_LABELS as L } from "../utils/bomFieldLabels";
+import { BOM_FIELD_LABELS as L, LINK_LABEL_COLUMN_WIDE } from "../utils/bomFieldLabels";
 import {
   basenameFromRel,
   normalizeRepoRel,
@@ -50,15 +50,18 @@ type BomRow = {
   PartVersion: string;
   TypeCode: string;
   PartName: string;
+  linkLabel: string;
   filename: string;
   repoRel: string;
   resolveStatus: string;
+  labelMismatch?: boolean;
 };
 
 const assemblyColumns: TableColumnDef[] = [
   { key: "index", label: "#", width: 44, minWidth: 40, headerClass: "col-index" },
+  { key: "linkLabel", label: LINK_LABEL_COLUMN_WIDE, width: 160, minWidth: 120 },
   { key: "partKey", label: L.partKey, width: 108, minWidth: 80 },
-  { key: "typeCode", label: L.typeCode, width: 72, minWidth: 56 },
+  { key: "typeCode", label: L.typeCode, width: 36, minWidth: 28 },
   { key: "partName", label: L.partName, width: 120, minWidth: 80 },
   { key: "file", label: "文件名", width: 180, minWidth: 100 },
   { key: "path", label: "相对目录", width: 160, minWidth: 100 },
@@ -67,9 +70,10 @@ const assemblyColumns: TableColumnDef[] = [
 
 const allColumns: TableColumnDef[] = [
   { key: "index", label: "#", width: 44, minWidth: 40, headerClass: "col-index" },
+  { key: "linkLabel", label: LINK_LABEL_COLUMN_WIDE, width: 160, minWidth: 120 },
   { key: "host", label: "宿主文件", width: 160, minWidth: 100 },
   { key: "partKey", label: L.partKey, width: 108, minWidth: 80 },
-  { key: "typeCode", label: L.typeCode, width: 72, minWidth: 56 },
+  { key: "typeCode", label: L.typeCode, width: 36, minWidth: 28 },
   { key: "partName", label: L.partName, width: 120, minWidth: 80 },
   { key: "file", label: "子件文件名", width: 160, minWidth: 100 },
   { key: "path", label: "子件目录", width: 160, minWidth: 100 },
@@ -91,6 +95,16 @@ const loadingAll = ref(false);
 const rebuilding = ref(false);
 const assemblyError = ref("");
 const allRefsError = ref("");
+const allGroupByHost = ref(true);
+const expandedAllHosts = ref<Set<string>>(new Set());
+
+type AllHostGroup = {
+  hostRel: string;
+  hostBasename: string;
+  rows: BomRow[];
+};
+
+const allChildColumns = computed(() => allColumns.filter((c) => c.key !== "host"));
 
 const hasIndex = computed(() => (meta.value?.edge_count ?? 0) > 0);
 
@@ -110,9 +124,11 @@ function enrichTarget(edge: BomXrefEdge) {
     PartVersion: entry?.PartVersion || "—",
     TypeCode: entry?.TypeCode || "—",
     PartName: entry?.PartName || "—",
+    linkLabel: edge.link_label?.trim() || "—",
     filename: edge.target_basename,
     repoRel: edge.target_repo_rel_path || "—",
     resolveStatus: edge.resolve_status,
+    labelMismatch: Boolean(edge.label_mismatch),
   };
 }
 
@@ -133,6 +149,47 @@ const allRows = computed((): BomRow[] => {
     ...enrichTarget(row),
   }));
 });
+
+const allGrouped = computed((): AllHostGroup[] => {
+  const groups: AllHostGroup[] = [];
+  const seen = new Map<string, AllHostGroup>();
+  for (const row of allRows.value) {
+    let g = seen.get(row.hostRel);
+    if (!g) {
+      g = { hostRel: row.hostRel, hostBasename: row.hostBasename, rows: [] };
+      seen.set(row.hostRel, g);
+      groups.push(g);
+    }
+    g.rows.push(row);
+  }
+  return groups;
+});
+
+const allHostCount = computed(() => allGrouped.value.length);
+
+function syncExpandedAllHosts(expandAll = true) {
+  if (!expandAll) return;
+  expandedAllHosts.value = new Set(allGrouped.value.map((g) => g.hostRel));
+}
+
+function isAllHostExpanded(hostRel: string) {
+  return expandedAllHosts.value.has(hostRel);
+}
+
+function toggleAllHost(hostRel: string) {
+  const next = new Set(expandedAllHosts.value);
+  if (next.has(hostRel)) next.delete(hostRel);
+  else next.add(hostRel);
+  expandedAllHosts.value = next;
+}
+
+function expandAllHosts() {
+  expandedAllHosts.value = new Set(allGrouped.value.map((g) => g.hostRel));
+}
+
+function collapseAllHosts() {
+  expandedAllHosts.value = new Set();
+}
 
 const totalPages = computed(() => Math.max(1, Math.ceil(allTotal.value / pageSize.value)));
 const currentPage = computed(() => Math.floor(allOffset.value / pageSize.value) + 1);
@@ -243,6 +300,7 @@ async function loadAllEdges(resetOffset = false) {
     });
     allRefs.value = data.refs;
     allTotal.value = data.total;
+    syncExpandedAllHosts(true);
     shell.appendLog(
       `[BOM列表] 共 ${data.total} 条 · 本页 ${data.count} 条（第 ${Math.floor(allOffset.value / pageSize.value) + 1} 页）`,
       { source: "bom_xref" },
@@ -491,8 +549,24 @@ onUnmounted(() => {
         table-class="bom-table"
       >
         <tbody>
-          <tr v-for="row in bomRows" :key="`${row.index}-${row.filename}`">
+          <tr
+            v-for="row in bomRows"
+            :key="`${row.index}-${row.filename}`"
+            :class="{ 'row-label-mismatch': row.labelMismatch }"
+          >
             <td class="col-index">{{ row.index }}</td>
+            <td class="mono link-label-cell">
+              <button
+                v-if="canOpenFileDetailRel(row.repoRel)"
+                type="button"
+                class="link-key"
+                :title="row.repoRel"
+                @click="openFileDetailRel(row.repoRel)"
+              >
+                {{ row.linkLabel }}
+              </button>
+              <span v-else :title="row.linkLabel">{{ row.linkLabel }}</span>
+            </td>
             <td>
               <button
                 v-if="partKeyLabel(row)"
@@ -559,6 +633,9 @@ onUnmounted(() => {
           </button>
           <span class="page-info">
             第 {{ currentPage }} / {{ totalPages }} 页 · 共 {{ allTotal }} 条
+            <template v-if="allGroupByHost && allHostCount">
+              · {{ allHostCount }} 个宿主
+            </template>
           </span>
           <button
             type="button"
@@ -569,19 +646,124 @@ onUnmounted(() => {
             下一页
           </button>
         </div>
+        <label v-if="allRows.length" class="view-opt">
+          <input v-model="allGroupByHost" type="checkbox" />
+          按宿主分组
+        </label>
+        <template v-if="allGroupByHost && allRows.length">
+          <button type="button" class="btn mini" @click="expandAllHosts">展开宿主</button>
+          <button type="button" class="btn mini" @click="collapseAllHosts">折叠宿主</button>
+        </template>
       </section>
 
       <div v-if="allRefsError" class="banner err">{{ allRefsError }}</div>
 
       <ResizableDataTable
-        v-if="allRows.length"
+        v-if="allRows.length && allGroupByHost"
+        :columns="allChildColumns"
+        wrap-class="table-grow"
+        table-class="bom-table bom-table-grouped"
+      >
+        <tbody>
+          <template v-for="group in allGrouped" :key="group.hostRel">
+            <tr class="host-group-row" @click="toggleAllHost(group.hostRel)">
+              <td :colspan="allChildColumns.length" class="host-group-cell">
+                <span class="host-toggle">{{
+                  isAllHostExpanded(group.hostRel) ? "▾" : "▸"
+                }}</span>
+                <button
+                  v-if="canOpenFileDetailRel(group.hostRel)"
+                  type="button"
+                  class="link-key host-link"
+                  :title="group.hostRel"
+                  @click.stop="openFileDetailRel(group.hostRel)"
+                >
+                  {{ group.hostBasename }}
+                </button>
+                <span v-else class="mono host-link" :title="group.hostRel">{{ group.hostBasename }}</span>
+                <span class="host-meta muted">{{ group.rows.length }} 条引用</span>
+              </td>
+            </tr>
+            <template v-if="isAllHostExpanded(group.hostRel)">
+              <tr
+                v-for="row in group.rows"
+                :key="`${group.hostRel}-${row.index}-${row.filename}`"
+                class="child-ref-row"
+                :class="{ 'row-label-mismatch': row.labelMismatch }"
+              >
+                <td class="col-index">{{ row.index }}</td>
+                <td class="mono link-label-cell">
+                  <button
+                    v-if="canOpenFileDetailRel(row.repoRel)"
+                    type="button"
+                    class="link-key"
+                    :title="row.repoRel"
+                    @click="openFileDetailRel(row.repoRel)"
+                  >
+                    {{ row.linkLabel }}
+                  </button>
+                  <span v-else :title="row.linkLabel">{{ row.linkLabel }}</span>
+                </td>
+                <td>
+                  <button
+                    v-if="partKeyLabel(row)"
+                    type="button"
+                    class="link-key"
+                    @click="openPartKeyFromRow(row)"
+                  >
+                    {{ partKeyLabel(row) }}
+                  </button>
+                  <span v-else>—</span>
+                </td>
+                <td>{{ row.TypeCode }}</td>
+                <td>{{ row.PartName }}</td>
+                <td class="mono">
+                  <button
+                    v-if="canOpenFileDetailRel(row.repoRel)"
+                    type="button"
+                    class="link-key"
+                    :title="row.repoRel"
+                    @click="openFileDetailRel(row.repoRel)"
+                  >
+                    {{ row.filename }}
+                  </button>
+                  <span v-else>{{ row.filename }}</span>
+                </td>
+                <td class="mono muted" :title="row.repoRel">{{ repoDirFromRel(row.repoRel) }}</td>
+                <td>
+                  <span class="tag" :class="row.resolveStatus">{{ statusLabel(row.resolveStatus) }}</span>
+                </td>
+              </tr>
+            </template>
+          </template>
+        </tbody>
+      </ResizableDataTable>
+
+      <ResizableDataTable
+        v-else-if="allRows.length"
         :columns="allColumns"
         wrap-class="table-grow"
         table-class="bom-table"
       >
         <tbody>
-          <tr v-for="row in allRows" :key="`${row.hostRel}-${row.index}-${row.filename}`">
+          <tr
+            v-for="row in allRows"
+            :key="`${row.hostRel}-${row.index}-${row.filename}`"
+            :class="{ 'row-label-mismatch': row.labelMismatch }"
+          >
             <td class="col-index">{{ row.index }}</td>
+            <td class="mono link-label-cell">
+              <button
+                v-if="canOpenFileDetailRel(row.repoRel)"
+                type="button"
+                class="link-key"
+                :title="row.repoRel"
+                @click="openFileDetailRel(row.repoRel)"
+              >
+                {{ row.linkLabel }}
+              </button>
+              <span v-else :title="row.linkLabel">{{ row.linkLabel }}</span>
+            </td>
             <td class="mono">
               <button
                 v-if="canOpenFileDetailRel(row.hostRel)"
@@ -916,6 +1098,62 @@ onUnmounted(() => {
 .tag.ambiguous {
   background: #fef3c7;
   color: #b45309;
+}
+
+.bom-table tr.row-label-mismatch {
+  background: #fffbeb;
+}
+
+.bom-table-grouped .host-group-row {
+  background: #f1f5f9;
+  cursor: pointer;
+}
+
+.bom-table-grouped .host-group-cell {
+  padding: 6px 10px;
+  font-weight: 600;
+}
+
+.bom-table-grouped .host-toggle {
+  display: inline-block;
+  width: 18px;
+  color: #64748b;
+  font-size: 0.72rem;
+}
+
+.bom-table-grouped .host-meta {
+  margin-left: 10px;
+  font-size: 0.76rem;
+  font-weight: 500;
+}
+
+.bom-table-grouped .child-ref-row td {
+  background: #fff;
+}
+
+/* 子件行链接标签列相对宿主分组行略缩进，与展开三角对齐 */
+.bom-table-grouped .child-ref-row .link-label-cell {
+  padding-left: 20px;
+}
+
+.bom-table-grouped .child-ref-row .col-index {
+  color: var(--muted);
+}
+
+.view-opt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  margin-left: 8px;
+}
+
+.link-label-cell {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
 }
 
 .link-key {

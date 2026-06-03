@@ -12,7 +12,11 @@ import {
 import { collectPageStates } from "./usePageSession";
 import { loadWorkbenchSession, saveWorkbenchSessionAll } from "./workbenchSession";
 import { createWorkbench, type WorkbenchContext } from "./useWorkbench";
+import { basenameFromRel } from "../utils/workspaceFileQuery";
 import type { OpenTabOptions, WorkbenchTab, WorkbenchTabPayload } from "../types/workbench";
+
+/** 返回 false 表示当前 Tab 未接管此次树点击，由 shell 回退打开文件详情 */
+export type TreeSelectHandler = (rel: string) => void | boolean | Promise<void | boolean>;
 
 export type LogAppendOptions = {
   /** 强制展开 / 仅追加不展开；默认遵循 log_auto_open_on_append */
@@ -79,9 +83,10 @@ export type AppShellContext = {
   persistShellLayout: (patch: Partial<ShellLayout>) => Promise<void>;
   reloadLauncher: () => Promise<void>;
   init: () => Promise<void>;
-  treeSelectHandler: Ref<((rel: string) => void) | null>;
-  /** 仅当前激活 Tab 会收到树点击；后台 Tab 注册不会生效 */
-  registerTreeSelect: (tabId: string | undefined, fn: ((rel: string) => void) | null) => void;
+  treeSelectHandler: Ref<TreeSelectHandler | null>;
+  /** 仅当前激活 Tab 会收到树点击；未注册或返回 false 时回退为打开文件详情 */
+  registerTreeSelect: (tabId: string | undefined, fn: TreeSelectHandler | null) => void;
+  dispatchTreeSelect: (rel: string) => Promise<void>;
   treeRescanToken: Ref<number>;
   treeSelectAfterRescan: Ref<string | null>;
   requestTreeRescan: (selectRel?: string) => void;
@@ -129,8 +134,8 @@ export function provideAppShell(): AppShellContext {
   const logText = ref("");
   const logSource = ref<string | null>(null);
   const logAutoOpenSuppressed = ref(false);
-  const treeSelectHandler = shallowRef<((rel: string) => void) | null>(null);
-  const treeHandlersByTab = new Map<string, (rel: string) => void>();
+  const treeSelectHandler = shallowRef<TreeSelectHandler | null>(null);
+  const treeHandlersByTab = new Map<string, TreeSelectHandler>();
   const treeRescanToken = ref(0);
   const treeSelectAfterRescan = ref<string | null>(null);
 
@@ -414,11 +419,30 @@ export function provideAppShell(): AppShellContext {
     shellLayout.value = { ...shellLayout.value, ...updated };
   }
 
-  function registerTreeSelect(tabId: string | undefined, fn: ((rel: string) => void) | null) {
+  function registerTreeSelect(tabId: string | undefined, fn: TreeSelectHandler | null) {
     if (!tabId) return;
     if (fn) treeHandlersByTab.set(tabId, fn);
     else treeHandlersByTab.delete(tabId);
     syncActiveTreeHandler();
+  }
+
+  async function dispatchTreeSelect(rel: string) {
+    const norm = rel.replace(/\\/g, "/").trim();
+    if (!norm) return;
+
+    const handler = treeSelectHandler.value;
+    if (handler) {
+      try {
+        const accepted = await handler(norm);
+        if (accepted !== false) return;
+      } catch {
+        /* 当前 Tab 处理失败时回退文件详情 */
+      }
+    }
+
+    if (/\.fcstd$/i.test(basenameFromRel(norm))) {
+      openFileDetailForRel(norm);
+    }
   }
 
   function requestTreeRescan(selectRel?: string) {
@@ -499,6 +523,7 @@ export function provideAppShell(): AppShellContext {
     init,
     treeSelectHandler,
     registerTreeSelect,
+    dispatchTreeSelect,
     treeRescanToken,
     treeSelectAfterRescan,
     requestTreeRescan,

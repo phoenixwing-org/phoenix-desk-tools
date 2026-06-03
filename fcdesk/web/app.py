@@ -849,9 +849,12 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
     def api_bom_xrefs_assembly_tree(
         host_rel: str = Query(..., min_length=1),
         full: bool = Query(False),
+        refresh_disk: bool = Query(False),
     ) -> dict:
         try:
-            return load_assembly_tree(get_workspace(), host_rel, full=full)
+            return load_assembly_tree(
+                get_workspace(), host_rel, full=full, refresh_disk=refresh_disk
+            )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         except RenameAnalysisError as e:
@@ -1029,6 +1032,7 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
         basename: str = "",
         part_number: str = "",
         part_version: str = "",
+        exclude_repo_rel: str = "",
     ) -> dict:
         try:
             return list_xlink_fix_candidates(
@@ -1036,6 +1040,7 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
                 basename=basename,
                 part_number=part_number or None,
                 part_version=part_version or None,
+                exclude_repo_rel=exclude_repo_rel or None,
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e

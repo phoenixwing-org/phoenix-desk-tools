@@ -104,6 +104,14 @@ async function reloadFile(targetRel?: string) {
     }
     await refreshXrefCounts();
     assemblyLabelEdits.value = false;
+    if (props.workbenchTabId) {
+      const tab = shell.getTab(props.workbenchTabId);
+      if (tab) {
+        tab.contextKey = path;
+        tab.subtitle = path;
+      }
+      shell.scheduleWorkbenchSave();
+    }
     shell.setStatus(data.embedded_warning ? `警告: ${data.embedded_warning}` : data.source_note);
   } catch (e) {
     pageError.value = String(e);
@@ -130,7 +138,7 @@ async function confirmSwitchFile(targetRel: string): Promise<boolean> {
   if (!hasUnsavedEdits()) return true;
   const name = rel.value.split("/").pop() ?? "当前文件";
   const next = targetRel.split("/").pop() ?? targetRel;
-  const hint = assemblyLabelEdits.value ? "子件零件名或属性" : "属性";
+  const hint = assemblyLabelEdits.value ? "链接标签或属性" : "属性";
   const choice = await promptChoice({
     title: "切换文件",
     message: `「${name}」有尚未写入的${hint}。\n\n要打开「${next}」？`,
@@ -153,18 +161,17 @@ watch(showAssemblyTab, (show) => {
   }
 });
 
-async function onTreeSelect(targetRel: string) {
-  if (targetRel === rel.value) return;
-  if (!(await confirmSwitchFile(targetRel))) return;
+async function onTreeSelect(targetRel: string): Promise<boolean> {
+  if (targetRel === rel.value) return true;
+  if (!(await confirmSwitchFile(targetRel))) return false;
   activeSubTab.value = "overview";
   await reloadFile(targetRel);
+  return true;
 }
 
 function registerTreeHandler() {
   if (!props.workbenchTabId) return;
-  shell.registerTreeSelect(props.workbenchTabId, (path) => {
-    void onTreeSelect(path);
-  });
+  shell.registerTreeSelect(props.workbenchTabId, (path) => onTreeSelect(path));
 }
 
 function unregisterTreeHandler() {
@@ -188,6 +195,24 @@ function applyOpenPayload() {
   void reloadFile(openRel);
 }
 
+/** F5 / 会话恢复：pageState → Tab.contextKey（仓库相对路径） */
+async function restoreFromWorkbenchTab() {
+  if (!props.workbenchTabId) return;
+  if (rel.value.trim() && preview.value) return;
+
+  const pageState = shell.consumeTabPageState(props.workbenchTabId);
+  if (pageState) {
+    await hydratePageSession(pageState);
+    if (rel.value.trim()) return;
+  }
+
+  const tab = shell.getTab(props.workbenchTabId);
+  if (tab?.pageId !== "file_detail" && tab?.pageId !== "bom_apply") return;
+  const fallbackRel = (tab.contextKey || tab.subtitle || "").trim();
+  if (!fallbackRel || fallbackRel === rel.value) return;
+  void reloadFile(fallbackRel);
+}
+
 provideFileDetailContext({
   rel,
   preview,
@@ -209,7 +234,7 @@ async function hydratePageSession(snap: Record<string, unknown>): Promise<boolea
   if (snap.v !== SESSION_V) return false;
   if (snap.subTab) activeSubTab.value = normalizeFileDetailSubTab(snap.subTab);
   const savedRel = String(snap.rel ?? "").trim();
-  if (!savedRel) return true;
+  if (!savedRel) return false;
   form.value = { ...(snap.form as Partial<BomFields>) };
   baseline.value = { ...(snap.baseline as Partial<BomFields>) };
   await reloadFile(savedRel);
@@ -240,11 +265,13 @@ watch(
 
 onMounted(() => {
   applyOpenPayload();
+  void restoreFromWorkbenchTab();
   registerTreeHandler();
 });
 
 onActivated(() => {
   applyOpenPayload();
+  void restoreFromWorkbenchTab();
   registerTreeHandler();
 });
 onDeactivated(() => {});

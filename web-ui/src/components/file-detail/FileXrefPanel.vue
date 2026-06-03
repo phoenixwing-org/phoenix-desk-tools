@@ -5,8 +5,13 @@ import { fetchBomXrefIncoming, fetchBomXrefOutgoing, refreshBomXrefHostIndex } f
 import { useFileDetailContext } from "../../composables/useFileDetailContext";
 import { useReferenceLabelSync } from "../../composables/useReferenceLabelSync";
 import { useAppShell } from "../../composables/useAppShell";
+import {
+  LINK_LABEL_COLUMN_WIDE,
+  LINK_LABEL_TITLE,
+} from "../../utils/bomFieldLabels";
 import { basenameFromRel, normalizeRepoRelForApi, repoDirFromRel } from "../../utils/workspaceFileQuery";
 import { logReferenceLabelApply } from "../../utils/referenceLabelLog";
+import XlinkReplaceDialog from "../XlinkReplaceDialog.vue";
 
 const ctx = useFileDetailContext();
 const shell = useAppShell();
@@ -22,6 +27,34 @@ const outgoingLabelMismatchCount = ref(0);
 const directCount = ref(0);
 const incomingCount = computed(() => ctx.incomingCount.value);
 const outgoingCount = computed(() => ctx.outgoingCount.value);
+
+const replaceOpen = ref(false);
+const replaceEdge = ref<BomXrefEdge | null>(null);
+/** 当前文件 repo 相对路径（ctx.rel 为 Ref，须解包再传给对话框） */
+const hostRepoRel = computed(() => ctx.rel.value.trim());
+
+const showXlinkReplaceActions = computed(() => Boolean(ctx.preview.value?.is_fcstd));
+
+function canReplaceXlink(row: BomXrefEdge) {
+  return Boolean((row.xlink_file_attr ?? "").trim());
+}
+
+function openReplaceDialog(row: BomXrefEdge) {
+  if (!canReplaceXlink(row)) return;
+  replaceEdge.value = row;
+  replaceOpen.value = true;
+}
+
+function closeReplaceDialog() {
+  replaceOpen.value = false;
+  replaceEdge.value = null;
+}
+
+async function onReplaceApplied() {
+  closeReplaceDialog();
+  await loadTables(false, true);
+  await ctx.refreshXrefCounts();
+}
 
 function statusLabel(s: string) {
   if (s === "ok" || s === "present" || s === "resolved") return "已解析";
@@ -341,13 +374,13 @@ async function onSyncIncomingLabels() {
         </button>
       </div>
       <p v-if="outgoingRefs.length" class="section-hint muted">
-        <strong>子件零件名</strong> = 本装配树里看到的名称；<strong>规则名</strong> = 目标文件的标准名。
+        <strong>链接标签（子件名）</strong> = 装配树里该引用的显示名（Link.Label）。
         <template v-if="outgoingLabelMismatchCount">
-          当前有 <strong>{{ outgoingLabelMismatchCount }}</strong> 处不一致（黄行）。
+          当前有 <strong>{{ outgoingLabelMismatchCount }}</strong> 处与目标标准名不一致（黄行）。
         </template>
         批量对齐请前往
         <button type="button" class="inline-link" @click="goToAssemblyTab">装配结构</button>
-        Tab（支持按规则名更新与手工编辑）。
+        Tab。单条改 XLink 路径请用右侧「改链接」。
       </p>
       <p v-else-if="!loading" class="section-hint muted">
         本文件无下级引用。若被父装配引用，请用上方「更新父装配中本件名」。
@@ -356,16 +389,20 @@ async function onSyncIncomingLabels() {
       <table v-else class="data-table">
         <thead>
           <tr>
+            <th :title="LINK_LABEL_TITLE">{{ LINK_LABEL_COLUMN_WIDE }}</th>
             <th>目标文件</th>
-            <th title="装配树 Link.Label">子件零件名</th>
-            <th title="目标 FCStd 的规则显示名">规则名</th>
             <th>目标目录</th>
             <th v-if="showXlinkColumn">XLink 属性</th>
             <th>解析</th>
+            <th v-if="showXlinkReplaceActions" class="col-action">操作</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="row in outgoingRefs" :key="row.id" :class="rowClass(row.resolve_status, row)">
+            <td class="tree-name-cell">
+              <span v-if="row.link_label" class="mono">{{ row.link_label }}</span>
+              <span v-else class="muted">—</span>
+            </td>
             <td class="mono">
               <button
                 v-if="canOpenFileDetailRel(row.target_repo_rel_path)"
@@ -377,14 +414,6 @@ async function onSyncIncomingLabels() {
                 {{ row.target_basename }}
               </button>
               <span v-else>{{ row.target_basename }}</span>
-            </td>
-            <td class="tree-name-cell">
-              <span v-if="row.link_label" class="mono">{{ row.link_label }}</span>
-              <span v-else class="muted">—</span>
-            </td>
-            <td class="tree-name-cell">
-              <span v-if="row.rule_label" class="mono muted">{{ row.rule_label }}</span>
-              <span v-else class="muted">—</span>
             </td>
             <td class="mono muted">
               <button
@@ -406,14 +435,38 @@ async function onSyncIncomingLabels() {
             <td>
               <span class="tag" :class="row.resolve_status">{{ statusLabel(row.resolve_status) }}</span>
             </td>
+            <td v-if="showXlinkReplaceActions" class="col-action">
+              <button
+                type="button"
+                class="btn-row-action"
+                :disabled="!canReplaceXlink(row)"
+                :title="
+                  canReplaceXlink(row)
+                    ? '按零件标识搜索候选并写回本文件内该 XLink'
+                    : '无 XLink 路径，无法写回'
+                "
+                @click="openReplaceDialog(row)"
+              >
+                改链接
+              </button>
+            </td>
           </tr>
         </tbody>
       </table>
     </section>
 
+    <XlinkReplaceDialog
+      :open="replaceOpen"
+      :host-repo-rel="hostRepoRel"
+      :edge="replaceEdge"
+      @close="closeReplaceDialog"
+      @applied="onReplaceApplied"
+    />
+
     <p class="hint muted">
       本页展示 CAD 索引中的入向/出向关系。「重建本文件引用索引」从磁盘写入引用边；
-      <strong>缺失</strong>表示索引中无目标或路径无法解析。磁盘改名后请先在「改名」Tab 写回 XLink，再重建索引。
+      <strong>缺失</strong>表示索引中无目标或路径无法解析。单条 XLink 写回用出向表「改链接」；
+      批量改名写回请用「改名」Tab，再重建索引。
     </p>
   </div>
 </template>
@@ -641,5 +694,30 @@ async function onSyncIncomingLabels() {
 
 .muted-link:hover {
   color: #1d4ed8;
+}
+
+.col-action {
+  width: 72px;
+  white-space: nowrap;
+}
+
+.btn-row-action {
+  padding: 3px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--border-strong);
+  background: #fff;
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+
+.btn-row-action:hover:not(:disabled) {
+  background: #f0f9ff;
+  border-color: #7dd3fc;
+  color: #0369a1;
+}
+
+.btn-row-action:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 </style>

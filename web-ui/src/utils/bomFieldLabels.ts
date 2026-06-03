@@ -1,5 +1,11 @@
 /** BOM / CAD 索引字段在表格与表单中的中文表头（API 字段名仍为英文）。 */
 
+/** 装配树中 XLink 引用实例的 Label（界面列名） */
+export const LINK_LABEL_COLUMN = "链接标签";
+export const LINK_LABEL_COLUMN_WIDE = "链接标签（子件名）";
+export const LINK_LABEL_TITLE =
+  "FreeCAD 装配树中该引用的 Label（Link.Label），即树里看到的子件显示名";
+
 export const BOM_FIELD_LABELS = {
   PartNumber: "零件号",
   PartVersion: "版本",

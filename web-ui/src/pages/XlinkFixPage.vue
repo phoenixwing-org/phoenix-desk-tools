@@ -135,6 +135,7 @@ async function loadCandidates(row: XlinkFixIssueRow) {
       basename: row.basename || row.old_path,
       part_number: row.part_number,
       part_version: row.part_version,
+      exclude_repo_rel: row.host_repo_rel,
     });
     if (!row.part_key && data.part_key) {
       row.part_number = data.part_number;
