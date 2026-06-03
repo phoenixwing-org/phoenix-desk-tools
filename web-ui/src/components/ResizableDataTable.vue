@@ -92,6 +92,16 @@ const { widths, totalWidth, onResizeStart } = useResizableTable(() => props.colu
   isolation: isolate;
 }
 
+/* 操作列含按钮时放宽行高，避免裁切 */
+.resizable-data-table :deep(td.actions) {
+  height: auto;
+  min-height: 22px;
+  line-height: normal;
+  overflow: visible;
+  padding: 4px 8px;
+  white-space: normal;
+}
+
 /* 越靠右的列 z-index 越高，溢出文字被右侧列遮住 */
 .resizable-data-table :deep(td:nth-child(1)) { z-index: 1; }
 .resizable-data-table :deep(td:nth-child(2)) { z-index: 2; }

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useReferenceLabelSync } from "../composables/useReferenceLabelSync";
+import { useAppShell } from "../composables/useAppShell";
+import { logReferenceLabelApply } from "../utils/referenceLabelLog";
 
 const props = withDefaults(
   defineProps<{
@@ -28,6 +30,7 @@ const emit = defineEmits<{
   error: [message: string];
 }>();
 
+const shell = useAppShell();
 const { syncing, syncIncomingLabels, syncHostAllLabels } = useReferenceLabelSync(
   () => props.targetRepoRel,
 );
@@ -43,9 +46,11 @@ const canHostAll = computed(() => props.showHostAll && Boolean(props.targetRepoR
 async function onIncoming() {
   try {
     const data = await syncIncomingLabels(props.incomingHostPaths, props.includeTransitive);
-    const n = data.label_patches ?? 0;
-    const h = data.applied_hosts?.length ?? 0;
-    emit("done", `已更新勾选装配内对本文件的显示名 · ${h} 个装配 · ${n} 处`);
+    const msg = logReferenceLabelApply(shell.appendLog, data, {
+      source: "file_detail",
+      title: `已更新勾选装配内对本文件的子件标签 · ${data.applied_hosts?.length ?? 0} 个装配`,
+    });
+    emit("done", msg);
   } catch (e) {
     emit("error", String(e));
   }
@@ -54,8 +59,11 @@ async function onIncoming() {
 async function onHostAll() {
   try {
     const data = await syncHostAllLabels();
-    const n = data.label_patches ?? 0;
-    emit("done", `已更新本装配内全部子件显示名 · ${n} 处`);
+    const msg = logReferenceLabelApply(shell.appendLog, data, {
+      source: "file_detail",
+      title: "按规则名更新树中名称",
+    });
+    emit("done", msg);
   } catch (e) {
     emit("error", String(e));
   }
@@ -64,7 +72,7 @@ async function onHostAll() {
 
 <template>
   <div class="label-sync-bar" :class="{ compact }">
-    <span v-if="!compact" class="bar-label">装配树显示名</span>
+    <span v-if="!compact" class="bar-label">装配树子件标签</span>
     <button
       v-if="canIncoming"
       type="button"
@@ -76,7 +84,7 @@ async function onHostAll() {
       {{
         syncing
           ? "…"
-          : `勾选装配 · 同步对本文件的显示名（${incomingHostPaths.length}）`
+          : `勾选装配 · 同步对本文件的子件标签（${incomingHostPaths.length}）`
       }}
     </button>
     <button
@@ -84,13 +92,13 @@ async function onHostAll() {
       type="button"
       class="btn subtle"
       :disabled="syncing"
-      title="将本装配文件内全部子件/外链的树节点名同步为各目标规则名"
+      title="将本装配文件内全部子件/外链的 Label 同步为各目标规则标签"
       @click="onHostAll"
     >
-      {{ syncing ? "…" : "本装配 · 同步全部子件显示名" }}
+      {{ syncing ? "…" : "按规则名更新树中名称" }}
     </button>
     <span v-if="!compact" class="bar-hint muted">
-      只改装配树 Label，不改路径。
+      只改装配树 Link.Label，不改路径。表格「子件零件名」列应与「规则名」一致。
     </span>
   </div>
 </template>

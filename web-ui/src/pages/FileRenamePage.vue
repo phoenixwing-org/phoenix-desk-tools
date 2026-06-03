@@ -13,6 +13,7 @@ import RenameAnalysisPanel from "../components/RenameAnalysisPanel.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useIncomingRefQuery } from "../composables/useIncomingRefQuery";
 import { usePageSession } from "../composables/usePageSession";
+import { logReferenceLabelApply } from "../utils/referenceLabelLog";
 
 const props = defineProps<{
   workbenchTabId?: string;
@@ -362,15 +363,10 @@ async function runReferenceLabelApply(scope: "incoming" | "host_all", hosts: str
   try {
     const data = await applyReferenceLabelCorrections(hosts, { ...buildApplyOpts(), labelScope: scope });
     if (data.scan) scan.value = data.scan;
-    if (data.failed.length) {
-      shell.appendLog(
-        data.failed.map((f) => `${f.host_repo_rel_path}: ${f.error}`).join("\n"),
-        { source: "file_rename" },
-      );
-    }
-    const msg =
-      `已同步${scopeLabel} · ${data.applied_hosts.length} 个宿主 · ${data.label_patches ?? 0} 处 Label` +
-      (data.failed.length ? ` · ${data.failed.length} 失败` : "");
+    const msg = logReferenceLabelApply(shell.appendLog, data, {
+      source: "file_rename",
+      title: `已同步${scopeLabel}`,
+    });
     logIncoming(msg);
     shell.setStatus(msg);
   } catch (e) {

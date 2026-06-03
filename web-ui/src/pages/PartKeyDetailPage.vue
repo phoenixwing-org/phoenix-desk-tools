@@ -1,16 +1,12 @@
 <script setup lang="ts">
 import { computed, onActivated, onMounted, onUnmounted, ref, watch } from "vue";
 import {
-  fetchPartAssemblyTree,
   fetchPartKeyDetail,
   inferPartKeyFromPath,
   patchPartKey,
-  type AssemblyTreeNode,
   type PartKeyDetail,
   type PartKeyFile,
 } from "../api";
-import AssemblyTreeTable from "../components/AssemblyTreeTable.vue";
-import ReferenceLabelSyncBar from "../components/ReferenceLabelSyncBar.vue";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
 import { promptChoice } from "../composables/choiceDialog";
 import ComboTextInput from "../components/ComboTextInput.vue";
@@ -26,10 +22,8 @@ const props = defineProps<{
 }>();
 
 const SESSION_V = 1;
-type PageSubTab = "attributes" | "assembly";
 
 const shell = useAppShell();
-const activeSubTab = ref<PageSubTab>("attributes");
 
 const fileColumns: TableColumnDef[] = [
   { key: "disk", label: "磁盘", width: 56, minWidth: 48 },
@@ -39,7 +33,7 @@ const fileColumns: TableColumnDef[] = [
   { key: "linkStatus", label: "关联状态", width: 96, minWidth: 80 },
   { key: "notes", label: "备注", width: 160, minWidth: 100 },
   { key: "dir", label: "相对目录", width: 140, minWidth: 80 },
-  { key: "actions", label: "操作", width: 96, minWidth: 88 },
+  { key: "actions", label: "操作", width: 148, minWidth: 120 },
 ];
 
 const partNumber = ref("");
@@ -67,20 +61,9 @@ const currentPartKey = computed(() => {
   return pn && pv ? `${pn}.${pv}` : "";
 });
 
-const treeMode = ref<"first" | "full">("first");
-const selectedAssemblyRel = ref("");
-const treeLoading = ref(false);
-const treeNodes = ref<AssemblyTreeNode[]>([]);
-
-const assemblyFiles = computed(() =>
-  (detail.value?.files ?? []).filter(
-    (f) =>
-      f.file_status === "present" &&
-      (f.file_role === "assembly" || /\.assy\.fcstd$/i.test(f.filename)),
-  ),
-);
-
-const showAssemblySection = computed(() => assemblyFiles.value.length > 0);
+function isAssemblyFile(file: PartKeyFile): boolean {
+  return file.file_role === "assembly" || /\.assy\.fcstd$/i.test(file.filename);
+}
 
 function resolvePartKeyFromTab(): boolean {
   if (!props.workbenchTabId) return false;
@@ -96,7 +79,7 @@ function syncBaselineFromEdit() {
   baselineForm.value = { ...editForm.value };
 }
 
-function hasUnsavedEdits(): boolean {
+function hasAttributeEdits(): boolean {
   const keys = ["TypeCode", "ModelSeries", "PartName", "label", "notes", "status"] as const;
   for (const k of keys) {
     if (String(editForm.value[k] ?? "").trim() !== String(baselineForm.value[k] ?? "").trim()) {
@@ -104,6 +87,10 @@ function hasUnsavedEdits(): boolean {
     }
   }
   return false;
+}
+
+function hasUnsavedEdits(): boolean {
+  return hasAttributeEdits();
 }
 
 async function confirmSwitchPartKey(targetKey: string): Promise<boolean> {
@@ -164,7 +151,6 @@ async function switchToPartKey(
   partNumber.value = pn;
   partVersion.value = pv;
   partKeyInput.value = targetKey;
-  activeSubTab.value = "attributes";
   pageError.value = "";
   await loadDetail();
   if (!detail.value) {
@@ -297,37 +283,12 @@ async function loadDetail() {
         subtitle: detail.value.PartName || detail.value.label || undefined,
       });
     }
-    if (!selectedAssemblyRel.value || !assemblyFiles.value.some((f) => f.repo_rel_path === selectedAssemblyRel.value)) {
-      selectedAssemblyRel.value = assemblyFiles.value[0]?.repo_rel_path ?? "";
-    }
     setStatus(`零件 ${detail.value.part_key} · ${detail.value.file_count} 个关联文件`);
-    await loadAssemblyTree();
   } catch (e) {
     pageError.value = String(e);
     detail.value = null;
   } finally {
     loading.value = false;
-  }
-}
-
-async function loadAssemblyTree() {
-  const pn = partNumber.value.trim();
-  const pv = partVersion.value.trim();
-  const host = selectedAssemblyRel.value.trim();
-  if (!pn || !pv || !host) {
-    treeNodes.value = [];
-    return;
-  }
-
-  treeLoading.value = true;
-  try {
-    const data = await fetchPartAssemblyTree(pn, pv, host, treeMode.value === "full");
-    treeNodes.value = data.nodes;
-  } catch (e) {
-    treeNodes.value = [];
-    setStatus(String(e));
-  } finally {
-    treeLoading.value = false;
   }
 }
 
@@ -361,6 +322,11 @@ function openFileDetail(file: PartKeyFile) {
   shell.openFileDetailForRel(file.repo_rel_path);
 }
 
+function openAssemblyStructure(file: PartKeyFile) {
+  if (file.file_status !== "present" || !isAssemblyFile(file)) return;
+  shell.openFileDetailForRel(file.repo_rel_path, { subTab: "assembly" });
+}
+
 function initPage() {
   if (resolvePartKeyFromTab()) {
     syncPartKeyInput();
@@ -368,30 +334,13 @@ function initPage() {
   }
 }
 
-watch(treeMode, () => {
-  void loadAssemblyTree();
-});
-
-watch(selectedAssemblyRel, () => {
-  void loadAssemblyTree();
-});
-
-watch(showAssemblySection, (has) => {
-  if (!has && activeSubTab.value === "assembly") {
-    activeSubTab.value = "attributes";
-  }
-});
-
 function hydratePageSession(snap: Record<string, unknown>): Promise<boolean> {
   if (snap.v !== SESSION_V) return Promise.resolve(false);
-  if (snap.subTab === "attributes" || snap.subTab === "assembly") {
-    activeSubTab.value = snap.subTab;
-  }
   return Promise.resolve(true);
 }
 
 usePageSession(props.workbenchTabId, {
-  serialize: () => ({ v: SESSION_V, subTab: activeSubTab.value }),
+  serialize: () => ({ v: SESSION_V }),
   hydrate: hydratePageSession,
   isDirty: hasUnsavedEdits,
 });
@@ -403,10 +352,6 @@ watch(
   },
   { immediate: true },
 );
-
-watch(activeSubTab, () => {
-  if (props.workbenchTabId) shell.scheduleWorkbenchSave();
-});
 
 onMounted(() => {
   initPage();
@@ -459,31 +404,7 @@ onUnmounted(() => {
     <div v-if="loading && !detail" class="empty">载入中…</div>
 
     <template v-else-if="detail">
-      <nav class="sub-tabs" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          class="sub-tab"
-          :class="{ active: activeSubTab === 'attributes' }"
-          @click="activeSubTab = 'attributes'"
-        >
-          属性
-          <span v-if="detail.file_count" class="tab-badge">{{ detail.file_count }}</span>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          class="sub-tab"
-          :class="{ active: activeSubTab === 'assembly' }"
-          :disabled="!showAssemblySection"
-          @click="activeSubTab = 'assembly'"
-        >
-          装配结构
-        </button>
-      </nav>
-
-      <!-- 属性 + 关联文件 -->
-      <div v-show="activeSubTab === 'attributes'" class="sub-panel">
+      <div class="sub-panel">
         <section class="detail-meta">
           <div class="meta-grid">
             <label
@@ -559,6 +480,14 @@ onUnmounted(() => {
                   >
                     详情
                   </button>
+                  <button
+                    v-if="file.file_status === 'present' && isAssemblyFile(file)"
+                    type="button"
+                    class="btn mini"
+                    @click="openAssemblyStructure(file)"
+                  >
+                    装配结构
+                  </button>
                 </td>
               </tr>
             </tbody>
@@ -567,44 +496,6 @@ onUnmounted(() => {
             <p class="empty">该零件键下暂无关联文件</p>
           </div>
         </section>
-      </div>
-
-      <!-- 装配 BOM 树 -->
-      <div v-show="activeSubTab === 'assembly'" class="sub-panel">
-        <section v-if="showAssemblySection" class="assembly-block">
-          <div class="section-head">
-            <div class="section-controls">
-              <label v-if="assemblyFiles.length > 1" class="ctl">
-                <span>装配文件</span>
-                <select v-model="selectedAssemblyRel">
-                  <option v-for="file in assemblyFiles" :key="file.id" :value="file.repo_rel_path">
-                    {{ file.filename }}
-                  </option>
-                </select>
-              </label>
-              <label class="mode-opt">
-                <input v-model="treeMode" type="radio" value="first" />
-                第一级
-              </label>
-              <label class="mode-opt">
-                <input v-model="treeMode" type="radio" value="full" />
-                全部层级
-              </label>
-            </div>
-          </div>
-          <ReferenceLabelSyncBar
-            v-if="selectedAssemblyRel"
-            compact
-            :target-repo-rel="selectedAssemblyRel"
-            :show-incoming="false"
-            @done="(msg) => shell.setStatus(msg)"
-            @error="(msg) => { pageError = msg; shell.setStatus(msg); }"
-          />
-          <AssemblyTreeTable :nodes="treeNodes" :loading="treeLoading" />
-        </section>
-        <div v-else class="empty-wrap table-grow">
-          <p class="empty">该零件无装配 FCStd，无法展开 BOM 树。</p>
-        </div>
       </div>
     </template>
 
@@ -653,45 +544,6 @@ onUnmounted(() => {
   font-size: 0.82rem;
   line-height: 1.4;
   min-width: 0;
-}
-
-.sub-tabs {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 12px;
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.sub-tab {
-  padding: 8px 14px;
-  border: none;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  font-size: 0.85rem;
-  cursor: pointer;
-  color: var(--muted);
-  margin-bottom: -1px;
-}
-
-.sub-tab.active {
-  color: var(--text);
-  border-bottom-color: var(--accent);
-  font-weight: 600;
-}
-
-.sub-tab:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.tab-badge {
-  margin-left: 6px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  background: #e0e7ff;
-  color: #3730a3;
 }
 
 .sub-panel {
@@ -792,13 +644,6 @@ onUnmounted(() => {
   color: inherit;
 }
 
-.assembly-block {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
 .files-block {
   flex: 1;
   min-height: 0;
@@ -807,47 +652,9 @@ onUnmounted(() => {
   margin-top: 4px;
 }
 
-.section-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
-  flex-shrink: 0;
-}
-
 .section-title {
   margin: 0;
   font-size: 0.95rem;
-}
-
-.section-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  margin-left: auto;
-}
-
-.ctl {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.82rem;
-}
-
-.ctl select {
-  min-width: 180px;
-  padding: 4px 6px;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-}
-
-.mode-opt {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.82rem;
 }
 
 .btn {
@@ -932,7 +739,17 @@ onUnmounted(() => {
 }
 
 .actions {
-  white-space: nowrap;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  white-space: normal;
+}
+
+.actions .btn.mini {
+  padding: 3px 7px;
+  font-size: 0.72rem;
+  line-height: 1.25;
 }
 
 .empty {

@@ -22,8 +22,11 @@ from fcdesk.freecad.phoenix_store import (
 from fcdesk.freecad.phoenix_store import _norm_key
 from fcdesk.freecad.rename_analysis.types import HostRefGroup, RenameAnalysisError, XLinkBasenameHit
 from fcdesk.freecad.rename_analysis.xlink import (
+    patch_fcstd_reference_labels_explicit,
     preferred_xlink_attr_for_target,
+    read_host_reference_labels,
     replace_basename_in_xlink_attr,
+    resolve_rule_display_label,
     xlink_attr_matches_target,
 )
 from fcdesk.services.cad_index import (
@@ -38,6 +41,7 @@ from fcdesk.services.cad_index import (
 )
 
 __all__ = [
+    "apply_explicit_link_labels",
     "ensure_bom_xref_built",
     "ensure_bom_xref_index",
     "host_ref_groups_from_db",
@@ -348,6 +352,28 @@ def search_incoming_refs(
     }
 
 
+def _enrich_outgoing_ref_row(
+    repo_root: Path,
+    host_repo_rel: str,
+    row: dict[str, Any],
+    *,
+    label_map: dict[str, str] | None = None,
+) -> None:
+    attr = str(row.get("xlink_file_attr") or "")
+    if label_map is None:
+        label_map = read_host_reference_labels(repo_root, host_repo_rel)
+    link_label = label_map.get(attr, "")
+    target_rel = str(row.get("target_repo_rel_path") or "").strip()
+    rule_label = (
+        resolve_rule_display_label(repo_root, repo_rel_path=target_rel) if target_rel else ""
+    )
+    row["link_label"] = link_label
+    row["rule_label"] = rule_label
+    row["label_mismatch"] = bool(
+        link_label and rule_label and link_label != rule_label
+    )
+
+
 def search_outgoing_refs(
     repo_root: Path,
     host_repo_rel: str,
@@ -361,9 +387,14 @@ def search_outgoing_refs(
     if refresh_disk:
         refresh_bom_xrefs_for_hosts(repo_root, [rel])
     rows = query_bom_xrefs_outgoing(repo_root, rel, limit=limit)
+    label_map = read_host_reference_labels(repo_root, rel)
+    for row in rows:
+        _enrich_outgoing_ref_row(repo_root, rel, row, label_map=label_map)
+    mismatch_count = sum(1 for r in rows if r.get("label_mismatch"))
     return {
         "host_repo_rel_path": rel,
         "count": len(rows),
+        "label_mismatch_count": mismatch_count,
         "refs": rows,
     }
 
@@ -648,8 +679,10 @@ def load_assembly_tree(
             return []
 
         rows = query_bom_xrefs_outgoing(repo_root, key, limit=limit_per_host)
+        label_map = read_host_reference_labels(repo_root, key)
         nodes: list[dict[str, Any]] = []
-        seen_targets: set[str] = set()
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        group_order: list[str] = []
         next_stack = stack | {key}
 
         for row in rows:
@@ -657,15 +690,38 @@ def load_assembly_tree(
             if status not in _GRAPH_TARGET_STATUSES:
                 continue
             target_rel = _norm_xref_path(row.get("target_repo_rel_path"))
-            if not target_rel or target_rel in seen_targets:
+            if not target_rel:
                 continue
-            seen_targets.add(target_rel)
+            if target_rel not in grouped:
+                grouped[target_rel] = []
+                group_order.append(target_rel)
+            grouped[target_rel].append(row)
+
+        for target_rel in group_order:
+            row_group = grouped[target_rel]
+            first_row = row_group[0]
+            xref_instances: list[dict[str, str]] = []
+            link_labels: list[str] = []
+            for r in row_group:
+                attr = str(r.get("xlink_file_attr") or "")
+                lbl = label_map.get(attr, "")
+                xref_instances.append({"xlink_file_attr": attr, "link_label": lbl})
+                if lbl:
+                    link_labels.append(lbl)
+
+            rule_label = resolve_rule_display_label(repo_root, repo_rel_path=target_rel)
 
             node: dict[str, Any] = {
+                "host_repo_rel": key,
                 "repo_rel_path": target_rel,
-                "basename": str(row.get("target_basename") or Path(target_rel).name),
-                "resolve_status": status,
-                "xlink_file_attr": str(row.get("xlink_file_attr") or ""),
+                "basename": str(first_row.get("target_basename") or Path(target_rel).name),
+                "resolve_status": str(first_row.get("resolve_status") or ""),
+                "xlink_file_attr": str(first_row.get("xlink_file_attr") or ""),
+                "link_label": link_labels[0] if link_labels else "",
+                "link_labels": link_labels,
+                "xref_instances": xref_instances,
+                "rule_label": rule_label,
+                "ref_count": len(row_group),
                 "part_number": "",
                 "part_version": "",
                 "part_key": "",
@@ -699,5 +755,49 @@ def load_assembly_tree(
         "mode": "full" if full else "first",
         "node_count": _count_tree_nodes(nodes),
         "nodes": nodes,
+    }
+
+
+def apply_explicit_link_labels(
+    repo_root: Path,
+    patches: list[dict[str, str]],
+) -> dict[str, Any]:
+    """按宿主 + XLink 属性手工写回引用实例 Label。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    by_host: dict[str, dict[str, str]] = {}
+    for raw in patches:
+        host = str(raw.get("host_repo_rel") or "").strip().replace("\\", "/")
+        attr = str(raw.get("xlink_file_attr") or "").strip()
+        label = str(raw.get("link_label") if raw.get("link_label") is not None else "")
+        if not host or not attr:
+            continue
+        by_host.setdefault(host, {})[attr] = label
+
+    if not by_host:
+        raise ValueError("无有效的 Label 修改")
+
+    applied_hosts: list[str] = []
+    failed: list[dict[str, str]] = []
+    total_patches = 0
+    for host, attr_labels in sorted(by_host.items()):
+        path = (rr / host).resolve(strict=False)
+        if not path.is_file():
+            failed.append({"host_repo_rel": host, "error": "宿主文件不存在"})
+            continue
+        try:
+            n = patch_fcstd_reference_labels_explicit(path, attr_labels)
+            if n > 0:
+                total_patches += n
+                applied_hosts.append(host)
+        except RenameAnalysisError as e:
+            failed.append({"host_repo_rel": host, "error": str(e)})
+
+    if applied_hosts:
+        refresh_bom_xrefs_for_hosts(rr, applied_hosts)
+
+    return {
+        "label_patches": total_patches,
+        "applied_hosts": applied_hosts,
+        "failed": failed,
     }
 

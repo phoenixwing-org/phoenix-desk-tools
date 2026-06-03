@@ -416,22 +416,102 @@ def _plan_reference_label_updates(
     return block_labels
 
 
+def read_reference_labels_by_xlink_attr(xml: str) -> dict[str, str]:
+    """读取 Document.xml 内各 XLink 对应引用对象的 ``Label``（装配树子件标签）。"""
+    labels: dict[str, str] = {}
+    for m in XLINK_FILE_RE.finditer(xml):
+        attr = m.group(2).strip()
+        if not attr:
+            continue
+        block = _find_object_block_span(xml, m.start())
+        if block is None:
+            continue
+        lm = LABEL_STRING_RE.search(xml[block[0] : block[1]])
+        if lm:
+            labels[attr] = lm.group(2)
+    return labels
+
+
+def read_host_reference_labels(repo_root: Path, host_repo_rel: str) -> dict[str, str]:
+    from fcdesk.freecad.bom_xref.extract import read_document_xml_from_fcstd
+
+    path = (repo_root.expanduser().resolve(strict=False) / host_repo_rel.strip()).resolve(strict=False)
+    if not path.is_file():
+        return {}
+    xml = read_document_xml_from_fcstd(path)
+    if not xml:
+        return {}
+    return read_reference_labels_by_xlink_attr(xml)
+
+
+def plan_explicit_reference_label_updates(
+    xml: str,
+    attr_labels: dict[str, str],
+) -> dict[tuple[int, int], str]:
+    """按 XLink ``file`` 属性指定引用实例 ``Label``（手工编辑）。"""
+    if not attr_labels:
+        return {}
+    block_labels: dict[tuple[int, int], str] = {}
+    for m in XLINK_FILE_RE.finditer(xml):
+        attr = m.group(2).strip()
+        if attr not in attr_labels:
+            continue
+        block = _find_object_block_span(xml, m.start())
+        if block is None:
+            continue
+        block_labels[block] = attr_labels[attr]
+    return block_labels
+
+
+def patch_fcstd_reference_labels_explicit(
+    fcstd_path: Path,
+    attr_labels: dict[str, str],
+) -> int:
+    """仅写回指定 XLink 引用实例的 ``Label``。"""
+    if not attr_labels:
+        return 0
+    xml = _read_document_xml_from_fcstd(fcstd_path)
+    if xml is None:
+        raise RenameAnalysisError(f"无法读取 Document.xml：{fcstd_path}")
+    block_labels = plan_explicit_reference_label_updates(xml, attr_labels)
+    xml, label_count, _changes = _patch_reference_labels_in_xml(xml, block_labels)
+    if label_count == 0:
+        return 0
+    try:
+        _rewrite_fcstd_document_xml(fcstd_path, xml)
+    except OSError as e:
+        raise RenameAnalysisError(f"写回失败（可能被占用）：{fcstd_path} · {e}") from e
+    return label_count
+
+
 def _patch_reference_labels_in_xml(
     xml: str,
     block_labels: dict[tuple[int, int], str],
-) -> tuple[str, int]:
+) -> tuple[str, int, list[dict[str, str]]]:
     if not block_labels:
-        return xml, 0
+        return xml, 0, []
     count = 0
+    changes: list[dict[str, str]] = []
     for (start, end), label in sorted(block_labels.items(), key=lambda item: item[0][0], reverse=True):
         block = xml[start:end]
         m = LABEL_STRING_RE.search(block)
         if m is None or m.group(2) == label:
             continue
+        old_label = m.group(2)
+        xlink_m = XLINK_FILE_RE.search(block)
+        xlink_attr = xlink_m.group(2).strip() if xlink_m else ""
+        changes.append(
+            {
+                "xlink_file_attr": xlink_attr,
+                "old_label": old_label,
+                "new_label": label,
+            }
+        )
         new_block = block[: m.start(2)] + label + block[m.end(2) :]
         xml = xml[:start] + new_block + xml[end:]
         count += 1
-    return xml, count
+    changes.reverse()
+    return xml, count, changes
 
 
 def patch_fcstd_reference_labels(
@@ -440,10 +520,10 @@ def patch_fcstd_reference_labels(
     *,
     repo_root: Path,
     host_repo_rel: str,
-) -> int:
-    """仅写回引用实例 ``Label``（不改 XLink ``file``）。"""
+) -> tuple[int, list[dict[str, str]]]:
+    """仅写回引用实例 ``Label``（不改 XLink ``file``）。返回 ``(变更数, 变更明细)``。"""
     if not hits:
-        return 0
+        return 0, []
     xml = _read_document_xml_from_fcstd(fcstd_path)
     if xml is None:
         raise RenameAnalysisError(f"无法读取 Document.xml：{fcstd_path}")
@@ -454,14 +534,14 @@ def patch_fcstd_reference_labels(
         repo_root=repo_root,
         host_repo_rel=host_repo_rel,
     )
-    xml, label_count = _patch_reference_labels_in_xml(xml, block_labels)
+    xml, label_count, changes = _patch_reference_labels_in_xml(xml, block_labels)
     if label_count == 0:
-        return 0
+        return 0, []
     try:
         _rewrite_fcstd_document_xml(fcstd_path, xml)
     except OSError as e:
         raise RenameAnalysisError(f"写回失败（可能被占用）：{fcstd_path} · {e}") from e
-    return label_count
+    return label_count, changes
 
 
 def patch_fcstd_host_corrections(
@@ -493,7 +573,7 @@ def patch_fcstd_host_corrections(
             repo_root=repo_root,
             host_repo_rel=host_repo_rel,
         )
-        xml, label_count = _patch_reference_labels_in_xml(xml, block_labels)
+        xml, label_count, _changes = _patch_reference_labels_in_xml(xml, block_labels)
 
     xml, xlink_count = _patch_xlink_attrs_in_xml(xml, replacements)
 
@@ -586,14 +666,14 @@ def apply_host_reference_label_corrections(
     repo_root: Path,
     host_repo_rel_path: str,
     hits: list[XLinkBasenameHit],
-) -> int:
-    """对单个宿主文件仅同步引用实例 Label。"""
+) -> tuple[int, list[dict[str, str]]]:
+    """对单个宿主文件仅同步引用实例 Label。返回 ``(变更数, 变更明细)``。"""
     rr = repo_root.expanduser().resolve(strict=False)
     host = (rr / host_repo_rel_path).resolve(strict=False)
     if not host.is_file():
         raise RenameAnalysisError(f"宿主文件不存在：{host_repo_rel_path}")
     if not hits:
-        return 0
+        return 0, []
     return patch_fcstd_reference_labels(
         host,
         hits,

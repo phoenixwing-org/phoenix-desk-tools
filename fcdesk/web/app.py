@@ -93,6 +93,8 @@ from fcdesk.services.cad_index import (
     refresh_bom_xref_index_for_host,
 )
 from fcdesk.services.bom_xref_service import (
+    apply_explicit_link_labels,
+    load_assembly_tree,
     load_bom_xref_payload,
     search_bom_xref_edges,
     search_incoming_refs,
@@ -250,6 +252,16 @@ class BomXrefRefreshHostBody(BaseModel):
     host_repo_rel: str
     recursive: bool = True
     max_hosts: int = 64
+
+
+class LinkLabelPatchItem(BaseModel):
+    host_repo_rel: str
+    xlink_file_attr: str
+    link_label: str
+
+
+class LinkLabelPatchBody(BaseModel):
+    patches: list[LinkLabelPatchItem]
 
 
 class FileRenameScanBody(BaseModel):
@@ -831,6 +843,32 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
                 refresh_disk=refresh_disk,
             )
         except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.get("/api/bom-xrefs/assembly-tree")
+    def api_bom_xrefs_assembly_tree(
+        host_rel: str = Query(..., min_length=1),
+        full: bool = Query(False),
+    ) -> dict:
+        try:
+            return load_assembly_tree(get_workspace(), host_rel, full=full)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except RenameAnalysisError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except LookupError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
+
+    @app.post("/api/bom-xrefs/patch-labels")
+    def api_bom_xrefs_patch_labels(body: LinkLabelPatchBody) -> dict:
+        try:
+            return apply_explicit_link_labels(
+                get_workspace(),
+                [p.model_dump() for p in body.patches],
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except RenameAnalysisError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
     @app.post("/api/bom-xrefs/refresh-host-index")

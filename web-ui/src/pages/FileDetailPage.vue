@@ -5,6 +5,7 @@ import { fetchBom, fetchBomXrefIncoming, fetchBomXrefOutgoing } from "../api";
 import FileOverviewPanel from "../components/file-detail/FileOverviewPanel.vue";
 import FileAttributesPanel from "../components/file-detail/FileAttributesPanel.vue";
 import FileXrefPanel from "../components/file-detail/FileXrefPanel.vue";
+import FileAssemblyPanel from "../components/file-detail/FileAssemblyPanel.vue";
 import FileRenamePanel from "../components/file-detail/FileRenamePanel.vue";
 import { provideFileDetailContext } from "../composables/useFileDetailContext";
 import { useAppShell } from "../composables/useAppShell";
@@ -31,8 +32,16 @@ const activeSubTab = ref<FileDetailSubTab>("overview");
 const incomingCount = ref(0);
 const outgoingCount = ref(0);
 const preferredRenameFilename = ref("");
+const assemblyLabelEdits = ref(false);
 
 const fileName = computed(() => rel.value.split("/").pop() ?? "");
+
+const showAssemblyTab = computed(() => {
+  if (!preview.value?.is_fcstd) return false;
+  if (outgoingCount.value > 0) return true;
+  if (preview.value.document_kinds?.assembly) return true;
+  return /\.assy\.fcstd$/i.test(rel.value);
+});
 
 async function refreshXrefCounts() {
   if (!rel.value.trim()) {
@@ -94,6 +103,7 @@ async function reloadFile(targetRel?: string) {
       });
     }
     await refreshXrefCounts();
+    assemblyLabelEdits.value = false;
     shell.setStatus(data.embedded_warning ? `警告: ${data.embedded_warning}` : data.source_note);
   } catch (e) {
     pageError.value = String(e);
@@ -111,14 +121,19 @@ function hasUnsavedAttrs() {
   return false;
 }
 
+function hasUnsavedEdits() {
+  return hasUnsavedAttrs() || assemblyLabelEdits.value;
+}
+
 async function confirmSwitchFile(targetRel: string): Promise<boolean> {
   if (!rel.value || targetRel === rel.value) return true;
-  if (!hasUnsavedAttrs()) return true;
+  if (!hasUnsavedEdits()) return true;
   const name = rel.value.split("/").pop() ?? "当前文件";
   const next = targetRel.split("/").pop() ?? targetRel;
+  const hint = assemblyLabelEdits.value ? "子件零件名或属性" : "属性";
   const choice = await promptChoice({
     title: "切换文件",
-    message: `「${name}」有尚未写入的属性。\n\n要打开「${next}」？`,
+    message: `「${name}」有尚未写入的${hint}。\n\n要打开「${next}」？`,
     choices: [
       { id: "discard", label: "放弃修改并切换", variant: "danger" },
       { id: "cancel", label: "取消切换" },
@@ -126,6 +141,17 @@ async function confirmSwitchFile(targetRel: string): Promise<boolean> {
   });
   return choice === "discard";
 }
+
+function onAssemblyEditsChange(dirty: boolean) {
+  assemblyLabelEdits.value = dirty;
+  if (props.workbenchTabId) shell.setTabDirty(props.workbenchTabId, hasUnsavedEdits());
+}
+
+watch(showAssemblyTab, (show) => {
+  if (!show && activeSubTab.value === "assembly") {
+    activeSubTab.value = "overview";
+  }
+});
 
 async function onTreeSelect(targetRel: string) {
   if (targetRel === rel.value) return;
@@ -199,13 +225,13 @@ usePageSession(props.workbenchTabId, {
     baseline: baseline.value,
   }),
   hydrate: hydratePageSession,
-  isDirty: hasUnsavedAttrs,
+  isDirty: hasUnsavedEdits,
 });
 
 watch([rel, form, baseline, activeSubTab], () => shell.scheduleWorkbenchSave(), { deep: true });
 
 watch(
-  () => hasUnsavedAttrs(),
+  () => hasUnsavedEdits(),
   (dirty) => {
     if (props.workbenchTabId) shell.setTabDirty(props.workbenchTabId, dirty);
   },
@@ -274,6 +300,16 @@ onUnmounted(() => {
           <span v-if="incomingCount + outgoingCount" class="tab-badge">{{ incomingCount + outgoingCount }}</span>
         </button>
         <button
+          v-if="showAssemblyTab"
+          type="button"
+          role="tab"
+          class="sub-tab"
+          :class="{ active: activeSubTab === 'assembly' }"
+          @click="switchSubTab('assembly')"
+        >
+          装配结构
+        </button>
+        <button
           type="button"
           role="tab"
           class="sub-tab"
@@ -288,6 +324,10 @@ onUnmounted(() => {
         <FileOverviewPanel v-show="activeSubTab === 'overview'" />
         <FileAttributesPanel v-show="activeSubTab === 'edit'" />
         <FileXrefPanel v-show="activeSubTab === 'xref'" />
+        <FileAssemblyPanel
+          v-show="activeSubTab === 'assembly'"
+          @edits-change="onAssemblyEditsChange"
+        />
         <FileRenamePanel
           v-show="activeSubTab === 'rename'"
           :workbench-tab-id="workbenchTabId"

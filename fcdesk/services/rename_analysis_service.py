@@ -229,7 +229,7 @@ def apply_reference_label_corrections(
         _expand_selected_for_indirect_label_apply(selected, groups) if transitive else selected
     )
 
-    applied_hosts, failed, total_label_patches = _apply_labels_for_hosts(
+    applied_hosts, failed, total_label_patches, label_changes = _apply_labels_for_hosts(
         rr,
         selected=apply_targets,
         host_map=host_map,
@@ -267,6 +267,7 @@ def apply_reference_label_corrections(
         "failed": failed,
         "xlink_patches": 0,
         "label_patches": total_label_patches,
+        "label_changes": label_changes,
         "scan": scan_payload,
     }
 
@@ -486,6 +487,7 @@ def _apply_host_all_reference_labels(
     applied_hosts: list[str] = []
     failed: list[dict[str, str]] = []
     total_label_patches = 0
+    label_changes: list[dict[str, str]] = []
 
     for host_rel in selected:
         hits = _hits_for_host_all_xlinks(repo_root, host_rel)
@@ -493,10 +495,11 @@ def _apply_host_all_reference_labels(
             failed.append({"host_repo_rel_path": host_rel, "error": "宿主内无外部 XLink 引用"})
             continue
         try:
-            n_l = apply_host_reference_label_corrections(repo_root, host_rel, hits)
+            n_l, changes = apply_host_reference_label_corrections(repo_root, host_rel, hits)
             if n_l <= 0:
                 continue
             total_label_patches += n_l
+            label_changes.extend(_label_changes_with_host(host_rel, changes))
             applied_hosts.append(host_rel)
         except (RenameAnalysisError, OSError) as ex:
             failed.append({"host_repo_rel_path": host_rel, "error": str(ex)})
@@ -556,6 +559,7 @@ def _apply_host_all_reference_labels(
         "failed": failed,
         "xlink_patches": 0,
         "label_patches": total_label_patches,
+        "label_changes": label_changes,
         "scan": scan_payload,
     }
 
@@ -651,10 +655,11 @@ def _apply_labels_for_hosts(
     *,
     selected: list[str],
     host_map: dict[str, HostRefGroup],
-) -> tuple[list[str], list[dict[str, str]], int]:
+) -> tuple[list[str], list[dict[str, str]], int, list[dict[str, str]]]:
     applied_hosts: list[str] = []
     failed: list[dict[str, str]] = []
     total_label_patches = 0
+    label_changes: list[dict[str, str]] = []
 
     for host_rel in selected:
         group = host_map.get(host_rel)
@@ -665,15 +670,16 @@ def _apply_labels_for_hosts(
         if not hits:
             continue
         try:
-            n_l = apply_host_reference_label_corrections(repo_root, host_rel, hits)
+            n_l, changes = apply_host_reference_label_corrections(repo_root, host_rel, hits)
             if n_l <= 0:
                 continue
             total_label_patches += n_l
+            label_changes.extend(_label_changes_with_host(host_rel, changes))
             applied_hosts.append(host_rel)
         except (RenameAnalysisError, OSError) as ex:
             failed.append({"host_repo_rel_path": host_rel, "error": str(ex)})
 
-    return applied_hosts, failed, total_label_patches
+    return applied_hosts, failed, total_label_patches, label_changes
 
 
 def _apply_labels_from_rename_log(
@@ -701,6 +707,7 @@ def _apply_labels_from_rename_log(
     applied_hosts: list[str] = []
     failed: list[dict[str, str]] = []
     total_label_patches = 0
+    label_changes: list[dict[str, str]] = []
 
     for host_rel in apply_targets:
         host_key = _norm_host_path(host_rel)
@@ -709,10 +716,11 @@ def _apply_labels_from_rename_log(
             failed.append({"host_repo_rel_path": host_key, "error": "未找到引用命中"})
             continue
         try:
-            n_l = apply_host_reference_label_corrections(rr, host_key, list(group.hits))
+            n_l, changes = apply_host_reference_label_corrections(rr, host_key, list(group.hits))
             if n_l <= 0:
                 continue
             total_label_patches += n_l
+            label_changes.extend(_label_changes_with_host(host_key, changes))
             applied_hosts.append(host_key)
         except (RenameAnalysisError, OSError) as ex:
             failed.append({"host_repo_rel_path": host_key, "error": str(ex)})
@@ -748,6 +756,7 @@ def _apply_labels_from_rename_log(
         "failed": failed,
         "xlink_patches": 0,
         "label_patches": total_label_patches,
+        "label_changes": label_changes,
         "scan": refreshed,
     }
 
@@ -814,6 +823,11 @@ def _flatten_hosts(hosts: list[dict[str, Any]]) -> list[dict[str, str]]:
 
 def _norm_host_path(path: str) -> str:
     return normalize_repo_rel_path_for_map(path.replace("\\", "/").strip())
+
+
+def _label_changes_with_host(host_rel: str, changes: list[dict[str, str]]) -> list[dict[str, str]]:
+    host = _norm_host_path(host_rel)
+    return [{**c, "host_repo_rel": host} for c in changes]
 
 
 def _groups_to_payload(

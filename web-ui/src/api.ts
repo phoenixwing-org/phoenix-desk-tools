@@ -479,6 +479,13 @@ export function analyzeRenameReferences(body: {
   });
 }
 
+export type ReferenceLabelChange = {
+  host_repo_rel?: string;
+  xlink_file_attr: string;
+  old_label: string;
+  new_label: string;
+};
+
 export function applyRenameAnalysisCorrections(
   hostRepoRelPaths: string[],
   opts: {
@@ -500,6 +507,7 @@ export function applyRenameAnalysisCorrections(
     failed: Array<{ host_repo_rel_path: string; error: string }>;
     xlink_patches: number;
     label_patches?: number;
+    label_changes?: ReferenceLabelChange[];
     scan: RefScanPayload;
   }>("/api/rename-analysis/apply", {
     method: "POST",
@@ -654,6 +662,11 @@ export type BomXrefEdge = {
   resolve_status: string;
   ref_kind: string;
   detail?: unknown;
+  /** 装配树中该引用的 Link.Label（当前树中名称） */
+  link_label?: string;
+  /** 目标文件的规则显示名（同步后的期望名；多件同目标时可能带 .001 序号） */
+  rule_label?: string;
+  label_mismatch?: boolean;
 };
 
 export function fetchBomXrefMeta() {
@@ -693,7 +706,12 @@ export function fetchBomXrefOutgoing(rel: string, limit?: number, refreshDisk = 
   const q = new URLSearchParams({ rel });
   if (limit != null) q.set("limit", String(limit));
   if (!refreshDisk) q.set("refresh_disk", "false");
-  return jsonFetch<{ host_repo_rel_path: string; count: number; refs: BomXrefEdge[] }>(
+  return jsonFetch<{
+    host_repo_rel_path: string;
+    count: number;
+    label_mismatch_count?: number;
+    refs: BomXrefEdge[];
+  }>(
     `/api/bom-xrefs/outgoing?${q}`,
   );
 }
@@ -829,8 +847,14 @@ export function fetchPartKeyDetail(partNumber: string, partVersion: string) {
   );
 }
 
+export type AssemblyXrefInstance = {
+  xlink_file_attr: string;
+  link_label: string;
+};
+
 export type AssemblyTreeNode = {
   id: string;
+  host_repo_rel: string;
   repo_rel_path: string;
   basename: string;
   resolve_status: string;
@@ -842,9 +866,34 @@ export type AssemblyTreeNode = {
   ModelSeries: string;
   PartName: string;
   label: string;
+  /** 装配内引用实例 Label（当前树中名称） */
+  link_label: string;
+  link_labels: string[];
+  xref_instances: AssemblyXrefInstance[];
+  /** 目标文件的规则显示名 */
+  rule_label?: string;
+  ref_count: number;
   file_role: string;
   children: AssemblyTreeNode[];
 };
+
+export type LinkLabelPatch = {
+  host_repo_rel: string;
+  xlink_file_attr: string;
+  link_label: string;
+};
+
+export function patchLinkLabels(patches: LinkLabelPatch[]) {
+  return jsonFetch<{
+    label_patches: number;
+    applied_hosts: string[];
+    failed: { host_repo_rel: string; error: string }[];
+  }>("/api/bom-xrefs/patch-labels", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ patches }),
+  });
+}
 
 export type AssemblyTreePayload = {
   host_repo_rel_path: string;
@@ -852,6 +901,14 @@ export type AssemblyTreePayload = {
   node_count: number;
   nodes: AssemblyTreeNode[];
 };
+
+export function fetchAssemblyTreeByHost(hostRel: string, full: boolean) {
+  const params = new URLSearchParams({
+    host_rel: hostRel,
+    full: full ? "true" : "false",
+  });
+  return jsonFetch<AssemblyTreePayload>(`/api/bom-xrefs/assembly-tree?${params}`);
+}
 
 export function fetchPartAssemblyTree(
   partNumber: string,

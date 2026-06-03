@@ -6,6 +6,7 @@ import { useFileDetailContext } from "../../composables/useFileDetailContext";
 import { useReferenceLabelSync } from "../../composables/useReferenceLabelSync";
 import { useAppShell } from "../../composables/useAppShell";
 import { basenameFromRel, normalizeRepoRelForApi, repoDirFromRel } from "../../utils/workspaceFileQuery";
+import { logReferenceLabelApply } from "../../utils/referenceLabelLog";
 
 const ctx = useFileDetailContext();
 const shell = useAppShell();
@@ -17,6 +18,7 @@ const rebuildSubtree = ref(true);
 const incomingHosts = ref<BomXrefHost[]>([]);
 const selectedIncoming = ref<Set<string>>(new Set());
 const outgoingRefs = ref<BomXrefEdge[]>([]);
+const outgoingLabelMismatchCount = ref(0);
 const directCount = ref(0);
 const incomingCount = computed(() => ctx.incomingCount.value);
 const outgoingCount = computed(() => ctx.outgoingCount.value);
@@ -63,11 +65,27 @@ const outgoingStats = computed(() => {
   return { missing, ambiguous, resolved };
 });
 
-function rowClass(status: string) {
+function rowClass(status: string, row?: BomXrefEdge) {
+  if (row?.label_mismatch) return "row-label-mismatch";
   if (status === "missing") return "row-missing";
   if (status === "ambiguous") return "row-ambiguous";
   return "";
 }
+
+const showAssemblyLink = computed(() => {
+  if (!ctx.preview.value?.is_fcstd) return false;
+  if (outgoingCount.value > 0) return true;
+  if (ctx.preview.value.document_kinds?.assembly) return true;
+  return /\.assy\.fcstd$/i.test(ctx.rel.value);
+});
+
+const incomingLabelActionLabel = computed(() => {
+  if (labelSyncing.value) return "…";
+  if (selectedIncomingCount.value) {
+    return `更新父装配中本件名（${selectedIncomingCount.value} 个）`;
+  }
+  return "更新父装配中本件名";
+});
 
 async function loadTables(manual = false, refreshDisk = true) {
   if (!ctx.rel.value.trim()) return;
@@ -87,6 +105,9 @@ async function loadTables(manual = false, refreshDisk = true) {
     incomingHosts.value = inc.hosts;
     selectedIncoming.value = new Set(inc.hosts.map((h) => h.host_repo_rel_path));
     outgoingRefs.value = out.refs;
+    outgoingLabelMismatchCount.value =
+      out.label_mismatch_count ??
+      out.refs.filter((r) => r.label_mismatch).length;
     directCount.value = inc.direct_count ?? inc.count;
     ctx.incomingCount.value = inc.count;
     ctx.outgoingCount.value = out.count;
@@ -147,11 +168,8 @@ const selectedIncomingCount = computed(() => selectedIncomingPaths.value.length)
 const canSyncIncomingLabels = computed(
   () => selectedIncomingCount.value > 0 && Boolean(ctx.rel.value.trim()),
 );
-const canSyncHostAllLabels = computed(
-  () => outgoingRefs.value.length > 0 && Boolean(ctx.rel.value.trim()),
-);
 
-const { syncing: labelSyncing, syncIncomingLabels, syncHostAllLabels } = useReferenceLabelSync(
+const { syncing: labelSyncing, syncIncomingLabels } = useReferenceLabelSync(
   () => ctx.rel.value,
 );
 
@@ -176,9 +194,12 @@ const allIncomingSelected = computed(
 
 function onLabelSyncDone(msg: string) {
   shell.setStatus(msg);
-  shell.appendLog(`[文件详情] ${msg}`, { source: "file_detail" });
   void loadTables(false, false);
   void ctx.refreshXrefCounts();
+}
+
+function goToAssemblyTab() {
+  ctx.switchSubTab("assembly");
 }
 
 function onLabelSyncError(msg: string) {
@@ -190,20 +211,11 @@ async function onSyncIncomingLabels() {
   if (!canSyncIncomingLabels.value) return;
   try {
     const data = await syncIncomingLabels(selectedIncomingPaths.value, includeTransitive.value);
-    const n = data.label_patches ?? 0;
-    const h = data.applied_hosts?.length ?? 0;
-    onLabelSyncDone(`已更新勾选装配内对本文件的显示名 · ${h} 个装配 · ${n} 处`);
-  } catch (e) {
-    onLabelSyncError(String(e));
-  }
-}
-
-async function onSyncHostAllLabels() {
-  if (!canSyncHostAllLabels.value) return;
-  try {
-    const data = await syncHostAllLabels();
-    const n = data.label_patches ?? 0;
-    onLabelSyncDone(`已更新本文件内全部子件显示名 · ${n} 处`);
+    const msg = logReferenceLabelApply(shell.appendLog, data, {
+      source: "file_detail",
+      title: "更新父装配中本件名",
+    });
+    onLabelSyncDone(msg);
   } catch (e) {
     onLabelSyncError(String(e));
   }
@@ -252,20 +264,18 @@ async function onSyncHostAllLabels() {
           :disabled="labelSyncing || !canSyncIncomingLabels"
           :title="
             canSyncIncomingLabels
-              ? '在下方勾选的装配/图纸里，只改引用本文件那一项的树节点名（Label）'
-              : '请先在下方勾选至少一个宿主装配'
+              ? '将勾选装配树里「引用本文件」那一项的 Label 更新为本文件的规则名'
+              : incomingHosts.length
+                ? '请先在下方表格勾选至少一个父装配'
+                : '当前无装配引用本文件'
           "
           @click="onSyncIncomingLabels"
         >
-          {{
-            labelSyncing
-              ? "…"
-              : `勾选装配 · 同步对本文件的显示名${selectedIncomingCount ? `（${selectedIncomingCount}）` : ""}`
-          }}
+          {{ incomingLabelActionLabel }}
         </button>
       </div>
       <p class="section-hint muted">
-        改的是装配树里「这一零件」的显示名，不改文件路径；改路径请到「改名」Tab。
+        下方列出<strong>引用本文件</strong>的装配。勾选后点「更新父装配中本件名」，把这些装配树里本文件的节点名改为<strong>规则名</strong>（改名后常用）。不改 XLink 路径。
       </p>
       <p v-if="!loading && !incomingHosts.length" class="empty muted">无入向宿主</p>
       <table v-else class="data-table">
@@ -322,34 +332,40 @@ async function onSyncHostAllLabels() {
           </span>
         </h3>
         <button
+          v-if="showAssemblyLink"
           type="button"
-          class="btn-label-sync subtle"
-          :disabled="labelSyncing || !canSyncHostAllLabels"
-          :title="
-            canSyncHostAllLabels
-              ? '当前文件是装配或图纸时，将其内部全部外链的树节点名同步为各目标文件的规则名'
-              : '无出向引用：当前文件不是装配/图纸宿主，无需此项'
-          "
-          @click="onSyncHostAllLabels"
+          class="btn-assembly-link"
+          @click="goToAssemblyTab"
         >
-          {{ labelSyncing ? "…" : "本装配/图纸 · 同步全部子件显示名" }}
+          批量对齐子件名 → 装配结构
         </button>
       </div>
-      <p v-if="!canSyncHostAllLabels && !loading" class="section-hint muted">
-        当前为零件文件或无子件引用时，只需用上方「勾选装配」按钮。
+      <p v-if="outgoingRefs.length" class="section-hint muted">
+        <strong>子件零件名</strong> = 本装配树里看到的名称；<strong>规则名</strong> = 目标文件的标准名。
+        <template v-if="outgoingLabelMismatchCount">
+          当前有 <strong>{{ outgoingLabelMismatchCount }}</strong> 处不一致（黄行）。
+        </template>
+        批量对齐请前往
+        <button type="button" class="inline-link" @click="goToAssemblyTab">装配结构</button>
+        Tab（支持按规则名更新与手工编辑）。
+      </p>
+      <p v-else-if="!loading" class="section-hint muted">
+        本文件无下级引用。若被父装配引用，请用上方「更新父装配中本件名」。
       </p>
       <p v-if="!loading && !outgoingRefs.length" class="empty muted">无出向引用</p>
       <table v-else class="data-table">
         <thead>
           <tr>
             <th>目标文件</th>
+            <th title="装配树 Link.Label">子件零件名</th>
+            <th title="目标 FCStd 的规则显示名">规则名</th>
             <th>目标目录</th>
             <th v-if="showXlinkColumn">XLink 属性</th>
             <th>解析</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in outgoingRefs" :key="row.id" :class="rowClass(row.resolve_status)">
+          <tr v-for="row in outgoingRefs" :key="row.id" :class="rowClass(row.resolve_status, row)">
             <td class="mono">
               <button
                 v-if="canOpenFileDetailRel(row.target_repo_rel_path)"
@@ -361,6 +377,14 @@ async function onSyncHostAllLabels() {
                 {{ row.target_basename }}
               </button>
               <span v-else>{{ row.target_basename }}</span>
+            </td>
+            <td class="tree-name-cell">
+              <span v-if="row.link_label" class="mono">{{ row.link_label }}</span>
+              <span v-else class="muted">—</span>
+            </td>
+            <td class="tree-name-cell">
+              <span v-if="row.rule_label" class="mono muted">{{ row.rule_label }}</span>
+              <span v-else class="muted">—</span>
             </td>
             <td class="mono muted">
               <button
@@ -433,15 +457,40 @@ async function onSyncHostAllLabels() {
   white-space: nowrap;
 }
 
-.btn-label-sync.subtle {
-  background: #fff;
-  color: #047857;
-  border-color: #86efac;
-}
-
 .btn-label-sync:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.btn-assembly-link {
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid #86efac;
+  background: #fff;
+  color: #047857;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.btn-assembly-link:hover {
+  background: #f0fdf4;
+}
+
+.inline-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #047857;
+  font: inherit;
+  font-size: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.inline-link:hover {
+  color: #065f46;
 }
 .toolbar {
   display: flex;
@@ -484,6 +533,20 @@ async function onSyncHostAllLabels() {
   font-size: 0.78rem;
   font-weight: 500;
   color: #b45309;
+}
+
+.data-table tr.row-label-mismatch {
+  background: #fefce8;
+}
+
+.tree-name-cell {
+  max-width: 180px;
+  font-size: 0.78rem;
+  word-break: break-all;
+}
+
+.section-hint code {
+  font-size: 0.9em;
 }
 
 .data-table tr.row-missing {

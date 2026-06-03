@@ -461,6 +461,45 @@ class TestRenameRefFix(unittest.TestCase):
             self.assertIn('String value="200002.002-规则名"', xml)
             self.assertNotIn('String value="100001.001-子件"', xml)
 
+    def test_apply_explicit_link_labels(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_fcstd(root / "child.FCStd", _CHILD_XML)
+            _write_fcstd(
+                root / "asm-single.FCStd",
+                """<?xml version="1.0"?>
+<Document>
+ <ObjectData Count="1">
+  <Object name="Asm">
+   <Properties Count="2">
+    <Property name="Label" type="App::PropertyString">
+     <String value="手工旧名"/>
+    </Property>
+    <Property name="Group" type="App::PropertyLinkList">
+     <XLink file="child.FCStd"/>
+    </Property>
+   </Properties>
+  </Object>
+ </ObjectData>
+</Document>""",
+            )
+            from fcdesk.services.bom_xref_service import apply_explicit_link_labels
+
+            out = apply_explicit_link_labels(
+                root,
+                [
+                    {
+                        "host_repo_rel": "asm-single.FCStd",
+                        "xlink_file_attr": "child.FCStd",
+                        "link_label": "自定义标签",
+                    }
+                ],
+            )
+            self.assertEqual(out["label_patches"], 1)
+            xml = zipfile.ZipFile(root / "asm-single.FCStd").read("Document.xml").decode("utf-8")
+            self.assertIn('String value="自定义标签"', xml)
+            self.assertNotIn("手工旧名", xml)
+
 
 if __name__ == "__main__":
     unittest.main()
