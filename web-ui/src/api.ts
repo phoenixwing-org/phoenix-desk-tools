@@ -714,7 +714,7 @@ export function fetchBomXrefIncoming(opts: {
   }>(`/api/bom-xrefs/incoming${qs ? `?${qs}` : ""}`);
 }
 
-export function fetchBomXrefOutgoing(rel: string, limit?: number, refreshDisk = true) {
+export function fetchBomXrefOutgoing(rel: string, limit?: number, refreshDisk = false) {
   const q = new URLSearchParams({ rel });
   if (limit != null) q.set("limit", String(limit));
   if (!refreshDisk) q.set("refresh_disk", "false");
@@ -752,6 +752,53 @@ export function refreshBomXrefHostIndex(body: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+export type AssemblyBomHostRow = {
+  host_repo_rel_path: string;
+  filename: string;
+  part_number: string;
+  part_version: string;
+  part_key: string;
+  TypeCode: string;
+  ModelSeries: string;
+  PartName: string;
+  label: string;
+  ref_count: number;
+  missing_count: number;
+  ambiguous_count: number;
+  /** 直接引用本文件的宿主数（bom_xref） */
+  incoming_host_count: number;
+  file_role: string;
+};
+
+export type BomTargetUsageStats = {
+  target_repo_rel_path: string;
+  direct_incoming_host_count: number;
+  bom_occurrence_count: number;
+  bom_root_count: number;
+  occurrences: {
+    root_host_repo_rel_path: string;
+    tree_path: string;
+    host_repo_rel_path: string;
+    link_label: string;
+  }[];
+};
+
+export function fetchBomTargetUsageStats(rel: string) {
+  const q = new URLSearchParams({ rel });
+  return jsonFetch<BomTargetUsageStats>(`/api/bom-xrefs/usage-stats?${q}`);
+}
+
+export function fetchAssemblyBomHosts(search?: string) {
+  const q = new URLSearchParams();
+  if (search?.trim()) q.set("search", search.trim());
+  const qs = q.toString();
+  return jsonFetch<{
+    count: number;
+    hosts: AssemblyBomHostRow[];
+    filter?: { assembly_only?: boolean; exclude_drawings?: boolean; note?: string };
+  }>(`/api/bom-xrefs/assembly-hosts${qs ? `?${qs}` : ""}`);
 }
 
 export function fetchBomXrefEdges(opts?: { offset?: number; limit?: number; search?: string }) {

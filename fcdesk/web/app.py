@@ -95,7 +95,9 @@ from fcdesk.services.cad_index import (
 )
 from fcdesk.services.bom_xref_service import (
     apply_explicit_link_labels,
+    load_assembly_bom_catalog,
     load_assembly_tree,
+    load_target_usage_stats,
     load_bom_xref_payload,
     search_bom_xref_edges,
     search_incoming_refs,
@@ -838,7 +840,7 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
     def api_bom_xrefs_outgoing(
         rel: str = Query(...),
         limit: int = Query(500, ge=1, le=2000),
-        refresh_disk: bool = Query(True),
+        refresh_disk: bool = Query(False),
     ) -> dict:
         try:
             return search_outgoing_refs(
@@ -888,6 +890,24 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
                 recursive=body.recursive,
                 max_hosts=body.max_hosts,
             )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.get("/api/bom-xrefs/assembly-hosts")
+    def api_bom_xrefs_assembly_hosts(
+        search: str | None = Query(None),
+    ) -> dict:
+        try:
+            return load_assembly_bom_catalog(get_workspace(), search=search)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.get("/api/bom-xrefs/usage-stats")
+    def api_bom_xrefs_usage_stats(
+        rel: str = Query(..., min_length=1),
+    ) -> dict:
+        try:
+            return load_target_usage_stats(get_workspace(), rel)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 

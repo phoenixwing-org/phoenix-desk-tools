@@ -6,7 +6,12 @@ from pathlib import Path
 from typing import Any
 
 from fcdesk.config.user_prefs import format_resolved_under_workspace
-from fcdesk.freecad.bom_xref.extract import list_fcstd_xlink_attrs_from_file
+from fcdesk.freecad.bom_xref.extract import (
+    list_fcstd_xlink_attrs_from_file,
+    list_xlink_file_attrs,
+    read_document_xml_from_fcstd,
+)
+from fcdesk.freecad.rename_analysis.xlink import read_reference_labels_by_xlink_attr
 from fcdesk.freecad.bom_xref.resolve import resolve_xlink_target
 from fcdesk.freecad.cad_index_types import is_fcstd_filename
 from fcdesk.freecad.fcstd_mapping import normalize_repo_rel_path_for_map
@@ -86,8 +91,14 @@ def bom_xref_edges_for_host(
     if not host_path.is_file():
         return []
 
+    xml = read_document_xml_from_fcstd(host_path)
+    if not xml:
+        return []
+    label_by_attr = read_reference_labels_by_xlink_attr(xml)
     edges: list[dict[str, Any]] = []
-    for xlink in list_fcstd_xlink_attrs_from_file(host_path):
+    for xlink in list_xlink_file_attrs(xml):
+        if not xlink.lower().endswith(".fcstd"):
+            continue
         target_base = Path(xlink.replace("\\", "/")).name
         resolved = resolve_xlink_target(
             repo_root=repo_root,
@@ -109,6 +120,7 @@ def bom_xref_edges_for_host(
                 "host_file_asset_id": asset["id"],
                 "host_repo_rel_path": host_rel,
                 "xlink_file_attr": xlink,
+                "link_label": label_by_attr.get(xlink, ""),
                 "target_basename": target_base,
                 "target_file_asset_id": target_id,
                 "target_repo_rel_path": target_rel,
@@ -192,6 +204,10 @@ def rebuild_bom_xrefs(repo_root: Path, *, scan_id: int, scan_root: Path) -> dict
 
     hosts_with_xlink = len({e["host_repo_rel_path"] for e in edges})
     stats = replace_bom_xrefs(rr, scan_id=scan_id, edges=edges)
+    from fcdesk.services.bom_tree_occurrence import rebuild_bom_tree_occurrences
+
+    occ_stats = rebuild_bom_tree_occurrences(rr)
+    stats = {**stats, **occ_stats}
     log = _format_bom_xref_rebuild_log(
         repo_root=rr,
         scan_root=root,

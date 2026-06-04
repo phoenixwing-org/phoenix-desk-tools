@@ -282,6 +282,58 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
         conn.execute(
             "UPDATE meta SET value = '6' WHERE key = 'schema_version'"
         )
+        version = 6
+    if version < 7:
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(bom_xref)").fetchall()}
+        if "link_label" not in cols:
+            conn.execute(
+                "ALTER TABLE bom_xref ADD COLUMN link_label TEXT NOT NULL DEFAULT ''"
+            )
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS bom_assembly_cache (
+                host_repo_rel_path TEXT NOT NULL,
+                mode TEXT NOT NULL,
+                tree_json TEXT NOT NULL,
+                node_count INTEGER NOT NULL DEFAULT 0,
+                bom_xref_at TEXT NOT NULL DEFAULT '',
+                built_at TEXT NOT NULL,
+                PRIMARY KEY (host_repo_rel_path, mode)
+            );
+            CREATE INDEX IF NOT EXISTS idx_bom_asm_cache_built
+                ON bom_assembly_cache(bom_xref_at);
+            """
+        )
+        conn.execute(
+            "UPDATE meta SET value = '7' WHERE key = 'schema_version'"
+        )
+        version = 7
+    if version < 8:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS bom_tree_occurrence (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                root_host_repo_rel_path TEXT NOT NULL,
+                tree_path TEXT NOT NULL,
+                depth INTEGER NOT NULL,
+                host_repo_rel_path TEXT NOT NULL,
+                target_repo_rel_path TEXT,
+                xlink_file_attr TEXT NOT NULL,
+                link_label TEXT,
+                built_at TEXT NOT NULL,
+                UNIQUE(root_host_repo_rel_path, tree_path)
+            );
+            CREATE INDEX IF NOT EXISTS idx_bom_occ_target
+                ON bom_tree_occurrence(target_repo_rel_path);
+            CREATE INDEX IF NOT EXISTS idx_bom_occ_root
+                ON bom_tree_occurrence(root_host_repo_rel_path);
+            CREATE INDEX IF NOT EXISTS idx_bom_occ_host_target
+                ON bom_tree_occurrence(host_repo_rel_path, target_repo_rel_path);
+            """
+        )
+        conn.execute(
+            "UPDATE meta SET value = '8' WHERE key = 'schema_version'"
+        )
 
 
 def _meta_get(conn: sqlite3.Connection, key: str) -> str | None:
@@ -1362,6 +1414,40 @@ def list_present_fcstd_file_assets(repo_root: Path) -> list[dict[str, Any]]:
     ]
 
 
+def _dedupe_bom_xref_edges(edges: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """同一宿主 + 同一 XLink file 属性只保留一条（避免 UNIQUE 冲突）。"""
+    seen: set[tuple[int, str]] = set()
+    out: list[dict[str, Any]] = []
+    for edge in edges:
+        host_id = int(edge["host_file_asset_id"])
+        xlink = str(edge["xlink_file_attr"])
+        key = (host_id, xlink)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(dict(edge))
+    return out
+
+
+_BOM_XREF_UPSERT_SQL = """
+    INSERT INTO bom_xref (
+        scan_id, host_file_asset_id, host_repo_rel_path, ref_kind, locator,
+        xlink_file_attr, link_label, target_basename, target_file_asset_id,
+        target_repo_rel_path, resolve_status, detail_json, last_seen_at
+    ) VALUES (?, ?, ?, 'xlink_file_attr', 'Document.xml', ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(host_file_asset_id, xlink_file_attr) DO UPDATE SET
+        scan_id = excluded.scan_id,
+        host_repo_rel_path = excluded.host_repo_rel_path,
+        link_label = excluded.link_label,
+        target_basename = excluded.target_basename,
+        target_file_asset_id = excluded.target_file_asset_id,
+        target_repo_rel_path = excluded.target_repo_rel_path,
+        resolve_status = excluded.resolve_status,
+        detail_json = excluded.detail_json,
+        last_seen_at = excluded.last_seen_at
+"""
+
+
 def replace_bom_xrefs(
     repo_root: Path,
     *,
@@ -1373,9 +1459,12 @@ def replace_bom_xrefs(
     now = rebuilt_at or _utc_now_iso()
     stats = {"edge_count": 0, "host_count": 0, "target_resolved": 0, "target_ambiguous": 0, "target_missing": 0}
     hosts: set[str] = set()
+    edges = _dedupe_bom_xref_edges(edges)
 
     with connect(rr) as conn:
         conn.execute("DELETE FROM bom_xref")
+        conn.execute("DELETE FROM bom_assembly_cache")
+        conn.execute("DELETE FROM bom_tree_occurrence")
         for edge in edges:
             host_id = int(edge["host_file_asset_id"])
             host_path = _norm_key(str(edge["host_repo_rel_path"]))
@@ -1391,18 +1480,13 @@ def replace_bom_xrefs(
                 detail = json.dumps(detail, ensure_ascii=False)
 
             conn.execute(
-                """
-                INSERT INTO bom_xref (
-                    scan_id, host_file_asset_id, host_repo_rel_path, ref_kind, locator,
-                    xlink_file_attr, target_basename, target_file_asset_id,
-                    target_repo_rel_path, resolve_status, detail_json, last_seen_at
-                ) VALUES (?, ?, ?, 'xlink_file_attr', 'Document.xml', ?, ?, ?, ?, ?, ?, ?)
-                """,
+                _BOM_XREF_UPSERT_SQL,
                 (
                     scan_id,
                     host_id,
                     host_path,
                     xlink,
+                    str(edge.get("link_label") or ""),
                     target_base,
                     int(target_id) if target_id is not None else None,
                     target_path,
@@ -1436,9 +1520,18 @@ def delete_bom_xrefs_for_hosts(repo_root: Path, host_repo_rel_paths: list[str]) 
         return 0
     deleted = 0
     with connect(rr) as conn:
+        conn.execute("DELETE FROM bom_assembly_cache")
+        conn.execute("DELETE FROM bom_tree_occurrence")
         for key in keys:
             cur = conn.execute("DELETE FROM bom_xref WHERE host_repo_rel_path = ?", (key,))
             deleted += int(cur.rowcount)
+            asset_id = get_file_asset_id(rr, key)
+            if asset_id is not None:
+                cur2 = conn.execute(
+                    "DELETE FROM bom_xref WHERE host_file_asset_id = ?",
+                    (asset_id,),
+                )
+                deleted += int(cur2.rowcount)
     return deleted
 
 
@@ -1453,6 +1546,7 @@ def insert_bom_xref_edges(
     rr = repo_root.expanduser().resolve(strict=False)
     now = rebuilt_at or _utc_now_iso()
     stats = {"edge_count": 0, "target_resolved": 0, "target_ambiguous": 0, "target_missing": 0}
+    edges = _dedupe_bom_xref_edges(edges)
     if not edges:
         return stats
 
@@ -1472,18 +1566,13 @@ def insert_bom_xref_edges(
                 detail = json.dumps(detail, ensure_ascii=False)
 
             conn.execute(
-                """
-                INSERT INTO bom_xref (
-                    scan_id, host_file_asset_id, host_repo_rel_path, ref_kind, locator,
-                    xlink_file_attr, target_basename, target_file_asset_id,
-                    target_repo_rel_path, resolve_status, detail_json, last_seen_at
-                ) VALUES (?, ?, ?, 'xlink_file_attr', 'Document.xml', ?, ?, ?, ?, ?, ?, ?)
-                """,
+                _BOM_XREF_UPSERT_SQL,
                 (
                     scan_id,
                     host_id,
                     host_path,
                     xlink,
+                    str(edge.get("link_label") or ""),
                     target_base,
                     int(target_id) if target_id is not None else None,
                     target_path,
@@ -1541,7 +1630,7 @@ def _bom_xref_row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
             detail = json.loads(str(raw))
         except json.JSONDecodeError:
             detail = raw
-    return {
+    out: dict[str, Any] = {
         "id": int(row["id"]),
         "host_repo_rel_path": str(row["host_repo_rel_path"]),
         "host_file_asset_id": int(row["host_file_asset_id"]),
@@ -1553,6 +1642,197 @@ def _bom_xref_row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
         "ref_kind": str(row["ref_kind"]),
         "detail": detail,
     }
+    keys = row.keys()
+    if "link_label" in keys:
+        out["link_label"] = str(row["link_label"] or "")
+    if "target_part_number" in keys:
+        out["target_part_number"] = str(row["target_part_number"] or "")
+        out["target_part_version"] = str(row["target_part_version"] or "")
+        out["target_type_code"] = str(row["target_type_code"] or "")
+        out["target_model_series"] = str(row["target_model_series"] or "")
+        out["target_part_name"] = str(row["target_part_name"] or "")
+        out["target_asset_label"] = str(row["target_asset_label"] or "")
+    return out
+
+
+def clear_bom_assembly_cache(repo_root: Path) -> None:
+    rr = repo_root.expanduser().resolve(strict=False)
+    if not cad_database_path(rr).is_file():
+        return
+    with connect(rr) as conn:
+        conn.execute("DELETE FROM bom_assembly_cache")
+
+
+def load_bom_assembly_cache(
+    repo_root: Path,
+    host_repo_rel: str,
+    mode: str,
+) -> dict[str, Any] | None:
+    rr = repo_root.expanduser().resolve(strict=False)
+    if not cad_database_path(rr).is_file():
+        return None
+    key = _norm_key(host_repo_rel)
+    with connect(rr) as conn:
+        row = conn.execute(
+            """
+            SELECT tree_json, node_count, bom_xref_at
+            FROM bom_assembly_cache
+            WHERE host_repo_rel_path = ? AND mode = ?
+            """,
+            (key, mode),
+        ).fetchone()
+    if row is None:
+        return None
+    try:
+        nodes = json.loads(str(row["tree_json"]))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(nodes, list):
+        return None
+    return {
+        "nodes": nodes,
+        "node_count": int(row["node_count"] or 0),
+        "bom_xref_at": str(row["bom_xref_at"] or ""),
+    }
+
+
+def save_bom_assembly_cache(
+    repo_root: Path,
+    host_repo_rel: str,
+    mode: str,
+    *,
+    nodes: list[dict[str, Any]],
+    node_count: int,
+    bom_xref_at: str,
+) -> None:
+    rr = repo_root.expanduser().resolve(strict=False)
+    key = _norm_key(host_repo_rel)
+    now = _utc_now_iso()
+    payload = json.dumps(nodes, ensure_ascii=False)
+    with connect(rr) as conn:
+        conn.execute(
+            """
+            INSERT INTO bom_assembly_cache (
+                host_repo_rel_path, mode, tree_json, node_count, bom_xref_at, built_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(host_repo_rel_path, mode) DO UPDATE SET
+                tree_json = excluded.tree_json,
+                node_count = excluded.node_count,
+                bom_xref_at = excluded.bom_xref_at,
+                built_at = excluded.built_at
+            """,
+            (key, mode, payload, node_count, bom_xref_at or "", now),
+        )
+
+
+def query_all_bom_xref_edges_enriched(repo_root: Path) -> list[dict[str, Any]]:
+    """一次查询全部引用边（含子件索引字段与链接标签）。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    if not cad_database_path(rr).is_file():
+        return []
+    with connect(rr) as conn:
+        rows = conn.execute(
+            """
+            SELECT bx.*,
+                   ta.part_number AS target_part_number,
+                   ta.part_version AS target_part_version,
+                   ta.type_code AS target_type_code,
+                   ta.model_series AS target_model_series,
+                   ta.part_name AS target_part_name,
+                   ta.label AS target_asset_label
+            FROM bom_xref bx
+            LEFT JOIN file_asset ta ON ta.id = bx.target_file_asset_id
+            ORDER BY bx.host_repo_rel_path, bx.xlink_file_attr
+            """
+        ).fetchall()
+    return [_bom_xref_row_to_dict(r) for r in rows]
+
+
+def query_assembly_bom_hosts(
+    repo_root: Path,
+    *,
+    search: str | None = None,
+) -> tuple[list[dict[str, Any]], int]:
+    """一次 SQL 汇总各总成（有出向引用的装配宿主；排除图纸档）。
+
+    总成判定：文件名含 ``.assy.fcstd``，或出向引用数 ≥ 2（子装配）。
+    单零件仅 1 条出向引用且非 assy 命名的不计入。
+    """
+    rr = repo_root.expanduser().resolve(strict=False)
+    if not cad_database_path(rr).is_file():
+        return [], 0
+    where_extra = ""
+    params: list[Any] = []
+    q = (search or "").strip()
+    if q:
+        like = f"%{q}%"
+        where_extra = """
+            AND (
+                bx.host_repo_rel_path LIKE ? COLLATE NOCASE
+                OR fa.filename LIKE ? COLLATE NOCASE
+                OR COALESCE(fa.part_name, '') LIKE ? COLLATE NOCASE
+                OR COALESCE(fa.label, '') LIKE ? COLLATE NOCASE
+            )
+        """
+        params.extend([like, like, like, like])
+    sql = f"""
+        SELECT
+            bx.host_repo_rel_path,
+            fa.filename,
+            fa.part_number,
+            fa.part_version,
+            fa.type_code,
+            fa.model_series,
+            fa.part_name,
+            fa.label,
+            COUNT(*) AS ref_count,
+            SUM(CASE WHEN bx.resolve_status = 'missing' THEN 1 ELSE 0 END) AS missing_count,
+            SUM(CASE WHEN bx.resolve_status = 'ambiguous' THEN 1 ELSE 0 END) AS ambiguous_count,
+            (
+                SELECT COUNT(DISTINCT bx_in.host_repo_rel_path)
+                FROM bom_xref bx_in
+                WHERE bx_in.target_repo_rel_path = fa.repo_rel_path
+            ) AS incoming_host_count
+        FROM bom_xref bx
+        INNER JOIN file_asset fa ON fa.id = bx.host_file_asset_id
+        WHERE fa.file_status = 'present'
+          AND LOWER(fa.filename) LIKE '%.fcstd'
+          AND LOWER(fa.filename) NOT LIKE '%.drawing.fcstd'
+          {where_extra}
+        GROUP BY bx.host_repo_rel_path
+        HAVING COUNT(*) > 0
+           AND (
+                LOWER(fa.filename) LIKE '%.assy.fcstd'
+                OR COUNT(*) >= 2
+           )
+        ORDER BY fa.filename COLLATE NOCASE
+    """
+    with connect(rr) as conn:
+        rows = conn.execute(sql, tuple(params)).fetchall()
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        pn = str(r["part_number"] or "").strip()
+        pv = str(r["part_version"] or "").strip()
+        fname = str(r["filename"] or "")
+        out.append(
+            {
+                "host_repo_rel_path": str(r["host_repo_rel_path"]),
+                "filename": fname,
+                "part_number": pn,
+                "part_version": pv,
+                "part_key": format_part_key(pn, pv) if pn and pv else "",
+                "TypeCode": str(r["type_code"] or ""),
+                "ModelSeries": str(r["model_series"] or ""),
+                "PartName": str(r["part_name"] or ""),
+                "label": str(r["label"] or ""),
+                "ref_count": int(r["ref_count"] or 0),
+                "missing_count": int(r["missing_count"] or 0),
+                "ambiguous_count": int(r["ambiguous_count"] or 0),
+                "incoming_host_count": int(r["incoming_host_count"] or 0),
+                "file_role": infer_part_file_role(fname),
+            }
+        )
+    return out, len(out)
 
 
 def query_all_bom_xref_edges(repo_root: Path) -> list[dict[str, Any]]:
@@ -1653,22 +1933,30 @@ def query_bom_xref_edges_paged(
     if q:
         like = f"%{q}%"
         where = """
-            WHERE host_repo_rel_path LIKE ? COLLATE NOCASE
-               OR target_basename LIKE ? COLLATE NOCASE
-               OR COALESCE(target_repo_rel_path, '') LIKE ? COLLATE NOCASE
+            WHERE bx.host_repo_rel_path LIKE ? COLLATE NOCASE
+               OR bx.target_basename LIKE ? COLLATE NOCASE
+               OR COALESCE(bx.target_repo_rel_path, '') LIKE ? COLLATE NOCASE
         """
         params.extend([like, like, like])
     with connect(rr) as conn:
         total_row = conn.execute(
-            f"SELECT COUNT(*) AS n FROM bom_xref {where}",
+            f"SELECT COUNT(*) AS n FROM bom_xref bx {where}",
             params,
         ).fetchone()
         total = int(total_row["n"]) if total_row else 0
         rows = conn.execute(
             f"""
-            SELECT * FROM bom_xref
+            SELECT bx.*,
+                   ta.part_number AS target_part_number,
+                   ta.part_version AS target_part_version,
+                   ta.type_code AS target_type_code,
+                   ta.model_series AS target_model_series,
+                   ta.part_name AS target_part_name,
+                   ta.label AS target_asset_label
+            FROM bom_xref bx
+            LEFT JOIN file_asset ta ON ta.id = bx.target_file_asset_id
             {where}
-            ORDER BY host_repo_rel_path, target_basename, xlink_file_attr
+            ORDER BY bx.host_repo_rel_path, bx.target_basename, bx.xlink_file_attr
             LIMIT ? OFFSET ?
             """,
             [*params, cap, off],

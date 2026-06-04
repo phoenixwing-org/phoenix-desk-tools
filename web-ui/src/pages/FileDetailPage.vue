@@ -68,7 +68,7 @@ async function refreshXrefCounts() {
   try {
     const [inc, out] = await Promise.all([
       fetchBomXrefIncoming({ rel: rel.value, transitive: true, limit: 500 }),
-      fetchBomXrefOutgoing(rel.value, 500),
+      fetchBomXrefOutgoing(rel.value, 500, false),
     ]);
     incomingCount.value = inc.count;
     outgoingCount.value = out.count;

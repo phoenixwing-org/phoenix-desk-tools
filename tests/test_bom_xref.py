@@ -7,14 +7,20 @@ import unittest
 import zipfile
 from pathlib import Path
 
+from fcdesk.services.assembly_tree_cache import build_assembly_tree_payload, load_assembly_tree_cached
+from fcdesk.services.bom_tree_occurrence import query_target_usage_stats
 from fcdesk.services.bom_xref_service import (
     host_ref_groups_from_db,
+    load_assembly_bom_catalog,
+    load_assembly_tree,
     search_incoming_refs,
     search_outgoing_refs,
 )
+from fcdesk.freecad.phoenix_store import connect, insert_bom_xref_edges
 from fcdesk.services.cad_index import (
     rebuild_bom_xrefs,
     refresh_bom_xref_index_for_host,
+    refresh_bom_xrefs_for_hosts,
 )
 from fcdesk.services.fcstd_map_service import run_fcstd_map_scan
 from fcdesk.services.rename_analysis_service import analyze_rename_references
@@ -464,6 +470,116 @@ class TestBomXref(unittest.TestCase):
             )
             self.assertEqual(len(groups), 1)
             self.assertEqual(groups[0].hit_count, 2)
+
+    def test_refresh_outgoing_legacy_host_path_and_duplicate_xlink(self) -> None:
+        """路径未规范化或 XML 重复 XLink 时，refresh 不应触发 UNIQUE 冲突。"""
+        dup_xml = """<?xml version="1.0"?>
+<Document>
+ <ObjectData Count="1">
+  <Object name="Asm">
+   <Properties Count="1">
+    <Property name="Group" type="App::PropertyLinkList">
+     <XLink file="child.FCStd"/>
+     <XLink file="child.FCStd"/>
+    </Property>
+   </Properties>
+  </Object>
+ </ObjectData>
+</Document>
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_fcstd(root / "child.FCStd", "<Document/>")
+            _write_fcstd(root / "asm.FCStd", dup_xml)
+            run_fcstd_map_scan(root)
+
+            from fcdesk.freecad.phoenix_store import ensure_fcstd_scan_record, get_file_asset_id
+
+            asset_id = get_file_asset_id(root, "./asm.FCStd")
+            self.assertIsNotNone(asset_id)
+            scan_id = ensure_fcstd_scan_record(root)
+            self.assertIsNotNone(scan_id)
+
+            with connect(root) as conn:
+                conn.execute("DELETE FROM bom_xref WHERE host_repo_rel_path = ?", ("./asm.FCStd",))
+
+            child_id = get_file_asset_id(root, "./child.FCStd")
+            insert_bom_xref_edges(
+                root,
+                scan_id=int(scan_id),
+                edges=[
+                    {
+                        "host_file_asset_id": asset_id,
+                        "host_repo_rel_path": "asm.FCStd",
+                        "xlink_file_attr": "child.FCStd",
+                        "target_basename": "child.FCStd",
+                        "target_file_asset_id": child_id,
+                        "target_repo_rel_path": "./child.FCStd",
+                        "resolve_status": "resolved",
+                        "detail_json": None,
+                    }
+                ],
+            )
+
+            out = search_outgoing_refs(root, "./asm.FCStd", refresh_disk=True)
+            self.assertEqual(out["count"], 1)
+
+            refresh_bom_xrefs_for_hosts(root, ["./asm.FCStd"])
+            listed = search_outgoing_refs(root, "./asm.FCStd", refresh_disk=False)
+            self.assertEqual(listed["count"], 1)
+
+    def test_assembly_bom_catalog_lists_hosts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_fcstd(root / "leaf.FCStd", "<Document/>")
+            _write_fcstd(root / "sub/sub-assy.FCStd", _SUB_ASM_XML)
+            _write_fcstd(root / "top-assy.FCStd", _TOP_ASM_XML)
+            _write_fcstd(root / "drawing-only.drawing.fcstd", _HOST_XML)
+            run_fcstd_map_scan(root)
+
+            catalog = load_assembly_bom_catalog(root)
+            paths = {h["host_repo_rel_path"] for h in catalog["hosts"]}
+            self.assertIn("./top-assy.FCStd", paths)
+            self.assertNotIn("./drawing-only.drawing.fcstd", paths)
+            top = next(h for h in catalog["hosts"] if h["host_repo_rel_path"] == "./top-assy.FCStd")
+            self.assertGreaterEqual(top["ref_count"], 2)
+
+    def test_materialized_path_incoming_usage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_fcstd(root / "leaf.FCStd", "<Document/>")
+            _write_fcstd(root / "sub/sub-assy.FCStd", _SUB_ASM_XML)
+            _write_fcstd(root / "top-assy.FCStd", _TOP_ASM_XML)
+            run_fcstd_map_scan(root)
+
+            leaf_stats = query_target_usage_stats(root, "./leaf.FCStd")
+            self.assertGreaterEqual(leaf_stats["direct_incoming_host_count"], 1)
+            self.assertGreaterEqual(leaf_stats["bom_occurrence_count"], 1)
+            paths = {o["tree_path"] for o in leaf_stats["occurrences"]}
+            self.assertTrue(paths)
+
+    def test_assembly_tree_single_query_and_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_fcstd(root / "leaf.FCStd", "<Document/>")
+            _write_fcstd(root / "sub/sub-assy.FCStd", _SUB_ASM_XML)
+            _write_fcstd(root / "top-assy.FCStd", _TOP_ASM_XML)
+            run_fcstd_map_scan(root)
+
+            first = load_assembly_tree(root, "./top-assy.FCStd", full=True, refresh_disk=False)
+            self.assertGreaterEqual(first["node_count"], 2)
+            self.assertTrue(first.get("nodes"))
+
+            second = load_assembly_tree_cached(root, "./top-assy.FCStd", full=True)
+            self.assertTrue(second.get("cached"))
+            self.assertEqual(second["node_count"], first["node_count"])
+
+            paths = {
+                n.get("tree_path")
+                for n in second["nodes"]
+                if n.get("tree_path")
+            }
+            self.assertTrue(paths)
 
 
 if __name__ == "__main__":

@@ -159,7 +159,7 @@ watch([rel, treeMode], () => {
 watch(
   () => activeSubTab.value,
   (tab) => {
-    if (tab === "assembly") reloadAssemblyIfVisible({ refreshDisk: true });
+    if (tab === "assembly") reloadAssemblyIfVisible({ refreshDisk: false });
   },
 );
 
@@ -168,11 +168,11 @@ watch(outgoingCount, () => {
 });
 
 onMounted(() => {
-  reloadAssemblyIfVisible({ refreshDisk: true });
+  reloadAssemblyIfVisible({ refreshDisk: false });
 });
 
 onActivated(() => {
-  reloadAssemblyIfVisible({ refreshDisk: true });
+  reloadAssemblyIfVisible({ refreshDisk: false });
 });
 
 defineExpose({

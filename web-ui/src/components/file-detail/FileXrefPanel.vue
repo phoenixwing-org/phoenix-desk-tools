@@ -120,7 +120,7 @@ const incomingLabelActionLabel = computed(() => {
   return "更新父装配中本件名";
 });
 
-async function loadTables(manual = false, refreshDisk = true) {
+async function loadTables(manual = false, refreshDisk = false) {
   if (!ctx.rel.value.trim()) return;
   loading.value = true;
   if (manual) {
@@ -276,7 +276,7 @@ async function onSyncIncomingLabels() {
         <input v-model="includeTransitive" type="checkbox" />
         入向含间接宿主
       </label>
-      <button type="button" class="btn" :disabled="loading || rebuilding" @click="loadTables(true)">
+      <button type="button" class="btn" :disabled="loading || rebuilding" @click="loadTables(true, true)">
         {{ loading ? "…" : "刷新列表" }}
       </button>
       <button type="button" class="btn" @click="ctx.switchSubTab('rename')">改名后修正 XLink…</button>

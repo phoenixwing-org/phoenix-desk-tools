@@ -60,14 +60,14 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
   bom_export: {
     title: "BOM 列表",
     bullets: [
-      "依赖 CAD 索引；「当前装配」选宿主，「全部引用」分页列出出向边。",
-      "链接标签可进文件详情；可按宿主分组查看子件。",
+      "一次 SQL 汇总各总成及直接子件数；不加载全部引用边。",
+      "点击行进入文件详情 · 装配结构（多级树已预计算缓存）。",
+      "仅含 .assy.fcstd 或子件≥2；图纸档不列入。",
     ],
     docPath: "doc/BOM列表页设计.md",
     tourSteps: [
-      tour("[data-tour-page-bom-tabs]", "子 Tab", "装配 BOM 针对单个宿主；全部引用浏览整库出向边。"),
-      tour("[data-tour-page-bom-host]", "宿主查询", "输入路径或从右侧树点选装配 FCStd。"),
-      tour("[data-tour-page-bom-table]", "BOM 表", "点击链接标签打开子件文件详情。"),
+      tour("[data-tour-page-bom-tabs]", "总成列表", "浏览工程内装配宿主数量与摘要。"),
+      tour("[data-tour-page-bom-table]", "总成表", "点击行打开该文件的装配结构 Tab。"),
     ],
   },
   file_detail: {

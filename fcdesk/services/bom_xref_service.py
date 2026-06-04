@@ -13,6 +13,7 @@ from fcdesk.freecad.phoenix_store import (
     get_file_asset_id,
     load_bom_xref_meta,
     query_all_bom_xref_edges,
+    query_assembly_bom_hosts,
     query_bom_xref_edges_paged,
     query_bom_xrefs_for_rename_basename,
     query_bom_xrefs_incoming,
@@ -48,6 +49,7 @@ __all__ = [
     "ensure_bom_xref_built",
     "ensure_bom_xref_index",
     "host_ref_groups_from_db",
+    "load_assembly_bom_catalog",
     "load_assembly_tree",
     "load_bom_xref_payload",
     "rebuild_bom_xrefs",
@@ -58,6 +60,32 @@ __all__ = [
     "search_incoming_refs",
     "search_outgoing_refs",
 ]
+
+
+def load_target_usage_stats(repo_root: Path, target_repo_rel: str) -> dict[str, Any]:
+    from fcdesk.services.bom_tree_occurrence import query_target_usage_stats
+
+    ensure_bom_xref_built(repo_root)
+    return query_target_usage_stats(repo_root, target_repo_rel)
+
+
+def load_assembly_bom_catalog(
+    repo_root: Path,
+    *,
+    search: str | None = None,
+) -> dict[str, Any]:
+    """总成列表：单次 SQL 聚合，不含逐条引用边。"""
+    ensure_bom_xref_built(repo_root)
+    hosts, total = query_assembly_bom_hosts(repo_root, search=search)
+    return {
+        "count": total,
+        "hosts": hosts,
+        "filter": {
+            "assembly_only": True,
+            "exclude_drawings": True,
+            "note": "含 .assy.fcstd 或出向引用≥2；详情请在文件详情·装配结构查看",
+        },
+    }
 
 
 def load_bom_xref_payload(repo_root: Path) -> dict[str, Any]:
@@ -363,9 +391,11 @@ def _enrich_outgoing_ref_row(
     label_map: dict[str, str] | None = None,
 ) -> None:
     attr = str(row.get("xlink_file_attr") or "")
-    if label_map is None:
-        label_map = read_host_reference_labels(repo_root, host_repo_rel)
-    link_label = label_map.get(attr, "")
+    link_label = str(row.get("link_label") or "").strip()
+    if not link_label:
+        if label_map is None:
+            label_map = read_host_reference_labels(repo_root, host_repo_rel)
+        link_label = label_map.get(attr, "")
     target_rel = str(row.get("target_repo_rel_path") or "").strip()
     rule_label = (
         resolve_rule_display_label(repo_root, repo_rel_path=target_rel) if target_rel else ""
@@ -382,7 +412,7 @@ def search_outgoing_refs(
     host_repo_rel: str,
     *,
     limit: int = 500,
-    refresh_disk: bool = True,
+    refresh_disk: bool = False,
 ) -> dict[str, Any]:
     rel = host_repo_rel.strip()
     if not rel:
@@ -402,14 +432,73 @@ def search_outgoing_refs(
     }
 
 
+def _rule_label_from_target_index(row: Mapping[str, Any]) -> str:
+    """从 JOIN 的 ``file_asset`` 列推算规则显示名（不再逐行查库/读盘）。"""
+    from fcdesk.freecad.fcstd_mapping import compose_fcstd_body_label_display
+
+    label = str(row.get("target_asset_label") or "").strip()
+    if label:
+        return label
+    composed = compose_fcstd_body_label_display(
+        part_number=str(row.get("target_part_number") or ""),
+        part_version=str(row.get("target_part_version") or ""),
+        part_name=str(row.get("target_part_name") or ""),
+        label_fallback="",
+    )
+    return composed or ""
+
+
+def _enrich_paged_bom_xref_rows(
+    repo_root: Path,
+    rows: list[dict[str, Any]],
+    *,
+    include_labels: bool,
+) -> None:
+    label_cache: dict[str, dict[str, str]] = {}
+    if include_labels and rows:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        hosts = sorted({str(r.get("host_repo_rel_path") or "").strip() for r in rows if r.get("host_repo_rel_path")})
+        workers = min(8, max(1, len(hosts)))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(read_host_reference_labels, repo_root, h): h for h in hosts}
+            for fut in as_completed(futures):
+                host = futures[fut]
+                try:
+                    label_cache[host] = fut.result()
+                except OSError:
+                    label_cache[host] = {}
+
+    for row in rows:
+        rule_label = _rule_label_from_target_index(row)
+        row["rule_label"] = rule_label
+        if include_labels:
+            host = str(row.get("host_repo_rel_path") or "").strip()
+            attr = str(row.get("xlink_file_attr") or "")
+            link_label = str(row.get("link_label") or "").strip()
+            if not link_label:
+                link_label = label_cache.get(host, {}).get(attr, "")
+            row["link_label"] = link_label
+            row["label_mismatch"] = bool(
+                link_label and rule_label and link_label != rule_label
+            )
+        else:
+            link_label = str(row.get("link_label") or "").strip()
+            row["link_label"] = link_label
+            row["label_mismatch"] = bool(
+                link_label and rule_label and link_label != rule_label
+            )
+
+
 def search_bom_xref_edges(
     repo_root: Path,
     *,
     offset: int = 0,
     limit: int = 100,
     search: str | None = None,
+    include_labels: bool = False,
 ) -> dict[str, Any]:
-    """分页返回全部 ``bom_xref`` 引用边。"""
+    """分页返回全部 ``bom_xref`` 引用边（子件属性由 SQL JOIN；链接标签默认不读盘）。"""
     ensure_bom_xref_built(repo_root)
     cap = max(1, min(int(limit), 500))
     off = max(0, int(offset))
@@ -419,14 +508,7 @@ def search_bom_xref_edges(
         limit=cap,
         search=search,
     )
-    label_cache: dict[str, dict[str, str]] = {}
-    for row in rows:
-        host = str(row.get("host_repo_rel_path") or "").strip()
-        if not host:
-            continue
-        if host not in label_cache:
-            label_cache[host] = read_host_reference_labels(repo_root, host)
-        _enrich_outgoing_ref_row(repo_root, host, row, label_map=label_cache[host])
+    _enrich_paged_bom_xref_rows(repo_root, rows, include_labels=include_labels)
     return {
         "offset": off,
         "limit": cap,
@@ -688,117 +770,22 @@ def load_assembly_tree(
     max_depth: int = 16,
     limit_per_host: int = 500,
 ) -> dict[str, Any]:
-    """从 ``bom_xref`` 读取装配的直接或完整下级树。"""
+    """从预计算的 ``bom_xref`` 邻接表 + JSON 缓存加载装配树（无逐层递归查库）。"""
+    del limit_per_host  # 保留参数兼容；构图一次加载全表
+    from fcdesk.services.assembly_tree_cache import load_assembly_tree_cached
+
     ensure_bom_xref_built(repo_root)
     host = normalize_repo_rel_path_for_map(host_repo_rel.strip())
-    if refresh_disk:
+    if refresh_disk and host:
         refresh_bom_xrefs_for_hosts(repo_root, [host])
     if not host:
         raise ValueError("请提供 host_repo_rel")
-
-    def build_level(rel: str, depth: int, stack: frozenset[str]) -> list[dict[str, Any]]:
-        key = _norm_xref_path(rel) or rel
-        if key in stack:
-            return []
-
-        rows = query_bom_xrefs_outgoing(repo_root, key, limit=limit_per_host)
-        label_map = read_host_reference_labels(repo_root, key)
-        nodes: list[dict[str, Any]] = []
-        grouped: dict[str, list[dict[str, Any]]] = {}
-        group_order: list[str] = []
-        next_stack = stack | {key}
-
-        for row in rows:
-            status = str(row.get("resolve_status") or "")
-            if status not in _ASSEMBLY_TREE_STATUSES:
-                continue
-            target_rel = _norm_xref_path(row.get("target_repo_rel_path"))
-            attr = str(row.get("xlink_file_attr") or "").strip()
-            if target_rel:
-                group_key = f"target:{target_rel}"
-            elif status == "missing" and attr:
-                group_key = f"missing:{attr}"
-            elif status == "ambiguous" and attr:
-                group_key = f"ambiguous:{attr}"
-            else:
-                continue
-            if group_key not in grouped:
-                grouped[group_key] = []
-                group_order.append(group_key)
-            grouped[group_key].append(row)
-
-        for group_key in group_order:
-            row_group = grouped[group_key]
-            first_row = row_group[0]
-            target_rel = _norm_xref_path(first_row.get("target_repo_rel_path"))
-            status = str(first_row.get("resolve_status") or "")
-            xref_instances: list[dict[str, str]] = []
-            link_labels: list[str] = []
-            for r in row_group:
-                r_attr = str(r.get("xlink_file_attr") or "")
-                lbl = label_map.get(r_attr, "")
-                xref_instances.append({"xlink_file_attr": r_attr, "link_label": lbl})
-                if lbl:
-                    link_labels.append(lbl)
-
-            rule_label = (
-                resolve_rule_display_label(repo_root, repo_rel_path=target_rel) if target_rel else ""
-            )
-            attr = str(first_row.get("xlink_file_attr") or "")
-            basename = str(first_row.get("target_basename") or "").strip()
-            if not basename and attr:
-                basename = Path(attr.replace("\\", "/")).name
-            if not basename:
-                basename = "（缺失引用）"
-
-            node: dict[str, Any] = {
-                "host_repo_rel": key,
-                "repo_rel_path": target_rel or "",
-                "basename": basename,
-                "resolve_status": status,
-                "xlink_file_attr": attr,
-                "link_label": link_labels[0] if link_labels else "",
-                "link_labels": link_labels,
-                "xref_instances": xref_instances,
-                "rule_label": rule_label,
-                "ref_count": len(row_group),
-                "part_number": "",
-                "part_version": "",
-                "part_key": "",
-                "TypeCode": "",
-                "ModelSeries": "",
-                "PartName": "",
-                "label": "",
-                "file_role": "",
-                "children": [],
-            }
-            _enrich_tree_node(repo_root, node)
-
-            if full and depth < max_depth and target_rel:
-                child_rows = query_bom_xrefs_outgoing(repo_root, target_rel, limit=limit_per_host)
-                has_sub = any(
-                    str(r.get("resolve_status") or "") in _ASSEMBLY_TREE_STATUSES
-                    and (
-                        _norm_xref_path(r.get("target_repo_rel_path"))
-                        or str(r.get("resolve_status") or "") == "missing"
-                    )
-                    for r in child_rows
-                )
-                if has_sub:
-                    node["children"] = build_level(target_rel, depth + 1, next_stack)
-
-            nodes.append(node)
-
-        return nodes
-
-    nodes = build_level(host, 0, frozenset())
-    _assign_tree_node_ids(nodes)
-    return {
-        "host_repo_rel_path": host,
-        "mode": "full" if full else "first",
-        "node_count": _count_tree_nodes(nodes),
-        "nodes": nodes,
-    }
+    return load_assembly_tree_cached(
+        repo_root,
+        host,
+        full=full,
+        max_depth=max_depth,
+    )
 
 
 def apply_explicit_link_labels(
