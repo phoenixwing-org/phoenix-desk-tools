@@ -77,6 +77,10 @@ function displayLabel(host: string, inst: AssemblyXrefInstance) {
   return baselineLabel(host, inst);
 }
 
+function isLabelEdited(host: string, inst: AssemblyXrefInstance) {
+  return edits.value.has(editKey(host, inst.xlink_file_attr));
+}
+
 function isMissingNode(node: AssemblyTreeNode) {
   return node.resolve_status === "missing";
 }
@@ -499,16 +503,7 @@ watch(
         </thead>
         <tbody>
           <template v-for="{ node, depth } in flatRows" :key="node.id">
-            <tr
-              :class="[
-                rowStatusClass(node),
-                {
-                  'row-edited':
-                    canEditLinkLabel(node) &&
-                    instancesOf(node).some((i) => edits.has(editKey(node.host_repo_rel, i.xlink_file_attr))),
-                },
-              ]"
-            >
+            <tr :class="rowStatusClass(node)">
               <td class="tree-cell">
                 <div
                   class="tree-item"
@@ -535,15 +530,44 @@ watch(
                   </button>
                   <span
                     class="role-icon"
-                    :class="roleIconClass(node)"
-                    :title="roleLabel(resolveRole(node))"
-                    aria-hidden="true"
-                  />
+                    :class="[
+                      roleIconClass(node),
+                      {
+                        'role-icon-dirty':
+                          canEditLinkLabel(node) &&
+                          instancesOf(node)[0] &&
+                          isLabelEdited(node.host_repo_rel, instancesOf(node)[0]),
+                      },
+                    ]"
+                    :title="
+                      canEditLinkLabel(node) &&
+                      instancesOf(node)[0] &&
+                      isLabelEdited(node.host_repo_rel, instancesOf(node)[0])
+                        ? `${roleLabel(resolveRole(node))} · 链接标签已修改未保存`
+                        : roleLabel(resolveRole(node))
+                    "
+                  >
+                    <span
+                      v-if="
+                        canEditLinkLabel(node) &&
+                        instancesOf(node)[0] &&
+                        isLabelEdited(node.host_repo_rel, instancesOf(node)[0])
+                      "
+                      class="role-dirty-badge"
+                      aria-label="链接标签已修改未保存"
+                    />
+                  </span>
                   <div class="tree-body">
                     <div class="tree-label-row">
                       <input
                         v-if="canEditLinkLabel(node) && instancesOf(node)[0]"
                         class="label-input"
+                        :class="{
+                          'label-input-edited': isLabelEdited(
+                            node.host_repo_rel,
+                            instancesOf(node)[0],
+                          ),
+                        }"
                         :value="displayLabel(node.host_repo_rel, instancesOf(node)[0])"
                         spellcheck="false"
                         :placeholder="resolveRuleLabelForNode(node) || '链接标签'"
@@ -621,21 +645,34 @@ watch(
               v-for="extra in instanceExtraRows(node, depth)"
               :key="`${node.id}-inst-${extra.instanceIndex}`"
               class="instance-row"
-              :class="{
-                'row-edited':
-                  canEditLinkLabel(node) &&
-                  edits.has(editKey(node.host_repo_rel, extra.instance.xlink_file_attr)),
-              }"
             >
               <td class="tree-cell" colspan="1">
                 <div class="tree-item instance-indent" :style="{ paddingLeft: `${depth * 18 + 36}px` }">
-                  <span class="role-icon icon-instance" title="同目标多实例" aria-hidden="true" />
+                  <span
+                    class="role-icon icon-instance"
+                    :class="{
+                      'role-icon-dirty':
+                        canEditLinkLabel(node) && isLabelEdited(node.host_repo_rel, extra.instance),
+                    }"
+                    :title="
+                      isLabelEdited(node.host_repo_rel, extra.instance)
+                        ? '同目标多实例 · 链接标签已修改未保存'
+                        : '同目标多实例'
+                    "
+                  >
+                    <span
+                      v-if="canEditLinkLabel(node) && isLabelEdited(node.host_repo_rel, extra.instance)"
+                      class="role-dirty-badge"
+                      aria-label="链接标签已修改未保存"
+                    />
+                  </span>
                   <div class="tree-body">
                     <div class="tree-label-row">
                       <span class="muted instance-tag">#{{ extra.instanceIndex + 1 }}</span>
                       <input
                         v-if="canEditLinkLabel(node)"
                         class="label-input"
+                        :class="{ 'label-input-edited': isLabelEdited(node.host_repo_rel, extra.instance) }"
                         :value="displayLabel(node.host_repo_rel, extra.instance)"
                         spellcheck="false"
                         @input="setLabel(node, extra.instance, ($event.target as HTMLInputElement).value)"
@@ -879,12 +916,29 @@ watch(
 }
 
 .role-icon {
+  position: relative;
   flex-shrink: 0;
   align-self: center;
   width: 20px;
   height: 20px;
   border-radius: 4px;
   background: #e2e8f0 center / 14px 14px no-repeat;
+}
+
+.role-icon-dirty {
+  box-shadow: 0 0 0 1px #fdba74;
+}
+
+.role-dirty-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #c2410c;
+  border: 1.5px solid #fff;
+  pointer-events: none;
 }
 
 .role-icon.icon-assembly {
@@ -992,6 +1046,12 @@ watch(
   font-size: 0.84rem;
   font-weight: 600;
   box-sizing: border-box;
+  background: #fff;
+}
+
+.label-input-edited {
+  background: #fff7ed;
+  border-color: #fdba74;
 }
 
 .col-qty {
@@ -1110,10 +1170,6 @@ watch(
   background: #f0f9ff;
   border-color: #7dd3fc;
   color: #0369a1;
-}
-
-.row-edited {
-  background: #fffbeb;
 }
 
 .file-link {

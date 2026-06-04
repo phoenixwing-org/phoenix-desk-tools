@@ -5,6 +5,7 @@ import AssemblyTreeTable from "../AssemblyTreeTable.vue";
 import { useAppShell } from "../../composables/useAppShell";
 import { useFileDetailContext } from "../../composables/useFileDetailContext";
 import { logReferenceLabelApply } from "../../utils/referenceLabelLog";
+import { getAssemblyTreeDepth, setAssemblyTreeDepth } from "../../utils/uiPrefs";
 
 const emit = defineEmits<{
   "edits-change": [dirty: boolean];
@@ -13,7 +14,7 @@ const emit = defineEmits<{
 const shell = useAppShell();
 const { rel, pageError, activeSubTab, outgoingCount } = useFileDetailContext();
 
-const treeMode = ref<"first" | "full">("first");
+const treeMode = ref<"first" | "full">(getAssemblyTreeDepth());
 const treeLoading = ref(false);
 const treeNodes = ref<AssemblyTreeNode[]>([]);
 const assemblyTreeRef = ref<InstanceType<typeof AssemblyTreeTable> | null>(null);
@@ -145,6 +146,10 @@ async function onExpandAllTree() {
 
 watch(rel, (host) => {
   if (!host.trim()) treeNodes.value = [];
+});
+
+watch(treeMode, (mode) => {
+  setAssemblyTreeDepth(mode);
 });
 
 watch([rel, treeMode], () => {
