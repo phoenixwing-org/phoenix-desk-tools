@@ -33,8 +33,23 @@ const incomingCount = ref(0);
 const outgoingCount = ref(0);
 const preferredRenameFilename = ref("");
 const assemblyLabelEdits = ref(false);
+/** 已写入属性但未改盘符时的目标文件名（按 repo_rel 缓存） */
+const filenameDraftByRel = ref<Record<string, string>>({});
 
 const fileName = computed(() => rel.value.split("/").pop() ?? "");
+
+function rememberFilenameDraft(filename: string, relPath?: string) {
+  const r = (relPath ?? rel.value).trim();
+  const name = filename.trim();
+  if (!r || !name) return;
+  filenameDraftByRel.value = { ...filenameDraftByRel.value, [r]: name };
+}
+
+function applyFilenameDraft(relPath: string) {
+  const draft = filenameDraftByRel.value[relPath.trim()]?.trim();
+  if (!draft) return;
+  form.value = { ...form.value, filename: draft };
+}
 
 const showAssemblyTab = computed(() => {
   if (!preview.value?.is_fcstd) return false;
@@ -87,15 +102,21 @@ function switchSubTab(tab: FileDetailSubTab) {
 async function reloadFile(targetRel?: string) {
   const path = (targetRel ?? rel.value).trim();
   if (!path) return;
+  const prevRel = rel.value.trim();
   loading.value = true;
   pageError.value = "";
   try {
     const data = await fetchBom(path);
     rel.value = path;
+    if (props.workbenchTabId && prevRel && prevRel !== path) {
+      shell.rerouteFileDetailTab(prevRel, path, props.workbenchTabId);
+    }
     preview.value = data;
-    originalFilename.value = data.fields.filename || path.split("/").pop() || "";
+    const diskBasename = path.replace(/\\/g, "/").split("/").pop() || "";
+    originalFilename.value = diskBasename;
     form.value = { ...data.fields };
     baseline.value = { ...data.fields };
+    applyFilenameDraft(path);
     if (props.workbenchTabId) {
       shell.updateTab(props.workbenchTabId, {
         title: originalFilename.value,
@@ -228,6 +249,7 @@ provideFileDetailContext({
   openRenameTab,
   reloadFile,
   refreshXrefCounts,
+  rememberFilenameDraft,
 });
 
 async function hydratePageSession(snap: Record<string, unknown>): Promise<boolean> {
@@ -235,6 +257,10 @@ async function hydratePageSession(snap: Record<string, unknown>): Promise<boolea
   if (snap.subTab) activeSubTab.value = normalizeFileDetailSubTab(snap.subTab);
   const savedRel = String(snap.rel ?? "").trim();
   if (!savedRel) return false;
+  const drafts = snap.filenameDraftByRel;
+  if (drafts && typeof drafts === "object" && !Array.isArray(drafts)) {
+    filenameDraftByRel.value = { ...(drafts as Record<string, string>) };
+  }
   form.value = { ...(snap.form as Partial<BomFields>) };
   baseline.value = { ...(snap.baseline as Partial<BomFields>) };
   await reloadFile(savedRel);
@@ -248,12 +274,15 @@ usePageSession(props.workbenchTabId, {
     subTab: activeSubTab.value,
     form: form.value,
     baseline: baseline.value,
+    filenameDraftByRel: { ...filenameDraftByRel.value },
   }),
   hydrate: hydratePageSession,
   isDirty: hasUnsavedEdits,
 });
 
-watch([rel, form, baseline, activeSubTab], () => shell.scheduleWorkbenchSave(), { deep: true });
+watch([rel, form, baseline, activeSubTab, filenameDraftByRel], () => shell.scheduleWorkbenchSave(), {
+  deep: true,
+});
 
 watch(
   () => hasUnsavedEdits(),

@@ -10,6 +10,7 @@ import {
   type BomXrefMeta,
   type FcstdMapEntry,
 } from "../api";
+import ExpandCaret from "../components/ExpandCaret.vue";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { usePageSession } from "../composables/usePageSession";
@@ -668,9 +669,10 @@ onUnmounted(() => {
           <template v-for="group in allGrouped" :key="group.hostRel">
             <tr class="host-group-row" @click="toggleAllHost(group.hostRel)">
               <td :colspan="allChildColumns.length" class="host-group-cell">
-                <span class="host-toggle">{{
-                  isAllHostExpanded(group.hostRel) ? "▾" : "▸"
-                }}</span>
+                <ExpandCaret
+                  class="host-toggle"
+                  :expanded="isAllHostExpanded(group.hostRel)"
+                />
                 <button
                   v-if="canOpenFileDetailRel(group.hostRel)"
                   type="button"
@@ -1115,10 +1117,8 @@ onUnmounted(() => {
 }
 
 .bom-table-grouped .host-toggle {
-  display: inline-block;
-  width: 18px;
-  color: #64748b;
-  font-size: 0.72rem;
+  vertical-align: middle;
+  margin-right: 2px;
 }
 
 .bom-table-grouped .host-meta {
@@ -1131,13 +1131,12 @@ onUnmounted(() => {
   background: #fff;
 }
 
-/* 子件行链接标签列相对宿主分组行略缩进，与展开三角对齐 */
-.bom-table-grouped .child-ref-row .link-label-cell {
-  padding-left: 20px;
-}
-
 .bom-table-grouped .child-ref-row .col-index {
   color: var(--muted);
+}
+
+:deep(.bom-table-grouped tr.child-ref-row td.link-label-cell) {
+  padding-left: 0;
 }
 
 .view-opt {

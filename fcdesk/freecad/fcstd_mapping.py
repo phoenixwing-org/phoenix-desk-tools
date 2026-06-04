@@ -93,6 +93,7 @@ def compose_fcstd_recommended_filename(
 
     规则：``{PartNumber}.{PartVersion}``，若有类型码则 ``-{TypeCode}``，若有型号则 ``-{ModelSeries}``，
     若有名称则 ``-{名称}``（``PartName`` 优先，否则 ``label_fallback``），最后接 ``suffix``。
+    类型码 **S**（标准件）时不拼型号系列。
     零件号与版本均非空时才生成，否则 ``None``。
     """
     pn = (part_number or "").strip()
@@ -106,7 +107,7 @@ def compose_fcstd_recommended_filename(
     stem = f"{pn}.{pv}"
     if tc:
         stem += f"-{tc}"
-    if ms:
+    if ms and tc != "S":
         stem += f"-{ms}"
     if pname:
         stem += f"-{pname}"

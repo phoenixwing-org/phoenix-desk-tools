@@ -56,7 +56,8 @@ export type LauncherPrefs = {
 };
 
 export const DEFAULT_PAGE_ICONS: Record<string, string> = {
-  home: "⚙",
+  home: "⌂",
+  config: "⚙",
   fcstd_map: "◫",
   xlink_fix: "⎘",
   step_batch: "⇩",

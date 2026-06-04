@@ -8,6 +8,7 @@ import {
   type LinkLabelPatch,
 } from "../api";
 import { useAppShell } from "../composables/useAppShell";
+import ExpandCaret from "./ExpandCaret.vue";
 import XlinkReplaceDialog from "./XlinkReplaceDialog.vue";
 import { resolveRuleLabelForNode } from "../utils/fcstdRuleLabel";
 
@@ -512,7 +513,7 @@ watch(
                 >
                   <button
                     type="button"
-                    class="toggle"
+                    class="fcdesk-expand-btn toggle"
                     :class="[`toggle-${toggleVisualState(node)}`, { leaf: !canExpand(node) }]"
                     :disabled="!canExpand(node) || loadingSubtree.has(node.id)"
                     :aria-expanded="
@@ -526,7 +527,18 @@ watch(
                     "
                     @click="toggle(node)"
                   >
-                    <span class="toggle-glyph" aria-hidden="true" />
+                    <span
+                      v-if="toggleVisualState(node) === 'leaf'"
+                      class="toggle-leaf-dot"
+                      aria-hidden="true"
+                    />
+                    <ExpandCaret
+                      v-else-if="toggleVisualState(node) !== 'loading'"
+                      :expanded="
+                        toggleVisualState(node) === 'expanded' ||
+                        (toggleVisualState(node) === 'lazy' && expanded.has(node.id))
+                      "
+                    />
                   </button>
                   <span
                     class="role-icon"
@@ -618,7 +630,10 @@ watch(
                   @click="toggleLabelExpand(node)"
                 >
                   {{ node.ref_count }}
-                  <span class="qty-caret">{{ expandedLabels.has(node.id) ? "▾" : "▸" }}</span>
+                  <ExpandCaret
+                    inline
+                    :expanded="expandedLabels.has(node.id)"
+                  />
                 </button>
                 <span v-else class="qty-num">{{ node.ref_count ?? 1 }}</span>
               </td>
@@ -966,52 +981,15 @@ watch(
 }
 
 .toggle {
-  flex-shrink: 0;
   align-self: center;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
   margin: 0 1px 0 0;
-  padding: 0;
-  border: none;
-  border-radius: 5px;
-  background: transparent;
-  cursor: pointer;
-  color: #475569;
 }
 
-.toggle:hover:not(:disabled):not(.leaf) {
-  background: #f1f5f9;
-}
-
-.toggle:focus-visible {
-  outline: 2px solid #93c5fd;
-  outline-offset: 1px;
-}
-
-.toggle-glyph {
-  width: 14px;
-  height: 14px;
-  background: center / 14px 14px no-repeat;
-}
-
-.toggle-collapsed .toggle-glyph,
-.toggle-lazy .toggle-glyph {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23475569' d='M6.2 3.8 11.4 8l-5.2 4.2z'/%3E%3C/svg%3E");
-}
-
-.toggle-expanded .toggle-glyph {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23475569' d='M3.8 5.8 8 11l4.2-5.2z'/%3E%3C/svg%3E");
-}
-
-.toggle-leaf .toggle-glyph {
+.toggle-leaf-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: #cbd5e1;
-  background-image: none;
 }
 
 .toggle-loading {
@@ -1020,7 +998,7 @@ watch(
   color: #64748b;
 }
 
-.toggle-loading .toggle-glyph {
+.toggle-loading .fcdesk-expand-twistie {
   display: none;
 }
 
@@ -1110,11 +1088,6 @@ watch(
   font-size: 0.72rem;
   font-weight: 600;
   cursor: pointer;
-}
-
-.qty-caret {
-  margin-left: 2px;
-  font-size: 0.65rem;
 }
 
 .qty-num {

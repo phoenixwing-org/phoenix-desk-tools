@@ -12,7 +12,8 @@ import {
 import { collectPageStates } from "./usePageSession";
 import { loadWorkbenchSession, saveWorkbenchSessionAll } from "./workbenchSession";
 import { createWorkbench, type WorkbenchContext } from "./useWorkbench";
-import { basenameFromRel } from "../utils/workspaceFileQuery";
+import { basenameFromRel, normalizeRepoRelForApi } from "../utils/workspaceFileQuery";
+import { normalizeDetailTabRel, partKeyTabContextKey } from "../utils/detailTabRoute";
 import type { OpenTabOptions, WorkbenchTab, WorkbenchTabPayload } from "../types/workbench";
 
 /** 返回 false 表示当前 Tab 未接管此次树点击，由 shell 回退打开文件详情 */
@@ -73,6 +74,8 @@ export type AppShellContext = {
       baseline?: Partial<BomFields>;
     },
   ) => void;
+  /** 磁盘改名后更新文件详情 Tab 路由（避免同文件占两个 Tab） */
+  rerouteFileDetailTab: (oldRel: string, newRel: string, tabId: string) => void;
   openFileRenameForRel: (
     repoRelPath: string,
     form: Partial<BomFields>,
@@ -152,6 +155,71 @@ export function provideAppShell(): AppShellContext {
     syncActiveTreeHandler();
   }
   const wb: WorkbenchContext = createWorkbench(appConfig);
+  /** repo_rel（规范化）→ Tab id，避免同文件重复打开 */
+  const fileDetailTabByRel = new Map<string, string>();
+  /** part_number.part_version → Tab id */
+  const partKeyTabByKey = new Map<string, string>();
+
+  function syncDetailTabMaps() {
+    fileDetailTabByRel.clear();
+    partKeyTabByKey.clear();
+    for (const t of wb.tabs.value) {
+      if ((t.pageId === "file_detail" || t.pageId === "bom_apply") && t.contextKey) {
+        const k = normalizeDetailTabRel(t.contextKey);
+        if (k) fileDetailTabByRel.set(k, t.id);
+      }
+      if (t.pageId === "part_key_detail" && t.contextKey?.trim()) {
+        partKeyTabByKey.set(t.contextKey.trim(), t.id);
+      }
+    }
+  }
+
+  function findFileDetailTab(repoRel: string): WorkbenchTab | undefined {
+    const key = normalizeDetailTabRel(repoRel);
+    if (!key) return undefined;
+    const mappedId = fileDetailTabByRel.get(key);
+    if (mappedId) {
+      const tab = wb.getTab(mappedId);
+      if (tab && (tab.pageId === "file_detail" || tab.pageId === "bom_apply")) return tab;
+      fileDetailTabByRel.delete(key);
+    }
+    const found = wb.tabs.value.find(
+      (t) =>
+        (t.pageId === "file_detail" || t.pageId === "bom_apply") &&
+        normalizeDetailTabRel(t.contextKey ?? "") === key,
+    );
+    if (found) fileDetailTabByRel.set(key, found.id);
+    return found;
+  }
+
+  function findPartKeyTab(partNumber: string, partVersion: string): WorkbenchTab | undefined {
+    const key = partKeyTabContextKey(partNumber, partVersion);
+    if (!key || key === ".") return undefined;
+    const mappedId = partKeyTabByKey.get(key);
+    if (mappedId) {
+      const tab = wb.getTab(mappedId);
+      if (tab?.pageId === "part_key_detail") return tab;
+      partKeyTabByKey.delete(key);
+    }
+    const found = wb.tabs.value.find(
+      (t) => t.pageId === "part_key_detail" && (t.contextKey ?? "").trim() === key,
+    );
+    if (found) partKeyTabByKey.set(key, found.id);
+    return found;
+  }
+
+  function rerouteFileDetailTab(oldRel: string, newRel: string, tabId: string) {
+    const oldKey = normalizeDetailTabRel(oldRel);
+    const newKey = normalizeDetailTabRel(newRel);
+    if (!newKey) return;
+    if (oldKey) fileDetailTabByRel.delete(oldKey);
+    fileDetailTabByRel.set(newKey, tabId);
+    const tab = wb.getTab(tabId);
+    if (tab) {
+      tab.contextKey = normalizeRepoRelForApi(newRel) || newRel.trim();
+    }
+  }
+
   const currentPage = wb.activePageId;
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let persistenceReady = false;
@@ -207,11 +275,12 @@ export function provideAppShell(): AppShellContext {
     const pn = partNumber.trim();
     const pv = partVersion.trim();
     if (!pn || !pv) return;
-    const contextKey = `${pn}.${pv}`;
-    const existing = wb.tabs.value.find(
-      (t) => t.pageId === "part_key_detail" && t.contextKey === contextKey,
-    );
+    const contextKey = partKeyTabContextKey(pn, pv);
+    const existing = findPartKeyTab(pn, pv);
     if (existing) {
+      if (opts?.partName?.trim() || opts?.label?.trim()) {
+        existing.subtitle = opts.partName?.trim() || opts.label?.trim() || existing.subtitle;
+      }
       wb.activateTab(existing.id);
       return;
     }
@@ -241,15 +310,13 @@ export function provideAppShell(): AppShellContext {
   ) {
     const rel = repoRelPath.trim();
     if (!rel) return;
-    const existing = wb.tabs.value.find(
-      (t) =>
-        (t.pageId === "file_detail" || t.pageId === "bom_apply") &&
-        t.contextKey === rel,
-    );
+    const existing = findFileDetailTab(rel);
     if (existing) {
+      const relApi = normalizeRepoRelForApi(rel) || rel;
       existing.title = wb.basename(rel);
-      existing.subtitle = rel;
-      existing.contextKey = rel;
+      existing.subtitle = relApi;
+      existing.contextKey = relApi;
+      fileDetailTabByRel.set(normalizeDetailTabRel(rel), existing.id);
       if (opts?.subTab || opts?.preferredNewFilename || opts?.form) {
         existing.payload = {
           fileDetail: {
@@ -273,11 +340,12 @@ export function provideAppShell(): AppShellContext {
       return;
     }
     try {
-      wb.openTab({
+      const relApi = normalizeRepoRelForApi(rel) || rel;
+      const tabId = wb.openTab({
         pageId: "file_detail",
         title: wb.basename(rel),
-        subtitle: rel,
-        contextKey: rel,
+        subtitle: relApi,
+        contextKey: relApi,
         payload: {
           fileDetail: {
             rel,
@@ -296,6 +364,7 @@ export function provideAppShell(): AppShellContext {
         },
         forceNew: true,
       });
+      fileDetailTabByRel.set(normalizeDetailTabRel(rel), tabId);
     } catch (e) {
       setStatus(String(e));
     }
@@ -376,6 +445,7 @@ export function provideAppShell(): AppShellContext {
 
   function setupWorkbenchPersistence() {
     watch(wb.tabs, () => {
+      syncDetailTabMaps();
       pruneTreeHandlers();
       scheduleWorkbenchSave();
     }, { deep: true });
@@ -456,7 +526,7 @@ export function provideAppShell(): AppShellContext {
     if (fromUrl && nav.some((n) => n.page === fromUrl)) {
       return fromUrl;
     }
-    return nav.find((n) => n.page !== "home")?.page ?? nav[0]?.page;
+    return "home";
   }
 
   function applyUrlDeepLink(): void {
@@ -515,6 +585,7 @@ export function provideAppShell(): AppShellContext {
     openPartKeyDetail,
     openBomApplyForRel,
     openFileDetailForRel,
+    rerouteFileDetailTab,
     openFileRenameForRel,
     openRenameAnalysis,
     switchWorkspace,

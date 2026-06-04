@@ -35,7 +35,8 @@ fcdesk「属性回写」将可编辑 BOM 字段写入 **`.FCStd` ZIP** 内的 **
 | 常用值 | **`H`**：一般件 · **`S`**：标准件 · **`R`**：虚拟零件 |
 | 是否枚举 | **推荐**用 H/S/R，**不强制**；Web 表单可下拉选上述三项，也可手输其它值（如将来扩展码） |
 | 大小写 | 写入索引与推荐文件名时倾向 **大写**（`fcstd_mapping` 对 `TypeCode` 做 `upper`） |
-| 推荐文件名 | ``{PartNumber}.{PartVersion}[-{TypeCode}][-{ModelSeries}]-名称{suffix}``，例 ``8000.001-H-PX-所有零件预览.ASSY.FCStd``（见 `compose_fcstd_recommended_filename`） |
+| 推荐文件名 | ``{PartNumber}.{PartVersion}[-{TypeCode}][-{ModelSeries}]-名称{suffix}``（见 `compose_fcstd_recommended_filename`）；**类型码 S（标准件）时不拼 ModelSeries**，且 Web 推荐会把型号系列置空 |
+| 示例 | 一般件：`8000.001-H-PX-所有零件预览.ASSY.FCStd` · 标准件：`8007.001-S-M6X12螺栓.FCStd` |
 | 从文件名推断 | `part_naming.hints_from_filename`：在 stem 中匹配 ``…-{H\|S\|R}-…`` 段时写入 `TypeCode` |
 | FreeCAD 提示 | 挂载对象 Property **`doc`** 文案：`类型码 (H/S/R)`（`fcstd_document_bom_props._BOM_STRING_PROPERTY_DOC`） |
 | Web 界面 | **文件详情 · 属性**、**零件详情 · 属性**：`ComboTextInput`（聚焦或点 ▾ **始终列出全部** H/S/R，可点选切换，亦可手输）；选项见 `TYPE_CODE_OPTIONS`；表头中文 **类型码**（`bomFieldLabels.ts`） |

@@ -1,270 +1,106 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
-import { pruneRecentWorkspaces, removeRecentWorkspace, saveLauncherFreecad, shutdownWebServer, syncLauncherFromLegacy } from "../api";
+import { computed } from "vue";
 import { useAppShell } from "../composables/useAppShell";
 
 const shell = useAppShell();
 
-const repoInput = ref("");
-const fcInput = ref("");
-const syncNote = ref("");
-
+const appTitle = computed(() => shell.appConfig.value?.title ?? "FreeCAD 管理工具");
 const workspacePath = computed(() => shell.workspacePath.value);
-const launcher = computed(() => shell.launcher.value);
-const appConfig = computed(() => shell.appConfig.value);
-const recentWorkspaces = computed(() => launcher.value?.recent_workspaces ?? []);
-const recentEntries = computed(
-  () =>
-    launcher.value?.recent_workspace_entries ??
-    recentWorkspaces.value.map((path) => ({ path, exists: true })),
+const featureNav = computed(() =>
+  (shell.appConfig.value?.navigation ?? []).filter(
+    (n) => n.page !== "home" && n.page !== "config",
+  ),
 );
-const webRunning = ref(false);
-const webUrl = ref("http://127.0.0.1:5173");
-const defaultFreecadDir = computed(() => launcher.value?.default_freecad_dir ?? "");
 
-function fillDefaultFreecad() {
-  const p = defaultFreecadDir.value.trim();
-  if (p) fcInput.value = p;
+function openFeature(page: string) {
+  shell.goToPage(page);
 }
 
-async function syncLegacyLauncher() {
-  try {
-    const data = await syncLauncherFromLegacy();
-    await shell.reloadLauncher();
-    if (data.migrated_from_legacy) {
-      syncNote.value = "已从旧 workspace.custom.json 合并最近工作空间。";
-    } else if (data.legacy_launcher_exists) {
-      syncNote.value = "旧配置已读取（无新增项需合并）。";
-    } else {
-      syncNote.value = "";
-    }
-  } catch (e) {
-    syncNote.value = String(e);
-  }
+function openConfig() {
+  shell.goToPage("config");
 }
-
-onMounted(async () => {
-  repoInput.value = workspacePath.value;
-  fcInput.value = launcher.value?.freecad_dir ?? "";
-  await refreshWebStatus();
-});
-
-watch(workspacePath, (v) => {
-  repoInput.value = v;
-});
-
-watch(launcher, (v) => {
-  fcInput.value = v?.freecad_dir ?? "";
-});
-
-async function refreshFields() {
-  repoInput.value = shell.workspacePath.value;
-  await shell.reloadLauncher();
-  fcInput.value = shell.launcher.value?.freecad_dir ?? "";
-}
-
-async function savePrefs() {
-  const repo = repoInput.value.trim();
-  const fc = fcInput.value.trim();
-  if (!repo) {
-    alert("请先填写工作空间根目录。");
-    return;
-  }
-  try {
-    // 先保存 FreeCAD 路径：switchWorkspace 会 reloadLauncher，watch(launcher) 会清空 fcInput
-    const fcResult = await saveLauncherFreecad(fc);
-    await shell.switchWorkspace(repo);
-    fcInput.value = fcResult.freecad_dir || fc;
-    alert("已保存启动器偏好。");
-  } catch (e) {
-    alert(String(e));
-  }
-}
-
-async function switchRecent(path: string) {
-  if (path === workspacePath.value) {
-    alert("当前已是该工作空间。");
-    return;
-  }
-  if (!window.confirm(`切换到以下工作空间？\n\n${path}`)) return;
-  shell.appendLog(`切换工作空间：${path}`, { source: "config", open: true });
-  try {
-    await shell.switchWorkspace(path);
-    await refreshFields();
-    shell.appendLog(`已切换到 ${path}`, { source: "config" });
-  } catch (e) {
-    shell.appendLog(String(e), { source: "config" });
-    alert(String(e));
-  }
-}
-
-async function refreshWebStatus() {
-  try {
-    await fetch("/api/health", { method: "GET" });
-    webRunning.value = true;
-  } catch {
-    webRunning.value = false;
-  }
-}
-
-async function stopWebServer() {
-  if (!window.confirm(`停止本地 Web 服务并释放端口？\n\n${webUrl.value}`)) return;
-  shell.appendLog(`请求关闭 Web 服务：${webUrl.value}`, { source: "config", open: true });
-  try {
-    await shutdownWebServer();
-    shell.appendLog("Web 服务正在关闭…", { source: "config", open: true });
-    shell.setStatus("Web 服务已关闭");
-    webRunning.value = false;
-  } catch (e) {
-    const msg = String(e);
-    shell.appendLog(`关闭 Web 服务失败：${msg}`, { source: "config", open: true });
-    shell.setStatus(msg);
-    alert(msg);
-  }
-}
-
-async function removeRecent(path: string, event: MouseEvent) {
-  event.stopPropagation();
-  if (!window.confirm(`从最近列表中移除？\n\n${path}`)) return;
-  try {
-    await removeRecentWorkspace(path);
-    await shell.reloadLauncher();
-    shell.setStatus("已从最近列表移除");
-  } catch (e) {
-    alert(String(e));
-  }
-}
-
-async function pruneRecentList() {
-  if (!window.confirm("清理最近列表中的临时目录与无效路径？")) return;
-  shell.appendLog("清理最近工作空间列表…", { source: "config", open: true });
-  try {
-    const data = await pruneRecentWorkspaces();
-    await shell.reloadLauncher();
-    const n = data.pruned_count ?? 0;
-    const msg = n > 0 ? `已清理 ${n} 条记录` : "无需清理";
-    shell.appendLog(msg, { source: "config" });
-    shell.setStatus(msg);
-  } catch (e) {
-    shell.appendLog(String(e), { source: "config" });
-    alert(String(e));
-  }
-}
-
-const navItems = () => (appConfig.value?.navigation ?? []).filter((n) => n.page !== "home");
 </script>
 
 <template>
-  <div class="page home-page">
-    <h1 class="page-title">配置</h1>
+  <div class="page welcome-page">
+    <h1 class="page-title">主页</h1>
 
-    <section class="section">
-      <label class="field-label">当前工作空间</label>
-      <p class="current-path">{{ workspacePath }}</p>
-
-      <label class="field-label" for="repo">工作空间根</label>
-      <div class="row">
-        <input id="repo" v-model="repoInput" class="path-input" spellcheck="false" />
-      </div>
-
-      <label class="field-label" for="fc">FreeCAD 目录</label>
-      <div class="row">
-        <input id="fc" v-model="fcInput" class="path-input" spellcheck="false" placeholder="可选" />
-        <button
-          v-if="defaultFreecadDir"
-          type="button"
-          class="btn"
-          title="填入本机常用安装路径"
-          @click="fillDefaultFreecad"
-        >
-          默认位置
-        </button>
-      </div>
-
-      <div class="btn-row">
-        <button type="button" class="btn primary" @click="savePrefs">保存偏好</button>
-        <button type="button" class="btn" @click="refreshFields">刷新</button>
-        <button type="button" class="btn" @click="syncLegacyLauncher">从旧配置合并</button>
-      </div>
-      <p v-if="syncNote" class="hint sync-note">{{ syncNote }}</p>
-      <p v-if="launcher?.legacy_launcher_exists" class="hint">
-        检测到旧启动器：
-        <code>{{ launcher.legacy_launcher_path }}</code>
+    <section class="intro">
+      <p class="lead">
+        <strong>{{ appTitle }}</strong>
+        面向 FreeCAD 工作空间的 Web 壳层：在浏览器中管理 CAD 索引、BOM、零件库、文件属性与引用路径，并与本机
+        FreeCAD 目录协同。
+      </p>
+      <p class="lead muted">
+        左侧导航进入各功能；工作区树可打开文件详情。工作空间根目录、FreeCAD 安装路径与最近打开记录在
+        <button type="button" class="link-btn" @click="openConfig">配置</button>
+        中维护。
       </p>
     </section>
 
     <section class="section">
-      <h2 class="section-title">Web 服务</h2>
-      <p class="hint">
-        {{ webRunning ? `运行中 · ${webUrl}` : "未检测到本页面对应的服务（可能已在其它端口运行）" }}
-      </p>
-      <div class="btn-row">
-        <button type="button" class="btn danger" :disabled="!webRunning" @click="stopWebServer">
-          关闭 Web 服务
-        </button>
-        <button type="button" class="btn" @click="refreshWebStatus">刷新状态</button>
-      </div>
-      <p class="hint">关闭后释放 5173 端口；详细步骤见右侧运行日志。</p>
+      <h2 class="section-title">当前工作空间</h2>
+      <p class="workspace-path">{{ workspacePath || "（未设置）" }}</p>
+      <button type="button" class="btn" @click="openConfig">打开配置…</button>
     </section>
 
     <section class="section">
-      <h2 class="section-title">最近打开</h2>
-      <p class="hint">
-        仅记录你主动切换/保存的工作空间根目录（写入本机 launcher.json）。系统临时目录不会再加入列表。
-      </p>
-      <div class="btn-row compact">
-        <button type="button" class="btn" @click="pruneRecentList">清理临时/无效项</button>
-      </div>
-      <p class="hint">点击路径可切换；右侧 × 可单条移除（不删除磁盘目录）</p>
-      <div class="recent-list">
-        <div
-          v-for="entry in recentEntries"
-          :key="entry.path"
-          class="recent-row"
-          :class="{ missing: !entry.exists, current: entry.path === workspacePath }"
-        >
-          <button type="button" class="recent-btn" @click="switchRecent(entry.path)">
-            <span v-if="!entry.exists" class="missing-tag">已失效</span>
-            {{ entry.path === workspacePath ? "● 当前 · " : "" }}{{ entry.path }}
+      <h2 class="section-title">功能入口</h2>
+      <ul class="feature-grid">
+        <li v-for="item in featureNav" :key="item.page">
+          <button type="button" class="feature-card" @click="openFeature(item.page)">
+            <span class="feature-label">{{ item.label }}</span>
+            <span class="feature-desc">{{ item.description }}</span>
           </button>
-          <button
-            type="button"
-            class="recent-remove"
-            title="从最近列表移除"
-            @click="removeRecent(entry.path, $event)"
-          >
-            ×
-          </button>
-        </div>
-        <p v-if="!recentEntries.length" class="muted">尚无记录</p>
-      </div>
-    </section>
-
-    <section class="section">
-      <h2 class="section-title">功能一览</h2>
-      <ul class="feature-list">
-        <li v-for="item in navItems()" :key="item.page">
-          · {{ item.label }} — {{ item.description }}
         </li>
       </ul>
     </section>
 
-    <p class="footer-hint">
-      各功能页路径与选项写入当前工作空间根下的
-      {{ appConfig?.workspace_dotfile }}；最近打开与 FreeCAD 目录保存在
-      {{ launcher?.launcher_config_path ?? appConfig?.launcher_config_path }}。
-    </p>
+    <section class="section hints">
+      <h2 class="section-title">使用提示</h2>
+      <ul class="hint-list">
+        <li>首次使用请在配置中填写工作空间根目录并保存偏好。</li>
+        <li>「CAD 索引」扫描后，BOM 列表与文件详情中的属性才完整可用。</li>
+        <li>文件详情支持多 Tab；改名、引用写回与 BOM 属性回写在同一页的不同子 Tab 中。</li>
+        <li>运行日志在右侧栏，便于查看批量任务与 API 输出。</li>
+      </ul>
+    </section>
   </div>
 </template>
 
 <style scoped>
-.home-page {
+.welcome-page {
   padding: 24px 28px 40px;
+  max-width: 920px;
 }
 
 .page-title {
-  margin: 0 0 20px;
+  margin: 0 0 16px;
   font-size: 1.25rem;
+}
+
+.intro {
+  margin-bottom: 28px;
+}
+
+.lead {
+  margin: 0 0 12px;
+  font-size: 0.95rem;
+  line-height: 1.65;
+}
+
+.lead.muted {
+  color: var(--muted);
+}
+
+.link-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
 }
 
 .section {
@@ -272,44 +108,15 @@ const navItems = () => (appConfig.value?.navigation ?? []).filter((n) => n.page 
 }
 
 .section-title {
-  margin: 0 0 8px;
+  margin: 0 0 10px;
   font-size: 1rem;
 }
 
-.field-label {
-  display: block;
-  margin: 12px 0 6px;
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-.current-path {
-  margin: 0 0 8px;
+.workspace-path {
+  margin: 0 0 12px;
   font-weight: 600;
   word-break: break-all;
-}
-
-.row {
-  display: flex;
-  gap: 8px;
-}
-
-.path-input {
-  flex: 1;
-  padding: 8px 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-}
-
-.btn-row {
-  display: flex;
-  gap: 10px;
-  margin-top: 14px;
-}
-
-.btn-row.compact {
-  margin-top: 8px;
-  margin-bottom: 8px;
+  font-size: 0.88rem;
 }
 
 .btn {
@@ -319,114 +126,50 @@ const navItems = () => (appConfig.value?.navigation ?? []).filter((n) => n.page 
   background: var(--btn-bg);
 }
 
-.btn.primary {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
+.feature-grid {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
 }
 
-.btn.danger {
-  background: #fef2f2;
-  border-color: #fecaca;
-  color: #b91c1c;
-}
-
-.btn.danger:disabled {
-  opacity: 0.45;
-}
-
-.hint {
-  margin: 0 0 8px;
-  font-size: 0.82rem;
-  color: var(--muted);
-}
-
-.recent-list {
+.feature-card {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-}
-
-.recent-row {
-  display: flex;
-  align-items: stretch;
-  gap: 6px;
-}
-
-.recent-row.missing .recent-btn {
-  opacity: 0.72;
-}
-
-.recent-btn {
-  flex: 1;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  padding: 12px 14px;
   text-align: left;
-  padding: 8px 12px;
-  border: none;
-  border-radius: 6px;
-  background: #e8eef6;
-  font-size: 0.82rem;
-  word-break: break-all;
-}
-
-.recent-row.current .recent-btn {
-  background: #2563eb;
-  color: #fff;
-}
-
-.missing-tag {
-  display: inline-block;
-  margin-right: 6px;
-  padding: 0 5px;
-  border-radius: 4px;
-  font-size: 0.72rem;
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.recent-row.current .missing-tag {
-  background: rgba(255, 255, 255, 0.2);
-  color: #fff;
-}
-
-.recent-remove {
-  flex-shrink: 0;
-  width: 32px;
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--btn-bg);
+  cursor: pointer;
+}
+
+.feature-card:hover {
+  border-color: var(--accent);
+  background: #f0f6ff;
+}
+
+.feature-label {
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.feature-desc {
+  font-size: 0.8rem;
   color: var(--muted);
-  font-size: 1.1rem;
-  line-height: 1;
+  line-height: 1.45;
 }
 
-.recent-remove:hover {
-  background: #fee2e2;
-  border-color: #fecaca;
-  color: #b91c1c;
-}
-
-.feature-list {
+.hint-list {
   margin: 0;
-  padding-left: 0;
-  list-style: none;
+  padding-left: 1.2rem;
   font-size: 0.88rem;
   line-height: 1.7;
-}
-
-.sync-note {
-  margin-top: 10px;
-  color: #15803d;
-}
-
-code {
-  font-size: 0.78rem;
-  word-break: break-all;
-}
-
-.footer-hint,
-.muted {
-  font-size: 0.82rem;
   color: var(--muted);
-  line-height: 1.6;
 }
 </style>

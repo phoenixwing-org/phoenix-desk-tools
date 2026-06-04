@@ -7,9 +7,10 @@
 | 页面 | 职责 |
 | --- | --- |
 | **BOM 列表** | 选装配 FCStd → 表格列出**直接子件**（出向 XLink + CAD 索引属性） |
-| **改名与引用** | 磁盘改名、XLink 分析/写回、只读入向/出向引用查询 |
+| **文件详情** | 单文件属性 / 引用 / 改名 / **装配结构** |
+| **链接路径修正** | 全局 XLink 缺失与候选写回 |
 
-本页**不做**引用分析、改名写回；相关能力已全部移至「改名与引用」。
+本页**不做**引用分析写回、磁盘改名；相关能力在 **文件详情** 与 **链接路径修正**。
 
 ## 数据来源
 
@@ -28,24 +29,26 @@ flowchart LR
 
 ## 交互
 
-1. 右侧树点击装配，或输入路径/文件名 → **加载 BOM**。
-2. 顶栏显示引用表元数据；**工程内搜索**后引用表已与索引同步，必要时用 **仅重建引用表**（不重扫属性）。
-3. 表格展示当前装配的**一层子件**（非递归多级 BOM；多级见零件详情装配树）。
+1. 右侧树点击装配，或输入路径/文件名 → **加载 BOM**（树点击在无其它 Tab 接管时会**打开文件详情**）。
+2. 顶栏子 Tab：**装配 BOM**（一层子件）/ **全部引用**（分页、可按宿主分组）。
+3. **全部引用**支持搜索、分页、按宿主分组展开；分组子行相对宿主行略缩进。
 
-## 表格列
+## 表格列（装配 BOM / 全部引用子行）
 
 | 列 | 来源 | 说明 |
 | --- | --- | --- |
 | # | 序号 | 1…n |
-| PartNumber | CAD 索引 | 无则 `—` |
-| PartVersion | CAD 索引 | |
-| 类型码（TypeCode） | CAD 索引 | 单字母分类：**H** 一般件 · **S** 标准件 · **R** 虚拟零件（见 [Fcdesk嵌入式BOM属性约定.md](Fcdesk嵌入式BOM属性约定.md) §2.1） |
-| PartName | CAD 索引 | |
-| 文件名 | `target_basename` | XLink 目标 basename |
-| 相对路径 | `target_repo_rel_path` | 解析后的工作空间路径 |
+| **链接标签（子件名）** | `link_label` | **第一数据列**；已解析 FCStd 可点进**文件详情** |
+| 零件标识 | PartNumber + PartVersion | 可点进**零件详情**（同键复用 Tab） |
+| 类型码（TypeCode） | CAD 索引 | H / S / R；列宽约 36px |
+| 零件名（PartName） | CAD 索引 | |
+| 子件文件名 | `target_basename` | 可点进文件详情 |
+| 子件目录 / 相对目录 | `target_repo_rel_path` | |
 | 解析 | `resolve_status` | resolved / ambiguous / missing 等 |
 
-样式：`<table class="bom-table">`，表头 sticky，容器横向滚动；与零件目录页保持相近字号与边框。
+**全部引用（平铺）**在 `#` 后多一列 **宿主文件**。
+
+样式：`ResizableDataTable` + `bom-table`（分组时 `bom-table-grouped`），表头 sticky。
 
 ## API
 
@@ -53,17 +56,18 @@ flowchart LR
 | --- | --- | --- |
 | GET | `/api/bom-xrefs/meta` | 引用表统计 |
 | GET | `/api/bom-xrefs/outgoing?rel=` | 装配一层子件 |
+| GET | `/api/bom-xrefs/edges` | 全部引用边（分页） |
 | GET | `/api/fcstd-map` | 属性补全 |
-| POST | `/api/bom-xrefs/rebuild` | 仅重建引用表（等同上次扫描参数，不重扫 `file_asset`） |
-| POST | `/api/fcstd-map/scan`（工程内搜索） | 写 CAD 索引并 **内建** `rebuild_bom_xrefs` |
+| POST | `/api/bom-xrefs/rebuild` | 仅重建引用表 |
+| POST | `/api/fcstd-map/scan` | 工程内搜索 + 内建 `rebuild_bom_xrefs` |
 
 ## 后续扩展（未实现）
 
-- 递归 / 多级 BOM 展开（可复用 `load_assembly_tree`）。
+- 递归 / 多级 BOM 展开（装配结构见文件详情 · `load_assembly_tree`）。
 - 导出 CSV / Excel。
-- 从 FreeCAD 内 Live BOM 导出（见 [BOM工具说明.md](BOM工具说明.md)）。
+- FreeCAD 内 Live BOM 导出（见 [BOM工具说明.md](BOM工具说明.md)）。
 
 ## 实现文件
 
 - 前端：`web-ui/src/pages/BomExportPage.vue`
-- 后端：`fcdesk/services/bom_xref_service.py`（查询）；`fcdesk/services/cad_index/`（引用表索引重建）
+- 后端：`fcdesk/services/bom_xref_service.py`；`fcdesk/services/cad_index/`

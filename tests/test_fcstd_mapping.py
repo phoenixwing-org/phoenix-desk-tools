@@ -273,6 +273,16 @@ class TestRecommendedFilename(unittest.TestCase):
         )
         self.assertEqual(s, "100337.001-H-ABC-PULL-GEAR-RING.FCStd")
 
+    def test_standard_part_omits_model_series(self) -> None:
+        s = compose_fcstd_recommended_filename(
+            part_number="8007",
+            part_version="001",
+            type_code="S",
+            model_series="PX",
+            part_name="M6X12螺栓",
+        )
+        self.assertEqual(s, "8007.001-S-M6X12螺栓.FCStd")
+
     def test_part_name_fallback_to_label(self) -> None:
         s = compose_fcstd_recommended_filename(
             part_number="100001",

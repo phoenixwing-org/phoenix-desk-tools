@@ -43,6 +43,7 @@ const {
   pageError,
   reloadFile,
   openRenameTab,
+  rememberFilenameDraft,
 } = useFileDetailContext();
 const shell = useAppShell();
 const bomPrefs = ref<BomApplyPrefs | null>(null);
@@ -94,6 +95,15 @@ function patchField(key: keyof BomFields, value: string) {
   form.value = { ...form.value, [key]: value };
 }
 
+/** 类型码 S（标准件）：文件名不含型号系列，表单中型号系列置空 */
+function applyStandardPartModelSeriesRule() {
+  const tc = String(form.value.TypeCode ?? "").trim().toUpperCase();
+  if (tc !== "S") return;
+  if (String(form.value.ModelSeries ?? "").trim()) {
+    patchField("ModelSeries", "");
+  }
+}
+
 async function loadPrefs() {
   try {
     bomPrefs.value = await fetchBomPrefs();
@@ -132,7 +142,11 @@ async function onRecommendField(key: EditableKey) {
     const data = await recommendBomField(rel.value, key, form.value, kindFilters.value);
     if (data.filled && data.value) {
       patchField(key as keyof BomFields, data.value);
+      if (key === "TypeCode" || key === "filename") applyStandardPartModelSeriesRule();
       shell.setStatus(`${key} ← ${data.source_note}`);
+    } else if (key === "ModelSeries" && data.filled && !data.value) {
+      patchField("ModelSeries", "");
+      shell.setStatus(data.source_note || "标准件不含型号系列");
     } else {
       shell.setStatus(data.source_note || "未找到可推荐值");
     }
@@ -158,8 +172,17 @@ async function onRecommendAll() {
         working = { ...working, [key]: data.value };
         patchField(key as keyof BomFields, data.value);
         filled.push(key);
+      } else if (key === "ModelSeries" && data.filled && !data.value) {
+        working = { ...working, ModelSeries: "" };
+        patchField("ModelSeries", "");
+        filled.push(key);
+      }
+      if (key === "TypeCode" || key === "filename") {
+        applyStandardPartModelSeriesRule();
+        working = { ...working, ModelSeries: form.value.ModelSeries ?? "" };
       }
     }
+    applyStandardPartModelSeriesRule();
     const msg = filled.length ? `全部推荐完成（${filled.length} 项）` : "未找到可推荐值";
     shell.appendLog(`[文件详情] ${msg}`, { source: "file_detail" });
     shell.setStatus(msg);
@@ -175,9 +198,11 @@ async function onRecommendAll() {
 async function onSave() {
   if (!rel.value || !isFcstd.value || bomReadonly.value) return;
   busy.value = true;
+  const filenameDraft = (form.value.filename ?? "").trim();
   shell.appendLog(`[文件详情] 写入 Document.xml ${rel.value}…`, { source: "file_detail", open: true });
   try {
     await saveBom(rel.value, form.value);
+    if (filenameDraft) rememberFilenameDraft(filenameDraft);
     shell.appendLog("[文件详情] 已写入文件（Document.xml）", { source: "file_detail" });
     shell.setStatus("已写入文件（Document.xml）");
     await reloadFile();

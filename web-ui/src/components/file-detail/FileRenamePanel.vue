@@ -29,6 +29,7 @@ const {
   reloadFile,
   refreshXrefCounts,
   switchSubTab,
+  activeSubTab,
 } = useFileDetailContext();
 const shell = useAppShell();
 const incoming = useIncomingRefQuery(props.workbenchTabId, "file_rename");
@@ -51,12 +52,20 @@ const canRename = computed(
 
 const canApplyRefs = computed(() => Boolean(scan.value && (scan.value.pending_hit_count ?? 0) > 0));
 
+function resolveRenameTargetFilename(): string {
+  return (
+    props.preferredFilename?.trim() ||
+    (form.value.filename ?? "").trim() ||
+    ""
+  );
+}
+
 function applyRenameTargets() {
   const disk = originalFilename.value.trim();
-  const pref = props.preferredFilename?.trim();
-  if (pref && pref !== disk) renamed.value = false;
+  const target = resolveRenameTargetFilename();
+  if (target && target !== disk) renamed.value = false;
   if (!renamed.value) {
-    newFilename.value = pref && pref !== disk ? pref : newFilename.value.trim() || disk;
+    newFilename.value = target || disk;
   }
 }
 
@@ -92,9 +101,17 @@ watch(
 );
 
 watch(
-  () => [originalFilename.value, props.preferredFilename] as const,
-  () => applyRenameTargets(),
-  { immediate: true },
+  () => [originalFilename.value, props.preferredFilename, form.value.filename] as const,
+  () => {
+    if (activeSubTab.value === "rename") applyRenameTargets();
+  },
+);
+
+watch(
+  () => activeSubTab.value,
+  (tab) => {
+    if (tab === "rename") applyRenameTargets();
+  },
 );
 
 function hasUnsavedDocumentAttrs() {

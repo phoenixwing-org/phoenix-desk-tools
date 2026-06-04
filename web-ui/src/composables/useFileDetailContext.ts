@@ -18,6 +18,8 @@ export type FileDetailContext = {
   openRenameTab: (target?: string) => boolean;
   reloadFile: (targetRel?: string) => Promise<void>;
   refreshXrefCounts: () => Promise<void>;
+  /** 写入 Document.xml 不更名；缓存表单中的目标文件名，reload/F5 后仍显示 */
+  rememberFilenameDraft: (filename: string, relPath?: string) => void;
 };
 
 const FILE_DETAIL_KEY: InjectionKey<FileDetailContext> = Symbol("fileDetail");

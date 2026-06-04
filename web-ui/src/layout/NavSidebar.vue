@@ -6,8 +6,11 @@ import { DEFAULT_PAGE_ICONS } from "../types/config";
 const shell = useAppShell();
 
 const navItems = computed(() => shell.appConfig.value?.navigation ?? []);
-const mainNavItems = computed(() => navItems.value.filter((n) => n.page !== "home"));
-const configNavItem = computed(() => navItems.value.find((n) => n.page === "home"));
+const mainNavItems = computed(() =>
+  navItems.value.filter((n) => n.page !== "home" && n.page !== "config"),
+);
+const homeNavItem = computed(() => navItems.value.find((n) => n.page === "home"));
+const configNavItem = computed(() => navItems.value.find((n) => n.page === "config"));
 const shellLayout = computed(() => shell.shellLayout.value);
 const currentPage = computed(() => shell.currentPage.value);
 const wide = computed(() => shellLayout.value.nav_rail_mode === 1);
@@ -47,6 +50,22 @@ function hover(tip: string | null) {
       @mouseleave="hover(null)"
     >
       {{ wide ? "◀" : "▶" }}
+    </button>
+
+    <button
+      v-if="homeNavItem"
+      type="button"
+      class="nav-item nav-home"
+      :class="{ active: currentPage === homeNavItem.page }"
+      :title="homeNavItem.label"
+      @click="select(homeNavItem.page)"
+      @mouseenter="hover(homeNavItem.label)"
+      @mouseleave="hover(null)"
+    >
+      <template v-if="wide">
+        {{ iconFor(homeNavItem.page, homeNavItem.icon) }} {{ homeNavItem.label }}
+      </template>
+      <template v-else>{{ iconFor(homeNavItem.page, homeNavItem.icon) }}</template>
     </button>
 
     <button

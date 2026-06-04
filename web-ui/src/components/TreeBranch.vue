@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import ExpandCaret from "./ExpandCaret.vue";
 import TreeBranch from "./TreeBranch.vue";
 import type { TreeNode } from "../api";
 
@@ -46,8 +47,12 @@ function treeKindTag(kind?: string) {
       :aria-expanded="hasChildren ? expanded : undefined"
       @click="toggleDir"
     >
-      <span v-if="hasChildren" class="tree-twistie" aria-hidden="true">{{ expanded ? "▾" : "▸" }}</span>
-      <span v-else class="tree-twistie tree-twistie-placeholder" aria-hidden="true" />
+      <ExpandCaret v-if="hasChildren" :expanded="expanded" />
+      <span
+        v-else
+        class="tree-twistie-placeholder"
+        aria-hidden="true"
+      />
       <span class="tree-dir-name">{{ node.name || "/" }}</span>
     </button>
     <TreeBranch
@@ -112,15 +117,10 @@ function treeKindTag(kind?: string) {
   white-space: nowrap;
 }
 
-.tree-twistie {
-  flex-shrink: 0;
-  width: 1em;
-  font-size: 0.72rem;
-  color: #64748b;
-  line-height: 1;
-}
-
 .tree-twistie-placeholder {
+  width: var(--fcdesk-expand-size);
+  height: var(--fcdesk-expand-size);
+  flex-shrink: 0;
   visibility: hidden;
 }
 </style>

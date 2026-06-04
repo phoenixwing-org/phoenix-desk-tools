@@ -183,6 +183,27 @@ class TestRecommendBomField(unittest.TestCase):
             self.assertEqual(out["value"], "100002.001-磁芯")
             self.assertIn("编号公式", str(out["source_note"]))
 
+    def test_standard_part_clears_model_series_recommend(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            out = recommend_bom_field(
+                root,
+                Path("parts/bolt.FCStd"),
+                "ModelSeries",
+                {
+                    "PartNumber": "8007",
+                    "PartVersion": "001",
+                    "TypeCode": "S",
+                    "ModelSeries": "PX",
+                    "PartName": "M6X12螺栓",
+                    "label": "",
+                    "filename": "bolt.FCStd",
+                },
+            )
+            self.assertTrue(out["filled"])
+            self.assertEqual(out["value"], "")
+            self.assertIn("标准件", str(out["source_note"]))
+
 
 if __name__ == "__main__":
     unittest.main()

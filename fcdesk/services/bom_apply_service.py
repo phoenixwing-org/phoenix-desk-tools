@@ -665,6 +665,14 @@ def recommend_bom_field(
             }
         return {"field": key, "value": "", "source_note": "未找到可推荐值", "filled": False}
 
+    if key == "ModelSeries" and (merged.get("TypeCode") or "").strip().upper() == "S":
+        return {
+            "field": key,
+            "value": "",
+            "source_note": "标准件（S）不含型号系列",
+            "filled": True,
+        }
+
     candidates: list[tuple[str, str]] = []
     if is_fcstd:
         candidates.extend(_collect_embedded_field(full, key))

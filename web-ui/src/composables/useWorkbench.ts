@@ -34,6 +34,7 @@ export function createWorkbench(appConfig: Ref<AppConfig | null>) {
     const fromNav = appConfig.value?.navigation.find((n) => n.page === pageId)?.label;
     if (fromNav) return fromNav;
     const extras: Record<string, string> = {
+      config: "配置",
       part_key_detail: "零件详情",
       rename_analysis: "文件改名",
     };
@@ -209,7 +210,9 @@ export function createWorkbench(appConfig: Ref<AppConfig | null>) {
           ? "file_rename"
           : t.pageId === "bom_apply"
             ? "file_detail"
-            : t.pageId,
+            : t.pageId === "home" && t.title === "配置"
+              ? "config"
+              : t.pageId,
       title: t.title,
       subtitle: t.subtitle,
       contextKey: t.contextKey,

@@ -39,7 +39,7 @@
 | `step_batch` | `step_batch_service` | ✅ | ✅ | Web 无收件箱桥接 |
 | `sw_step_export` | `sw_step_export_service` | ✅ | ✅ | — |
 | `bom_apply` | `bom_apply_service` | ✅ 功能对齐桌面 | ⚠️ 直连核心库 | Web 已补推荐值/改名等；桌面页可改调 service |
-| `bom_export` | — | 占位 | 占位 | 待 FreeCAD BOM 提取方案 |
+| `bom_export` | `bom_xref_service` | ✅ | 占位 | Web：装配 BOM + 全部引用表；FreeCAD 内 Live BOM 导出仍待方案 |
 
 **Web 独有：** 壳层布局 API（`shell-layout`）、无原生目录对话框（手输路径）、**Workbench 多 Tab**（见 [Web壳层-Tab与状态持久化-规划讨论.md](Web壳层-Tab与状态持久化-规划讨论.md)）。
 

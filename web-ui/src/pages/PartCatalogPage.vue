@@ -83,7 +83,7 @@ onMounted(() => refreshList());
       <div class="head-row">
         <h1 class="page-title">零件目录</h1>
         <p class="page-desc">
-          以 <code>零件号.版本</code> 为唯一键聚合关联文件。点击<strong>零件标识</strong>在独立 Tab 打开详情（可多开）。
+          以 <code>零件号.版本</code> 为唯一键聚合关联文件。点击<strong>标签</strong>或<strong>零件标识</strong>打开零件详情（同键复用 Tab，不重复开）。
         </p>
       </div>
     </header>
@@ -107,13 +107,23 @@ onMounted(() => refreshList());
     >
       <tbody>
         <tr v-for="row in filteredEntries" :key="row.part_key">
+          <td>
+            <button
+              v-if="row.label?.trim()"
+              type="button"
+              class="link-key"
+              @click="openDetail(row)"
+            >
+              {{ row.label }}
+            </button>
+            <span v-else class="muted">—</span>
+          </td>
           <td class="mono">
             <button type="button" class="link-key" @click="openDetail(row)">{{ row.part_key }}</button>
           </td>
           <td>{{ row.TypeCode }}</td>
           <td>{{ row.ModelSeries }}</td>
           <td>{{ row.PartName }}</td>
-          <td>{{ row.label }}</td>
           <td>{{ row.status === "obsolete" ? "失效" : "有效" }}</td>
           <td>{{ row.file_count }}</td>
           <td>{{ row.present_count }}/{{ row.missing_count }}</td>

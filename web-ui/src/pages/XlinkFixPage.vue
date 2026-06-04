@@ -12,6 +12,7 @@ import {
   type XlinkFixOverrideResult,
   type XlinkFixResult,
 } from "../api";
+import ExpandCaret from "../components/ExpandCaret.vue";
 import { useAppShell } from "../composables/useAppShell";
 
 type FilterTab = "all" | "fixable" | "not_found";
@@ -419,12 +420,12 @@ onMounted(async () => {
                   <button
                     v-if="canExpandRow(row)"
                     type="button"
-                    class="expand-btn"
+                    class="fcdesk-expand-btn expand-btn"
                     :aria-expanded="isExpanded(row)"
                     title="展开：按零件标识选择目标 FCStd"
                     @click.stop="toggleExpand(row)"
                   >
-                    {{ isExpanded(row) ? "▼" : "▶" }}
+                    <ExpandCaret :expanded="isExpanded(row)" />
                   </button>
                 </td>
                 <td @click.stop>
@@ -776,23 +777,9 @@ onMounted(async () => {
 }
 
 .col-expand {
-  width: 28px;
+  width: calc(var(--fcdesk-expand-size) + 12px);
   padding: 4px 6px;
   vertical-align: middle;
-}
-
-.expand-btn {
-  border: none;
-  background: none;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 0.72rem;
-  padding: 2px 4px;
-  line-height: 1;
-}
-
-.expand-btn:hover {
-  color: var(--accent);
 }
 
 .expand-detail-row td {

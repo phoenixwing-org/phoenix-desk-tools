@@ -40,7 +40,7 @@ async function removeRecent(path: string, event: MouseEvent) {
 
 function openConfig() {
   recentOpen.value = false;
-  shell.goToPage("home");
+  shell.goToPage("config");
 }
 </script>
 
