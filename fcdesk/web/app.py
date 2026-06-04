@@ -33,6 +33,7 @@ from fcdesk.services.fcstd_map_service import (
     run_fcstd_map_scan,
     save_fcstd_map_prefs,
 )
+from fcdesk.services.onboarding_service import onboarding_status_payload
 from fcdesk.services.launcher_service import (
     activate_workspace,
     app_config_payload,
@@ -415,6 +416,10 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
     def api_get_workspace() -> dict[str, str]:
         ws = get_workspace()
         return {"path": str(ws), "name": ws.name or str(ws)}
+
+    @app.get("/api/onboarding/status")
+    def api_onboarding_status() -> dict:
+        return onboarding_status_payload(get_workspace())
 
     @app.post("/api/workspace")
     def api_set_workspace(body: WorkspaceBody) -> dict[str, str]:

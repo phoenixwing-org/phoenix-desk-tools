@@ -102,7 +102,7 @@ onUnmounted(() => {
       <NavSidebar />
       <main class="shell-main" :style="{ marginRight: rightWidth }">
         <WorkbenchTabBar v-if="shell.showTabBar.value" />
-        <div class="shell-pages">
+        <div class="shell-pages" data-tour="main-content">
           <KeepAlive :max="24">
             <component
               v-if="activeTab"

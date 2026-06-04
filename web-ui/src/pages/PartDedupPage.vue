@@ -8,6 +8,7 @@ import {
   type PartDedupGroup,
   type PartDedupScanResult,
 } from "../api";
+import PageHelpButton from "../components/PageHelpButton.vue";
 import { useAppShell } from "../composables/useAppShell";
 
 const shell = useAppShell();
@@ -121,10 +122,13 @@ onMounted(async () => {
       <div class="head-row">
         <h1 class="page-title">编号查重</h1>
         <p class="page-desc">按扩展名扫描目录，检测文件名、编号、编号+版本三类重复</p>
+        <div class="head-help">
+          <PageHelpButton page-id="part_dedup" />
+        </div>
       </div>
     </header>
 
-    <section class="card settings-card">
+    <section class="card settings-card" data-tour-page-dedup-settings>
       <div class="settings-form">
         <div class="form-row">
           <span class="section-label">扫描设置</span>
@@ -169,7 +173,7 @@ onMounted(async () => {
               <span>编号须数字</span>
             </label>
           </div>
-          <div class="settings-actions">
+          <div class="settings-actions" data-tour-page-dedup-scan>
             <button type="button" class="btn btn-quiet btn-sm" :disabled="saving" @click="onSave">
               {{ saving ? "…" : "保存偏好" }}
             </button>

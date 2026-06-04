@@ -52,6 +52,8 @@ python -m fcdesk.web -w /path/to/CAD/workspace
 
 结论：**平时用 `python -m fcdesk.web`**；**改界面用 `python -m fcdesk.web --dev`**。详见 [web-ui/README.md](web-ui/README.md)。
 
+**首次使用 Web**： [doc/新手指引.md](doc/新手指引.md) · [doc/快速开始.md](doc/快速开始.md)
+
 ## 命名
 
 - **发行名**（Gitee/PyPI）：`phoenix-freecad-desktop`

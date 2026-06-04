@@ -10,6 +10,7 @@ import {
   loadRenameAnalysis,
 } from "../api";
 import RenameAnalysisPanel from "../components/RenameAnalysisPanel.vue";
+import PageHelpButton from "../components/PageHelpButton.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useIncomingRefQuery } from "../composables/useIncomingRefQuery";
 import { usePageSession } from "../composables/usePageSession";
@@ -482,13 +483,16 @@ onUnmounted(() => {
         <p class="page-desc">
           针对已发生的改名，分析引用影响并写回 XLink / 引用名。磁盘改名请在<strong>文件详情 · 改名</strong> Tab。
         </p>
+        <div class="head-help">
+          <PageHelpButton page-id="file_rename" />
+        </div>
       </div>
     </header>
 
     <div v-if="pageError" class="banner err">{{ pageError }}</div>
 
     <section class="source-block">
-      <nav class="mode-tabs" role="tablist">
+      <nav class="mode-tabs" role="tablist" data-tour-page-rename-modes>
         <button
           type="button"
           role="tab"
@@ -562,6 +566,7 @@ onUnmounted(() => {
       </div>
     </section>
 
+    <div data-tour-page-rename-panel>
     <RenameAnalysisPanel
       :scan="scan"
       :selected-hosts="selectedHosts"
@@ -579,6 +584,7 @@ onUnmounted(() => {
       @apply-host-all-labels="onApplyHostAllLabels"
       @export-report="onExportReport"
     />
+    </div>
 
     <details class="help-panel">
       <summary class="help-summary">说明</summary>

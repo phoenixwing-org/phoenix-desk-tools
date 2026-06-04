@@ -14,6 +14,11 @@ import { loadWorkbenchSession, saveWorkbenchSessionAll } from "./workbenchSessio
 import { createWorkbench, type WorkbenchContext } from "./useWorkbench";
 import { basenameFromRel, normalizeRepoRelForApi } from "../utils/workspaceFileQuery";
 import { normalizeDetailTabRel, partKeyTabContextKey } from "../utils/detailTabRoute";
+import {
+  ONBOARDING_PAGES_ALWAYS,
+  WORKSPACE_GATE_MSG,
+} from "../utils/onboardingConstants";
+import { useOnboardingStore } from "../stores/onboarding";
 import type { OpenTabOptions, WorkbenchTab, WorkbenchTabPayload } from "../types/workbench";
 
 /** 返回 false 表示当前 Tab 未接管此次树点击，由 shell 回退打开文件详情 */
@@ -59,6 +64,10 @@ export type AppShellContext = {
   clearLog: () => void;
   setLogOpen: (open: boolean) => void;
   goToPage: (pageId: string) => void;
+  canNavigateToPage: (pageId: string) => boolean;
+  /** 打开主页并滚动到新手指南区块 */
+  openOnboardingGuide: () => void;
+  scrollToGuideToken: Ref<number>;
   openPartKeyDetail: (
     partNumber: string,
     partVersion: string,
@@ -141,6 +150,29 @@ export function provideAppShell(): AppShellContext {
   const treeHandlersByTab = new Map<string, TreeSelectHandler>();
   const treeRescanToken = ref(0);
   const treeSelectAfterRescan = ref<string | null>(null);
+  const scrollToGuideToken = ref(0);
+  const onboarding = useOnboardingStore();
+
+  function normalizePageId(pageId: string): string {
+    return pageId === "rename_analysis" ? "file_rename" : pageId;
+  }
+
+  function canNavigateToPage(pageId: string): boolean {
+    const id = normalizePageId(pageId);
+    if (ONBOARDING_PAGES_ALWAYS.has(id)) return true;
+    return onboarding.workspaceOk;
+  }
+
+  function requireWorkspace(): boolean {
+    if (onboarding.workspaceOk) return true;
+    setStatus(WORKSPACE_GATE_MSG);
+    goToPage("config");
+    return false;
+  }
+
+  function syncOnboardingFromTabs() {
+    onboarding.syncFileDetailFromTabs(workspacePath.value, wb.tabs.value);
+  }
 
   function syncActiveTreeHandler() {
     const id = wb.activeTabId.value;
@@ -262,8 +294,20 @@ export function provideAppShell(): AppShellContext {
     await persistShellLayout({ log_panel_open: open });
   }
 
+  function openOnboardingGuide() {
+    goToPage("home");
+    scrollToGuideToken.value += 1;
+  }
+
   function goToPage(pageId: string) {
-    wb.navigateToPage(pageId === "rename_analysis" ? "file_rename" : pageId);
+    const id = normalizePageId(pageId);
+    if (!canNavigateToPage(id)) {
+      setStatus(WORKSPACE_GATE_MSG);
+      wb.navigateToPage("config");
+      navHover.value = null;
+      return;
+    }
+    wb.navigateToPage(id);
     navHover.value = null;
   }
 
@@ -272,6 +316,7 @@ export function provideAppShell(): AppShellContext {
     partVersion: string,
     opts?: { partName?: string; label?: string },
   ) {
+    if (!requireWorkspace()) return;
     const pn = partNumber.trim();
     const pv = partVersion.trim();
     if (!pn || !pv) return;
@@ -310,6 +355,7 @@ export function provideAppShell(): AppShellContext {
   ) {
     const rel = repoRelPath.trim();
     if (!rel) return;
+    if (!requireWorkspace()) return;
     const existing = findFileDetailTab(rel);
     if (existing) {
       const relApi = normalizeRepoRelForApi(rel) || rel;
@@ -337,6 +383,7 @@ export function provideAppShell(): AppShellContext {
         existing.payloadConsumed = false;
       }
       wb.activateTab(existing.id);
+      onboarding.markFileDetailOpened(workspacePath.value);
       return;
     }
     try {
@@ -365,6 +412,8 @@ export function provideAppShell(): AppShellContext {
         forceNew: true,
       });
       fileDetailTabByRel.set(normalizeDetailTabRel(rel), tabId);
+      onboarding.markFileDetailOpened(workspacePath.value);
+      syncOnboardingFromTabs();
     } catch (e) {
       setStatus(String(e));
     }
@@ -413,7 +462,9 @@ export function provideAppShell(): AppShellContext {
     const ws = await setWorkspace(path.trim());
     workspacePath.value = ws.path;
     await reloadLauncher();
+    await onboarding.refreshStatus();
     await restoreWorkbenchSession();
+    syncOnboardingFromTabs();
     setStatus(`工作空间: ${ws.path}`);
   }
 
@@ -447,6 +498,7 @@ export function provideAppShell(): AppShellContext {
     watch(wb.tabs, () => {
       syncDetailTabMaps();
       pruneTreeHandlers();
+      syncOnboardingFromTabs();
       scheduleWorkbenchSave();
     }, { deep: true });
     watch(wb.activeTabId, () => {
@@ -560,7 +612,19 @@ export function provideAppShell(): AppShellContext {
     const ws = await getWorkspace();
     workspacePath.value = ws.path;
     await reloadLauncher();
+    await onboarding.refreshStatus();
     await restoreWorkbenchSession();
+    syncOnboardingFromTabs();
+    if (!onboarding.workspaceOk) {
+      wb.ensureInitialTab("home");
+      if (!wb.tabs.value.some((t) => t.pageId === "config")) {
+        try {
+          wb.openTab({ pageId: "config", title: "配置" });
+        } catch {
+          /* 单页策略下可能已有 config */
+        }
+      }
+    }
     applyUrlDeepLink();
     setupWorkbenchPersistence();
     setupShellLogPolling();
@@ -582,6 +646,9 @@ export function provideAppShell(): AppShellContext {
     clearLog,
     setLogOpen,
     goToPage,
+    canNavigateToPage,
+    openOnboardingGuide,
+    scrollToGuideToken,
     openPartKeyDetail,
     openBomApplyForRel,
     openFileDetailForRel,

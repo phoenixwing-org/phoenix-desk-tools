@@ -83,3 +83,13 @@ kill <PID>
 开发模式下 5173 由 Vite 占用，8765 由 Python API 占用；单服务模式下 5173 由 Python 独占。
 
 换单服务端口：`python -m fcdesk.web --port 8765`
+
+## 新手指引
+
+首次打开 Web 壳建议：
+
+1. 阅读仓库 [doc/新手指引.md](../doc/新手指引.md) 或 [doc/快速开始.md](../doc/快速开始.md)。
+2. 在浏览器 **主页 → 新手指南** 按四步完成配置（工作空间 → 推荐 FreeCAD → CAD 索引 → 打开文件详情）。
+3. 可选 **界面巡游**（driver.js，熟悉导航 / Tab / 工作区树 / 日志）。
+
+状态 API：`GET /api/onboarding/status`。实现说明：[doc/新手指引-实现备忘.md](../doc/新手指引-实现备忘.md)。

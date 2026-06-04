@@ -104,7 +104,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="tab-bar">
+  <div class="tab-bar" data-tour="tab-bar">
     <div ref="scrollEl" class="tab-scroll" role="tablist">
       <button
         v-for="tab in tabs"

@@ -1,6 +1,6 @@
 # Web 前端 — 可行性分析
 
-> 状态：**W0 壳层完成 · 除 BOM 提取外各页已接入 Web API**  
+> 状态：**W0 壳层完成 · 各页已接入 Web API · 新手指引已落地**  
 > 存储目标与 [Phoenix工作空间存储-规划讨论.md](Phoenix工作空间存储-规划讨论.md) 一致：**默认 SQLite（`.phoenix/`），按需导出 JSON**。
 
 ---
@@ -58,6 +58,7 @@ exports/*.json  （含 fcstd_map、偏好快照等）
 | 启动器配置 | 本机 `…/phoenix-wing/fcdesk/launcher.json`（见 [启动器配置路径-规划讨论.md](启动器配置路径-规划讨论.md)） |
 | CAD 索引库 | `<工作空间>/.phoenix/cad-database.sqlite`（扫描后按需导出 `fcstd_map.json`） |
 | 运行说明 | [web-ui/README.md](../web-ui/README.md) |
+| 新手指引 | [新手指引.md](新手指引.md)、[Web壳层-使用说明.md](Web壳层-使用说明.md) |
 
 ```bash
 pip install -e ".[web]"
@@ -84,6 +85,8 @@ python -m fcdesk.web --build -w /path/to/workspace
 
 ## 5. 与现有文档
 
+- **首次使用**：[新手指引.md](新手指引.md)、[快速开始.md](快速开始.md)
+- **Web 壳操作**：[Web壳层-使用说明.md](Web壳层-使用说明.md)
 - 路径与偏好：[路径与目录显示约定.md](路径与目录显示约定.md)（**目标态**见 Phoenix 存储讨论）
 - 改名 / XLink 审计：[改名与XLink引用修正-规划讨论.md](改名与XLink引用修正-规划讨论.md)
-- 桌面壳现状：[桌面工具-使用说明.md](桌面工具-使用说明.md)
+- 桌面启动器：[桌面工具-使用说明.md](桌面工具-使用说明.md)

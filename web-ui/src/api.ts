@@ -88,6 +88,18 @@ async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
+export type OnboardingStatus = {
+  workspace_ok: boolean;
+  workspace_path: string;
+  freecad_ok: boolean;
+  index_scanned: boolean;
+  last_scan_at: string;
+};
+
+export function fetchOnboardingStatus() {
+  return jsonFetch<OnboardingStatus>("/api/onboarding/status");
+}
+
 export function fetchAppConfig() {
   return jsonFetch<AppConfig>("/api/config/app");
 }

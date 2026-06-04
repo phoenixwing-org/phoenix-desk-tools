@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useAppShell } from "../composables/useAppShell";
+import { useOnboardingStore } from "../stores/onboarding";
+import { WORKSPACE_GATE_MSG } from "../utils/onboardingConstants";
 import { DEFAULT_PAGE_ICONS } from "../types/config";
 
 const shell = useAppShell();
+const onboarding = useOnboardingStore();
 
 const navItems = computed(() => shell.appConfig.value?.navigation ?? []);
 const mainNavItems = computed(() =>
@@ -30,8 +33,16 @@ async function toggleRight() {
   });
 }
 
+function navDisabled(page: string): boolean {
+  return !shell.canNavigateToPage(page);
+}
+
 function select(page: string) {
   shell.goToPage(page);
+}
+
+function openGuide() {
+  shell.openOnboardingGuide();
 }
 
 function hover(tip: string | null) {
@@ -40,7 +51,7 @@ function hover(tip: string | null) {
 </script>
 
 <template>
-  <nav class="nav" :class="{ wide }">
+  <nav class="nav" :class="{ wide }" data-tour="nav-rail">
     <button
       type="button"
       class="nav-mode"
@@ -73,8 +84,9 @@ function hover(tip: string | null) {
       :key="item.page"
       type="button"
       class="nav-item"
-      :class="{ active: currentPage === item.page }"
-      :title="item.label"
+      :class="{ active: currentPage === item.page, disabled: navDisabled(item.page) }"
+      :title="navDisabled(item.page) ? WORKSPACE_GATE_MSG : item.label"
+      :disabled="navDisabled(item.page)"
       @click="select(item.page)"
       @mouseenter="hover(item.label)"
       @mouseleave="hover(null)"
@@ -86,9 +98,23 @@ function hover(tip: string | null) {
     <div class="nav-spacer" />
 
     <button
+      type="button"
+      class="nav-item nav-guide"
+      :class="{ active: currentPage === 'home' }"
+      title="新手指南与界面巡游"
+      @click="openGuide"
+      @mouseenter="hover('新手指引：四步开工清单')"
+      @mouseleave="hover(null)"
+    >
+      <template v-if="wide">? 新手指引</template>
+      <template v-else>?</template>
+    </button>
+
+    <button
       v-if="configNavItem"
       type="button"
       class="nav-item nav-config"
+      data-tour="nav-config"
       :class="{ active: currentPage === configNavItem.page }"
       :title="configNavItem.label"
       @click="select(configNavItem.page)"
@@ -171,15 +197,30 @@ function hover(tip: string | null) {
   color: #fff;
 }
 
+.nav-item.disabled,
+.nav-item:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.nav-item.disabled:hover,
+.nav-item:disabled:hover {
+  background: transparent;
+}
+
 .nav-spacer {
   flex: 1;
   min-height: 8px;
 }
 
-.nav-config {
+.nav-guide {
   margin-top: 4px;
   border-top: 1px solid var(--border);
   padding-top: 8px;
+}
+
+.nav-config {
+  margin-top: 2px;
 }
 
 .nav-dock {

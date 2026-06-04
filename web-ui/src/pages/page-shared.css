@@ -19,7 +19,8 @@
 .head-row:has(> .btn),
 .head-row:has(> .head-rebuild),
 .head-row:has(> .part-key-bar),
-.head-row:has(> .head-actions) {
+.head-row:has(> .head-actions),
+.head-row:has(> .head-trailing) {
   align-items: center;
   justify-content: space-between;
 }
@@ -40,6 +41,42 @@
   gap: 6px 12px;
   min-width: 0;
   flex: 1;
+}
+
+.head-title-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* 页内 ?：固定在标题行最右，弹层向左展开（见 PageHelpButton） */
+.head-help {
+  flex-shrink: 0;
+  align-self: flex-start;
+}
+
+.head-row > .head-help {
+  margin-left: auto;
+}
+
+.head-trailing {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.title-row > .head-help {
+  margin-left: auto;
 }
 
 .page-title {

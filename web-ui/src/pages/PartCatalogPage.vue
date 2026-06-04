@@ -4,6 +4,7 @@ import { fetchPartKeys, type PartKeyEntry, type PartKeysPayload } from "../api";
 import { BOM_FIELD_LABELS as L } from "../utils/bomFieldLabels";
 import { useAppShell } from "../composables/useAppShell";
 import { basenameFromRel, normalizeRepoRelForApi } from "../utils/workspaceFileQuery";
+import PageHelpButton from "../components/PageHelpButton.vue";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
 import type { TableColumnDef } from "../composables/useResizableTable";
 
@@ -85,10 +86,13 @@ onMounted(() => refreshList());
         <p class="page-desc">
           以 <code>零件号.版本</code> 为唯一键聚合关联文件。点击<strong>标签</strong>或<strong>零件标识</strong>打开零件详情（同键复用 Tab，不重复开）。
         </p>
+        <div class="head-help">
+          <PageHelpButton page-id="part_catalog" />
+        </div>
       </div>
     </header>
 
-    <section class="controls">
+    <section class="controls" data-tour-page-partcat-search>
       <input v-model="search" class="path-input" placeholder="搜索零件号、名称、备注…" spellcheck="false" />
       <button type="button" class="btn" :disabled="loading" @click="refreshList">刷新</button>
     </section>
@@ -100,8 +104,8 @@ onMounted(() => refreshList());
       <span class="count">{{ filteredEntries.length }} 键</span>
     </section>
 
+    <div v-if="filteredEntries.length" data-tour-page-partcat-table>
     <ResizableDataTable
-      v-if="filteredEntries.length"
       :columns="catalogColumns"
       wrap-class="table-grow"
     >
@@ -130,6 +134,7 @@ onMounted(() => refreshList());
         </tr>
       </tbody>
     </ResizableDataTable>
+    </div>
     <div v-else-if="!loading" class="table-wrap table-grow empty-wrap">
       <p class="empty">
         {{ listData?.exists ? "当前筛选无条目" : "尚无数据，请先在 CAD 索引页执行工程内搜索" }}

@@ -7,6 +7,7 @@ import {
   saveSwStepPrefs,
   type SwStepPrefs,
 } from "../api";
+import PageHelpButton from "../components/PageHelpButton.vue";
 import { useAppShell } from "../composables/useAppShell";
 
 const shell = useAppShell();
@@ -100,6 +101,9 @@ onMounted(async () => {
         <p class="page-desc">
           SolidWorks 三维模型批量导出 STEP（Windows COM）。非 Windows 可保存偏好与预览模型数量。
         </p>
+        <div class="head-help">
+          <PageHelpButton page-id="sw_step_export" />
+        </div>
       </div>
     </header>
 
@@ -107,7 +111,7 @@ onMounted(async () => {
       当前平台 {{ prefsMeta.platform }} 不支持 COM 批量导出；预览与保存偏好仍可用。
     </div>
 
-    <section class="controls">
+    <section class="controls" data-tour-page-sw-form>
       <div class="form-grid">
         <label class="field-label" for="src-dir">SolidWorks 模型目录</label>
         <input id="src-dir" v-model="sourceDir" class="path-input" spellcheck="false" />
@@ -121,7 +125,7 @@ onMounted(async () => {
         </div>
 
         <span class="field-label">操作</span>
-        <div class="row">
+        <div class="row" data-tour-page-sw-run>
           <button type="button" class="btn" :disabled="saving" @click="onSave">
             {{ saving ? "…" : "保存偏好" }}
           </button>

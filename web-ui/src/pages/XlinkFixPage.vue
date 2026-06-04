@@ -13,6 +13,7 @@ import {
   type XlinkFixResult,
 } from "../api";
 import ExpandCaret from "../components/ExpandCaret.vue";
+import PageHelpButton from "../components/PageHelpButton.vue";
 import { useAppShell } from "../composables/useAppShell";
 
 type FilterTab = "all" | "fixable" | "not_found";
@@ -292,6 +293,9 @@ onMounted(async () => {
       <div class="head-row">
         <h1 class="page-title">链接路径修正</h1>
         <p class="page-desc">扫描失效 XLink，先分析确认再写回</p>
+        <div class="head-help">
+          <PageHelpButton page-id="xlink_fix" />
+        </div>
       </div>
     </header>
 
@@ -327,7 +331,7 @@ onMounted(async () => {
         </span>
       </div>
 
-      <div class="settings-foot">
+      <div class="settings-foot" data-tour-page-xlink-analyze>
         <button type="button" class="btn btn-quiet" :disabled="saving" @click="onSavePrefs">
           {{ saving ? "…" : "保存偏好" }}
         </button>
@@ -398,7 +402,7 @@ onMounted(async () => {
         </p>
       </header>
 
-      <div v-if="filteredRows.length" class="table-wrap">
+      <div v-if="filteredRows.length" class="table-wrap" data-tour-page-xlink-table>
         <table class="issue-table">
           <thead>
             <tr>

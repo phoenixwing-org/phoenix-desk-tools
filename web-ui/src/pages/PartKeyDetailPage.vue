@@ -13,6 +13,7 @@ import ComboTextInput from "../components/ComboTextInput.vue";
 import { BOM_FIELD_LABELS as L, PART_KEY_META_FIELDS } from "../utils/bomFieldLabels";
 import { TYPE_CODE_OPTIONS } from "../utils/typeCodeOptions";
 import { parsePartKeyText } from "../utils/partNaming";
+import PageHelpButton from "../components/PageHelpButton.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { usePageSession } from "../composables/usePageSession";
 import type { TableColumnDef } from "../composables/useResizableTable";
@@ -396,6 +397,9 @@ onUnmounted(() => {
             {{ loading ? "检索中…" : "检索" }}
           </button>
         </div>
+        <div class="head-help">
+          <PageHelpButton page-id="part_key_detail" />
+        </div>
       </div>
     </header>
 
@@ -403,7 +407,7 @@ onUnmounted(() => {
     <div v-if="loading && !detail" class="empty">载入中…</div>
 
     <template v-else-if="detail">
-      <div class="sub-panel">
+      <div class="sub-panel" data-tour-page-partkey-body>
         <section class="detail-meta">
           <div class="meta-grid">
             <label

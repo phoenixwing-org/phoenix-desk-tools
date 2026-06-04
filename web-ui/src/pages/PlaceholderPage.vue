@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import PageHelpButton from "../components/PageHelpButton.vue";
 import { useAppShell } from "../composables/useAppShell";
 
 const shell = useAppShell();
@@ -10,7 +11,12 @@ const pageId = computed(() => shell.currentPage.value);
 
 <template>
   <div class="page placeholder">
-    <h1 class="page-title">{{ item?.label ?? pageId }}</h1>
+    <div class="title-row">
+      <h1 class="page-title">{{ item?.label ?? pageId }}</h1>
+      <div class="head-help">
+        <PageHelpButton :page-id="pageId" />
+      </div>
+    </div>
     <p class="desc">{{ item?.description ?? "功能开发中" }}</p>
     <p class="hint">
       此页对应桌面壳中的同名功能，后续将通过 Python 服务层 API 接入（逻辑复用
@@ -20,14 +26,20 @@ const pageId = computed(() => shell.currentPage.value);
 </template>
 
 <style scoped>
+@import "./page-shared.css";
+
 .placeholder {
   width: 100%;
   box-sizing: border-box;
   padding: 32px 28px;
 }
 
+.title-row {
+  margin-bottom: 8px;
+}
+
 .page-title {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: 1.2rem;
 }
 

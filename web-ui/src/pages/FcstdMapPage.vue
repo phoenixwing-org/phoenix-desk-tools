@@ -11,7 +11,9 @@ import {
 } from "../api";
 import { promptChoice } from "../composables/choiceDialog";
 import { useAppShell } from "../composables/useAppShell";
+import { useOnboardingStore } from "../stores/onboarding";
 import { usePageSession } from "../composables/usePageSession";
+import PageHelpButton from "../components/PageHelpButton.vue";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
 import type { TableColumnDef } from "../composables/useResizableTable";
 import { BOM_FIELD_LABELS as L } from "../utils/bomFieldLabels";
@@ -21,6 +23,7 @@ const props = defineProps<{
 }>();
 
 const shell = useAppShell();
+const onboarding = useOnboardingStore();
 
 const SESSION_V = 3;
 
@@ -169,6 +172,7 @@ async function onScan() {
       `扫描完成：存在 ${data.value.stats.present} · CAD ${data.value.stats.cad_file_count}`,
     );
     activeSubTab.value = "index";
+    await onboarding.refreshStatus();
   } catch (e) {
     shell.appendLog(String(e), { source: "fcstd_map" });
     setStatus(String(e));
@@ -346,7 +350,8 @@ onMounted(() => applyInitialTabState());
           <span class="ok">存在 {{ stats.present }}</span> ·
           <span class="warn">缺失 {{ stats.missing }}</span>
         </p>
-        <div class="head-actions">
+        <div class="head-trailing">
+        <div class="head-actions" data-tour-page-fcstd-scan>
           <button type="button" class="btn primary" :disabled="scanning" @click="onScan">
             {{ scanning ? "扫描中…" : "工程内搜索" }}
           </button>
@@ -360,6 +365,10 @@ onMounted(() => applyInitialTabState());
           >
             {{ purging ? "删除中…" : `删除缺失${stats?.missing ? `（${stats.missing}）` : ""}` }}
           </button>
+        </div>
+        <div class="head-help">
+          <PageHelpButton page-id="fcstd_map" />
+        </div>
         </div>
       </div>
     </header>
@@ -421,7 +430,8 @@ onMounted(() => applyInitialTabState());
         </span>
       </section>
 
-      <ResizableDataTable v-if="filteredEntries.length" :columns="cadColumns" wrap-class="table-grow">
+      <div v-if="filteredEntries.length" data-tour-page-fcstd-table>
+        <ResizableDataTable :columns="cadColumns" wrap-class="table-grow">
         <tbody>
           <tr
             v-for="(row, idx) in filteredEntries"
@@ -463,7 +473,8 @@ onMounted(() => applyInitialTabState());
             <td class="meta">{{ metaCell(row) }}</td>
           </tr>
         </tbody>
-      </ResizableDataTable>
+        </ResizableDataTable>
+      </div>
       <div v-else-if="!loading" class="table-wrap table-grow empty-wrap">
         <p class="empty">
           {{

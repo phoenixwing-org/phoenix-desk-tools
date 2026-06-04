@@ -2,6 +2,9 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { pruneRecentWorkspaces, removeRecentWorkspace, saveLauncherFreecad, shutdownWebServer, syncLauncherFromLegacy } from "../api";
 import { useAppShell } from "../composables/useAppShell";
+import PageHelpButton from "../components/PageHelpButton.vue";
+import { useShellTour } from "../composables/useShellTour";
+import { useOnboardingStore } from "../stores/onboarding";
 import { useUiPrefsStore } from "../stores/uiPrefs";
 import {
   EXPAND_ICON_SIZE_MAX,
@@ -10,8 +13,10 @@ import {
 } from "../utils/expandIconTheme";
 
 const uiPrefs = useUiPrefsStore();
+const onboarding = useOnboardingStore();
 
 const shell = useAppShell();
+const { startShellTour } = useShellTour(shell);
 
 const repoInput = ref("");
 const fcInput = ref("");
@@ -167,9 +172,14 @@ const navItems = () =>
 
 <template>
   <div class="page config-page">
-    <h1 class="page-title">配置</h1>
+    <div class="title-row">
+      <h1 class="page-title">配置</h1>
+      <div class="head-help">
+        <PageHelpButton page-id="config" />
+      </div>
+    </div>
 
-    <section class="section">
+    <section class="section" data-tour-page-config-workspace>
       <label class="field-label">当前工作空间</label>
       <p class="current-path">{{ workspacePath }}</p>
 
@@ -178,7 +188,7 @@ const navItems = () =>
         <input id="repo" v-model="repoInput" class="path-input" spellcheck="false" />
       </div>
 
-      <label class="field-label" for="fc">FreeCAD 目录</label>
+      <label class="field-label" for="fc" data-tour-page-config-freecad>FreeCAD 目录</label>
       <div class="row">
         <input id="fc" v-model="fcInput" class="path-input" spellcheck="false" placeholder="可选" />
         <button
@@ -225,6 +235,16 @@ const navItems = () =>
       <p class="hint">
         作用于工作区树、BOM 按宿主分组、装配结构树、链接路径修正等展开三角；写入本机浏览器 localStorage。
       </p>
+      <div class="btn-row compact">
+        <button
+          type="button"
+          class="btn"
+          :disabled="!onboarding.workspaceOk"
+          @click="startShellTour(true)"
+        >
+          重新观看界面巡游
+        </button>
+      </div>
     </section>
 
     <section class="section">
@@ -292,12 +312,18 @@ const navItems = () =>
 </template>
 
 <style scoped>
+@import "./page-shared.css";
+
 .config-page {
   padding: 24px 28px 40px;
 }
 
+.title-row {
+  margin-bottom: 20px;
+}
+
 .page-title {
-  margin: 0 0 20px;
+  margin: 0;
   font-size: 1.25rem;
 }
 

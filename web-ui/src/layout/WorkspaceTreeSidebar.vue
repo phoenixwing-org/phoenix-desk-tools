@@ -153,6 +153,7 @@ onUnmounted(() => {
     v-show="open"
     ref="sidebarRef"
     class="ws-sidebar"
+    data-tour="workspace-tree"
     :style="{ width: panelWidth, gridTemplateRows }"
   >
     <div class="ws-tree-section">

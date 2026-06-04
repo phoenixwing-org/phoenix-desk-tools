@@ -32,7 +32,7 @@ watch(
 </script>
 
 <template>
-  <section class="log-panel">
+  <section class="log-panel" data-tour="shell-log">
     <header class="log-head">
       <span class="log-title">
         运行日志

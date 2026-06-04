@@ -1,8 +1,24 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, nextTick, onMounted, watch } from "vue";
+import PageHelpButton from "../components/PageHelpButton.vue";
+import OnboardingChecklist from "../components/OnboardingChecklist.vue";
 import { useAppShell } from "../composables/useAppShell";
+import { useOnboardingStore } from "../stores/onboarding";
 
 const shell = useAppShell();
+const onboarding = useOnboardingStore();
+
+onMounted(() => {
+  void onboarding.refreshStatus();
+});
+
+watch(
+  () => shell.scrollToGuideToken.value,
+  async () => {
+    await nextTick();
+    document.getElementById("onboarding-guide")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  },
+);
 
 const appTitle = computed(() => shell.appConfig.value?.title ?? "FreeCAD 管理工具");
 const workspacePath = computed(() => shell.workspacePath.value);
@@ -13,6 +29,10 @@ const featureNav = computed(() =>
 );
 
 function openFeature(page: string) {
+  if (!shell.canNavigateToPage(page)) {
+    shell.goToPage("config");
+    return;
+  }
   shell.goToPage(page);
 }
 
@@ -23,7 +43,12 @@ function openConfig() {
 
 <template>
   <div class="page welcome-page">
-    <h1 class="page-title">主页</h1>
+    <div class="title-row">
+      <h1 class="page-title">主页</h1>
+      <div class="head-help">
+        <PageHelpButton page-id="home" />
+      </div>
+    </div>
 
     <section class="intro">
       <p class="lead">
@@ -38,6 +63,8 @@ function openConfig() {
       </p>
     </section>
 
+    <OnboardingChecklist />
+
     <section class="section">
       <h2 class="section-title">当前工作空间</h2>
       <p class="workspace-path">{{ workspacePath || "（未设置）" }}</p>
@@ -46,9 +73,15 @@ function openConfig() {
 
     <section class="section">
       <h2 class="section-title">功能入口</h2>
-      <ul class="feature-grid">
+      <ul class="feature-grid" data-tour-page-home-features>
         <li v-for="item in featureNav" :key="item.page">
-          <button type="button" class="feature-card" @click="openFeature(item.page)">
+          <button
+            type="button"
+            class="feature-card"
+            :class="{ 'feature-disabled': !shell.canNavigateToPage(item.page) }"
+            :disabled="!shell.canNavigateToPage(item.page)"
+            @click="openFeature(item.page)"
+          >
             <span class="feature-label">{{ item.label }}</span>
             <span class="feature-desc">{{ item.description }}</span>
           </button>
@@ -69,13 +102,19 @@ function openConfig() {
 </template>
 
 <style scoped>
+@import "./page-shared.css";
+
 .welcome-page {
   padding: 24px 28px 40px;
   max-width: 920px;
 }
 
+.title-row {
+  margin-bottom: 16px;
+}
+
 .page-title {
-  margin: 0 0 16px;
+  margin: 0;
   font-size: 1.25rem;
 }
 
@@ -149,9 +188,15 @@ function openConfig() {
   cursor: pointer;
 }
 
-.feature-card:hover {
+.feature-card:hover:not(:disabled) {
   border-color: var(--accent);
   background: #f0f6ff;
+}
+
+.feature-card.feature-disabled,
+.feature-card:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .feature-label {

@@ -7,9 +7,13 @@ import {
   saveStepBatchPrefs,
   type StepBatchPreview,
 } from "../api";
+import OnboardingBanner from "../components/OnboardingBanner.vue";
+import PageHelpButton from "../components/PageHelpButton.vue";
 import { useAppShell } from "../composables/useAppShell";
+import { useFreecadTaskGate } from "../composables/useFreecadTaskGate";
 
 const shell = useAppShell();
+const { blocked: freecadBlocked, assertFreecadForTask, hint: freecadHint } = useFreecadTaskGate();
 
 const stepDir = ref("");
 const outDir = ref("");
@@ -57,6 +61,7 @@ async function onSave() {
 }
 
 async function onPreview() {
+  if (!assertFreecadForTask()) return;
   previewing.value = true;
   shell.appendLog("STEP 批量转换预览…", { source: "step_batch", open: true });
   try {
@@ -73,6 +78,7 @@ async function onPreview() {
 }
 
 async function onRun() {
+  if (!assertFreecadForTask()) return;
   running.value = true;
   shell.appendLog("freecadcmd 批量转换…（可能需要数分钟）", { source: "step_batch", open: true });
   try {
@@ -112,10 +118,20 @@ onMounted(async () => {
         <p class="page-desc">
           使用 <code>freecadcmd</code> 批量将 STEP 转为 FCStd。请在「配置」页设置 FreeCAD 安装目录。
         </p>
+        <div class="head-help">
+          <PageHelpButton page-id="step_batch" />
+        </div>
       </div>
     </header>
 
-    <section class="controls">
+    <OnboardingBanner
+      v-if="freecadBlocked"
+      :message="freecadHint"
+      action-label="打开配置"
+      @action="shell.goToPage('config')"
+    />
+
+    <section class="controls" data-tour-page-step-form>
       <div class="form-grid">
         <label class="field-label" for="step-dir">STEP 目录</label>
         <input id="step-dir" v-model="stepDir" class="path-input" spellcheck="false" />
@@ -137,14 +153,14 @@ onMounted(async () => {
         </select>
 
         <span class="field-label">操作</span>
-        <div class="row">
+        <div class="row" data-tour-page-step-run>
           <button type="button" class="btn" :disabled="saving" @click="onSave">
             {{ saving ? "…" : "保存偏好" }}
           </button>
-          <button type="button" class="btn" :disabled="previewing" @click="onPreview">
+          <button type="button" class="btn" :disabled="previewing || freecadBlocked" @click="onPreview">
             {{ previewing ? "…" : "预览数量" }}
           </button>
-          <button type="button" class="btn primary" :disabled="running" @click="onRun">
+          <button type="button" class="btn primary" :disabled="running || freecadBlocked" @click="onRun">
             {{ running ? "转换中…" : "开始转换" }}
           </button>
         </div>

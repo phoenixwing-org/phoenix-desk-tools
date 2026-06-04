@@ -11,8 +11,11 @@ import {
   type FcstdMapEntry,
 } from "../api";
 import ExpandCaret from "../components/ExpandCaret.vue";
+import OnboardingBanner from "../components/OnboardingBanner.vue";
+import PageHelpButton from "../components/PageHelpButton.vue";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
 import { useAppShell } from "../composables/useAppShell";
+import { useOnboardingStore } from "../stores/onboarding";
 import { usePageSession } from "../composables/usePageSession";
 import type { TableColumnDef } from "../composables/useResizableTable";
 import { useWorkspaceFileQuery } from "../composables/useWorkspaceFileQuery";
@@ -34,6 +37,7 @@ type PageSubTab = "assembly" | "all" | "settings";
 const PAGE_SIZES = [50, 100, 200] as const;
 
 const shell = useAppShell();
+const onboarding = useOnboardingStore();
 const {
   queryText,
   pickedRel,
@@ -448,6 +452,7 @@ watch(pageSize, () => {
 });
 
 onMounted(() => {
+  void onboarding.refreshStatus();
   applyInitialTabState();
   registerTreeHandler();
 });
@@ -475,6 +480,7 @@ onUnmounted(() => {
             <span class="head-meta-hint"> · 随 CAD 索引「工程内搜索」自动重建</span>
           </p>
         </div>
+        <div class="head-trailing">
         <button
           type="button"
           class="btn head-rebuild"
@@ -484,14 +490,25 @@ onUnmounted(() => {
         >
           {{ rebuilding ? "重建中…" : "仅重建引用表" }}
         </button>
+        <div class="head-help">
+          <PageHelpButton page-id="bom_export" />
+        </div>
+        </div>
       </div>
     </header>
+
+    <OnboardingBanner
+      v-if="!onboarding.indexScanned"
+      message="建议先在「CAD 索引」执行工程内搜索，BOM 属性与 PartKey 才完整。"
+      action-label="去 CAD 索引"
+      @action="shell.goToPage('fcstd_map')"
+    />
 
     <p v-if="!hasIndex" class="warn-line">
       引用表为空。请先在「CAD 索引」执行「工程内搜索」（会一并重建引用表）。
     </p>
 
-    <nav class="sub-tabs" role="tablist">
+    <nav class="sub-tabs" role="tablist" data-tour-page-bom-tabs>
       <button
         type="button"
         role="tab"
@@ -524,7 +541,7 @@ onUnmounted(() => {
 
     <!-- 装配一层 BOM -->
     <div v-show="activeSubTab === 'assembly'" class="sub-panel">
-      <section class="toolbar">
+      <section class="toolbar" data-tour-page-bom-host>
         <input
           v-model="queryText"
           class="search-input mono"
@@ -543,8 +560,8 @@ onUnmounted(() => {
         {{ hostRel }} · {{ bomRows.length }} 个子件
       </p>
 
+      <div v-if="bomRows.length" data-tour-page-bom-table>
       <ResizableDataTable
-        v-if="bomRows.length"
         :columns="assemblyColumns"
         wrap-class="table-grow"
         table-class="bom-table"
@@ -600,6 +617,7 @@ onUnmounted(() => {
           </tr>
         </tbody>
       </ResizableDataTable>
+      </div>
       <div v-else-if="hostRel && !loading" class="empty-wrap table-grow">
         <p class="empty">该装配暂无出向 XLink 引用。</p>
       </div>

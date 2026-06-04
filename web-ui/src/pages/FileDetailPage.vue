@@ -2,6 +2,7 @@
 import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from "vue";
 import type { BomFields, BomPreview } from "../api";
 import { fetchBom, fetchBomXrefIncoming, fetchBomXrefOutgoing } from "../api";
+import PageHelpButton from "../components/PageHelpButton.vue";
 import FileOverviewPanel from "../components/file-detail/FileOverviewPanel.vue";
 import FileAttributesPanel from "../components/file-detail/FileAttributesPanel.vue";
 import FileXrefPanel from "../components/file-detail/FileXrefPanel.vue";
@@ -317,6 +318,9 @@ onUnmounted(() => {
       <div class="head-row">
         <h1 class="page-title">文件详情</h1>
         <h2 v-if="rel && preview" class="file-name mono">{{ fileName }}</h2>
+        <div class="head-help">
+          <PageHelpButton page-id="file_detail" />
+        </div>
       </div>
     </header>
 
@@ -326,7 +330,8 @@ onUnmounted(() => {
     <div v-else-if="loading && !preview" class="empty">载入中…</div>
 
     <template v-else-if="rel && preview">
-      <nav class="sub-tabs" role="tablist">
+      <div data-tour-page-filedetail-body>
+      <nav class="sub-tabs" role="tablist" data-tour-page-filedetail-tabs>
         <button
           type="button"
           role="tab"
@@ -390,6 +395,7 @@ onUnmounted(() => {
           :preferred-filename="preferredRenameFilename"
           @renamed="refreshXrefCounts()"
         />
+      </div>
       </div>
     </template>
   </div>
