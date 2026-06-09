@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -32,6 +33,7 @@ from fcdesk.services.fcstd_map_service import (
     purge_missing_fcstd_map_entries,
     run_fcstd_map_scan,
     save_fcstd_map_prefs,
+    search_fcstd_map_entries,
 )
 from fcdesk.services.onboarding_service import onboarding_status_payload
 from fcdesk.services.launcher_service import (
@@ -330,8 +332,21 @@ class SwStepPrefsBody(BaseModel):
     recursive_scan: bool | None = None
 
 
+def _ensure_fcdesk_logging() -> None:
+    """保证 ``fcdesk.*`` 的 INFO 日志输出到终端（与 uvicorn 并列可见）。"""
+    root = logging.getLogger("fcdesk")
+    if root.handlers:
+        return
+    root.setLevel(logging.INFO)
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(levelname)s [%(name)s] %(message)s"))
+    root.addHandler(handler)
+    root.propagate = False
+
+
 def create_app(*, static_dir: Path | None = None) -> FastAPI:
     app = FastAPI(title="FreeCAD 管理工具", version="0.1.0")
+    _ensure_fcdesk_logging()
 
     app.add_middleware(
         CORSMiddleware,
@@ -761,7 +776,27 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
     @app.get("/api/fcstd-map")
     def api_fcstd_map_get() -> dict:
         ws = get_workspace()
-        return load_fcstd_map_payload(ws)
+        return load_fcstd_map_payload(ws, include_entries=False)
+
+    @app.get("/api/fcstd-map/entries")
+    def api_fcstd_map_entries(
+        offset: int = Query(0, ge=0),
+        limit: int = Query(20, ge=1, le=500),
+        status: str | None = Query(None),
+        kind: str | None = Query(None),
+        search: str | None = Query(None),
+    ) -> dict:
+        try:
+            return search_fcstd_map_entries(
+                get_workspace(),
+                offset=offset,
+                limit=limit,
+                status=status,
+                kind=kind,
+                search=search,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
     @app.get("/api/fcstd-map/prefs")
     def api_fcstd_map_prefs_get() -> dict:

@@ -297,7 +297,7 @@ def refresh_bom_xref_index_for_host(
     )
     refresh_stats = refresh_bom_xrefs_for_hosts(rr, hosts)
 
-    root_rows = query_bom_xrefs_outgoing(rr, host, limit=500)
+    root_rows, _ = query_bom_xrefs_outgoing(rr, host, limit=500)
     status_counts: dict[str, int] = {}
     for row in root_rows:
         st = str(row.get("resolve_status") or "unknown")

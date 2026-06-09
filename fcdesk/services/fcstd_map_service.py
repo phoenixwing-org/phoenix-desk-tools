@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -30,11 +31,14 @@ from fcdesk.freecad.fcstd_mapping import (
 )
 from fcdesk.freecad.phoenix_store import (
     cad_database_path,
+    connect,
     delete_missing_file_assets,
     export_fcstd_map_json,
     fcstd_map_json_path,
     load_fcstd_document,
     migrate_fcstd_map_json,
+    query_file_asset_entries_paged,
+    read_fcstd_map_meta,
     save_fcstd_document,
     update_scan_stats_meta,
 )
@@ -44,7 +48,6 @@ from fcdesk.services.cad_index.scan_paths import (
     scan_cad_basename_map,
     scan_fcstd_basename_map,
 )
-
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
@@ -315,7 +318,57 @@ def _ensure_index_loaded(repo_root: Path) -> None:
     migrate_fcstd_map_json(repo_root)
 
 
-def load_fcstd_map_payload(repo_root: Path) -> dict[str, Any]:
+def _parse_scan_stats_json(raw: str | None) -> dict[str, int] | None:
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    return {k: int(v) for k, v in parsed.items() if isinstance(v, (int, float))}
+
+
+def search_fcstd_map_entries(
+    repo_root: Path,
+    *,
+    offset: int = 0,
+    limit: int = 20,
+    status: str | None = None,
+    kind: str | None = None,
+    search: str | None = None,
+) -> dict[str, Any]:
+    """分页返回 CAD 索引条目（单次 ``file_asset`` 查询，无 JOIN）。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    _ensure_index_loaded(rr)
+    cap = max(1, min(int(limit), 500))
+    off = max(0, int(offset))
+    st = (status or "").strip().lower()
+    if st == "all":
+        st = None
+    k = (kind or "").strip().lower()
+    if k == "all":
+        k = None
+    rows, total, debug_sql = query_file_asset_entries_paged(
+        rr,
+        offset=off,
+        limit=cap,
+        status=st,
+        kind=k,
+        search=search,
+    )
+    return {
+        "offset": off,
+        "limit": cap,
+        "total": total,
+        "count": len(rows),
+        "entries": rows,
+        "debug_sql": debug_sql,
+    }
+
+
+def load_fcstd_map_payload(repo_root: Path, *, include_entries: bool = True) -> dict[str, Any]:
     rr = repo_root.expanduser().resolve(strict=False)
     _ensure_index_loaded(rr)
     prefs = get_fcstd_map_prefs(rr)
@@ -337,6 +390,54 @@ def load_fcstd_map_payload(repo_root: Path) -> dict[str, Any]:
         "image_file_count": 0,
     }
 
+    if not db.is_file():
+        return {
+            "database_path": str(db),
+            "database_path_display": format_resolved_under_workspace(db, rr),
+            "map_path": str(jp),
+            "map_path_display": format_resolved_under_workspace(jp, rr),
+            "exists": False,
+            "prefs": prefs,
+            "last_scan_at": "",
+            "scan_root": ".",
+            "stats": empty_stats,
+            "entries": [],
+        }
+
+    with connect(rr) as conn:
+        n_row = conn.execute("SELECT COUNT(*) AS n FROM file_asset").fetchone()
+        row_count = int(n_row["n"]) if n_row else 0
+        if row_count == 0:
+            return {
+                "database_path": str(db),
+                "database_path_display": format_resolved_under_workspace(db, rr),
+                "map_path": str(jp),
+                "map_path_display": format_resolved_under_workspace(jp, rr),
+                "exists": False,
+                "prefs": prefs,
+                "last_scan_at": "",
+                "scan_root": ".",
+                "stats": empty_stats,
+                "entries": [],
+            }
+
+        if not include_entries:
+            meta = read_fcstd_map_meta(rr)
+            stats = _parse_scan_stats_json(meta.get("last_scan_stats_json")) or empty_stats
+            return {
+                "database_path": str(db),
+                "database_path_display": format_resolved_under_workspace(db, rr),
+                "map_path": str(jp),
+                "map_path_display": format_resolved_under_workspace(jp, rr),
+                "exists": True,
+                "prefs": prefs,
+                "last_scan_at": meta.get("last_scan_at") or "",
+                "scan_root": meta.get("scan_root") or ".",
+                "stats": stats,
+                "entries": [],
+            }
+
+    doc = load_fcstd_document(rr)
     if doc is None:
         return {
             "database_path": str(db),

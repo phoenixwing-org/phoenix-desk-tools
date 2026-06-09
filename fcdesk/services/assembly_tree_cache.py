@@ -284,7 +284,7 @@ def build_assembly_tree_payload(
     if not host:
         raise ValueError("请提供 host_repo_rel")
 
-    edges = query_all_bom_xref_edges_enriched(repo_root)
+    edges, _ = query_all_bom_xref_edges_enriched(repo_root)
     adj = _xref_adjacency(edges)
     nodes = _build_level(
         adj,
@@ -320,7 +320,7 @@ def load_assembly_tree_cached(
 
     mode = "full" if full else "first"
     xref_at = str(load_bom_xref_meta(repo_root).get("last_bom_xref_at") or "")
-    cached = load_bom_assembly_cache(repo_root, host, mode)
+    cached, _ = load_bom_assembly_cache(repo_root, host, mode)
     if cached and cached.get("bom_xref_at") == xref_at and xref_at:
         return {
             "host_repo_rel_path": host,

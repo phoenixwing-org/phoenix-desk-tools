@@ -453,7 +453,7 @@ def _host_has_reference_hits(group: HostRefGroup) -> bool:
 
 def _hits_for_host_all_xlinks(repo_root: Path, host_rel: str) -> list[XLinkBasenameHit]:
     """宿主内全部 XLink（用于 ``host_all`` 引用名修正）。"""
-    edges = query_bom_xrefs_outgoing(repo_root, host_rel)
+    edges, _ = query_bom_xrefs_outgoing(repo_root, host_rel)
     if edges:
         attrs = sorted({str(e["xlink_file_attr"]) for e in edges})
     else:

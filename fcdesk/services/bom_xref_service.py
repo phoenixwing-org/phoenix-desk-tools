@@ -76,7 +76,7 @@ def load_assembly_bom_catalog(
 ) -> dict[str, Any]:
     """总成列表：单次 SQL 聚合，不含逐条引用边。"""
     ensure_bom_xref_built(repo_root)
-    hosts, total = query_assembly_bom_hosts(repo_root, search=search)
+    hosts, total, _ = query_assembly_bom_hosts(repo_root, search=search)
     return {
         "count": total,
         "hosts": hosts,
@@ -212,7 +212,7 @@ def fetch_incoming_direct_rows(
         )
     lookup_rel = rel
     lookup_base = base if not rel else None
-    rows = query_bom_xrefs_incoming(
+    rows, _ = query_bom_xrefs_incoming(
         repo_root,
         repo_rel=lookup_rel,
         basename=lookup_base,
@@ -279,7 +279,7 @@ def resolve_incoming_host_entries(
             for r in direct_rows
         ]
 
-    edges = query_all_bom_xref_edges(repo_root)
+    edges, _ = query_all_bom_xref_edges(repo_root)
     parents = _build_xref_parent_map(edges)
     target_paths = _resolve_incoming_target_paths(
         repo_root,
@@ -419,7 +419,7 @@ def search_outgoing_refs(
         raise ValueError("请提供 host_repo_rel")
     if refresh_disk:
         refresh_bom_xrefs_for_hosts(repo_root, [rel])
-    rows = query_bom_xrefs_outgoing(repo_root, rel, limit=limit)
+    rows, _ = query_bom_xrefs_outgoing(repo_root, rel, limit=limit)
     label_map = read_host_reference_labels(repo_root, rel)
     for row in rows:
         _enrich_outgoing_ref_row(repo_root, rel, row, label_map=label_map)

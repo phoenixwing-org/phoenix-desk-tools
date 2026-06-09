@@ -26,6 +26,7 @@ from fcdesk.services.fcstd_map_service import (
     load_fcstd_map_payload,
     purge_missing_fcstd_map_entries,
     run_fcstd_map_scan,
+    search_fcstd_map_entries,
 )
 
 _MIN_DOC = """<?xml version='1.0' encoding='utf-8'?>
@@ -181,6 +182,40 @@ class TestFcstdMapService(unittest.TestCase):
             self.assertEqual(len(detail["files"]), 1)
             self.assertEqual(detail["files"][0]["filename"], "100015.001-H-SHIELD-A.pdf")
             self.assertEqual(detail["files"][0]["asset_kind"], ASSET_KIND_PDF)
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
+    def test_search_entries_single_sql_with_debug(self) -> None:
+        td = Path(tempfile.mkdtemp(prefix="fcstd_map_page_"))
+        try:
+            (td / "a.FCStd").write_bytes(b"x")
+            sub = td / "parts"
+            sub.mkdir()
+            (sub / "b.md").write_text("# x", encoding="utf-8")
+            run_fcstd_map_scan(td)
+
+            page1 = search_fcstd_map_entries(td, offset=0, limit=1)
+            self.assertEqual(page1["total"], 2)
+            self.assertEqual(page1["count"], 1)
+            self.assertIn("debug_sql", page1)
+            self.assertIn("FROM file_asset", page1["debug_sql"])
+            self.assertIn("LIMIT 1", page1["debug_sql"])
+
+            page2 = search_fcstd_map_entries(td, offset=1, limit=1)
+            self.assertEqual(page2["count"], 1)
+            self.assertNotEqual(
+                page1["entries"][0]["repo_rel_path"],
+                page2["entries"][0]["repo_rel_path"],
+            )
+
+            meta = load_fcstd_map_payload(td, include_entries=False)
+            self.assertTrue(meta["exists"])
+            self.assertEqual(meta["entries"], [])
+            self.assertEqual(meta["stats"]["total_entries"], 2)
+
+            filtered = search_fcstd_map_entries(td, kind="markdown", search="b.md")
+            self.assertEqual(filtered["total"], 1)
+            self.assertTrue(filtered["entries"][0]["filename"].endswith(".md"))
         finally:
             shutil.rmtree(td, ignore_errors=True)
 

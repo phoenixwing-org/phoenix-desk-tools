@@ -1,8 +1,9 @@
 """将 BOM 可编辑字段写入 ``Document.xml`` 内可挂载对象的 ``Properties``。
 
-挂载对象优先级：**``PartDesign::Body``** → **类型名包含 ``Assembly`` 的对象**（装配/总成工作台）→ **``App::Part``**
-（常见于 Part / 总成容器）；若均无且文档含 **TechDraw**（图纸-primary），则取首个 **``App::Link``**。
-均按 ``Document.xml`` 中 ``<Objects><Object/>`` **出现顺序**取第一个匹配的 ``name``。
+挂载对象：在 **Group 拓扑** 上取 **结构顶级**（未被其它对象的 ``Group`` 引用的）候选，类型依次为
+**``PartDesign::Body``** → **类型名含 ``assembly``** → **``App::Part``** → **``App::Link``**（外部装配）；
+同档多个根时按 ``<Objects>`` 声明顺序取第一个。不依赖对象名或文件名。
+若均无结构根且文档含 **TechDraw**（图纸-primary），则取首个 **``App::Link``**。
 
 遵循 FreeCAD App 序列化惯例：每条动态 ``App::PropertyString`` 在 Document 中为
 
@@ -86,13 +87,32 @@ def _iter_objects_typename_ordered(doc_el: ET.Element) -> list[tuple[str, str]]:
     return out
 
 
+def _bom_mount_category(ctype: str) -> str | None:
+    """挂载候选类型档：body / assembly / part / link。"""
+    if ctype == "PartDesign::Body":
+        return "body"
+    if "assembly" in ctype.lower():
+        return "assembly"
+    if ctype == "App::Part":
+        return "part"
+    if ctype == "App::Link":
+        return "link"
+    return None
+
+
+_BOM_MOUNT_CATEGORY_ORDER: dict[str, int] = {
+    "body": 0,
+    "assembly": 1,
+    "part": 2,
+    "link": 3,
+}
+
+
 def _has_standard_bom_mount(objs: list[tuple[str, str]]) -> bool:
+    """Body / 装配 / Part；不含 Link（图纸-primary 时 Link 单独处理）。"""
     for ctype, _ in objs:
-        if ctype == "PartDesign::Body":
-            return True
-        if "assembly" in ctype.lower():
-            return True
-        if ctype == "App::Part":
+        cat = _bom_mount_category(ctype)
+        if cat is not None and cat != "link":
             return True
     return False
 
@@ -109,21 +129,57 @@ def is_drawing_primary_mount_context(doc_el: ET.Element) -> bool:
     return _document_has_techdraw(objs)
 
 
-def _first_bom_target_object_name(doc_el: ET.Element) -> str | None:
-    """选择写入 BOM / Label 挂载到的 DocumentObject 名称。"""
+def _group_referenced_object_names(doc_el: ET.Element) -> set[str]:
+    """任意 ``ObjectData`` 上 ``Group`` LinkList 引用的对象名（结构子节点）。"""
+    refs: set[str] = set()
+    od_root = doc_el.find("ObjectData")
+    if od_root is None:
+        return refs
+    for od in od_root.findall("Object"):
+        props = od.find("Properties")
+        if props is None:
+            continue
+        for prop in props.findall("Property"):
+            if prop.get("name") != "Group" or prop.get("type") != "App::PropertyLinkList":
+                continue
+            link_list = prop.find("LinkList")
+            if link_list is None:
+                continue
+            for link in link_list.findall("Link"):
+                name = (link.get("value") or "").strip()
+                if name:
+                    refs.add(name)
+    return refs
+
+
+def _structural_root_bom_mount_candidates(
+    doc_el: ET.Element,
+) -> list[tuple[str, str, str]]:
+    """``(category, ctype, name)`` — 结构顶级且为挂载候选类型。"""
     objs = _iter_objects_typename_ordered(doc_el)
+    grouped_children = _group_referenced_object_names(doc_el)
+    roots: list[tuple[str, str, str]] = []
+    for ctype, name in objs:
+        category = _bom_mount_category(ctype)
+        if category is None or name in grouped_children:
+            continue
+        roots.append((category, ctype, name))
+    return roots
 
-    for ctype, n in objs:
-        if ctype == "PartDesign::Body":
-            return n
 
-    for ctype, n in objs:
-        if "assembly" in ctype.lower():
-            return n
-
-    for ctype, n in objs:
-        if ctype == "App::Part":
-            return n
+def _first_bom_target_object_name(doc_el: ET.Element) -> str | None:
+    """选择写入 BOM / Label 挂载到的 DocumentObject 名称（结构顶级优先）。"""
+    objs = _iter_objects_typename_ordered(doc_el)
+    object_order = {name: idx for idx, (_, name) in enumerate(objs)}
+    roots = _structural_root_bom_mount_candidates(doc_el)
+    if roots:
+        roots.sort(
+            key=lambda item: (
+                _BOM_MOUNT_CATEGORY_ORDER[item[0]],
+                object_order.get(item[2], len(objs)),
+            )
+        )
+        return roots[0][2]
 
     if is_drawing_primary_mount_context(doc_el):
         for ctype, n in objs:
@@ -150,8 +206,8 @@ def _no_bom_mount_error(path: Path, objs: list[tuple[str, str]]) -> FcdeskDocume
     sample = ", ".join(f"{t}" for t, _ in objs[:12])
     extra = f" 已列出部分 Object.type：{sample}" if sample else ""
     return FcdeskDocumentBomError(
-        "未发现可挂载 BOM 的对象（依次尝试 PartDesign::Body → type 中含 assembly → App::Part"
-        " → 图纸-primary 时 App::Link）："
+        "未发现可挂载 BOM 的对象（结构顶级：PartDesign::Body → type 中含 assembly → App::Part"
+        " → App::Link；图纸-primary 时 App::Link）："
         f"{path}.{extra}"
     )
 

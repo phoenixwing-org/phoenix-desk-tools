@@ -624,6 +624,32 @@ export function fetchFcstdMap() {
   return jsonFetch<FcstdMapPayload>("/api/fcstd-map");
 }
 
+export type FcstdMapEntriesPayload = {
+  offset: number;
+  limit: number;
+  total: number;
+  count: number;
+  entries: FcstdMapEntry[];
+  debug_sql: string;
+};
+
+export function fetchFcstdMapEntries(opts?: {
+  offset?: number;
+  limit?: number;
+  status?: "all" | "present" | "missing";
+  kind?: string;
+  search?: string;
+}) {
+  const q = new URLSearchParams();
+  if (opts?.offset != null) q.set("offset", String(opts.offset));
+  if (opts?.limit != null) q.set("limit", String(opts.limit));
+  if (opts?.status && opts.status !== "all") q.set("status", opts.status);
+  if (opts?.kind && opts.kind !== "all") q.set("kind", opts.kind);
+  if (opts?.search?.trim()) q.set("search", opts.search.trim());
+  const qs = q.toString();
+  return jsonFetch<FcstdMapEntriesPayload>(`/api/fcstd-map/entries${qs ? `?${qs}` : ""}`);
+}
+
 export function saveFcstdMapPrefs(force_update_part_name?: boolean) {
   return jsonFetch<{ force_update_part_name: boolean }>("/api/fcstd-map/prefs", {
     method: "PUT",

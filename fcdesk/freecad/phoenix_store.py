@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import inspect
 import json
+import logging
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -25,6 +27,19 @@ STORE_SCHEMA_VERSION = 2
 
 PART_KEY_STATUS_ACTIVE = "active"
 PART_KEY_STATUS_OBSOLETE = "obsolete"
+
+logger = logging.getLogger(__name__)
+
+_SQL_LOG_SKIP_FUNCTIONS = frozenset(
+    {
+        "execute",
+        "executemany",
+        "_log_sql_execute",
+        "__getattr__",
+        "__setattr__",
+        "connect",
+    }
+)
 
 LINK_STATUS_ACTIVE = "active"
 LINK_STATUS_OBSOLETE = "obsolete"
@@ -59,6 +74,67 @@ def _looks_like_exact_basename(name: str) -> bool:
     return lower.endswith(".fcstd") and "/" not in name and "\\" not in name
 
 
+def _sql_caller_hint() -> str:
+    """从调用栈解析业务入口（模块.函数），便于对照页面/API。"""
+    for frame in inspect.stack()[2:16]:
+        fn = frame.function
+        if fn in _SQL_LOG_SKIP_FUNCTIONS:
+            continue
+        path = frame.filename.replace("\\", "/")
+        if "/fcdesk/" not in path:
+            continue
+        return f"{Path(path).stem}.{fn}"
+    return "unknown"
+
+
+def _log_sql_execute(
+    sql: str,
+    parameters: Any = (),
+    *,
+    batch_note: str = "",
+) -> None:
+    if not isinstance(sql, str):
+        return
+    if sql.strip().upper().startswith("PRAGMA"):
+        return
+    hint = _sql_caller_hint() + batch_note
+    if isinstance(parameters, (list, tuple)) and parameters and isinstance(parameters[0], (list, tuple)):
+        params: tuple[Any, ...] = tuple(parameters[0])
+    elif isinstance(parameters, (list, tuple)):
+        params = tuple(parameters)
+    else:
+        params = (parameters,) if parameters != () else ()
+    log_query_sql(logger, hint=hint, sql=sql, params=params)
+
+
+class _LoggingConnection:
+    """包装 SQLite 连接：每次 ``execute`` / ``executemany`` 打统一 SQL 日志。"""
+
+    def __init__(self, inner: sqlite3.Connection) -> None:
+        object.__setattr__(self, "_inner", inner)
+
+    def execute(self, sql: str, parameters: Any = ()):
+        _log_sql_execute(sql, parameters)
+        return self._inner.execute(sql, parameters)
+
+    def executemany(self, sql: str, parameters: Any):
+        try:
+            n = len(parameters)  # type: ignore[arg-type]
+        except TypeError:
+            n = 0
+        _log_sql_execute(sql, (), batch_note=f" executemany×{n}")
+        return self._inner.executemany(sql, parameters)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name == "_inner":
+            object.__setattr__(self, name, value)
+        else:
+            setattr(self._inner, name, value)
+
+
 @contextmanager
 def connect(repo_root: Path) -> Iterator[sqlite3.Connection]:
     rr = repo_root.expanduser().resolve(strict=False)
@@ -70,7 +146,7 @@ def connect(repo_root: Path) -> Iterator[sqlite3.Connection]:
         conn.execute("PRAGMA foreign_keys = ON")
         conn.execute("PRAGMA journal_mode = WAL")
         _ensure_schema(conn)
-        yield conn
+        yield _LoggingConnection(conn)  # type: ignore[misc]
         conn.commit()
     except Exception:
         conn.rollback()
@@ -348,6 +424,41 @@ def _meta_set(conn: sqlite3.Connection, key: str, value: str) -> None:
     )
 
 
+def sql_one_line(sql: str) -> str:
+    """折叠空白为单行，便于终端日志自动换行显示。"""
+    return " ".join(sql.split())
+
+
+def log_query_sql(
+    log: logging.Logger,
+    *,
+    hint: str,
+    sql: str,
+    params: tuple[Any, ...] = (),
+) -> None:
+    """统一 SQL 日志：``SQL <调用方> | <单行语句>``。"""
+    rendered = _format_debug_sql(sql, params) if params else sql.strip()
+    log.info("SQL %s | %s", hint, sql_one_line(rendered))
+
+
+def _format_debug_sql(sql: str, params: tuple[Any, ...]) -> str:
+    """将参数代入 ``?`` 占位符，便于复制到 SQLite 客户端调试。"""
+    parts = sql.split("?")
+    if len(parts) - 1 != len(params):
+        return f"{sql.strip()}\n-- params: {params!r}"
+    out: list[str] = []
+    for i, p in enumerate(params):
+        out.append(parts[i])
+        if p is None:
+            out.append("NULL")
+        elif isinstance(p, (int, float)):
+            out.append(str(p))
+        else:
+            out.append("'" + str(p).replace("'", "''") + "'")
+    out.append(parts[-1])
+    return "".join(out).strip()
+
+
 def _row_to_entry(row: sqlite3.Row) -> FcstdMapEntry:
     kind = row["asset_kind"] if "asset_kind" in row.keys() else None
     if not kind:
@@ -553,6 +664,120 @@ def _upsert_file_asset(conn: sqlite3.Connection, e: FcstdMapEntry, *, updated_at
     )
 
 
+def read_fcstd_map_meta(repo_root: Path) -> dict[str, str | None]:
+    """读取 CAD 索引扫描元数据（不加载 ``file_asset`` 行）。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    if not cad_database_path(rr).is_file():
+        return {
+            "last_scan_at": None,
+            "scan_root": None,
+            "last_scan_stats_json": None,
+        }
+    with connect(rr) as conn:
+        return {
+            "last_scan_at": _meta_get(conn, "last_scan_at"),
+            "scan_root": _meta_get(conn, "scan_root"),
+            "last_scan_stats_json": _meta_get(conn, "last_scan_stats"),
+        }
+
+
+def query_file_asset_entries_paged(
+    repo_root: Path,
+    *,
+    offset: int = 0,
+    limit: int = 20,
+    status: str | None = None,
+    kind: str | None = None,
+    search: str | None = None,
+) -> tuple[list[dict[str, Any]], int, str]:
+    """单次 SQL 分页列出 ``file_asset``（``COUNT(*) OVER()`` 同查总数）。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    if not cad_database_path(rr).is_file():
+        return [], 0, ""
+    cap = max(1, min(int(limit), 500))
+    off = max(0, int(offset))
+    where_parts: list[str] = []
+    params: list[Any] = []
+
+    st = (status or "").strip().lower()
+    if st in (FILE_STATUS_PRESENT, FILE_STATUS_MISSING):
+        where_parts.append("file_status = ?")
+        params.append(st)
+
+    k = (kind or "").strip().lower()
+    if k and k != "all":
+        where_parts.append("COALESCE(NULLIF(asset_kind, ''), 'fcstd') = ?")
+        params.append(k)
+
+    tokens = [t for t in (search or "").strip().lower().split() if t]
+    search_cols = (
+        "filename",
+        "repo_rel_path",
+        "part_number",
+        "part_version",
+        "type_code",
+        "model_series",
+        "part_name",
+        "label",
+        "COALESCE(NULLIF(asset_kind, ''), 'fcstd')",
+    )
+    for token in tokens:
+        like = f"%{token}%"
+        col_clauses = " OR ".join(f"{col} LIKE ? COLLATE NOCASE" for col in search_cols)
+        where_parts.append(f"({col_clauses})")
+        params.extend([like] * len(search_cols))
+
+    where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+    sql = f"""
+        SELECT
+            repo_rel_path,
+            filename,
+            asset_kind,
+            part_number,
+            part_version,
+            type_code,
+            model_series,
+            part_name,
+            label,
+            file_status,
+            last_seen_at,
+            COUNT(*) OVER() AS _total_count
+        FROM file_asset
+        {where_sql}
+        ORDER BY repo_rel_path, file_status
+        LIMIT ? OFFSET ?
+    """
+    query_params = tuple([*params, cap, off])
+    debug_sql = _format_debug_sql(sql, query_params)
+
+    with connect(rr) as conn:
+        rows = conn.execute(sql, query_params).fetchall()
+
+    if not rows:
+        return [], 0, debug_sql
+
+    total = int(rows[0]["_total_count"])
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        entry = _row_to_entry(r)
+        out.append(
+            {
+                "repo_rel_path": entry.repo_rel_path,
+                "filename": entry.filename,
+                "asset_kind": entry.asset_kind or cad_asset_kind(entry.filename),
+                "PartNumber": entry.PartNumber or "",
+                "PartVersion": entry.PartVersion or "",
+                "TypeCode": entry.TypeCode or "",
+                "ModelSeries": entry.ModelSeries or "",
+                "PartName": entry.PartName or "",
+                "label": entry.label or "",
+                "file_status": entry.file_status or FILE_STATUS_PRESENT,
+                "last_seen_at": entry.last_seen_at or "",
+            }
+        )
+    return out, total, debug_sql
+
+
 def load_fcstd_document(repo_root: Path) -> FcstdMapDocument | None:
     rr = repo_root.expanduser().resolve(strict=False)
     if not cad_database_path(rr).is_file():
@@ -664,15 +889,35 @@ def update_scan_stats_meta(repo_root: Path, stats: Mapping[str, int]) -> None:
         _meta_set(conn, "last_scan_stats", json.dumps(dict(stats), ensure_ascii=False))
 
 
-def find_fcstd_entry(repo_root: Path, rel_workspace: Path) -> FcstdMapEntry | None:
-    doc = load_fcstd_document(repo_root)
-    if doc is None:
-        return None
+def find_file_asset_entry(
+    repo_root: Path,
+    rel_workspace: Path,
+) -> tuple[FcstdMapEntry | None, str]:
+    """按 ``repo_rel_path`` 单次查询 ``file_asset``。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    if not cad_database_path(rr).is_file():
+        migrate_fcstd_map_json(repo_root)
+    if not cad_database_path(rr).is_file():
+        return None, ""
     want = _norm_key(rel_workspace.as_posix())
-    for e in doc.entries:
-        if _norm_key(e.repo_rel_path) == want:
-            return e
-    return None
+    sql = """
+        SELECT repo_rel_path, filename, asset_kind, part_number, part_version,
+               type_code, model_series, part_name, label, file_status, last_seen_at
+        FROM file_asset
+        WHERE repo_rel_path = ?
+    """
+    params = (want,)
+    debug_sql = _format_debug_sql(sql, params)
+    with connect(rr) as conn:
+        row = conn.execute(sql, params).fetchone()
+    if row is None:
+        return None, debug_sql
+    return _row_to_entry(row), debug_sql
+
+
+def find_fcstd_entry(repo_root: Path, rel_workspace: Path) -> FcstdMapEntry | None:
+    entry, _ = find_file_asset_entry(repo_root, rel_workspace)
+    return entry
 
 
 def update_fcstd_entry_rename(
@@ -1667,33 +1912,33 @@ def load_bom_assembly_cache(
     repo_root: Path,
     host_repo_rel: str,
     mode: str,
-) -> dict[str, Any] | None:
+) -> tuple[dict[str, Any] | None, str]:
     rr = repo_root.expanduser().resolve(strict=False)
     if not cad_database_path(rr).is_file():
-        return None
+        return None, ""
     key = _norm_key(host_repo_rel)
+    sql = """
+        SELECT tree_json, node_count, bom_xref_at
+        FROM bom_assembly_cache
+        WHERE host_repo_rel_path = ? AND mode = ?
+    """
+    params = (key, mode)
+    debug_sql = _format_debug_sql(sql, params)
     with connect(rr) as conn:
-        row = conn.execute(
-            """
-            SELECT tree_json, node_count, bom_xref_at
-            FROM bom_assembly_cache
-            WHERE host_repo_rel_path = ? AND mode = ?
-            """,
-            (key, mode),
-        ).fetchone()
+        row = conn.execute(sql, params).fetchone()
     if row is None:
-        return None
+        return None, debug_sql
     try:
         nodes = json.loads(str(row["tree_json"]))
     except json.JSONDecodeError:
-        return None
+        return None, debug_sql
     if not isinstance(nodes, list):
-        return None
+        return None, debug_sql
     return {
         "nodes": nodes,
         "node_count": int(row["node_count"] or 0),
         "bom_xref_at": str(row["bom_xref_at"] or ""),
-    }
+    }, debug_sql
 
 
 def save_bom_assembly_cache(
@@ -1725,34 +1970,34 @@ def save_bom_assembly_cache(
         )
 
 
-def query_all_bom_xref_edges_enriched(repo_root: Path) -> list[dict[str, Any]]:
+def query_all_bom_xref_edges_enriched(repo_root: Path) -> tuple[list[dict[str, Any]], str]:
     """一次查询全部引用边（含子件索引字段与链接标签）。"""
     rr = repo_root.expanduser().resolve(strict=False)
+    sql = """
+        SELECT bx.*,
+               ta.part_number AS target_part_number,
+               ta.part_version AS target_part_version,
+               ta.type_code AS target_type_code,
+               ta.model_series AS target_model_series,
+               ta.part_name AS target_part_name,
+               ta.label AS target_asset_label
+        FROM bom_xref bx
+        LEFT JOIN file_asset ta ON ta.id = bx.target_file_asset_id
+        ORDER BY bx.host_repo_rel_path, bx.xlink_file_attr
+    """
+    debug_sql = sql_one_line(sql)
     if not cad_database_path(rr).is_file():
-        return []
+        return [], debug_sql
     with connect(rr) as conn:
-        rows = conn.execute(
-            """
-            SELECT bx.*,
-                   ta.part_number AS target_part_number,
-                   ta.part_version AS target_part_version,
-                   ta.type_code AS target_type_code,
-                   ta.model_series AS target_model_series,
-                   ta.part_name AS target_part_name,
-                   ta.label AS target_asset_label
-            FROM bom_xref bx
-            LEFT JOIN file_asset ta ON ta.id = bx.target_file_asset_id
-            ORDER BY bx.host_repo_rel_path, bx.xlink_file_attr
-            """
-        ).fetchall()
-    return [_bom_xref_row_to_dict(r) for r in rows]
+        rows = conn.execute(sql).fetchall()
+    return [_bom_xref_row_to_dict(r) for r in rows], debug_sql
 
 
 def query_assembly_bom_hosts(
     repo_root: Path,
     *,
     search: str | None = None,
-) -> tuple[list[dict[str, Any]], int]:
+) -> tuple[list[dict[str, Any]], int, str]:
     """一次 SQL 汇总各总成（有出向引用的装配宿主；排除图纸档）。
 
     总成判定：文件名含 ``.assy.fcstd``，或出向引用数 ≥ 2（子装配）。
@@ -1760,7 +2005,7 @@ def query_assembly_bom_hosts(
     """
     rr = repo_root.expanduser().resolve(strict=False)
     if not cad_database_path(rr).is_file():
-        return [], 0
+        return [], 0, ""
     where_extra = ""
     params: list[Any] = []
     q = (search or "").strip()
@@ -1807,8 +2052,10 @@ def query_assembly_bom_hosts(
            )
         ORDER BY fa.filename COLLATE NOCASE
     """
+    query_params = tuple(params)
+    debug_sql = _format_debug_sql(sql, query_params)
     with connect(rr) as conn:
-        rows = conn.execute(sql, tuple(params)).fetchall()
+        rows = conn.execute(sql, query_params).fetchall()
     out: list[dict[str, Any]] = []
     for r in rows:
         pn = str(r["part_number"] or "").strip()
@@ -1832,28 +2079,28 @@ def query_assembly_bom_hosts(
                 "file_role": infer_part_file_role(fname),
             }
         )
-    return out, len(out)
+    return out, len(out), debug_sql
 
 
-def query_all_bom_xref_edges(repo_root: Path) -> list[dict[str, Any]]:
+def query_all_bom_xref_edges(repo_root: Path) -> tuple[list[dict[str, Any]], str]:
     """加载全部引用边（构图 / 传递查询用）。"""
     rr = repo_root.expanduser().resolve(strict=False)
+    sql = """
+        SELECT
+            host_repo_rel_path,
+            xlink_file_attr,
+            target_basename,
+            target_repo_rel_path,
+            target_file_asset_id,
+            resolve_status
+        FROM bom_xref
+        ORDER BY host_repo_rel_path, xlink_file_attr
+    """
+    debug_sql = sql_one_line(sql)
     if not cad_database_path(rr).is_file():
-        return []
+        return [], debug_sql
     with connect(rr) as conn:
-        rows = conn.execute(
-            """
-            SELECT
-                host_repo_rel_path,
-                xlink_file_attr,
-                target_basename,
-                target_repo_rel_path,
-                target_file_asset_id,
-                resolve_status
-            FROM bom_xref
-            ORDER BY host_repo_rel_path, xlink_file_attr
-            """
-        ).fetchall()
+        rows = conn.execute(sql).fetchall()
     return [
         {
             "host_repo_rel_path": str(r["host_repo_rel_path"]),
@@ -1864,7 +2111,7 @@ def query_all_bom_xref_edges(repo_root: Path) -> list[dict[str, Any]]:
             "resolve_status": str(r["resolve_status"]),
         }
         for r in rows
-    ]
+    ], debug_sql
 
 
 def query_bom_xrefs_incoming(
@@ -1873,7 +2120,7 @@ def query_bom_xrefs_incoming(
     repo_rel: str | None = None,
     basename: str | None = None,
     limit: int = 500,
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], str]:
     rr = repo_root.expanduser().resolve(strict=False)
     cap = max(1, min(int(limit), 2000))
     clauses: list[str] = []
@@ -1898,7 +2145,7 @@ def query_bom_xrefs_incoming(
             params.append(f"%{_sql_like_escape(base)}%")
 
     if not clauses:
-        return []
+        return [], ""
 
     where = " OR ".join(f"({c})" for c in clauses) if len(clauses) > 1 else clauses[0]
     sql = f"""
@@ -1908,10 +2155,12 @@ def query_bom_xrefs_incoming(
         LIMIT ?
     """
     params.append(cap)
+    query_params = tuple(params)
+    debug_sql = _format_debug_sql(sql, query_params)
 
     with connect(rr) as conn:
-        rows = conn.execute(sql, tuple(params)).fetchall()
-    return [_bom_xref_row_to_dict(r) for r in rows]
+        rows = conn.execute(sql, query_params).fetchall()
+    return [_bom_xref_row_to_dict(r) for r in rows], debug_sql
 
 
 def query_bom_xref_edges_paged(
@@ -1969,21 +2218,21 @@ def query_bom_xrefs_outgoing(
     host_repo_rel: str,
     *,
     limit: int = 500,
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], str]:
     rr = repo_root.expanduser().resolve(strict=False)
     key = _norm_key(host_repo_rel)
     cap = max(1, min(int(limit), 2000))
+    sql = """
+        SELECT * FROM bom_xref
+        WHERE host_repo_rel_path = ?
+        ORDER BY target_basename, xlink_file_attr
+        LIMIT ?
+    """
+    params = (key, cap)
+    debug_sql = _format_debug_sql(sql, params)
     with connect(rr) as conn:
-        rows = conn.execute(
-            """
-            SELECT * FROM bom_xref
-            WHERE host_repo_rel_path = ?
-            ORDER BY target_basename, xlink_file_attr
-            LIMIT ?
-            """,
-            (key, cap),
-        ).fetchall()
-    return [_bom_xref_row_to_dict(r) for r in rows]
+        rows = conn.execute(sql, params).fetchall()
+    return [_bom_xref_row_to_dict(r) for r in rows], debug_sql
 
 
 def find_present_repo_rel_by_filename(repo_root: Path, filename: str) -> str | None:
@@ -2061,7 +2310,7 @@ def query_bom_xrefs_for_basename(
         return []
 
     lookup_base = base if not rel else None
-    rows = query_bom_xrefs_incoming(
+    rows, _ = query_bom_xrefs_incoming(
         repo_root,
         repo_rel=rel,
         basename=lookup_base,

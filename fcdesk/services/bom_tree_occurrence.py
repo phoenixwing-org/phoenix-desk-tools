@@ -66,7 +66,7 @@ def rebuild_bom_tree_occurrences(repo_root: Path) -> dict[str, Any]:
     if not cad_database_path(rr).is_file():
         return {"root_count": 0, "occurrence_count": 0}
 
-    hosts, _ = query_assembly_bom_hosts(rr)
+    hosts, _, _ = query_assembly_bom_hosts(rr)
     now = _utc_now_iso()
     rows: list[dict[str, Any]] = []
 

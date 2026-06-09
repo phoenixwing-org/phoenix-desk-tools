@@ -41,7 +41,11 @@ from fcdesk.freecad.fcstd_mapping import (
     try_load_fcstd_entry_from_workspace_map,
     try_update_fcstd_map_entry_rename,
 )
-from fcdesk.freecad.phoenix_store import get_part_key_detail, migrate_fcstd_map_json
+from fcdesk.freecad.phoenix_store import (
+    find_file_asset_entry,
+    get_part_key_detail,
+    migrate_fcstd_map_json,
+)
 
 _EDITABLE_FORM_KEYS = frozenset({*EDITABLE_ENTRY_ATTRS, "filename"})
 
@@ -239,7 +243,8 @@ def load_bom_preview(repo_root: Path, rel: Path) -> BomPreview:
     rel = Path(rel)
     full = rr / rel
 
-    mapped = try_load_fcstd_entry_from_workspace_map(repo_root=rr, rel_workspace=rel)
+    migrate_fcstd_map_json(rr)
+    mapped, _ = find_file_asset_entry(rr, rel)
     if mapped is not None:
         entry = mapped
         note = "CAD 索引库 · Document.xml 可覆盖可编辑字段"

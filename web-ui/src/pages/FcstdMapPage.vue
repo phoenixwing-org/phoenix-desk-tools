@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import {
   exportFcstdMapJson,
   fetchFcstdMap,
+  fetchFcstdMapEntries,
   purgeMissingFcstdMap,
   saveFcstdMapPrefs,
   scanFcstdMap,
@@ -25,7 +26,8 @@ const props = defineProps<{
 const shell = useAppShell();
 const onboarding = useOnboardingStore();
 
-const SESSION_V = 3;
+const SESSION_V = 4;
+const PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
 
 type PageSubTab = "index" | "settings";
 
@@ -66,19 +68,18 @@ const data = ref<FcstdMapPayload | null>(null);
 const statusFilter = ref<"all" | "present" | "missing">("all");
 const kindFilter = ref<KindFilter>("all");
 const searchQuery = ref("");
+const entries = ref<FcstdMapEntry[]>([]);
+const entriesTotal = ref(0);
+const pageOffset = ref(0);
+const pageSize = ref(20);
+const entriesLoading = ref(false);
+const debugSql = ref("");
 
 const stats = computed(() => data.value?.stats);
 
-const baseEntries = computed(() => {
-  let rows = data.value?.entries ?? [];
-  if (statusFilter.value !== "all") {
-    rows = rows.filter((r) => r.file_status === statusFilter.value);
-  }
-  if (kindFilter.value !== "all") {
-    rows = rows.filter((r) => (r.asset_kind || "fcstd") === kindFilter.value);
-  }
-  return rows;
-});
+const pageEnd = computed(() => Math.min(pageOffset.value + entries.value.length, entriesTotal.value));
+const hasPrevPage = computed(() => pageOffset.value > 0);
+const hasNextPage = computed(() => pageOffset.value + pageSize.value < entriesTotal.value);
 
 function setStatus(msg: string) {
   shell.setStatus(msg);
@@ -119,7 +120,7 @@ async function onPurgeMissing() {
   shell.appendLog(`[CAD 索引] 删除缺失记录 ${n} 条…`, { source: "fcstd_map", open: true });
   try {
     const out = await purgeMissingFcstdMap();
-    data.value = out;
+    data.value = { ...out, entries: [] };
     const deleted = out.purge_deleted ?? 0;
     const msg = deleted ? `已删除 ${deleted} 条缺失记录` : "没有缺失记录可删除";
     shell.appendLog(`[CAD 索引] ${msg}`, { source: "fcstd_map" });
@@ -127,6 +128,8 @@ async function onPurgeMissing() {
     if (deleted && statusFilter.value === "missing") {
       statusFilter.value = "all";
     }
+    pageOffset.value = 0;
+    await loadEntries();
   } catch (e) {
     shell.appendLog(String(e), { source: "fcstd_map" });
     setStatus(String(e));
@@ -135,12 +138,18 @@ async function onPurgeMissing() {
   }
 }
 
-async function refresh() {
+async function loadMeta() {
+  data.value = await fetchFcstdMap();
+  forceUpdatePartName.value = Boolean(data.value.prefs.force_update_part_name);
+  setStatus(data.value.exists ? `索引 ${data.value.stats.total_entries} 条` : "尚无索引库");
+}
+
+async function refresh(resetPage = true) {
   loading.value = true;
   try {
-    data.value = await fetchFcstdMap();
-    forceUpdatePartName.value = Boolean(data.value.prefs.force_update_part_name);
-    setStatus(data.value.exists ? `索引 ${data.value.stats.total_entries} 条` : "尚无索引库");
+    if (resetPage) pageOffset.value = 0;
+    await loadMeta();
+    await loadEntries();
   } catch (e) {
     setStatus(String(e));
   } finally {
@@ -166,12 +175,15 @@ async function onScan() {
   const ws = shell.workspacePath.value || "（工作空间）";
   shell.appendLog(`工程内搜索：工作空间根 ${ws}`, { source: "fcstd_map", open: true });
   try {
-    data.value = await scanFcstdMap(forceUpdatePartName.value);
+    const scanned = await scanFcstdMap(forceUpdatePartName.value);
+    data.value = { ...scanned, entries: [] };
     shell.appendLog(data.value.scan_log ?? "", { source: "fcstd_map" });
     setStatus(
       `扫描完成：存在 ${data.value.stats.present} · CAD ${data.value.stats.cad_file_count}`,
     );
     activeSubTab.value = "index";
+    pageOffset.value = 0;
+    await loadEntries();
     await onboarding.refreshStatus();
   } catch (e) {
     shell.appendLog(String(e), { source: "fcstd_map" });
@@ -239,53 +251,67 @@ function relDir(row: FcstdMapEntry): string {
   return dir || ".";
 }
 
-function normalizeSearchText(text: string): string {
-  return text.toLowerCase().replace(/[^\w.\-+]/g, " ");
+let searchDebounce: ReturnType<typeof setTimeout> | undefined;
+
+async function loadEntries() {
+  if (!data.value?.exists) {
+    entries.value = [];
+    entriesTotal.value = 0;
+    debugSql.value = "";
+    return;
+  }
+  entriesLoading.value = true;
+  try {
+    const out = await fetchFcstdMapEntries({
+      offset: pageOffset.value,
+      limit: pageSize.value,
+      status: statusFilter.value,
+      kind: kindFilter.value,
+      search: searchQuery.value,
+    });
+    entries.value = out.entries;
+    entriesTotal.value = out.total;
+    debugSql.value = out.debug_sql;
+  } catch (e) {
+    entries.value = [];
+    entriesTotal.value = 0;
+    debugSql.value = "";
+    setStatus(String(e));
+  } finally {
+    entriesLoading.value = false;
+  }
 }
 
-function entrySearchHaystack(row: FcstdMapEntry): string {
-  return normalizeSearchText(
-    [
-      row.filename,
-      row.repo_rel_path,
-      row.PartNumber,
-      row.PartVersion,
-      row.TypeCode,
-      row.ModelSeries,
-      row.PartName,
-      row.label,
-      row.asset_kind,
-      assetKindLabel(row),
-      statusLabel(row),
-      partKeyLabel(row),
-      relDir(row),
-      metaCell(row),
-    ]
-      .filter(Boolean)
-      .join(" "),
-  );
+function goPrevPage() {
+  if (!hasPrevPage.value) return;
+  pageOffset.value = Math.max(0, pageOffset.value - pageSize.value);
+  void loadEntries();
 }
 
-function entryMatchesSearch(row: FcstdMapEntry, query: string): boolean {
-  const q = query.trim();
-  if (!q) return true;
-  const hay = entrySearchHaystack(row);
-  const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
-  return tokens.every((token) => {
-    if (hay.includes(token)) return true;
-    const norm = normalizeSearchText(token).trim();
-    return norm.length > 0 && hay.includes(norm);
-  });
+function goNextPage() {
+  if (!hasNextPage.value) return;
+  pageOffset.value += pageSize.value;
+  void loadEntries();
 }
 
-const filteredEntries = computed(() => {
-  const q = searchQuery.value.trim();
-  if (!q) return baseEntries.value;
-  return baseEntries.value.filter((r) => entryMatchesSearch(r, q));
-});
+function onPageSizeChange(ev: Event) {
+  const n = Number((ev.target as HTMLSelectElement).value);
+  if (!PAGE_SIZE_OPTIONS.includes(n as (typeof PAGE_SIZE_OPTIONS)[number])) return;
+  pageSize.value = n;
+  pageOffset.value = 0;
+  void loadEntries();
+}
+
+function scheduleEntriesReload(resetPage = true) {
+  if (resetPage) pageOffset.value = 0;
+  if (searchDebounce) clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(() => {
+    void loadEntries();
+  }, 280);
+}
 
 async function hydratePageSession(snap: Record<string, unknown>): Promise<boolean> {
-  if (snap.v !== SESSION_V && snap.v !== 2) return false;
+  if (snap.v !== SESSION_V && snap.v !== 3 && snap.v !== 2) return false;
   if (snap.subTab === "index" || snap.subTab === "settings") {
     activeSubTab.value = snap.subTab;
   }
@@ -303,7 +329,13 @@ async function hydratePageSession(snap: Record<string, unknown>): Promise<boolea
   if (snap.searchQuery != null) {
     searchQuery.value = String(snap.searchQuery);
   }
-  await refresh();
+  if (typeof snap.pageOffset === "number") {
+    pageOffset.value = Math.max(0, snap.pageOffset);
+  }
+  if (typeof snap.pageSize === "number" && PAGE_SIZE_OPTIONS.includes(snap.pageSize as 20 | 50 | 100)) {
+    pageSize.value = snap.pageSize;
+  }
+  await refresh(false);
   return true;
 }
 
@@ -328,14 +360,19 @@ usePageSession(props.workbenchTabId, {
     statusFilter: statusFilter.value,
     kindFilter: kindFilter.value,
     searchQuery: searchQuery.value,
+    pageOffset: pageOffset.value,
+    pageSize: pageSize.value,
   }),
   hydrate: hydratePageSession,
   isDirty: () => false,
 });
 
-watch([forceUpdatePartName, statusFilter, kindFilter, searchQuery, activeSubTab], () =>
+watch([forceUpdatePartName, statusFilter, kindFilter, searchQuery, pageOffset, pageSize, activeSubTab], () =>
   shell.scheduleWorkbenchSave(),
 );
+
+watch([statusFilter, kindFilter], () => scheduleEntriesReload(true));
+watch(searchQuery, () => scheduleEntriesReload(true));
 
 onMounted(() => applyInitialTabState());
 </script>
@@ -394,7 +431,7 @@ onMounted(() => applyInitialTabState());
       </button>
     </nav>
 
-    <div v-show="activeSubTab === 'index'" class="sub-panel">
+    <div v-show="activeSubTab === 'index'" class="sub-panel index-panel">
       <section class="index-toolbar">
         <input
           id="cad-index-search"
@@ -424,21 +461,25 @@ onMounted(() => applyInitialTabState());
           <input v-model="kindFilter" type="radio" :value="opt.value" /> {{ opt.label }}
         </label>
         <span class="count">
-          显示 <strong>{{ filteredEntries.length }}</strong>
-          <template v-if="searchQuery.trim()"> / {{ baseEntries.length }}</template>
-          条
+          显示 <strong>{{ entriesTotal ? `${pageOffset + 1}–${pageEnd}` : 0 }}</strong>
+          / {{ entriesTotal }} 条
         </span>
       </section>
 
-      <div v-if="filteredEntries.length" data-tour-page-fcstd-table>
-        <ResizableDataTable :columns="cadColumns" wrap-class="table-grow">
+      <div class="table-area">
+      <ResizableDataTable
+        v-if="entries.length"
+        :columns="cadColumns"
+        wrap-class="table-grow"
+        data-tour-page-fcstd-table
+      >
         <tbody>
           <tr
-            v-for="(row, idx) in filteredEntries"
+            v-for="(row, idx) in entries"
             :key="row.repo_rel_path + row.file_status"
             :class="row.file_status"
           >
-            <td class="col-index">{{ idx + 1 }}</td>
+            <td class="col-index">{{ pageOffset + idx + 1 }}</td>
             <td>{{ statusLabel(row) }}</td>
             <td>{{ assetKindLabel(row) }}</td>
             <td class="mono">
@@ -473,9 +514,11 @@ onMounted(() => applyInitialTabState());
             <td class="meta">{{ metaCell(row) }}</td>
           </tr>
         </tbody>
-        </ResizableDataTable>
+      </ResizableDataTable>
+      <div v-else-if="entriesLoading || loading" class="empty-wrap table-grow">
+        <p class="empty">加载索引列表…</p>
       </div>
-      <div v-else-if="!loading" class="table-wrap table-grow empty-wrap">
+      <div v-else class="empty-wrap table-grow">
         <p class="empty">
           {{
             data?.exists
@@ -486,6 +529,26 @@ onMounted(() => applyInitialTabState());
           }}
         </p>
       </div>
+      </div>
+
+      <nav v-if="data?.exists && entriesTotal > 0" class="pager">
+        <button type="button" class="btn mini" :disabled="!hasPrevPage || entriesLoading" @click="goPrevPage">
+          上一页
+        </button>
+        <span class="pager-info">
+          第 {{ Math.floor(pageOffset / pageSize) + 1 }} / {{ Math.max(1, Math.ceil(entriesTotal / pageSize)) }} 页
+        </span>
+        <button type="button" class="btn mini" :disabled="!hasNextPage || entriesLoading" @click="goNextPage">
+          下一页
+        </button>
+        <label class="pager-size">
+          每页
+          <select :value="pageSize" @change="onPageSizeChange">
+            <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
+          </select>
+          条
+        </label>
+      </nav>
     </div>
 
     <div v-show="activeSubTab === 'settings'" class="sub-panel settings-panel">
@@ -547,6 +610,12 @@ onMounted(() => applyInitialTabState());
         <p v-if="data.map_path_display" class="meta-line">JSON：{{ data.map_path_display }}</p>
         <p v-if="data.last_scan_at" class="meta-line">上次扫描：{{ data.last_scan_at }}</p>
       </section>
+
+      <section v-if="debugSql" class="settings-block">
+        <h2 class="block-title">调试 SQL</h2>
+        <p class="block-desc">最近一次列表查询（可复制到 SQLite 客户端执行）。</p>
+        <pre class="debug-sql mono">{{ debugSql }}</pre>
+      </section>
     </div>
   </div>
 </template>
@@ -601,6 +670,60 @@ onMounted(() => applyInitialTabState());
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.index-panel {
+  min-height: 0;
+}
+
+.table-area {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 8px;
+  flex-shrink: 0;
+  font-size: 0.82rem;
+}
+
+.pager-info {
+  color: var(--muted);
+}
+
+.pager-size {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.pager-size select {
+  padding: 4px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  font-size: 0.82rem;
+}
+
+.debug-sql {
+  margin: 0;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 200px;
+  overflow: auto;
 }
 
 .index-toolbar {

@@ -50,7 +50,7 @@ def onboarding_status_payload(workspace: Path) -> dict[str, Any]:
     last_scan_at = ""
     if workspace_ok:
         try:
-            payload = load_fcstd_map_payload(ws)
+            payload = load_fcstd_map_payload(ws, include_entries=False)
             last_scan_at = (payload.get("last_scan_at") or "").strip()
             stats = payload.get("stats") if isinstance(payload.get("stats"), dict) else {}
             total = int(stats.get("total_entries") or 0)

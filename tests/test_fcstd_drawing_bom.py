@@ -68,6 +68,9 @@ DRAWING_DOC = """<?xml version='1.0' encoding='utf-8'?>
 SAMPLE_LINK_DRAWING = (
     Path(__file__).resolve().parents[1] / "doc/samples/图纸-通过link来创建-Document.xml"
 )
+SAMPLE_INTERNAL_ASSY = (
+    Path(__file__).resolve().parents[1] / "doc/samples/内部装配示例-Document.xml"
+)
 
 
 def _write_fcstd(path: Path, xml: str) -> None:
@@ -80,6 +83,13 @@ class DrawingBomTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.mkdtemp(prefix="fcdesk_drawing_bom_")
         self.root = Path(self.tmp)
+
+    def test_internal_assy_mounts_on_structural_root_part(self) -> None:
+        import xml.etree.ElementTree as ET
+
+        self.assertTrue(SAMPLE_INTERNAL_ASSY.is_file(), SAMPLE_INTERNAL_ASSY)
+        doc_el = ET.fromstring(SAMPLE_INTERNAL_ASSY.read_text(encoding="utf-8"))
+        self.assertEqual(_first_bom_target_object_name(doc_el), "PCB")
 
     def test_drawing_primary_mounts_on_app_link(self) -> None:
         import xml.etree.ElementTree as ET
