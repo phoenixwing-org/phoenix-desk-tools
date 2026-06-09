@@ -6,6 +6,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 from fcdesk.services.assembly_tree_cache import build_assembly_tree_payload, load_assembly_tree_cached
 from fcdesk.services.bom_tree_occurrence import query_target_usage_stats
@@ -13,6 +14,8 @@ from fcdesk.services.bom_xref_service import (
     host_ref_groups_from_db,
     load_assembly_bom_catalog,
     load_assembly_tree,
+    query_xref_counts_for_rel,
+    search_file_detail_xrefs,
     search_incoming_refs,
     search_outgoing_refs,
 )
@@ -580,6 +583,127 @@ class TestBomXref(unittest.TestCase):
                 if n.get("tree_path")
             }
             self.assertTrue(paths)
+
+    def test_file_detail_xrefs_combined_and_counts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_fcstd(root / "leaf.FCStd", "<Document/>")
+            _write_fcstd(root / "sub/sub-assy.FCStd", _SUB_ASM_XML)
+            _write_fcstd(root / "top-assy.FCStd", _TOP_ASM_XML)
+            run_fcstd_map_scan(root)
+
+            counts = query_xref_counts_for_rel(root, "./top-assy.FCStd")
+            self.assertEqual(counts["outgoing_count"], 2)
+            self.assertEqual(counts["direct_incoming_count"], 0)
+
+            leaf_counts = query_xref_counts_for_rel(root, "./leaf.FCStd")
+            self.assertEqual(leaf_counts["direct_incoming_count"], 1)
+
+            payload = search_file_detail_xrefs(root, "./top-assy.FCStd")
+            self.assertEqual(payload["outgoing"]["count"], 2)
+            self.assertGreaterEqual(payload["incoming"]["count"], 0)
+            self.assertNotIn("direct_refs", payload["incoming"]["hosts"][0] if payload["incoming"]["hosts"] else {})
+            for ref in payload["outgoing"]["refs"]:
+                self.assertIn("rule_label", ref)
+
+            top_out = search_outgoing_refs(root, "./top-assy.FCStd")
+            self.assertEqual(top_out["count"], 2)
+            for ref in top_out["refs"]:
+                self.assertIn("rule_label", ref)
+
+    def test_outgoing_link_label_from_index_without_disk_read(self) -> None:
+        labeled_host = """<?xml version="1.0"?>
+<Document>
+ <ObjectData Count="2">
+  <Object name="Asm">
+   <Properties Count="1">
+    <Property name="Group" type="App::PropertyLinkList">
+     <LinkList count="1">
+      <Link value="LinkChild"/>
+     </LinkList>
+    </Property>
+   </Properties>
+  </Object>
+  <Object name="LinkChild">
+   <Properties Count="2">
+    <Property name="LinkedObject" type="App::PropertyXLink">
+     <XLink file="child.FCStd"/>
+    </Property>
+    <Property name="Label" type="App::PropertyString">
+     <String value="子件显示名"/>
+    </Property>
+   </Properties>
+  </Object>
+ </ObjectData>
+</Document>
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_fcstd(root / "child.FCStd", "<Document/>")
+            _write_fcstd(root / "asm.FCStd", labeled_host)
+            run_fcstd_map_scan(root)
+
+            with patch(
+                "fcdesk.freecad.rename_analysis.xlink.read_host_reference_labels"
+            ) as disk_read:
+                out = search_outgoing_refs(root, "./asm.FCStd")
+                disk_read.assert_not_called()
+
+            self.assertEqual(out["count"], 1)
+            self.assertEqual(out["refs"][0]["link_label"], "子件显示名")
+
+    def test_outgoing_missing_index_fields_never_reads_disk(self) -> None:
+        """索引缺 link_label / 目标 BOM 字段时，出向引用查询不回退读宿主 FCStd。"""
+        host_xml = """<?xml version="1.0"?>
+<Document>
+ <ObjectData Count="2">
+  <Object name="Asm">
+   <Properties Count="1">
+    <Property name="Group" type="App::PropertyLinkList">
+     <LinkList count="1">
+      <Link value="LinkChild"/>
+     </LinkList>
+    </Property>
+   </Properties>
+  </Object>
+  <Object name="LinkChild">
+   <Properties Count="2">
+    <Property name="LinkedObject" type="App::PropertyXLink">
+     <XLink file="child.FCStd"/>
+    </Property>
+    <Property name="Label" type="App::PropertyString">
+     <String value="仅存在于 XML 的 Label"/>
+    </Property>
+   </Properties>
+  </Object>
+ </ObjectData>
+</Document>
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_fcstd(root / "child.FCStd", "<Document/>")
+            _write_fcstd(root / "asm.FCStd", host_xml)
+            run_fcstd_map_scan(root)
+            from fcdesk.freecad.phoenix_store import connect
+
+            with connect(root) as conn:
+                conn.execute(
+                    "UPDATE bom_xref SET link_label = '' WHERE host_repo_rel_path LIKE '%asm.FCStd'"
+                )
+                conn.commit()
+
+            with patch(
+                "fcdesk.freecad.rename_analysis.xlink.read_host_reference_labels"
+            ) as disk_read, patch(
+                "fcdesk.freecad.fcstd_embedded_attrs.read_embedded_bom_attrs"
+            ) as embedded_read:
+                out = search_outgoing_refs(root, "./asm.FCStd")
+                disk_read.assert_not_called()
+                embedded_read.assert_not_called()
+
+            self.assertEqual(out["count"], 1)
+            self.assertEqual(out["refs"][0]["link_label"], "")
+            self.assertEqual(out["refs"][0]["rule_label"], "child")
 
 
 if __name__ == "__main__":

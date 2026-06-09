@@ -47,6 +47,11 @@ export type BomApplyPrefs = {
   };
 };
 
+export type BomXrefCounts = {
+  outgoing_count: number;
+  direct_incoming_count: number;
+};
+
 export type BomPreview = {
   rel_path: string;
   fields: BomFields;
@@ -65,6 +70,10 @@ export type BomPreview = {
   file_size_display: string | null;
   bom_readonly?: boolean;
   bom_source_rel?: string | null;
+  /** 打开文件时附带：出向 + 直接入向计数（单条 SQL） */
+  xref_counts?: BomXrefCounts;
+  /** 引用表尚未构建（不会在打开文件时自动全量重建） */
+  xref_index_pending?: boolean;
 };
 
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
@@ -247,13 +256,20 @@ export function saveBom(rel: string, fields: Partial<BomFields>) {
   });
 }
 
+export type BomFieldRecommendResult = {
+  field: string;
+  value: string;
+  source_note: string;
+  filled: boolean;
+};
+
 export function recommendBomField(
   rel: string,
   field: string,
   fields: Partial<BomFields>,
   kindFilters: BomKindFilters,
 ) {
-  return jsonFetch<{ field: string; value: string; source_note: string; filled: boolean }>(
+  return jsonFetch<BomFieldRecommendResult>(
     `/api/bom/recommend-field?rel=${encodeURIComponent(rel)}&field=${encodeURIComponent(field)}`,
     {
       method: "POST",
@@ -261,6 +277,21 @@ export function recommendBomField(
       body: JSON.stringify({ ...bomBody(fields), kind_filters: kindFilters }),
     },
   );
+}
+
+export function recommendBomFieldsAll(
+  rel: string,
+  fields: Partial<BomFields>,
+  kindFilters: BomKindFilters,
+) {
+  return jsonFetch<{
+    results: Record<string, BomFieldRecommendResult>;
+    filled_keys: string[];
+  }>(`/api/bom/recommend-all-fields?rel=${encodeURIComponent(rel)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...bomBody(fields), kind_filters: kindFilters }),
+  });
 }
 
 export function fillRecommendedValues(rel: string, fields: Partial<BomFields>) {
@@ -752,6 +783,43 @@ export function fetchBomXrefOutgoing(rel: string, limit?: number, refreshDisk = 
   }>(
     `/api/bom-xrefs/outgoing?${q}`,
   );
+}
+
+/** 文件详情「引用」Tab：入向 + 出向一次返回（懒加载） */
+export type FileDetailXrefsPayload = {
+  rel: string;
+  index_pending?: boolean;
+  incoming: {
+    count: number;
+    direct_count: number;
+    hosts: BomXrefHost[];
+  };
+  outgoing: {
+    count: number;
+    label_mismatch_count?: number;
+    refs: BomXrefEdge[];
+  };
+};
+
+export function fetchBomXrefCounts(rel: string) {
+  return jsonFetch<BomXrefCounts & { index_pending?: boolean }>(
+    `/api/bom-xrefs/counts?rel=${encodeURIComponent(rel)}`,
+  );
+}
+
+export function fetchFileDetailXrefs(opts: {
+  rel: string;
+  limit?: number;
+  transitive?: boolean;
+  refreshDisk?: boolean;
+  scope?: "both" | "outgoing" | "incoming";
+}) {
+  const q = new URLSearchParams({ rel: opts.rel });
+  if (opts.limit != null) q.set("limit", String(opts.limit));
+  if (opts.scope) q.set("scope", opts.scope);
+  if (opts.transitive) q.set("transitive", "true");
+  if (opts.refreshDisk) q.set("refresh_disk", "true");
+  return jsonFetch<FileDetailXrefsPayload>(`/api/file-detail/xrefs?${q}`);
 }
 
 export type BomXrefRefreshHostResult = {

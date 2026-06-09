@@ -10,7 +10,10 @@ import {
 import { useAppShell } from "../composables/useAppShell";
 import ExpandCaret from "./ExpandCaret.vue";
 import XlinkReplaceDialog from "./XlinkReplaceDialog.vue";
-import { resolveRuleLabelForNode } from "../utils/fcstdRuleLabel";
+import {
+  linkLabelsEqual,
+  resolveRuleLabelForNode,
+} from "../utils/fcstdRuleLabel";
 
 const props = withDefaults(
   defineProps<{
@@ -79,7 +82,9 @@ function displayLabel(host: string, inst: AssemblyXrefInstance) {
 }
 
 function isLabelEdited(host: string, inst: AssemblyXrefInstance) {
-  return edits.value.has(editKey(host, inst.xlink_file_attr));
+  const key = editKey(host, inst.xlink_file_attr);
+  if (!edits.value.has(key)) return false;
+  return !linkLabelsEqual(edits.value.get(key)!, baselineLabel(host, inst));
 }
 
 function isMissingNode(node: AssemblyTreeNode) {
@@ -109,10 +114,10 @@ function setLabel(node: AssemblyTreeNode, inst: AssemblyXrefInstance, value: str
   const key = editKey(host, inst.xlink_file_attr);
   const base = baselineLabel(host, inst);
   const next = new Map(edits.value);
-  if (value.trim() === base.trim()) next.delete(key);
+  if (linkLabelsEqual(value, base)) next.delete(key);
   else next.set(key, value);
   edits.value = next;
-  emit("edits-change", next.size > 0);
+  emit("edits-change", hasPendingLabelEdits());
 }
 
 function isAssemblyNode(node: AssemblyTreeNode) {
@@ -303,19 +308,46 @@ function applyRuleLabelsPreview(): { filled: number; unchanged: number; noRule: 
     for (const inst of instancesOf(node)) {
       const attr = inst.xlink_file_attr?.trim();
       if (!attr) continue;
-      const current = displayLabel(host, inst).trim();
-      if (rule === current) {
+      const key = editKey(host, attr);
+      const current = displayLabel(host, inst);
+      if (linkLabelsEqual(rule, current)) {
         unchanged += 1;
+        next.delete(key);
         continue;
       }
-      next.set(editKey(host, attr), rule);
+      if (linkLabelsEqual(rule, baselineLabel(host, inst))) {
+        unchanged += 1;
+        next.delete(key);
+        continue;
+      }
+      next.set(key, rule);
       filled += 1;
     }
   });
 
   edits.value = next;
-  emit("edits-change", next.size > 0);
+  emit("edits-change", hasPendingLabelEdits());
   return { filled, unchanged, noRule };
+}
+
+function hasPendingLabelEdits(): boolean {
+  for (const [key, value] of edits.value) {
+    const sep = key.indexOf("\x00");
+    if (sep < 0) continue;
+    const host = key.slice(0, sep);
+    const attr = key.slice(sep + 1);
+    let base = "";
+    walkNodes(props.nodes, (node) => {
+      if (base || node.host_repo_rel?.trim() !== host) return;
+      for (const inst of instancesOf(node)) {
+        if (inst.xlink_file_attr?.trim() === attr) {
+          base = baselineLabel(host, inst);
+        }
+      }
+    });
+    if (!linkLabelsEqual(value, base)) return true;
+  }
+  return false;
 }
 
 function statusLabel(s: string) {
@@ -415,10 +447,12 @@ function getPendingPatches(): LinkLabelPatch[] {
       if (!attr) continue;
       const key = editKey(host, attr);
       if (!edits.value.has(key)) continue;
+      const newLabel = edits.value.get(key)!.trim();
+      if (linkLabelsEqual(newLabel, baselineLabel(host, inst))) continue;
       patches.push({
         host_repo_rel: host,
         xlink_file_attr: attr,
-        link_label: edits.value.get(key)!.trim(),
+        link_label: newLabel,
       });
     }
   });
@@ -453,7 +487,7 @@ function getPendingLabelChanges() {
 }
 
 function hasEdits() {
-  return edits.value.size > 0;
+  return hasPendingLabelEdits();
 }
 
 function resetEdits() {
@@ -483,7 +517,7 @@ watch(
       if (hasSubtree(node)) expanded.value.add(node.id);
     }
   },
-  { immediate: true },
+  { immediate: true, deep: true },
 );
 </script>
 

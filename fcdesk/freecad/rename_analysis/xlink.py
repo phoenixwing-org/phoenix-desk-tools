@@ -208,8 +208,11 @@ def resolve_rule_display_label(
     fcstd_path: Path | None = None,
     repo_rel_path: str | None = None,
 ) -> str:
-    """规则显示名：CAD 索引 ``file_asset`` → FCStd 内嵌属性 → 文件名兜底。"""
-    from fcdesk.freecad.fcstd_mapping import compose_fcstd_body_label_display
+    """规则显示名：仅 CAD 索引 ``file_asset`` 与文件名兜底（查询路径不读 FCStd）。"""
+    from fcdesk.freecad.fcstd_mapping import (
+        basename_label_fallback,
+        compose_fcstd_body_label_display,
+    )
     from fcdesk.freecad.phoenix_store import get_file_asset_bom_fields
 
     rr = repo_root.expanduser().resolve(strict=False)
@@ -234,12 +237,10 @@ def resolve_rule_display_label(
             )
             if composed:
                 return composed
+        return basename_label_fallback(rel)
 
     if fcstd_path is not None:
-        return resolve_fcstd_display_label(fcstd_path)
-
-    if rel:
-        return Path(rel).name
+        return basename_label_fallback(fcstd_path.name)
     return ""
 
 

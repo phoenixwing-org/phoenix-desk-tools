@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onActivated, onMounted, ref, watch } from "vue";
+import { nextTick, ref, watch } from "vue";
 import { fetchAssemblyTreeByHost, patchLinkLabels, type AssemblyTreeNode } from "../../api";
 import AssemblyTreeTable from "../AssemblyTreeTable.vue";
 import { useAppShell } from "../../composables/useAppShell";
@@ -12,7 +12,8 @@ const emit = defineEmits<{
 }>();
 
 const shell = useAppShell();
-const { rel, pageError, activeSubTab, outgoingCount } = useFileDetailContext();
+const { rel, pageError, activeSubTab, assemblyCacheByKey, invalidateAssemblyCache } =
+  useFileDetailContext();
 
 const treeMode = ref<"first" | "full">(getAssemblyTreeDepth());
 const treeLoading = ref(false);
@@ -21,16 +22,29 @@ const assemblyTreeRef = ref<InstanceType<typeof AssemblyTreeTable> | null>(null)
 const savingLabels = ref(false);
 const labelEdits = ref(false);
 
-/** 避免并发请求时较早的空结果覆盖较新的数据 */
 let loadSeq = 0;
+
+function assemblyCacheKey(host: string, mode: "first" | "full") {
+  return `${host}|${mode}`;
+}
 
 async function loadAssemblyTree(opts?: {
   refreshDisk?: boolean;
+  force?: boolean;
   allowEmptyRetry?: boolean;
 }) {
   const host = rel.value.trim();
   if (!host) {
     treeNodes.value = [];
+    return;
+  }
+  if (activeSubTab.value !== "assembly" && !opts?.force) return;
+
+  const cacheKey = assemblyCacheKey(host, treeMode.value);
+  if (!opts?.force && !opts?.refreshDisk && assemblyCacheByKey.value[cacheKey]) {
+    treeNodes.value = assemblyCacheByKey.value[cacheKey];
+    await nextTick();
+    assemblyTreeRef.value?.resetEdits();
     return;
   }
 
@@ -43,15 +57,20 @@ async function loadAssemblyTree(opts?: {
 
     if (
       opts?.allowEmptyRetry &&
-      !data.nodes.length &&
-      outgoingCount.value > 0
+      !data.nodes.length
     ) {
       await new Promise((r) => setTimeout(r, 450));
       if (seq !== loadSeq) return;
       data = await fetchAssemblyTreeByHost(host, full, false);
     }
 
-    if (seq === loadSeq) treeNodes.value = data.nodes;
+    if (seq === loadSeq) {
+      treeNodes.value = data.nodes;
+      assemblyCacheByKey.value = {
+        ...assemblyCacheByKey.value,
+        [cacheKey]: data.nodes,
+      };
+    }
   } catch (e) {
     if (seq === loadSeq) treeNodes.value = [];
     shell.setStatus(String(e));
@@ -60,9 +79,9 @@ async function loadAssemblyTree(opts?: {
   }
 }
 
-function reloadAssemblyIfVisible(opts?: { refreshDisk?: boolean }) {
+function ensureAssemblyLoaded(opts?: { refreshDisk?: boolean; force?: boolean }) {
   if (activeSubTab.value !== "assembly" || !rel.value.trim()) return;
-  void loadAssemblyTree({ refreshDisk: opts?.refreshDisk, allowEmptyRetry: true });
+  void loadAssemblyTree({ ...opts, allowEmptyRetry: true });
 }
 
 async function saveAssemblyLabels() {
@@ -97,7 +116,8 @@ async function saveAssemblyLabels() {
     assemblyTreeRef.value?.resetEdits();
     labelEdits.value = false;
     emit("edits-change", false);
-    await loadAssemblyTree();
+    invalidateAssemblyCache(rel.value);
+    await loadAssemblyTree({ force: true });
   } catch (e) {
     pageError.value = String(e);
     shell.setStatus(String(e));
@@ -138,10 +158,15 @@ function onApplyRuleLabelsPreview() {
 async function onExpandAllTree() {
   if (treeMode.value !== "full") {
     treeMode.value = "full";
-    await loadAssemblyTree();
+    await loadAssemblyTree({ force: true });
   }
   await nextTick();
   await assemblyTreeRef.value?.expandAllTree(treeNodes.value);
+}
+
+async function onXrefReplaced() {
+  invalidateAssemblyCache(rel.value);
+  await loadAssemblyTree({ force: true });
 }
 
 watch(rel, (host) => {
@@ -153,27 +178,15 @@ watch(treeMode, (mode) => {
 });
 
 watch([rel, treeMode], () => {
-  reloadAssemblyIfVisible();
+  ensureAssemblyLoaded();
 });
 
 watch(
   () => activeSubTab.value,
   (tab) => {
-    if (tab === "assembly") reloadAssemblyIfVisible({ refreshDisk: false });
+    if (tab === "assembly") ensureAssemblyLoaded();
   },
 );
-
-watch(outgoingCount, () => {
-  reloadAssemblyIfVisible();
-});
-
-onMounted(() => {
-  reloadAssemblyIfVisible({ refreshDisk: false });
-});
-
-onActivated(() => {
-  reloadAssemblyIfVisible({ refreshDisk: false });
-});
 
 defineExpose({
   hasLabelEdits: () => Boolean(assemblyTreeRef.value?.getPendingPatches().length),
@@ -217,7 +230,7 @@ defineExpose({
       :saving-labels="savingLabels"
       @need-full-depth="onExpandAllTree"
       @edits-change="onAssemblyEditsChange"
-      @xref-replaced="loadAssemblyTree"
+      @xref-replaced="onXrefReplaced"
       @discard-label-edits="discardAssemblyLabelEdits"
       @apply-label-edits="saveAssemblyLabels"
     />

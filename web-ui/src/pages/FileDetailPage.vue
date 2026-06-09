@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from "vue";
 import type { BomFields, BomPreview } from "../api";
-import { fetchBom, fetchBomXrefIncoming, fetchBomXrefOutgoing } from "../api";
+import { fetchBom, fetchBomXrefCounts } from "../api";
 import PageHelpButton from "../components/PageHelpButton.vue";
 import FileOverviewPanel from "../components/file-detail/FileOverviewPanel.vue";
 import FileAttributesPanel from "../components/file-detail/FileAttributesPanel.vue";
@@ -32,10 +32,14 @@ const pageError = ref("");
 const activeSubTab = ref<FileDetailSubTab>("overview");
 const incomingCount = ref(0);
 const outgoingCount = ref(0);
+const xrefCacheByRel = ref<Record<string, import("../api").FileDetailXrefsPayload>>({});
+const assemblyCacheByKey = ref<Record<string, import("../api").AssemblyTreeNode[]>>({});
 const preferredRenameFilename = ref("");
 const assemblyLabelEdits = ref(false);
 /** 已写入属性但未改盘符时的目标文件名（按 repo_rel 缓存） */
 const filenameDraftByRel = ref<Record<string, string>>({});
+let reloadSeq = 0;
+let bootstrapDone = false;
 
 const fileName = computed(() => rel.value.split("/").pop() ?? "");
 
@@ -52,12 +56,42 @@ function applyFilenameDraft(relPath: string) {
   form.value = { ...form.value, filename: draft };
 }
 
+function applyXrefCountsFromPreview(data: BomPreview) {
+  const counts = data.xref_counts;
+  if (!counts) {
+    incomingCount.value = 0;
+    outgoingCount.value = 0;
+    return;
+  }
+  incomingCount.value = counts.direct_incoming_count;
+  outgoingCount.value = counts.outgoing_count;
+}
+
 const showAssemblyTab = computed(() => {
   if (!preview.value?.is_fcstd) return false;
   if (outgoingCount.value > 0) return true;
+  if (preview.value.xref_counts?.outgoing_count) return true;
   if (preview.value.document_kinds?.assembly) return true;
   return /\.assy\.fcstd$/i.test(rel.value);
 });
+
+function invalidateXrefCache(relPath?: string) {
+  const key = (relPath ?? rel.value).trim();
+  if (!key) return;
+  const next = { ...xrefCacheByRel.value };
+  delete next[key];
+  xrefCacheByRel.value = next;
+}
+
+function invalidateAssemblyCache(relPath?: string) {
+  const prefix = `${(relPath ?? rel.value).trim()}|`;
+  if (prefix === "|") return;
+  const next = { ...assemblyCacheByKey.value };
+  for (const k of Object.keys(next)) {
+    if (k.startsWith(prefix)) delete next[k];
+  }
+  assemblyCacheByKey.value = next;
+}
 
 async function refreshXrefCounts() {
   if (!rel.value.trim()) {
@@ -66,12 +100,9 @@ async function refreshXrefCounts() {
     return;
   }
   try {
-    const [inc, out] = await Promise.all([
-      fetchBomXrefIncoming({ rel: rel.value, transitive: true, limit: 500 }),
-      fetchBomXrefOutgoing(rel.value, 500, false),
-    ]);
-    incomingCount.value = inc.count;
-    outgoingCount.value = out.count;
+    const counts = await fetchBomXrefCounts(rel.value);
+    incomingCount.value = counts.direct_incoming_count;
+    outgoingCount.value = counts.outgoing_count;
   } catch {
     incomingCount.value = 0;
     outgoingCount.value = 0;
@@ -104,10 +135,12 @@ async function reloadFile(targetRel?: string) {
   const path = (targetRel ?? rel.value).trim();
   if (!path) return;
   const prevRel = rel.value.trim();
+  const seq = ++reloadSeq;
   loading.value = true;
   pageError.value = "";
   try {
     const data = await fetchBom(path);
+    if (seq !== reloadSeq) return;
     rel.value = path;
     if (props.workbenchTabId && prevRel && prevRel !== path) {
       shell.rerouteFileDetailTab(prevRel, path, props.workbenchTabId);
@@ -124,7 +157,8 @@ async function reloadFile(targetRel?: string) {
         subtitle: path,
       });
     }
-    await refreshXrefCounts();
+    applyXrefCountsFromPreview(data);
+    if (prevRel && prevRel !== path) invalidateAssemblyCache(prevRel);
     assemblyLabelEdits.value = false;
     if (props.workbenchTabId) {
       const tab = shell.getTab(props.workbenchTabId);
@@ -136,10 +170,11 @@ async function reloadFile(targetRel?: string) {
     }
     shell.setStatus(data.embedded_warning ? `警告: ${data.embedded_warning}` : data.source_note);
   } catch (e) {
+    if (seq !== reloadSeq) return;
     pageError.value = String(e);
     preview.value = null;
   } finally {
-    loading.value = false;
+    if (seq === reloadSeq) loading.value = false;
   }
 }
 
@@ -201,13 +236,13 @@ function unregisterTreeHandler() {
   shell.registerTreeSelect(props.workbenchTabId, null);
 }
 
-function applyOpenPayload() {
-  if (!props.workbenchTabId) return;
+function applyOpenPayload(): boolean {
+  if (!props.workbenchTabId) return false;
   const payload = shell.consumeTabPayload(props.workbenchTabId);
   const detail = payload?.fileDetail;
   const legacyRel = payload?.bomRel?.trim() || payload?.fileRename?.rel?.trim();
   const openRel = detail?.rel?.trim() || legacyRel;
-  if (!openRel) return;
+  if (!openRel) return false;
   if (detail?.subTab) activeSubTab.value = normalizeFileDetailSubTab(detail.subTab);
   if (detail?.preferredNewFilename) preferredRenameFilename.value = detail.preferredNewFilename;
   if (payload?.fileRename?.form) {
@@ -215,12 +250,14 @@ function applyOpenPayload() {
     baseline.value = { ...(payload.fileRename.baseline ?? payload.fileRename.form) };
   }
   void reloadFile(openRel);
+  return true;
 }
 
 /** F5 / 会话恢复：pageState → Tab.contextKey（仓库相对路径） */
 async function restoreFromWorkbenchTab() {
   if (!props.workbenchTabId) return;
   if (rel.value.trim() && preview.value) return;
+  if (loading.value) return;
 
   const pageState = shell.consumeTabPageState(props.workbenchTabId);
   if (pageState) {
@@ -233,6 +270,15 @@ async function restoreFromWorkbenchTab() {
   const fallbackRel = (tab.contextKey || tab.subtitle || "").trim();
   if (!fallbackRel || fallbackRel === rel.value) return;
   void reloadFile(fallbackRel);
+}
+
+async function bootstrapFileDetail() {
+  const openedFromPayload = applyOpenPayload();
+  if (!bootstrapDone) {
+    bootstrapDone = true;
+    if (!openedFromPayload) await restoreFromWorkbenchTab();
+  }
+  registerTreeHandler();
 }
 
 provideFileDetailContext({
@@ -250,6 +296,10 @@ provideFileDetailContext({
   openRenameTab,
   reloadFile,
   refreshXrefCounts,
+  xrefCacheByRel,
+  invalidateXrefCache,
+  assemblyCacheByKey,
+  invalidateAssemblyCache,
   rememberFilenameDraft,
 });
 
@@ -294,14 +344,11 @@ watch(
 );
 
 onMounted(() => {
-  applyOpenPayload();
-  void restoreFromWorkbenchTab();
-  registerTreeHandler();
+  void bootstrapFileDetail();
 });
 
 onActivated(() => {
-  applyOpenPayload();
-  void restoreFromWorkbenchTab();
+  if (bootstrapDone) applyOpenPayload();
   registerTreeHandler();
 });
 onDeactivated(() => {});
@@ -384,7 +431,7 @@ onUnmounted(() => {
       <div class="sub-panel">
         <FileOverviewPanel v-show="activeSubTab === 'overview'" />
         <FileAttributesPanel v-show="activeSubTab === 'edit'" />
-        <FileXrefPanel v-show="activeSubTab === 'xref'" />
+        <FileXrefPanel v-if="activeSubTab === 'xref'" :key="rel" />
         <FileAssemblyPanel
           v-show="activeSubTab === 'assembly'"
           @edits-change="onAssemblyEditsChange"
@@ -393,7 +440,7 @@ onUnmounted(() => {
           v-show="activeSubTab === 'rename'"
           :workbench-tab-id="workbenchTabId"
           :preferred-filename="preferredRenameFilename"
-          @renamed="refreshXrefCounts()"
+          @renamed="invalidateXrefCache(); refreshXrefCounts()"
         />
       </div>
       </div>

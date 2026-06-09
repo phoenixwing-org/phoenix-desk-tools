@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from fcdesk.freecad.fcstd_mapping import (
-    compose_fcstd_body_label_display,
     infer_part_key_from_filename,
     normalize_repo_rel_path_for_map,
 )
@@ -27,19 +26,6 @@ from fcdesk.services.cad_index import norm_xref_path as _norm_xref_path
 
 # 与 bom_xref_service 装配树展示一致
 _ASSEMBLY_TREE_STATUSES = frozenset({"resolved", "ambiguous", "self", "missing"})
-
-
-def _rule_label_from_edge(row: Mapping[str, Any]) -> str:
-    label = str(row.get("target_asset_label") or "").strip()
-    if label:
-        return label
-    composed = compose_fcstd_body_label_display(
-        part_number=str(row.get("target_part_number") or ""),
-        part_version=str(row.get("target_part_version") or ""),
-        part_name=str(row.get("target_part_name") or ""),
-        label_fallback="",
-    )
-    return composed or ""
 
 
 def _xref_adjacency(edges: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
@@ -96,7 +82,7 @@ def _node_from_row_group(
         if lbl:
             link_labels.append(lbl)
 
-    rule_label = _rule_label_from_edge(first_row) if target_rel else ""
+    rule_label = str(first_row.get("rule_label") or "").strip() if target_rel else ""
     attr = str(first_row.get("xlink_file_attr") or "")
     basename = str(first_row.get("target_basename") or "").strip()
     if not basename and attr:

@@ -14,10 +14,12 @@ from fcdesk.freecad.phoenix_store import (
     load_bom_xref_meta,
     query_all_bom_xref_edges,
     query_assembly_bom_hosts,
+    query_bom_xref_counts_for_rel,
     query_bom_xref_edges_paged,
     query_bom_xrefs_for_rename_basename,
     query_bom_xrefs_incoming,
     query_bom_xrefs_outgoing,
+    query_bom_xrefs_outgoing_enriched,
     find_present_repo_rel_by_filename,
 )
 from fcdesk.freecad.phoenix_store import _norm_key
@@ -25,9 +27,7 @@ from fcdesk.freecad.rename_analysis.types import HostRefGroup, RenameAnalysisErr
 from fcdesk.freecad.rename_analysis.xlink import (
     patch_fcstd_reference_labels_explicit,
     preferred_xlink_attr_for_target,
-    read_host_reference_labels,
     replace_basename_in_xlink_attr,
-    resolve_rule_display_label,
     xlink_attr_matches_target,
 )
 from fcdesk.services.cad_index import (
@@ -57,8 +57,10 @@ __all__ = [
     "refresh_bom_xref_index_for_host",
     "refresh_bom_xrefs_for_hosts",
     "search_bom_xref_edges",
+    "search_file_detail_xrefs",
     "search_incoming_refs",
     "search_outgoing_refs",
+    "query_xref_counts_for_rel",
 ]
 
 
@@ -383,28 +385,91 @@ def search_incoming_refs(
     }
 
 
-def _enrich_outgoing_ref_row(
-    repo_root: Path,
-    host_repo_rel: str,
-    row: dict[str, Any],
-    *,
-    label_map: dict[str, str] | None = None,
-) -> None:
-    attr = str(row.get("xlink_file_attr") or "")
+def _enrich_xref_row_display(row: dict[str, Any]) -> None:
+    """展示字段仅来自 ``bom_xref`` 冗余列（``link_label`` / ``rule_label``），查询不 JOIN、不读盘。"""
     link_label = str(row.get("link_label") or "").strip()
-    if not link_label:
-        if label_map is None:
-            label_map = read_host_reference_labels(repo_root, host_repo_rel)
-        link_label = label_map.get(attr, "")
-    target_rel = str(row.get("target_repo_rel_path") or "").strip()
-    rule_label = (
-        resolve_rule_display_label(repo_root, repo_rel_path=target_rel) if target_rel else ""
-    )
+    rule_label = str(row.get("rule_label") or "").strip()
     row["link_label"] = link_label
     row["rule_label"] = rule_label
     row["label_mismatch"] = bool(
         link_label and rule_label and link_label != rule_label
     )
+
+
+def bom_xref_index_is_built(repo_root: Path) -> bool:
+    meta = load_bom_xref_meta(repo_root)
+    return bool(meta.get("last_bom_xref_at"))
+
+
+def query_xref_counts_for_rel(repo_root: Path, repo_rel: str) -> dict[str, int]:
+    """文件详情角标：出向 + 直接入向（单条 SQL）。"""
+    counts, _ = query_bom_xref_counts_for_rel(repo_root, repo_rel)
+    return counts
+
+
+def empty_xref_counts_payload() -> dict[str, int]:
+    return {"outgoing_count": 0, "direct_incoming_count": 0}
+
+
+def _slim_incoming_hosts(hosts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """入向列表精简字段（不含 ``direct_refs``，避免重复大块 JSON）。"""
+    return [
+        {
+            "host_repo_rel_path": h["host_repo_rel_path"],
+            "depth": h.get("depth", 0),
+            "usage_kind": h.get("usage_kind", "direct"),
+            "via_chain": list(h.get("via_chain") or []),
+        }
+        for h in hosts
+    ]
+
+
+def search_file_detail_xrefs(
+    repo_root: Path,
+    repo_rel: str,
+    *,
+    limit: int = 500,
+    transitive: bool = False,
+    refresh_disk: bool = False,
+    scope: str = "both",
+) -> dict[str, Any]:
+    """文件详情「引用」Tab：``scope`` 为 outgoing / incoming / both（可拆分请求）。"""
+    rel = repo_rel.strip()
+    if not rel:
+        raise ValueError("请提供 repo_rel")
+    want_out = scope in ("both", "outgoing")
+    want_in = scope in ("both", "incoming")
+    payload: dict[str, Any] = {
+        "rel": rel,
+        "incoming": {"count": 0, "direct_count": 0, "hosts": []},
+        "outgoing": {"count": 0, "label_mismatch_count": 0, "refs": []},
+    }
+    if not bom_xref_index_is_built(repo_root):
+        return {**payload, "index_pending": True}
+    if refresh_disk and want_out:
+        refresh_bom_xrefs_for_hosts(repo_root, [rel])
+    if want_out:
+        outgoing = search_outgoing_refs(
+            repo_root, rel, limit=limit, refresh_disk=False
+        )
+        payload["outgoing"] = {
+            "count": outgoing["count"],
+            "label_mismatch_count": outgoing.get("label_mismatch_count", 0),
+            "refs": outgoing["refs"],
+        }
+    if want_in:
+        incoming = search_incoming_refs(
+            repo_root,
+            repo_rel=rel,
+            transitive=transitive,
+            limit=limit,
+        )
+        payload["incoming"] = {
+            "count": incoming["count"],
+            "direct_count": incoming.get("direct_count", incoming["count"]),
+            "hosts": _slim_incoming_hosts(incoming.get("hosts") or []),
+        }
+    return payload
 
 
 def search_outgoing_refs(
@@ -419,10 +484,9 @@ def search_outgoing_refs(
         raise ValueError("请提供 host_repo_rel")
     if refresh_disk:
         refresh_bom_xrefs_for_hosts(repo_root, [rel])
-    rows, _ = query_bom_xrefs_outgoing(repo_root, rel, limit=limit)
-    label_map = read_host_reference_labels(repo_root, rel)
+    rows, _ = query_bom_xrefs_outgoing_enriched(repo_root, rel, limit=limit)
     for row in rows:
-        _enrich_outgoing_ref_row(repo_root, rel, row, label_map=label_map)
+        _enrich_xref_row_display(row)
     mismatch_count = sum(1 for r in rows if r.get("label_mismatch"))
     return {
         "host_repo_rel_path": rel,
@@ -432,62 +496,15 @@ def search_outgoing_refs(
     }
 
 
-def _rule_label_from_target_index(row: Mapping[str, Any]) -> str:
-    """从 JOIN 的 ``file_asset`` 列推算规则显示名（不再逐行查库/读盘）。"""
-    from fcdesk.freecad.fcstd_mapping import compose_fcstd_body_label_display
-
-    label = str(row.get("target_asset_label") or "").strip()
-    if label:
-        return label
-    composed = compose_fcstd_body_label_display(
-        part_number=str(row.get("target_part_number") or ""),
-        part_version=str(row.get("target_part_version") or ""),
-        part_name=str(row.get("target_part_name") or ""),
-        label_fallback="",
-    )
-    return composed or ""
-
-
 def _enrich_paged_bom_xref_rows(
-    repo_root: Path,
+    _repo_root: Path,
     rows: list[dict[str, Any]],
     *,
     include_labels: bool,
 ) -> None:
-    label_cache: dict[str, dict[str, str]] = {}
-    if include_labels and rows:
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-
-        hosts = sorted({str(r.get("host_repo_rel_path") or "").strip() for r in rows if r.get("host_repo_rel_path")})
-        workers = min(8, max(1, len(hosts)))
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = {pool.submit(read_host_reference_labels, repo_root, h): h for h in hosts}
-            for fut in as_completed(futures):
-                host = futures[fut]
-                try:
-                    label_cache[host] = fut.result()
-                except OSError:
-                    label_cache[host] = {}
-
+    del include_labels  # 保留 API 参数；链接标签一律来自 bom_xref 索引列
     for row in rows:
-        rule_label = _rule_label_from_target_index(row)
-        row["rule_label"] = rule_label
-        if include_labels:
-            host = str(row.get("host_repo_rel_path") or "").strip()
-            attr = str(row.get("xlink_file_attr") or "")
-            link_label = str(row.get("link_label") or "").strip()
-            if not link_label:
-                link_label = label_cache.get(host, {}).get(attr, "")
-            row["link_label"] = link_label
-            row["label_mismatch"] = bool(
-                link_label and rule_label and link_label != rule_label
-            )
-        else:
-            link_label = str(row.get("link_label") or "").strip()
-            row["link_label"] = link_label
-            row["label_mismatch"] = bool(
-                link_label and rule_label and link_label != rule_label
-            )
+        _enrich_xref_row_display(row)
 
 
 def search_bom_xref_edges(
@@ -498,7 +515,7 @@ def search_bom_xref_edges(
     search: str | None = None,
     include_labels: bool = False,
 ) -> dict[str, Any]:
-    """分页返回全部 ``bom_xref`` 引用边（子件属性由 SQL JOIN；链接标签默认不读盘）。"""
+    """分页返回全部 ``bom_xref`` 引用边（子件快照与标签已冗余在表内）。"""
     ensure_bom_xref_built(repo_root)
     cap = max(1, min(int(limit), 500))
     off = max(0, int(offset))

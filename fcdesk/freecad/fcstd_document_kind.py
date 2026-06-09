@@ -79,6 +79,17 @@ def classify_document_xml(xml_text: str) -> FcstdDocumentKinds:
     return FcstdDocumentKinds(part=part, assembly=assembly, drawing=drawing)
 
 
+def infer_fcstd_document_kinds_from_filename(filename: str) -> FcstdDocumentKinds:
+    """按 FCStd 族文件名后缀推断文档类型（不读 Document.xml）。"""
+    suffix = infer_fcstd_name_suffix(filename.strip() or "x.FCStd")
+    low = suffix.casefold()
+    if low == ".drawing.fcstd":
+        return FcstdDocumentKinds(part=False, assembly=False, drawing=True)
+    if low == ".assy.fcstd":
+        return FcstdDocumentKinds(part=False, assembly=True, drawing=False)
+    return FcstdDocumentKinds(part=True, assembly=False, drawing=False)
+
+
 def read_fcstd_document_kinds(fcstd_path: Path) -> FcstdDocumentKinds:
     """读取 ZIP 内 ``Document.xml`` 并分类；损坏或缺失时返回全 ``False``。"""
     path = fcstd_path.expanduser().resolve(strict=False)

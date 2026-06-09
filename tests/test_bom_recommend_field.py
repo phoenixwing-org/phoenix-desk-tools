@@ -9,7 +9,7 @@ from pathlib import Path
 
 from fcdesk.freecad.fcstd_mapping import FcstdMapDocument, FcstdMapEntry
 from fcdesk.freecad.phoenix_store import save_fcstd_document
-from fcdesk.services.bom_apply_service import recommend_bom_field
+from fcdesk.services.bom_apply_service import recommend_bom_field, recommend_bom_fields_all
 
 _MIN_DOC = """<?xml version='1.0' encoding='utf-8'?>
 <Document SchemaVersion="4" FileVersion="1">
@@ -182,6 +182,67 @@ class TestRecommendBomField(unittest.TestCase):
             self.assertTrue(out["filled"])
             self.assertEqual(out["value"], "100002.001-磁芯")
             self.assertIn("编号公式", str(out["source_note"]))
+
+    def test_recommend_from_filename_without_reading_fcstd(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            rel = Path("parts/100003.002-S-M6X12螺栓.FCStd")
+            # 故意不写有效 FCStd，仅依赖文件名推断 + 空索引
+            out = recommend_bom_field(
+                root,
+                rel,
+                "PartNumber",
+                {
+                    "PartNumber": "",
+                    "PartVersion": "",
+                    "TypeCode": "",
+                    "ModelSeries": "",
+                    "PartName": "",
+                    "label": "",
+                    "filename": rel.name,
+                },
+            )
+            self.assertTrue(out["filled"])
+            self.assertEqual(out["value"], "100003")
+            self.assertIn("文件名", str(out["source_note"]))
+
+    def test_recommend_all_fields_single_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            rel = Path("parts/100001.001-H-本体.FCStd")
+            fcstd = root / rel
+            _write_fcstd(fcstd, label="100001.001-本体")
+
+            doc = FcstdMapDocument(
+                entries=[
+                    FcstdMapEntry(
+                        repo_rel_path="./parts/100001.001-H-本体.FCStd",
+                        filename="100001.001-H-本体.FCStd",
+                        PartNumber="100001",
+                        PartVersion="001",
+                        TypeCode="H",
+                        PartName="本体",
+                    )
+                ]
+            )
+            save_fcstd_document(root, doc, scan_root=".", stats={"total_entries": 1})
+
+            out = recommend_bom_fields_all(
+                root,
+                rel,
+                {
+                    "PartNumber": "",
+                    "PartVersion": "",
+                    "TypeCode": "",
+                    "ModelSeries": "",
+                    "PartName": "",
+                    "label": "",
+                    "filename": fcstd.name,
+                },
+            )
+            self.assertIn("PartNumber", out["filled_keys"])
+            self.assertEqual(out["results"]["PartNumber"]["value"], "100001")
+            self.assertIn("PartVersion", out["filled_keys"])
 
     def test_standard_part_clears_model_series_recommend(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

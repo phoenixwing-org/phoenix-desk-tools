@@ -68,6 +68,45 @@ def infer_fcstd_name_suffix(filename: str) -> str:
     return ".FCStd"
 
 
+def basename_label_fallback(rel_or_name: str) -> str:
+    """从仓库相对路径或文件名推算显示名（不读 FCStd）。"""
+    name = Path(rel_or_name.replace("\\", "/")).name
+    suffix = infer_fcstd_name_suffix(name)
+    if name.casefold().endswith(suffix.casefold()):
+        stem = name[: -len(suffix)]
+        if stem:
+            return stem
+    return Path(name).stem
+
+
+def compute_rule_label_from_target_fields(
+    *,
+    target_asset_label: str = "",
+    target_part_number: str = "",
+    target_part_version: str = "",
+    target_part_name: str = "",
+    target_basename: str = "",
+    target_repo_rel_path: str = "",
+) -> str:
+    """由子件索引字段推算规则显示名（索引写入 ``bom_xref`` 冗余列，查询只读库）。"""
+    label = (target_asset_label or "").strip()
+    if label:
+        return label
+    composed = compose_fcstd_body_label_display(
+        part_number=target_part_number or "",
+        part_version=target_part_version or "",
+        part_name=target_part_name or "",
+        label_fallback="",
+    )
+    if composed:
+        return composed
+    basename = (target_basename or "").strip()
+    if basename:
+        return basename_label_fallback(basename)
+    rel = (target_repo_rel_path or "").strip()
+    return basename_label_fallback(rel) if rel else ""
+
+
 _COMPOUND_FCSTD_TAIL_RE = re.compile(r"(\.(?:Drawing|ASSY))?\.FCStd$", re.IGNORECASE)
 
 

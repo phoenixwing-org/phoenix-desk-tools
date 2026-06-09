@@ -23,6 +23,7 @@ from fcdesk.services.bom_apply_service import (
     read_document_kinds,
     recommend_filename_for_values,
     recommend_bom_field,
+    recommend_bom_fields_all,
     rename_bom_fcstd_file,
     save_bom_to_fcstd,
 )
@@ -478,7 +479,7 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
             preview = load_bom_preview(ws, rel_path)
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
-        return {
+        payload: dict = {
             "rel_path": preview.rel_path,
             "fields": preview.fields,
             "source_note": preview.source_note,
@@ -491,6 +492,19 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
             "bom_readonly": preview.bom_readonly,
             "bom_source_rel": preview.bom_source_rel,
         }
+        if preview.is_fcstd:
+            from fcdesk.services.bom_xref_service import (
+                bom_xref_index_is_built,
+                empty_xref_counts_payload,
+                query_xref_counts_for_rel,
+            )
+
+            if bom_xref_index_is_built(ws):
+                payload["xref_counts"] = query_xref_counts_for_rel(ws, preview.rel_path)
+            else:
+                payload["xref_counts"] = empty_xref_counts_payload()
+                payload["xref_index_pending"] = True
+        return payload
 
     @app.put("/api/bom")
     def api_bom_put(rel: str = Query(...), body: BomFieldsBody = ...) -> dict[str, str]:
@@ -534,6 +548,21 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
                 get_workspace(),
                 Path(rel),
                 field,
+                _bom_vals(body),
+                kind_filters=_kind_filters(body),
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post("/api/bom/recommend-all-fields")
+    def api_bom_recommend_all_fields(
+        rel: str = Query(...),
+        body: BomOperationBody = ...,
+    ) -> dict:
+        try:
+            return recommend_bom_fields_all(
+                get_workspace(),
+                Path(rel),
                 _bom_vals(body),
                 kind_filters=_kind_filters(body),
             )
@@ -886,6 +915,43 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.get("/api/file-detail/xrefs")
+    def api_file_detail_xrefs(
+        rel: str = Query(..., min_length=1),
+        limit: int = Query(500, ge=1, le=2000),
+        transitive: bool = Query(False),
+        refresh_disk: bool = Query(False),
+        scope: str = Query("both", pattern="^(both|outgoing|incoming)$"),
+    ) -> dict:
+        """文件详情「引用」Tab：``scope`` 可仅拉出向或入向（出向优先、更快）。"""
+        ws = get_workspace()
+        try:
+            from fcdesk.services.bom_xref_service import search_file_detail_xrefs
+
+            return search_file_detail_xrefs(
+                ws,
+                rel,
+                limit=limit,
+                transitive=transitive,
+                refresh_disk=refresh_disk,
+                scope=scope,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.get("/api/bom-xrefs/counts")
+    def api_bom_xref_counts(rel: str = Query(..., min_length=1)) -> dict:
+        ws = get_workspace()
+        from fcdesk.services.bom_xref_service import (
+            bom_xref_index_is_built,
+            empty_xref_counts_payload,
+            query_xref_counts_for_rel,
+        )
+
+        if not bom_xref_index_is_built(ws):
+            return {**empty_xref_counts_payload(), "index_pending": True}
+        return {**query_xref_counts_for_rel(ws, rel), "index_pending": False}
 
     @app.get("/api/bom-xrefs/assembly-tree")
     def api_bom_xrefs_assembly_tree(

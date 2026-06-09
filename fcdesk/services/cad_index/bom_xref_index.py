@@ -86,6 +86,7 @@ def bom_xref_edges_for_host(
     basename_map: dict[str, list[str]],
     path_to_id: dict[str, int],
 ) -> list[dict[str, Any]]:
+    """提取宿主出向 XLink 边；``link_label`` / 子件快照 / ``rule_label`` 在索引时写入 ``bom_xref``。"""
     host_rel = asset["repo_rel_path"]
     host_path = repo_root / host_rel
     if not host_path.is_file():

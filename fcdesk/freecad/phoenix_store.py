@@ -410,6 +410,138 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
         conn.execute(
             "UPDATE meta SET value = '8' WHERE key = 'schema_version'"
         )
+        version = 8
+    if version < 9:
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(bom_xref)").fetchall()}
+        redundant = (
+            ("rule_label", "TEXT NOT NULL DEFAULT ''"),
+            ("target_part_number", "TEXT NOT NULL DEFAULT ''"),
+            ("target_part_version", "TEXT NOT NULL DEFAULT ''"),
+            ("target_type_code", "TEXT NOT NULL DEFAULT ''"),
+            ("target_model_series", "TEXT NOT NULL DEFAULT ''"),
+            ("target_part_name", "TEXT NOT NULL DEFAULT ''"),
+            ("target_asset_label", "TEXT NOT NULL DEFAULT ''"),
+        )
+        for name, ddl in redundant:
+            if name not in cols:
+                conn.execute(f"ALTER TABLE bom_xref ADD COLUMN {name} {ddl}")
+        _backfill_bom_xref_redundant_columns(conn)
+        conn.execute("DELETE FROM bom_assembly_cache")
+        conn.execute(
+            "UPDATE meta SET value = '9' WHERE key = 'schema_version'"
+        )
+
+
+def _backfill_bom_xref_redundant_columns(conn: sqlite3.Connection) -> None:
+    """将既有 ``bom_xref`` 行的子件快照与 ``rule_label`` 从 ``file_asset`` 回填进冗余列。"""
+    from fcdesk.freecad.fcstd_mapping import compute_rule_label_from_target_fields
+
+    rows = conn.execute(
+        """
+        SELECT bx.id, bx.target_basename, bx.target_repo_rel_path,
+               COALESCE(ta.part_number, '') AS target_part_number,
+               COALESCE(ta.part_version, '') AS target_part_version,
+               COALESCE(ta.type_code, '') AS target_type_code,
+               COALESCE(ta.model_series, '') AS target_model_series,
+               COALESCE(ta.part_name, '') AS target_part_name,
+               COALESCE(ta.label, '') AS target_asset_label
+        FROM bom_xref bx
+        LEFT JOIN file_asset ta ON ta.id = bx.target_file_asset_id
+        """
+    ).fetchall()
+    updates: list[tuple[Any, ...]] = []
+    for row in rows:
+        pn = str(row["target_part_number"] or "")
+        pv = str(row["target_part_version"] or "")
+        tc = str(row["target_type_code"] or "")
+        ms = str(row["target_model_series"] or "")
+        pname = str(row["target_part_name"] or "")
+        label = str(row["target_asset_label"] or "")
+        base = str(row["target_basename"] or "")
+        trel = str(row["target_repo_rel_path"] or "")
+        rule_label = compute_rule_label_from_target_fields(
+            target_asset_label=label,
+            target_part_number=pn,
+            target_part_version=pv,
+            target_part_name=pname,
+            target_basename=base,
+            target_repo_rel_path=trel,
+        )
+        updates.append((rule_label, pn, pv, tc, ms, pname, label, int(row["id"])))
+    if updates:
+        conn.executemany(
+            """
+            UPDATE bom_xref SET
+                rule_label = ?,
+                target_part_number = ?,
+                target_part_version = ?,
+                target_type_code = ?,
+                target_model_series = ?,
+                target_part_name = ?,
+                target_asset_label = ?
+            WHERE id = ?
+            """,
+            updates,
+        )
+
+
+def enrich_bom_xref_edges_target_fields(
+    repo_root: Path,
+    edges: list[dict[str, Any]],
+) -> None:
+    """索引写入前：批量从 ``file_asset`` 填充 ``bom_xref`` 冗余子件字段与 ``rule_label``。"""
+    from fcdesk.freecad.fcstd_mapping import compute_rule_label_from_target_fields
+
+    rr = repo_root.expanduser().resolve(strict=False)
+    if not edges:
+        return
+    ids = sorted(
+        {
+            int(edge["target_file_asset_id"])
+            for edge in edges
+            if edge.get("target_file_asset_id") is not None
+        }
+    )
+    by_id: dict[int, dict[str, str]] = {}
+    if ids and cad_database_path(rr).is_file():
+        placeholders = ",".join("?" * len(ids))
+        with connect(rr) as conn:
+            rows = conn.execute(
+                f"""
+                SELECT id, part_number, part_version, type_code, model_series, part_name, label
+                FROM file_asset
+                WHERE id IN ({placeholders})
+                """,
+                ids,
+            ).fetchall()
+        for row in rows:
+            by_id[int(row["id"])] = {
+                "target_part_number": str(row["part_number"] or ""),
+                "target_part_version": str(row["part_version"] or ""),
+                "target_type_code": str(row["type_code"] or ""),
+                "target_model_series": str(row["model_series"] or ""),
+                "target_part_name": str(row["part_name"] or ""),
+                "target_asset_label": str(row["label"] or ""),
+            }
+
+    for edge in edges:
+        tid = edge.get("target_file_asset_id")
+        snap = by_id.get(int(tid)) if tid is not None else None
+        edge["target_part_number"] = snap["target_part_number"] if snap else ""
+        edge["target_part_version"] = snap["target_part_version"] if snap else ""
+        edge["target_type_code"] = snap["target_type_code"] if snap else ""
+        edge["target_model_series"] = snap["target_model_series"] if snap else ""
+        edge["target_part_name"] = snap["target_part_name"] if snap else ""
+        edge["target_asset_label"] = snap["target_asset_label"] if snap else ""
+        target_path = edge.get("target_repo_rel_path")
+        edge["rule_label"] = compute_rule_label_from_target_fields(
+            target_asset_label=edge["target_asset_label"],
+            target_part_number=edge["target_part_number"],
+            target_part_version=edge["target_part_version"],
+            target_part_name=edge["target_part_name"],
+            target_basename=str(edge.get("target_basename") or ""),
+            target_repo_rel_path=str(target_path or ""),
+        )
 
 
 def _meta_get(conn: sqlite3.Connection, key: str) -> str | None:
@@ -521,7 +653,10 @@ def _pick_scan_attr(files: list[sqlite3.Row], field: str) -> str | None:
 
 
 def sync_part_keys_from_file_assets(conn: sqlite3.Connection) -> None:
-    """按 ``file_asset`` 的零件号+版本重建 ``part_key`` 与 ``part_file_link``。"""
+    """按 ``file_asset`` 的零件号+版本重建 ``part_key`` 与 ``part_file_link``。
+
+    批量 UPSERT（``executemany``），避免逐文件 SELECT+UPDATE 的 N+1 查库。
+    """
     now = _utc_now_iso()
     rows = conn.execute(
         """
@@ -539,83 +674,84 @@ def sync_part_keys_from_file_assets(conn: sqlite3.Connection) -> None:
         key = (str(row["part_number"]).strip(), str(row["part_version"]).strip())
         groups.setdefault(key, []).append(row)
 
-    touched_key_ids: set[int] = set()
+    key_upserts: list[tuple[Any, ...]] = []
     for (pn, pv), files in groups.items():
-        attrs = {
-            "type_code": _pick_scan_attr(files, "type_code"),
-            "model_series": _pick_scan_attr(files, "model_series"),
-            "part_name": _pick_scan_attr(files, "part_name"),
-            "label": _pick_scan_attr(files, "label"),
-        }
-        existing = conn.execute(
-            "SELECT id FROM part_key WHERE part_number = ? AND part_version = ?",
-            (pn, pv),
-        ).fetchone()
-        if existing:
-            pk_id = int(existing["id"])
-            conn.execute(
-                """
-                UPDATE part_key
-                SET type_code = ?, model_series = ?, part_name = ?, label = ?, updated_at = ?
-                WHERE id = ?
-                """,
-                (
-                    attrs["type_code"],
-                    attrs["model_series"],
-                    attrs["part_name"],
-                    attrs["label"],
-                    now,
-                    pk_id,
-                ),
+        key_upserts.append(
+            (
+                pn,
+                pv,
+                _pick_scan_attr(files, "type_code"),
+                _pick_scan_attr(files, "model_series"),
+                _pick_scan_attr(files, "part_name"),
+                _pick_scan_attr(files, "label"),
+                PART_KEY_STATUS_ACTIVE,
+                now,
+                now,
             )
-        else:
-            cur = conn.execute(
-                """
-                INSERT INTO part_key (
-                    part_number, part_version, type_code, model_series, part_name, label,
-                    notes, status, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
-                """,
-                (
-                    pn,
-                    pv,
-                    attrs["type_code"],
-                    attrs["model_series"],
-                    attrs["part_name"],
-                    attrs["label"],
-                    PART_KEY_STATUS_ACTIVE,
-                    now,
-                    now,
-                ),
-            )
-            pk_id = int(cur.lastrowid)
-        touched_key_ids.add(pk_id)
+        )
 
+    if key_upserts:
+        conn.executemany(
+            """
+            INSERT INTO part_key (
+                part_number, part_version, type_code, model_series, part_name, label,
+                notes, status, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
+            ON CONFLICT(part_number, part_version) DO UPDATE SET
+                type_code = excluded.type_code,
+                model_series = excluded.model_series,
+                part_name = excluded.part_name,
+                label = excluded.label,
+                updated_at = excluded.updated_at
+            """,
+            key_upserts,
+        )
+
+    pk_map: dict[tuple[str, str], int] = {}
+    if groups:
+        pk_rows = conn.execute(
+            """
+            SELECT id, part_number, part_version FROM part_key
+            WHERE part_number IS NOT NULL AND TRIM(part_number) != ''
+              AND part_version IS NOT NULL AND TRIM(part_version) != ''
+            """
+        ).fetchall()
+        pk_map = {
+            (str(r["part_number"]).strip(), str(r["part_version"]).strip()): int(r["id"])
+            for r in pk_rows
+        }
+
+    touched_key_ids: set[int] = set()
+    link_upserts: list[tuple[Any, ...]] = []
+    for (pn, pv), files in groups.items():
+        pk_id = pk_map.get((pn, pv))
+        if pk_id is None:
+            continue
+        touched_key_ids.add(pk_id)
         for f in files:
-            fid = int(f["id"])
-            role = infer_part_file_role(str(f["filename"]))
-            link = conn.execute(
-                "SELECT id FROM part_file_link WHERE file_asset_id = ?",
-                (fid,),
-            ).fetchone()
-            if link:
-                conn.execute(
-                    """
-                    UPDATE part_file_link
-                    SET part_key_id = ?, file_role = ?, linked_at = ?
-                    WHERE file_asset_id = ?
-                    """,
-                    (pk_id, role, now, fid),
+            link_upserts.append(
+                (
+                    pk_id,
+                    int(f["id"]),
+                    infer_part_file_role(str(f["filename"])),
+                    LINK_STATUS_ACTIVE,
+                    now,
                 )
-            else:
-                conn.execute(
-                    """
-                    INSERT INTO part_file_link (
-                        part_key_id, file_asset_id, file_role, notes, link_status, linked_at
-                    ) VALUES (?, ?, ?, NULL, ?, ?)
-                    """,
-                    (pk_id, fid, role, LINK_STATUS_ACTIVE, now),
-                )
+            )
+
+    if link_upserts:
+        conn.executemany(
+            """
+            INSERT INTO part_file_link (
+                part_key_id, file_asset_id, file_role, notes, link_status, linked_at
+            ) VALUES (?, ?, ?, NULL, ?, ?)
+            ON CONFLICT(file_asset_id) DO UPDATE SET
+                part_key_id = excluded.part_key_id,
+                file_role = excluded.file_role,
+                linked_at = excluded.linked_at
+            """,
+            link_upserts,
+        )
 
     if touched_key_ids:
         placeholders = ",".join("?" * len(touched_key_ids))
@@ -1677,20 +1813,72 @@ def _dedupe_bom_xref_edges(edges: list[Mapping[str, Any]]) -> list[dict[str, Any
 _BOM_XREF_UPSERT_SQL = """
     INSERT INTO bom_xref (
         scan_id, host_file_asset_id, host_repo_rel_path, ref_kind, locator,
-        xlink_file_attr, link_label, target_basename, target_file_asset_id,
-        target_repo_rel_path, resolve_status, detail_json, last_seen_at
-    ) VALUES (?, ?, ?, 'xlink_file_attr', 'Document.xml', ?, ?, ?, ?, ?, ?, ?, ?)
+        xlink_file_attr, link_label, rule_label,
+        target_basename, target_file_asset_id, target_repo_rel_path,
+        target_part_number, target_part_version, target_type_code,
+        target_model_series, target_part_name, target_asset_label,
+        resolve_status, detail_json, last_seen_at
+    ) VALUES (
+        ?, ?, ?, 'xlink_file_attr', 'Document.xml', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    )
     ON CONFLICT(host_file_asset_id, xlink_file_attr) DO UPDATE SET
         scan_id = excluded.scan_id,
         host_repo_rel_path = excluded.host_repo_rel_path,
         link_label = excluded.link_label,
+        rule_label = excluded.rule_label,
         target_basename = excluded.target_basename,
         target_file_asset_id = excluded.target_file_asset_id,
         target_repo_rel_path = excluded.target_repo_rel_path,
+        target_part_number = excluded.target_part_number,
+        target_part_version = excluded.target_part_version,
+        target_type_code = excluded.target_type_code,
+        target_model_series = excluded.target_model_series,
+        target_part_name = excluded.target_part_name,
+        target_asset_label = excluded.target_asset_label,
         resolve_status = excluded.resolve_status,
         detail_json = excluded.detail_json,
         last_seen_at = excluded.last_seen_at
 """
+
+
+def _bom_xref_edge_upsert_params(
+    edge: Mapping[str, Any],
+    *,
+    scan_id: int,
+    now: str,
+) -> tuple[Any, ...]:
+    host_id = int(edge["host_file_asset_id"])
+    host_path = _norm_key(str(edge["host_repo_rel_path"]))
+    xlink = str(edge["xlink_file_attr"])
+    target_base = str(edge["target_basename"])
+    target_id = edge.get("target_file_asset_id")
+    target_path = edge.get("target_repo_rel_path")
+    if target_path:
+        target_path = _norm_key(str(target_path))
+    status = str(edge.get("resolve_status") or "missing")
+    detail = edge.get("detail_json")
+    if detail is not None and not isinstance(detail, str):
+        detail = json.dumps(detail, ensure_ascii=False)
+    return (
+        scan_id,
+        host_id,
+        host_path,
+        xlink,
+        str(edge.get("link_label") or ""),
+        str(edge.get("rule_label") or ""),
+        target_base,
+        int(target_id) if target_id is not None else None,
+        target_path,
+        str(edge.get("target_part_number") or ""),
+        str(edge.get("target_part_version") or ""),
+        str(edge.get("target_type_code") or ""),
+        str(edge.get("target_model_series") or ""),
+        str(edge.get("target_part_name") or ""),
+        str(edge.get("target_asset_label") or ""),
+        status,
+        detail,
+        now,
+    )
 
 
 def replace_bom_xrefs(
@@ -1705,40 +1893,19 @@ def replace_bom_xrefs(
     stats = {"edge_count": 0, "host_count": 0, "target_resolved": 0, "target_ambiguous": 0, "target_missing": 0}
     hosts: set[str] = set()
     edges = _dedupe_bom_xref_edges(edges)
+    enrich_bom_xref_edges_target_fields(rr, edges)
 
     with connect(rr) as conn:
         conn.execute("DELETE FROM bom_xref")
         conn.execute("DELETE FROM bom_assembly_cache")
         conn.execute("DELETE FROM bom_tree_occurrence")
         for edge in edges:
-            host_id = int(edge["host_file_asset_id"])
             host_path = _norm_key(str(edge["host_repo_rel_path"]))
-            xlink = str(edge["xlink_file_attr"])
-            target_base = str(edge["target_basename"])
-            target_id = edge.get("target_file_asset_id")
-            target_path = edge.get("target_repo_rel_path")
-            if target_path:
-                target_path = _norm_key(str(target_path))
             status = str(edge.get("resolve_status") or "missing")
-            detail = edge.get("detail_json")
-            if detail is not None and not isinstance(detail, str):
-                detail = json.dumps(detail, ensure_ascii=False)
 
             conn.execute(
                 _BOM_XREF_UPSERT_SQL,
-                (
-                    scan_id,
-                    host_id,
-                    host_path,
-                    xlink,
-                    str(edge.get("link_label") or ""),
-                    target_base,
-                    int(target_id) if target_id is not None else None,
-                    target_path,
-                    status,
-                    detail,
-                    now,
-                ),
+                _bom_xref_edge_upsert_params(edge, scan_id=scan_id, now=now),
             )
             stats["edge_count"] += 1
             hosts.add(host_path)
@@ -1795,36 +1962,15 @@ def insert_bom_xref_edges(
     if not edges:
         return stats
 
+    enrich_bom_xref_edges_target_fields(rr, edges)
+
     with connect(rr) as conn:
         for edge in edges:
-            host_id = int(edge["host_file_asset_id"])
-            host_path = _norm_key(str(edge["host_repo_rel_path"]))
-            xlink = str(edge["xlink_file_attr"])
-            target_base = str(edge["target_basename"])
-            target_id = edge.get("target_file_asset_id")
-            target_path = edge.get("target_repo_rel_path")
-            if target_path:
-                target_path = _norm_key(str(target_path))
             status = str(edge.get("resolve_status") or "missing")
-            detail = edge.get("detail_json")
-            if detail is not None and not isinstance(detail, str):
-                detail = json.dumps(detail, ensure_ascii=False)
 
             conn.execute(
                 _BOM_XREF_UPSERT_SQL,
-                (
-                    scan_id,
-                    host_id,
-                    host_path,
-                    xlink,
-                    str(edge.get("link_label") or ""),
-                    target_base,
-                    int(target_id) if target_id is not None else None,
-                    target_path,
-                    status,
-                    detail,
-                    now,
-                ),
+                _bom_xref_edge_upsert_params(edge, scan_id=scan_id, now=now),
             )
             stats["edge_count"] += 1
             if status == "resolved":
@@ -1890,6 +2036,8 @@ def _bom_xref_row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
     keys = row.keys()
     if "link_label" in keys:
         out["link_label"] = str(row["link_label"] or "")
+    if "rule_label" in keys:
+        out["rule_label"] = str(row["rule_label"] or "")
     if "target_part_number" in keys:
         out["target_part_number"] = str(row["target_part_number"] or "")
         out["target_part_version"] = str(row["target_part_version"] or "")
@@ -1971,19 +2119,11 @@ def save_bom_assembly_cache(
 
 
 def query_all_bom_xref_edges_enriched(repo_root: Path) -> tuple[list[dict[str, Any]], str]:
-    """一次查询全部引用边（含子件索引字段与链接标签）。"""
+    """一次查询全部引用边（子件快照与标签已冗余在 ``bom_xref``）。"""
     rr = repo_root.expanduser().resolve(strict=False)
     sql = """
-        SELECT bx.*,
-               ta.part_number AS target_part_number,
-               ta.part_version AS target_part_version,
-               ta.type_code AS target_type_code,
-               ta.model_series AS target_model_series,
-               ta.part_name AS target_part_name,
-               ta.label AS target_asset_label
-        FROM bom_xref bx
-        LEFT JOIN file_asset ta ON ta.id = bx.target_file_asset_id
-        ORDER BY bx.host_repo_rel_path, bx.xlink_file_attr
+        SELECT * FROM bom_xref
+        ORDER BY host_repo_rel_path, xlink_file_attr
     """
     debug_sql = sql_one_line(sql)
     if not cad_database_path(rr).is_file():
@@ -2195,15 +2335,7 @@ def query_bom_xref_edges_paged(
         total = int(total_row["n"]) if total_row else 0
         rows = conn.execute(
             f"""
-            SELECT bx.*,
-                   ta.part_number AS target_part_number,
-                   ta.part_version AS target_part_version,
-                   ta.type_code AS target_type_code,
-                   ta.model_series AS target_model_series,
-                   ta.part_name AS target_part_name,
-                   ta.label AS target_asset_label
-            FROM bom_xref bx
-            LEFT JOIN file_asset ta ON ta.id = bx.target_file_asset_id
+            SELECT * FROM bom_xref bx
             {where}
             ORDER BY bx.host_repo_rel_path, bx.target_basename, bx.xlink_file_attr
             LIMIT ? OFFSET ?
@@ -2233,6 +2365,63 @@ def query_bom_xrefs_outgoing(
     with connect(rr) as conn:
         rows = conn.execute(sql, params).fetchall()
     return [_bom_xref_row_to_dict(r) for r in rows], debug_sql
+
+
+def query_bom_xrefs_outgoing_enriched(
+    repo_root: Path,
+    host_repo_rel: str,
+    *,
+    limit: int = 500,
+) -> tuple[list[dict[str, Any]], str]:
+    """出向引用边（子件快照冗余在 ``bom_xref``，单表查询）。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    key = _norm_key(host_repo_rel)
+    cap = max(1, min(int(limit), 2000))
+    sql = """
+        SELECT * FROM bom_xref
+        WHERE host_repo_rel_path = ?
+        ORDER BY target_basename, xlink_file_attr
+        LIMIT ?
+    """
+    params = (key, cap)
+    debug_sql = _format_debug_sql(sql, params)
+    if not cad_database_path(rr).is_file():
+        return [], debug_sql
+    with connect(rr) as conn:
+        rows = conn.execute(sql, params).fetchall()
+    return [_bom_xref_row_to_dict(r) for r in rows], debug_sql
+
+
+def query_bom_xref_counts_for_rel(
+    repo_root: Path,
+    repo_rel: str,
+) -> tuple[dict[str, int], str]:
+    """Tab 角标用：出向边数 + 直接入向宿主数（单条 SQL）。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    key = _norm_key(repo_rel)
+    sql = """
+        SELECT
+            (SELECT COUNT(*) FROM bom_xref WHERE host_repo_rel_path = ?) AS outgoing_count,
+            (
+                SELECT COUNT(DISTINCT host_repo_rel_path) FROM bom_xref
+                WHERE target_repo_rel_path = ?
+                   OR target_file_asset_id = (
+                       SELECT id FROM file_asset WHERE repo_rel_path = ? LIMIT 1
+                   )
+            ) AS direct_incoming_count
+    """
+    params = (key, key, key)
+    debug_sql = _format_debug_sql(sql, params)
+    if not cad_database_path(rr).is_file():
+        return {"outgoing_count": 0, "direct_incoming_count": 0}, debug_sql
+    with connect(rr) as conn:
+        row = conn.execute(sql, params).fetchone()
+    if row is None:
+        return {"outgoing_count": 0, "direct_incoming_count": 0}, debug_sql
+    return {
+        "outgoing_count": int(row["outgoing_count"] or 0),
+        "direct_incoming_count": int(row["direct_incoming_count"] or 0),
+    }, debug_sql
 
 
 def find_present_repo_rel_by_filename(repo_root: Path, filename: str) -> str | None:

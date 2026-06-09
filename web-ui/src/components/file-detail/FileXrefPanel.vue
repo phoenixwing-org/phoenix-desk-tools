@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import type { BomXrefEdge, BomXrefHost } from "../../api";
-import { fetchBomXrefIncoming, fetchBomXrefOutgoing, refreshBomXrefHostIndex } from "../../api";
+import { computed, onMounted, ref, watch } from "vue";
+import type { BomXrefEdge, BomXrefHost, FileDetailXrefsPayload } from "../../api";
+import { fetchFileDetailXrefs, refreshBomXrefHostIndex } from "../../api";
 import { useFileDetailContext } from "../../composables/useFileDetailContext";
 import { useReferenceLabelSync } from "../../composables/useReferenceLabelSync";
 import { useAppShell } from "../../composables/useAppShell";
@@ -18,13 +18,17 @@ const shell = useAppShell();
 const loading = ref(false);
 const rebuilding = ref(false);
 const indexSummary = ref("");
-const includeTransitive = ref(true);
+const includeTransitive = ref(false);
+const loadingIncoming = ref(false);
 const rebuildSubtree = ref(true);
 const incomingHosts = ref<BomXrefHost[]>([]);
 const selectedIncoming = ref<Set<string>>(new Set());
 const outgoingRefs = ref<BomXrefEdge[]>([]);
 const outgoingLabelMismatchCount = ref(0);
 const directCount = ref(0);
+const indexPending = ref(false);
+/** 避免 onMounted 与 watch 并发时较早的空结果覆盖较新数据 */
+let loadSeq = 0;
 const incomingCount = computed(() => ctx.incomingCount.value);
 const outgoingCount = computed(() => ctx.outgoingCount.value);
 
@@ -52,7 +56,8 @@ function closeReplaceDialog() {
 
 async function onReplaceApplied() {
   closeReplaceDialog();
-  await loadTables(false, true);
+  ctx.invalidateXrefCache();
+  await loadTables(true, true);
   await ctx.refreshXrefCounts();
 }
 
@@ -120,56 +125,127 @@ const incomingLabelActionLabel = computed(() => {
   return "更新父装配中本件名";
 });
 
+function applyOutgoingPayload(data: FileDetailXrefsPayload) {
+  const out = data.outgoing;
+  outgoingRefs.value = out.refs;
+  outgoingLabelMismatchCount.value =
+    out.label_mismatch_count ?? out.refs.filter((r) => r.label_mismatch).length;
+  ctx.outgoingCount.value = out.count;
+}
+
+function applyIncomingPayload(data: FileDetailXrefsPayload) {
+  const inc = data.incoming;
+  incomingHosts.value = inc.hosts;
+  selectedIncoming.value = new Set(inc.hosts.map((h) => h.host_repo_rel_path));
+  directCount.value = inc.direct_count ?? inc.count;
+  ctx.incomingCount.value = inc.count;
+}
+
+function applyXrefPayload(data: FileDetailXrefsPayload) {
+  if (data.outgoing) applyOutgoingPayload(data);
+  if (data.incoming) applyIncomingPayload(data);
+}
+
+function clearTables() {
+  incomingHosts.value = [];
+  selectedIncoming.value = new Set();
+  outgoingRefs.value = [];
+  outgoingLabelMismatchCount.value = 0;
+  directCount.value = 0;
+}
+
 async function loadTables(manual = false, refreshDisk = false) {
-  if (!ctx.rel.value.trim()) return;
+  const rel = ctx.rel.value.trim();
+  if (!rel) {
+    clearTables();
+    return;
+  }
+  if (ctx.activeSubTab.value !== "xref" && !manual) return;
+
+  const cacheKey = rel;
+  if (!manual && !refreshDisk && ctx.xrefCacheByRel.value[cacheKey]) {
+    applyXrefPayload(ctx.xrefCacheByRel.value[cacheKey]);
+    return;
+  }
+
+  const seq = ++loadSeq;
   loading.value = true;
+  loadingIncoming.value = true;
   if (manual) {
-    shell.appendLog(`[文件详情] 刷新引用关系 ${ctx.rel.value}…`, { source: "file_detail", open: true });
+    shell.appendLog(`[文件详情] 刷新引用关系 ${rel}…`, { source: "file_detail", open: true });
   }
   try {
-    const [inc, out] = await Promise.all([
-      fetchBomXrefIncoming({
-        rel: ctx.rel.value,
-        transitive: includeTransitive.value,
-        limit: 500,
-      }),
-      fetchBomXrefOutgoing(ctx.rel.value, 500, refreshDisk),
-    ]);
-    incomingHosts.value = inc.hosts;
-    selectedIncoming.value = new Set(inc.hosts.map((h) => h.host_repo_rel_path));
-    outgoingRefs.value = out.refs;
-    outgoingLabelMismatchCount.value =
-      out.label_mismatch_count ??
-      out.refs.filter((r) => r.label_mismatch).length;
-    directCount.value = inc.direct_count ?? inc.count;
-    ctx.incomingCount.value = inc.count;
-    ctx.outgoingCount.value = out.count;
+    const outData = await fetchFileDetailXrefs({
+      rel,
+      scope: "outgoing",
+      limit: 500,
+      refreshDisk,
+    });
+    if (seq !== loadSeq) return;
+    indexPending.value = Boolean(outData.index_pending);
+    if (outData.index_pending) {
+      clearTables();
+      return;
+    }
+    applyOutgoingPayload(outData);
+    loading.value = false;
+
+    const inData = await fetchFileDetailXrefs({
+      rel,
+      scope: "incoming",
+      transitive: includeTransitive.value,
+      limit: 500,
+    });
+    if (seq !== loadSeq) return;
+    applyIncomingPayload(inData);
+    const merged: FileDetailXrefsPayload = {
+      rel,
+      incoming: inData.incoming,
+      outgoing: outData.outgoing,
+    };
+    ctx.xrefCacheByRel.value = { ...ctx.xrefCacheByRel.value, [cacheKey]: merged };
     if (manual) {
       shell.appendLog(
-        `[文件详情] 入向 ${inc.count} · 出向 ${out.count}`,
+        `[文件详情] 入向 ${inData.incoming.count} · 出向 ${outData.outgoing.count}`,
         { source: "file_detail" },
       );
     }
   } catch (e) {
+    if (seq !== loadSeq) return;
     ctx.pageError.value = String(e);
-    incomingHosts.value = [];
-    selectedIncoming.value = new Set();
-    outgoingRefs.value = [];
+    clearTables();
     if (manual) shell.appendLog(String(e), { source: "file_detail" });
   } finally {
-    loading.value = false;
+    if (seq === loadSeq) {
+      loading.value = false;
+      loadingIncoming.value = false;
+    }
   }
 }
 
 watch(
   () => ctx.rel.value,
-  () => {
-    void loadTables();
+  (host) => {
+    if (!host.trim()) clearTables();
   },
-  { immediate: true },
 );
 
+watch(
+  () => [ctx.rel.value, ctx.activeSubTab.value] as const,
+  ([host, tab]) => {
+    if (tab === "xref" && host.trim()) void loadTables();
+  },
+);
+
+onMounted(() => {
+  if (ctx.activeSubTab.value === "xref" && ctx.rel.value.trim()) {
+    void loadTables();
+  }
+});
+
 watch(includeTransitive, () => {
+  if (ctx.activeSubTab.value !== "xref") return;
+  ctx.invalidateXrefCache();
   void loadTables(true);
 });
 
@@ -186,6 +262,7 @@ async function onRebuildIndex() {
     if (out.log) shell.appendLog(out.log, { source: "file_detail" });
     indexSummary.value = `已索引 ${out.hosts_refreshed} 个宿主 · 出向 ${out.outgoing_count} 条（缺失 ${out.outgoing_missing} · 歧义 ${out.outgoing_ambiguous}）`;
     shell.setStatus(indexSummary.value);
+    ctx.invalidateXrefCache(ctx.rel.value);
     await loadTables(false, false);
   } catch (e) {
     ctx.pageError.value = String(e);
@@ -227,7 +304,8 @@ const allIncomingSelected = computed(
 
 function onLabelSyncDone(msg: string) {
   shell.setStatus(msg);
-  void loadTables(false, false);
+  ctx.invalidateXrefCache();
+  void loadTables(true, false);
   void ctx.refreshXrefCounts();
 }
 
@@ -258,6 +336,10 @@ async function onSyncIncomingLabels() {
 <template>
   <div class="xref-panel">
     <h3 class="panel-title">引用关系</h3>
+    <p v-if="loading && !outgoingRefs.length" class="empty muted">载入出向引用…</p>
+    <p v-else-if="indexPending" class="banner warn">
+      引用表尚未构建。请先在「CAD 索引」页执行工程内搜索，或点下方「重建本文件引用索引」。
+    </p>
     <div class="toolbar">
       <button
         type="button"
@@ -310,7 +392,8 @@ async function onSyncIncomingLabels() {
       <p class="section-hint muted">
         下方列出<strong>引用本文件</strong>的装配。勾选后点「更新父装配中本件名」，把这些装配树里本文件的节点名改为<strong>规则名</strong>（改名后常用）。不改 XLink 路径。
       </p>
-      <p v-if="!loading && !incomingHosts.length" class="empty muted">无入向宿主</p>
+      <p v-if="loadingIncoming" class="empty muted">载入入向引用…</p>
+      <p v-else-if="!incomingHosts.length" class="empty muted">无入向宿主</p>
       <table v-else class="data-table">
         <thead>
           <tr>
@@ -663,6 +746,15 @@ async function onSyncIncomingLabels() {
 .hint {
   font-size: 0.78rem;
   line-height: 1.5;
+}
+
+.banner.warn {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 0.85rem;
+  margin-bottom: 10px;
 }
 .muted {
   color: var(--muted);

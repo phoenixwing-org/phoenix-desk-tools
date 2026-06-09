@@ -16,6 +16,7 @@ from fcdesk.config.user_prefs import format_resolved_under_workspace
 from fcdesk.freecad.fcstd_document_kind import (
     FcstdDocumentKinds,
     FcstdKindFilters,
+    infer_fcstd_document_kinds_from_filename,
     kinds_match_filters,
     read_fcstd_document_kinds,
     recommend_fcstd_filename_suffix,
@@ -434,7 +435,7 @@ def recommend_filename_for_values(
     original_filename: str | None = None,
     persist_prefs: bool = True,
 ) -> dict[str, object]:
-    """推荐文件名；空字段可先填工作空间记忆，并返回详细说明。"""
+    """推荐文件名；类型由文件名后缀推断，空字段可先填工作空间记忆（不读 Document.xml）。"""
     rr = repo_root.expanduser().resolve(strict=False)
     rel = Path(rel)
     full = rr / rel
@@ -447,12 +448,11 @@ def recommend_filename_for_values(
         merged = dict(payload["fields"])
         filled = list(payload["filled_keys"])
 
-    kinds: FcstdDocumentKinds | None = None
-    if _path_is_fcstd(full):
-        kinds = read_fcstd_document_kinds(full)
-        _ensure_kinds_allow(kinds, filters, "推荐文件名")
-
     orig = (original_filename or merged.get("filename") or rel.name).strip()
+    kinds: FcstdDocumentKinds | None = None
+    if is_fcstd_filename(rel.name):
+        kinds = infer_fcstd_document_kinds_from_filename(orig)
+        _ensure_kinds_allow(kinds, filters, "推荐文件名")
     suffix = _recommended_suffix(
         full=full,
         rel=rel,
@@ -572,10 +572,12 @@ def _collect_index_related(
     *,
     part_number: str,
     part_version: str,
+    detail: dict[str, Any] | None = None,
 ) -> list[tuple[str, str]]:
     rr = repo_root.expanduser().resolve(strict=False)
-    migrate_fcstd_map_json(rr)
-    detail = get_part_key_detail(rr, part_number, part_version)
+    if detail is None:
+        migrate_fcstd_map_json(rr)
+        detail = get_part_key_detail(rr, part_number, part_version)
     if not detail:
         return []
     want = _norm_rel_key(rel)
@@ -607,45 +609,100 @@ def _collect_filename_hint(rel: Path, field_key: str) -> list[tuple[str, str]]:
 
 
 def _collect_prefs(repo_root: Path, field_key: str) -> list[tuple[str, str]]:
+    fills = recommend_field_fill_values(load_bom_apply_field_defaults(repo_root))
+    return _collect_prefs_from_fills(fills, field_key)
+
+
+def _collect_prefs_from_fills(fills: dict[str, str], field_key: str) -> list[tuple[str, str]]:
     if field_key not in ("PartNumber", "PartVersion", "TypeCode", "ModelSeries"):
         return []
-    fills = recommend_field_fill_values(load_bom_apply_field_defaults(repo_root))
     val = (fills.get(field_key) or "").strip()
     if val:
         return [(val, "工作空间记忆（上次保存递增）")]
     return []
 
 
-def recommend_bom_field(
-    repo_root: Path,
-    rel: Path,
-    field_key: str,
-    values: dict[str, str],
-    *,
-    kind_filters: KindFiltersInput | None = None,
-) -> dict[str, object]:
-    """单字段推荐：按优先级从文件嵌入、索引库、相关文件、文件名、工作空间记忆取值；只返回一个字段。"""
+_RECOMMEND_ALL_FIELD_ORDER: tuple[str, ...] = (
+    "PartNumber",
+    "PartVersion",
+    "TypeCode",
+    "ModelSeries",
+    "PartName",
+    "label",
+    "filename",
+)
+
+
+@dataclass
+class _RecommendFieldCtx:
+    repo_root: Path
+    rel: Path
+    merged: dict[str, str]
+    kind_filters: KindFiltersInput | None
+    mapped: FcstdMapEntry | None
+    full: Path
+    is_fcstd: bool
+    prefs_fills: dict[str, str]
+    part_detail_cache: dict[tuple[str, str], dict[str, Any] | None]
+
+    @classmethod
+    def build(
+        cls,
+        repo_root: Path,
+        rel: Path,
+        values: dict[str, str],
+        *,
+        kind_filters: KindFiltersInput | None = None,
+    ) -> _RecommendFieldCtx:
+        rr = repo_root.expanduser().resolve(strict=False)
+        rel = Path(rel)
+        merged = _coerce_form_values(values)
+        migrate_fcstd_map_json(rr)
+        mapped = try_load_fcstd_entry_from_workspace_map(repo_root=rr, rel_workspace=rel)
+        full = rr / rel
+        is_fcstd = _path_is_fcstd(full) or is_fcstd_filename(rel.name)
+        prefs_fills = recommend_field_fill_values(load_bom_apply_field_defaults(rr))
+        return cls(
+            repo_root=rr,
+            rel=rel,
+            merged=merged,
+            kind_filters=kind_filters,
+            mapped=mapped,
+            full=full,
+            is_fcstd=is_fcstd,
+            prefs_fills=prefs_fills,
+            part_detail_cache={},
+        )
+
+    def part_detail(self, part_number: str, part_version: str) -> dict[str, Any] | None:
+        key = (part_number, part_version)
+        if key not in self.part_detail_cache:
+            self.part_detail_cache[key] = get_part_key_detail(
+                self.repo_root, part_number, part_version
+            )
+        return self.part_detail_cache[key]
+
+
+def _recommend_one_field(ctx: _RecommendFieldCtx, field_key: str) -> dict[str, object]:
     key = (field_key or "").strip()
     if key not in _EDITABLE_FORM_KEYS:
         raise ValueError(f"不支持推荐的字段: {field_key}")
 
-    rr = repo_root.expanduser().resolve(strict=False)
-    rel = Path(rel)
-    merged = _coerce_form_values(values)
-    mapped = try_load_fcstd_entry_from_workspace_map(repo_root=rr, rel_workspace=rel)
-    full = rr / rel
-    is_fcstd = _path_is_fcstd(full)
+    merged = ctx.merged
+    mapped = ctx.mapped
+    rel = ctx.rel
+    rr = ctx.repo_root
     pn, pv = _resolve_part_key_triple(merged, mapped, rel)
 
     if key == "filename":
-        if not is_fcstd:
+        if not ctx.is_fcstd:
             raise ValueError("仅 FCStd 可推荐文件名")
         payload = recommend_filename_for_values(
             rr,
             rel,
             merged,
             fill_empty_from_prefs=False,
-            kind_filters=kind_filters,
+            kind_filters=ctx.kind_filters,
             original_filename=merged.get("filename") or rel.name,
             persist_prefs=False,
         )
@@ -679,13 +736,20 @@ def recommend_bom_field(
         }
 
     candidates: list[tuple[str, str]] = []
-    if is_fcstd:
-        candidates.extend(_collect_embedded_field(full, key))
     candidates.extend(_collect_index_same(mapped, key))
     if pn and pv:
-        candidates.extend(_collect_index_related(rr, rel, key, part_number=pn, part_version=pv))
+        candidates.extend(
+            _collect_index_related(
+                rr,
+                rel,
+                key,
+                part_number=pn,
+                part_version=pv,
+                detail=ctx.part_detail(pn, pv),
+            )
+        )
     candidates.extend(_collect_filename_hint(rel, key))
-    candidates.extend(_collect_prefs(rr, key))
+    candidates.extend(_collect_prefs_from_fills(ctx.prefs_fills, key))
 
     if key == "PartName":
         for val, note in candidates:
@@ -729,15 +793,47 @@ def recommend_bom_field(
     return {"field": key, "value": "", "source_note": "未找到可推荐值", "filled": False}
 
 
-def _collect_embedded_field(full: Path, field_key: str) -> list[tuple[str, str]]:
-    try:
-        embedded = read_embedded_bom_attrs(full)
-    except FcdeskFcstdEmbeddedError:
-        return []
-    val = (embedded.get(field_key) or "").strip()
-    if val:
-        return [(val, "文件内 Document.xml")]
-    return []
+def recommend_bom_field(
+    repo_root: Path,
+    rel: Path,
+    field_key: str,
+    values: dict[str, str],
+    *,
+    kind_filters: KindFiltersInput | None = None,
+) -> dict[str, object]:
+    """单字段推荐：索引库 → 同零件键 → 文件名推断 → 工作空间记忆（不读 FCStd）。"""
+    ctx = _RecommendFieldCtx.build(repo_root, rel, values, kind_filters=kind_filters)
+    return _recommend_one_field(ctx, field_key)
+
+
+def recommend_bom_fields_all(
+    repo_root: Path,
+    rel: Path,
+    values: dict[str, str],
+    *,
+    kind_filters: KindFiltersInput | None = None,
+) -> dict[str, object]:
+    """全部可推荐字段一次完成：单次索引上下文 + 文件名推断（不读 FCStd）。"""
+    ctx = _RecommendFieldCtx.build(repo_root, rel, values, kind_filters=kind_filters)
+    working = dict(ctx.merged)
+    results: dict[str, dict[str, object]] = {}
+    filled_keys: list[str] = []
+
+    for key in _RECOMMEND_ALL_FIELD_ORDER:
+        if key == "filename" and not ctx.is_fcstd:
+            continue
+        ctx.merged = working
+        row = _recommend_one_field(ctx, key)
+        results[key] = row
+        if row.get("filled"):
+            val = str(row.get("value") or "")
+            if val or key == "ModelSeries":
+                working[key] = val
+                filled_keys.append(key)
+        if (working.get("TypeCode") or "").strip().upper() == "S":
+            working["ModelSeries"] = ""
+
+    return {"results": results, "filled_keys": filled_keys}
 
 
 def _collect_index_same(mapped: FcstdMapEntry | None, field_key: str) -> list[tuple[str, str]]:

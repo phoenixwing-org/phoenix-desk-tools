@@ -5,6 +5,7 @@ import {
   fetchBomDocumentKinds,
   fetchBomPrefs,
   recommendBomField,
+  recommendBomFieldsAll,
   saveBom,
 } from "../../api";
 import { useFileDetailContext } from "../../composables/useFileDetailContext";
@@ -22,7 +23,6 @@ const EDITABLE_KEYS = [
   "filename",
 ] as const;
 type EditableKey = (typeof EDITABLE_KEYS)[number];
-const RECOMMEND_ALL_ORDER: EditableKey[] = [...EDITABLE_KEYS];
 
 const FIELD_ROWS = [
   { key: "repo_rel_path", cn: "仓库相对路径", en: "RepoRelativePath", editable: false, recommend: false },
@@ -161,36 +161,24 @@ async function onRecommendAll() {
   if (!rel.value) return;
   recommendingAll.value = true;
   shell.appendLog(`[文件详情] 全部推荐属性 ${rel.value}…`, { source: "file_detail", open: true });
-  let working: Partial<BomFields> = { ...form.value };
-  const filled: string[] = [];
   try {
-    for (const key of RECOMMEND_ALL_ORDER) {
-      if (key === "filename" && !isFcstd.value) continue;
-      recommendingField.value = key;
-      const data = await recommendBomField(rel.value, key, working, kindFilters.value);
-      if (data.filled && data.value) {
-        working = { ...working, [key]: data.value };
-        patchField(key as keyof BomFields, data.value);
-        filled.push(key);
-      } else if (key === "ModelSeries" && data.filled && !data.value) {
-        working = { ...working, ModelSeries: "" };
-        patchField("ModelSeries", "");
-        filled.push(key);
-      }
-      if (key === "TypeCode" || key === "filename") {
-        applyStandardPartModelSeriesRule();
-        working = { ...working, ModelSeries: form.value.ModelSeries ?? "" };
-      }
+    const data = await recommendBomFieldsAll(rel.value, form.value, kindFilters.value);
+    const next: Partial<BomFields> = { ...form.value };
+    for (const key of data.filled_keys) {
+      const row = data.results[key];
+      if (!row?.filled) continue;
+      next[key as keyof BomFields] = row.value ?? "";
     }
+    form.value = { ...form.value, ...next };
     applyStandardPartModelSeriesRule();
-    const msg = filled.length ? `全部推荐完成（${filled.length} 项）` : "未找到可推荐值";
+    const filled = data.filled_keys.length;
+    const msg = filled ? `全部推荐完成（${filled} 项）` : "未找到可推荐值";
     shell.appendLog(`[文件详情] ${msg}`, { source: "file_detail" });
     shell.setStatus(msg);
   } catch (e) {
     pageError.value = String(e);
     shell.appendLog(String(e), { source: "file_detail" });
   } finally {
-    recommendingField.value = null;
     recommendingAll.value = false;
   }
 }

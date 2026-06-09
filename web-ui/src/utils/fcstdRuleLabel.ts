@@ -1,5 +1,17 @@
 /** 与后端 ``compose_fcstd_body_label_display`` 对齐的规则显示名。 */
 
+/** 比较链接标签时归一化空白与常见连字符变体，避免肉眼相同却判为已改。 */
+export function normalizeLinkLabel(s: string): string {
+  return s
+    .trim()
+    .replace(/\u00a0/g, " ")
+    .replace(/[\u2010-\u2015\u2212\uFF0D]/g, "-");
+}
+
+export function linkLabelsEqual(a: string, b: string): boolean {
+  return normalizeLinkLabel(a) === normalizeLinkLabel(b);
+}
+
 export function composeFcstdBodyLabelDisplay(
   partNumber: string,
   partVersion: string,
@@ -39,9 +51,12 @@ function partKeyFields(node: RuleLabelNodeFields) {
 
 /**
  * 装配树节点规则显示名。
- * 有零件号/版本时优先用 PartName 组合（与后端 compose 一致），避免索引里截断的 label/rule_label 盖掉全名。
+ * 优先读 ``bom_xref`` 冗余列 ``rule_label``；无索引字段时再前端组合。
  */
 export function resolveRuleLabelForNode(node: RuleLabelNodeFields): string {
+  const fromApi = node.rule_label?.trim();
+  if (fromApi) return fromApi;
+
   const { pn, pv } = partKeyFields(node);
   const composed = composeFcstdBodyLabelDisplay(
     pn,
@@ -50,9 +65,6 @@ export function resolveRuleLabelForNode(node: RuleLabelNodeFields): string {
     node.label ?? "",
   );
   if (composed) return composed;
-
-  const fromApi = node.rule_label?.trim();
-  if (fromApi) return fromApi;
 
   return (node.basename ?? "").trim();
 }
