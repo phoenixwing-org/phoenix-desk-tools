@@ -152,10 +152,15 @@ async function applyAnalysisPayload(payload: {
       const data = await loadRenameAnalysis(payload.renameLogId);
       queryText.value = data.rename_log.old_basename;
       newBasename.value = data.rename_log.new_basename;
-      scan.value = data.scan;
-      selectPendingHosts();
+      if (!payload.autoAnalyze) {
+        scan.value = data.scan;
+        selectPendingHosts();
+      }
     } catch (e) {
       pageError.value = String(e);
+    }
+    if (payload.autoAnalyze) {
+      await onScanRefs();
     }
     return;
   }

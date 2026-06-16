@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
-import { pruneRecentWorkspaces, removeRecentWorkspace, saveLauncherFreecad, shutdownWebServer, syncLauncherFromLegacy } from "../api";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { addRecentWorkspace, pickWorkspaceDirectory, pruneRecentWorkspaces, removeRecentWorkspace, saveLauncherFreecad, shutdownWebServer, syncLauncherFromLegacy } from "../api";
 import { useAppShell } from "../composables/useAppShell";
 import PageHelpButton from "../components/PageHelpButton.vue";
 import { useShellTour } from "../composables/useShellTour";
@@ -21,6 +21,8 @@ const { startShellTour } = useShellTour(shell);
 const repoInput = ref("");
 const fcInput = ref("");
 const syncNote = ref("");
+const pickingWorkspace = ref(false);
+const workspaceSwitchHint = ref("");
 
 const workspacePath = computed(() => shell.workspacePath.value);
 const launcher = computed(() => shell.launcher.value);
@@ -34,6 +36,35 @@ const recentEntries = computed(
 const webRunning = ref(false);
 const webUrl = ref("http://127.0.0.1:5173");
 const defaultFreecadDir = computed(() => launcher.value?.default_freecad_dir ?? "");
+
+const nonHomeTabCount = computed(
+  () => shell.tabs.value.filter((t) => t.pageId !== "home").length,
+);
+
+function normalizePath(p: string) {
+  return p.trim().replace(/\\/g, "/");
+}
+
+function isSameWorkspacePath(a: string, b: string) {
+  const x = normalizePath(a);
+  const y = normalizePath(b);
+  return Boolean(x && y && x === y);
+}
+
+function workspaceSwitchBlocked(targetPath: string) {
+  return (
+    nonHomeTabCount.value > 0 &&
+    !isSameWorkspacePath(targetPath, workspacePath.value)
+  );
+}
+
+function setWorkspaceSwitchHint(targetPath: string) {
+  if (!workspaceSwitchBlocked(targetPath)) {
+    workspaceSwitchHint.value = "";
+    return;
+  }
+  workspaceSwitchHint.value = `已选路径与当前工作空间不同。请先关闭除「主页」外的 ${nonHomeTabCount.value} 个 Tab，再点「保存偏好」切换。`;
+}
 
 function fillDefaultFreecad() {
   const p = defaultFreecadDir.value.trim();
@@ -60,7 +91,18 @@ onMounted(async () => {
   repoInput.value = workspacePath.value;
   fcInput.value = launcher.value?.freecad_dir ?? "";
   await refreshWebStatus();
+  window.addEventListener("keydown", onConfigKeydown);
 });
+
+onUnmounted(() => {
+  window.removeEventListener("keydown", onConfigKeydown);
+});
+
+function onConfigKeydown(e: KeyboardEvent) {
+  if (e.key === "Escape" && shell.configOverlayOpen.value) {
+    shell.closeConfig();
+  }
+}
 
 watch(workspacePath, (v) => {
   repoInput.value = v;
@@ -68,6 +110,10 @@ watch(workspacePath, (v) => {
 
 watch(launcher, (v) => {
   fcInput.value = v?.freecad_dir ?? "";
+});
+
+watch(repoInput, (v) => {
+  setWorkspaceSwitchHint(v);
 });
 
 async function refreshFields() {
@@ -83,11 +129,18 @@ async function savePrefs() {
     alert("请先填写工作空间根目录。");
     return;
   }
+  if (workspaceSwitchBlocked(repo)) {
+    alert(
+      `当前仍有 ${nonHomeTabCount.value} 个工具 Tab 打开。\n请先全部关闭（可保留「主页」），再保存并切换工作空间。`,
+    );
+    return;
+  }
   try {
     // 先保存 FreeCAD 路径：switchWorkspace 会 reloadLauncher，watch(launcher) 会清空 fcInput
     const fcResult = await saveLauncherFreecad(fc);
     await shell.switchWorkspace(repo);
     fcInput.value = fcResult.freecad_dir || fc;
+    workspaceSwitchHint.value = "";
     alert("已保存启动器偏好。");
   } catch (e) {
     alert(String(e));
@@ -95,8 +148,14 @@ async function savePrefs() {
 }
 
 async function switchRecent(path: string) {
-  if (path === workspacePath.value) {
+  if (isSameWorkspacePath(path, workspacePath.value)) {
     alert("当前已是该工作空间。");
+    return;
+  }
+  if (workspaceSwitchBlocked(path)) {
+    alert(
+      `当前仍有 ${nonHomeTabCount.value} 个工具 Tab 打开。\n请先全部关闭（可保留「主页」），再从最近列表切换工作空间。`,
+    );
     return;
   }
   if (!window.confirm(`切换到以下工作空间？\n\n${path}`)) return;
@@ -148,6 +207,38 @@ async function removeRecent(path: string, event: MouseEvent) {
   }
 }
 
+async function onBrowseWorkspace() {
+  if (pickingWorkspace.value) return;
+  pickingWorkspace.value = true;
+  workspaceSwitchHint.value = "";
+  try {
+    const data = await pickWorkspaceDirectory(repoInput.value.trim() || workspacePath.value);
+    if (data.cancelled || !data.path?.trim()) {
+      shell.setStatus("已取消选择目录");
+      return;
+    }
+    const picked = data.path.trim();
+    repoInput.value = picked;
+    await addRecentWorkspace(picked);
+    await shell.reloadLauncher();
+    setWorkspaceSwitchHint(picked);
+    if (workspaceSwitchBlocked(picked)) {
+      shell.setStatus("已加入最近列表；关闭其它 Tab 后可保存切换");
+      shell.appendLog(
+        `[配置] 已选工作空间 ${picked}（已加入最近列表，未切换）`,
+        { source: "config", open: true },
+      );
+    } else {
+      shell.setStatus(`已选择：${picked}`);
+    }
+  } catch (e) {
+    alert(String(e));
+    shell.appendLog(String(e), { source: "config" });
+  } finally {
+    pickingWorkspace.value = false;
+  }
+}
+
 async function pruneRecentList() {
   if (!window.confirm("清理最近列表中的临时目录与无效路径？")) return;
   shell.appendLog("清理最近工作空间列表…", { source: "config", open: true });
@@ -174,7 +265,16 @@ const navItems = () =>
   <div class="page config-page">
     <div class="title-row">
       <h1 class="page-title">配置</h1>
-      <div class="head-help">
+      <div class="head-actions">
+        <button
+          v-if="shell.configOverlayOpen.value"
+          type="button"
+          class="btn close-frame"
+          title="关闭（Esc）"
+          @click="shell.closeConfig()"
+        >
+          关闭
+        </button>
         <PageHelpButton page-id="config" />
       </div>
     </div>
@@ -186,7 +286,17 @@ const navItems = () =>
       <label class="field-label" for="repo">工作空间根</label>
       <div class="row">
         <input id="repo" v-model="repoInput" class="path-input" spellcheck="false" />
+        <button
+          type="button"
+          class="btn"
+          :disabled="pickingWorkspace"
+          title="在本机弹出选文件夹对话框（非浏览器选目录）"
+          @click="onBrowseWorkspace"
+        >
+          {{ pickingWorkspace ? "…" : "浏览…" }}
+        </button>
       </div>
+      <p v-if="workspaceSwitchHint" class="hint workspace-hint">{{ workspaceSwitchHint }}</p>
 
       <label class="field-label" for="fc" data-tour-page-config-freecad>FreeCAD 目录</label>
       <div class="row">
@@ -315,11 +425,27 @@ const navItems = () =>
 @import "./page-shared.css";
 
 .config-page {
-  padding: 24px 28px 40px;
+  padding: 0;
 }
 
 .title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 20px;
+}
+
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.close-frame {
+  padding: 5px 12px;
+  font-size: 0.82rem;
 }
 
 .page-title {
@@ -399,6 +525,15 @@ const navItems = () =>
   margin: 0 0 8px;
   font-size: 0.82rem;
   color: var(--muted);
+}
+
+.workspace-hint {
+  margin: 6px 0 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #fcd34d;
+  background: #fffbeb;
+  color: #92400e;
 }
 
 .recent-list {

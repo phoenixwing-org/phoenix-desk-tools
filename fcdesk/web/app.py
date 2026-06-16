@@ -39,8 +39,10 @@ from fcdesk.services.fcstd_map_service import (
 from fcdesk.services.onboarding_service import onboarding_status_payload
 from fcdesk.services.launcher_service import (
     activate_workspace,
+    add_recent_workspace_entry,
     app_config_payload,
     launcher_prefs_payload,
+    pick_workspace_directory_via_dialog,
     remove_recent_workspace_entry,
     prune_recent_workspace_entries,
     sync_launcher_from_legacy,
@@ -173,6 +175,14 @@ class LauncherFreecadBody(BaseModel):
 
 
 class LauncherRecentRemoveBody(BaseModel):
+    path: str
+
+
+class PickDirectoryBody(BaseModel):
+    path_hint: str = ""
+
+
+class LauncherRecentAddBody(BaseModel):
     path: str = ""
 
 
@@ -388,6 +398,28 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
             return remove_recent_workspace_entry(body.path)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post("/api/config/launcher/recent/add")
+    def api_config_launcher_recent_add(body: LauncherRecentAddBody) -> dict:
+        try:
+            return add_recent_workspace_entry(body.path)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post("/api/config/pick-workspace-directory")
+    def api_config_pick_workspace_directory(body: PickDirectoryBody) -> dict:
+        try:
+            return pick_workspace_directory_via_dialog(
+                current_workspace=get_workspace(),
+                path_hint=body.path_hint,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"无法打开选目录对话框: {e}",
+            ) from e
 
     @app.post("/api/config/launcher/recent/prune")
     def api_config_launcher_recent_prune() -> dict:
@@ -721,8 +753,11 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
     @app.get("/api/rename-analysis/logs")
-    def api_rename_analysis_logs(limit: int = Query(50, ge=1, le=200)) -> dict:
-        return list_rename_logs_payload(get_workspace(), limit=limit)
+    def api_rename_analysis_logs(
+        limit: int = Query(50, ge=1, le=200),
+        rel: str | None = Query(None, description="筛选与该仓库路径相关（新路径或旧路径）的记录"),
+    ) -> dict:
+        return list_rename_logs_payload(get_workspace(), limit=limit, repo_rel_path=rel)
 
     @app.post("/api/rename-analysis/analyze")
     def api_rename_analysis_analyze(body: FileRenameScanBody) -> dict:

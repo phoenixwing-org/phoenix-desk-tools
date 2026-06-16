@@ -139,6 +139,25 @@ export function removeRecentWorkspace(path: string) {
   });
 }
 
+export function addRecentWorkspace(path: string) {
+  return jsonFetch<LauncherPrefs>("/api/config/launcher/recent/add", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path }),
+  });
+}
+
+export function pickWorkspaceDirectory(pathHint = "") {
+  return jsonFetch<{ cancelled: boolean; path: string }>(
+    "/api/config/pick-workspace-directory",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path_hint: pathHint }),
+    },
+  );
+}
+
 export function pruneRecentWorkspaces() {
   return jsonFetch<LauncherPrefs & { pruned_count?: number }>(
     "/api/config/launcher/recent/prune",
@@ -501,8 +520,11 @@ export function applyFileRenameRefs(
   return applyRenameAnalysisCorrections(hostRepoRelPaths, opts);
 }
 
-export function fetchRenameLogs(limit = 50) {
-  return jsonFetch<RenameLogsPayload>(`/api/rename-analysis/logs?limit=${limit}`);
+export function fetchRenameLogs(limit = 50, rel?: string) {
+  const q = new URLSearchParams({ limit: String(limit) });
+  const path = (rel ?? "").trim();
+  if (path) q.set("rel", path);
+  return jsonFetch<RenameLogsPayload>(`/api/rename-analysis/logs?${q.toString()}`);
 }
 
 export function analyzeRenameReferences(body: {

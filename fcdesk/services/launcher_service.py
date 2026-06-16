@@ -112,6 +112,43 @@ def activate_workspace(path: Path) -> dict[str, str]:
     return {"path": str(p), "name": p.name or str(p)}
 
 
+def add_recent_workspace_entry(path: str) -> dict[str, Any]:
+    """仅写入最近工作空间列表，不切换当前活动工作空间。"""
+    raw = path.strip()
+    if not raw:
+        raise ValueError("路径不能为空")
+    p = Path(raw).expanduser().resolve(strict=False)
+    if not p.is_dir():
+        raise ValueError(f"不是有效目录: {p}")
+    record_recent_workspace(p)
+    return launcher_prefs_payload()
+
+
+def pick_workspace_directory_via_dialog(
+    *,
+    current_workspace: Path,
+    path_hint: str = "",
+) -> dict[str, Any]:
+    """本机原生选目录（配置页「浏览…」）。"""
+    from fcdesk.shell.native_dialog import (
+        pick_directory_isolated,
+        resolve_directory_dialog_initialdir,
+    )
+
+    hint = (path_hint or "").strip() or str(current_workspace)
+    initial = resolve_directory_dialog_initialdir(current_workspace, path_hint=hint)
+    sel = pick_directory_isolated(
+        title="选择工作空间根目录",
+        initialdir=initial,
+    )
+    if not sel:
+        return {"cancelled": True, "path": ""}
+    p = Path(sel).expanduser().resolve(strict=False)
+    if not p.is_dir():
+        raise ValueError(f"不是有效目录: {p}")
+    return {"cancelled": False, "path": str(p)}
+
+
 def remove_recent_workspace_entry(path: str) -> dict[str, Any]:
     raw = path.strip()
     if not raw:

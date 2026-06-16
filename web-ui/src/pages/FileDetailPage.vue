@@ -438,7 +438,6 @@ onUnmounted(() => {
         />
         <FileRenamePanel
           v-show="activeSubTab === 'rename'"
-          :workbench-tab-id="workbenchTabId"
           :preferred-filename="preferredRenameFilename"
           @renamed="invalidateXrefCache(); refreshXrefCounts()"
         />

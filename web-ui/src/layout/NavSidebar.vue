@@ -115,7 +115,7 @@ function hover(tip: string | null) {
       type="button"
       class="nav-item nav-config"
       data-tour="nav-config"
-      :class="{ active: currentPage === configNavItem.page }"
+      :class="{ active: shell.configOverlayOpen.value || currentPage === configNavItem.page }"
       :title="configNavItem.label"
       @click="select(configNavItem.page)"
       @mouseenter="hover(configNavItem.label)"

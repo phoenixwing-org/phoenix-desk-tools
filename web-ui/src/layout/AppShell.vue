@@ -20,6 +20,7 @@ import BomExportPage from "../pages/BomExportPage.vue";
 import PlaceholderPage from "../pages/PlaceholderPage.vue";
 import { provideAppShell } from "../composables/useAppShell";
 import ChoiceDialogHost from "../components/ChoiceDialogHost.vue";
+import AppModalOverlay from "../components/AppModalOverlay.vue";
 
 const shell = provideAppShell();
 const loading = ref(true);
@@ -124,6 +125,14 @@ onUnmounted(() => {
     </div>
     <StatusBar />
     <ChoiceDialogHost />
+    <AppModalOverlay
+      :open="shell.configOverlayOpen.value"
+      aria-label="配置"
+      panel-class="config-modal-panel"
+      @close="shell.closeConfig()"
+    >
+      <ConfigPage />
+    </AppModalOverlay>
   </div>
 </template>
 
@@ -197,5 +206,13 @@ onUnmounted(() => {
 
 .shell-resizer:hover {
   background: rgba(59, 130, 246, 0.25);
+}
+</style>
+
+<style>
+/* 配置弹层内容区（非 scoped，作用于 ConfigPage 根节点） */
+.config-modal-panel .config-page {
+  padding: 20px 24px 28px;
+  box-sizing: border-box;
 }
 </style>

@@ -31,9 +31,14 @@ from fcdesk.services.cad_index import refresh_bom_xrefs_for_hosts
 LabelScope = Literal["incoming", "host_all"]
 
 
-def list_rename_logs_payload(repo_root: Path, *, limit: int = 50) -> dict[str, Any]:
+def list_rename_logs_payload(
+    repo_root: Path,
+    *,
+    limit: int = 50,
+    repo_rel_path: str | None = None,
+) -> dict[str, Any]:
     rr = repo_root.expanduser().resolve(strict=False)
-    entries = list_rename_logs(rr, limit=limit)
+    entries = list_rename_logs(rr, limit=limit, repo_rel_path=repo_rel_path)
     return {
         "database_path": str(cad_database_path(rr)),
         "database_path_display": format_resolved_under_workspace(cad_database_path(rr), rr),

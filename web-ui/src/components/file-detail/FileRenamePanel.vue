@@ -1,18 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import type { RefScanPayload, RenameLog } from "../../api";
-import {
-  analyzeRenameReferences,
-  applyRenameAnalysisCorrections,
-  executeFileRename,
-} from "../../api";
-import RenameAnalysisPanel from "../RenameAnalysisPanel.vue";
+import type { RenameLog } from "../../api";
+import { executeFileRename, fetchRenameLogs } from "../../api";
 import { useFileDetailContext } from "../../composables/useFileDetailContext";
 import { useAppShell } from "../../composables/useAppShell";
-import { useIncomingRefQuery } from "../../composables/useIncomingRefQuery";
 
 const props = defineProps<{
-  workbenchTabId?: string;
   preferredFilename?: string;
 }>();
 
@@ -27,20 +20,15 @@ const {
   originalFilename,
   pageError,
   reloadFile,
-  refreshXrefCounts,
-  switchSubTab,
   activeSubTab,
 } = useFileDetailContext();
 const shell = useAppShell();
-const incoming = useIncomingRefQuery(props.workbenchTabId, "file_rename");
-const { includeTransitive, formatHostSummary, logIncoming, transitiveLabel } = incoming;
 
 const newFilename = ref("");
 const renamed = ref(false);
-const renameLogId = ref<number | null>(null);
 const lastRenameLog = ref<RenameLog | null>(null);
-const scan = ref<RefScanPayload | null>(null);
-const selectedHosts = ref<Set<string>>(new Set());
+const fileRenameLogs = ref<RenameLog[]>([]);
+const logsLoading = ref(false);
 const busy = ref(false);
 
 const canRename = computed(
@@ -49,8 +37,6 @@ const canRename = computed(
     !renamed.value &&
     newFilename.value.trim() !== originalFilename.value.trim(),
 );
-
-const canApplyRefs = computed(() => Boolean(scan.value && (scan.value.pending_hit_count ?? 0) > 0));
 
 function resolveRenameTargetFilename(): string {
   return (
@@ -71,10 +57,7 @@ function applyRenameTargets() {
 
 function resetRenameWorkflow() {
   renamed.value = false;
-  renameLogId.value = null;
   lastRenameLog.value = null;
-  scan.value = null;
-  selectedHosts.value = new Set();
   applyRenameTargets();
 }
 
@@ -91,12 +74,67 @@ function isSameDirPathRename(prev: string, next: string) {
   return ad === bd;
 }
 
+function formatLogTime(iso: string) {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return iso;
+  return new Date(t).toLocaleString();
+}
+
+/** 改名记录列表：本次改名置顶，并与接口结果去重。 */
+const displayRenameLogs = computed(() => {
+  const logs = fileRenameLogs.value;
+  const latest = lastRenameLog.value;
+  if (!latest) return logs;
+  const idx = logs.findIndex((l) => l.id === latest.id);
+  if (idx < 0) return [latest, ...logs];
+  if (idx === 0) return logs;
+  return [logs[idx], ...logs.slice(0, idx), ...logs.slice(idx + 1)];
+});
+
+function isCurrentRenameLog(log: RenameLog) {
+  return lastRenameLog.value?.id === log.id;
+}
+
+async function loadFileRenameLogs() {
+  const path = rel.value.trim();
+  if (!path) {
+    fileRenameLogs.value = [];
+    return;
+  }
+  logsLoading.value = true;
+  try {
+    const data = await fetchRenameLogs(20, path);
+    fileRenameLogs.value = data.entries ?? [];
+  } catch {
+    fileRenameLogs.value = [];
+  } finally {
+    logsLoading.value = false;
+  }
+}
+
+async function onRefreshLogs() {
+  if (logsLoading.value || !rel.value.trim()) return;
+  await loadFileRenameLogs();
+  shell.setStatus("已刷新改名记录");
+}
+
+function openRenameAnalysisForLog(log: RenameLog) {
+  shell.openRenameAnalysis({
+    renameLogId: log.id,
+    oldBasename: log.old_basename,
+    newBasename: log.new_basename,
+    excludeRepoRel: log.new_repo_rel_path,
+    autoAnalyze: true,
+  });
+}
+
 watch(
   () => rel.value,
   (path, prev) => {
     if (!prev || path === prev) return;
     if (renamed.value && isSameDirPathRename(prev, path)) return;
     resetRenameWorkflow();
+    void loadFileRenameLogs();
   },
 );
 
@@ -110,8 +148,12 @@ watch(
 watch(
   () => activeSubTab.value,
   (tab) => {
-    if (tab === "rename") applyRenameTargets();
+    if (tab === "rename") {
+      applyRenameTargets();
+      void loadFileRenameLogs();
+    }
   },
+  { immediate: true },
 );
 
 function hasUnsavedDocumentAttrs() {
@@ -120,34 +162,6 @@ function hasUnsavedDocumentAttrs() {
     if (String(form.value[k] ?? "").trim() !== String(baseline.value[k] ?? "").trim()) return true;
   }
   return false;
-}
-
-function toggleHost(hostRel: string, checked: boolean) {
-  const next = new Set(selectedHosts.value);
-  if (checked) next.add(hostRel);
-  else next.delete(hostRel);
-  selectedHosts.value = next;
-}
-
-function toggleAll(checked: boolean) {
-  if (!scan.value) return;
-  selectedHosts.value = checked
-    ? new Set(scan.value.hosts.map((h) => h.host_repo_rel_path))
-    : new Set();
-}
-
-function buildApplyOpts() {
-  const log = lastRenameLog.value;
-  const oldBasename = log?.old_basename ?? originalFilename.value.trim();
-  const newBasename =
-    log?.new_basename ?? (newFilename.value.trim() || originalFilename.value.trim());
-  return {
-    oldBasename,
-    newBasename,
-    targetRepoRel: rel.value.trim(),
-    transitive: includeTransitive.value,
-    renameLogId: renameLogId.value ?? undefined,
-  };
 }
 
 async function onRename() {
@@ -171,7 +185,10 @@ async function onRename() {
   }
   busy.value = true;
   pageError.value = "";
-  logIncoming(`开始重命名 ${originalFilename.value} → ${newFilename.value.trim()}…`);
+  shell.appendLog(
+    `[文件详情] 重命名 ${originalFilename.value} → ${newFilename.value.trim()}…`,
+    { source: "file_detail", open: true },
+  );
   try {
     const data = await executeFileRename(
       rel.value,
@@ -181,86 +198,30 @@ async function onRename() {
     );
     renamed.value = true;
     lastRenameLog.value = data.rename_log ?? null;
-    renameLogId.value = data.rename_log_id ?? data.rename_log?.id ?? null;
     originalFilename.value = data.filename;
     form.value = { ...form.value, filename: data.filename };
     baseline.value = { ...form.value };
     await reloadFile(data.rel_path);
-    scan.value = null;
-    selectedHosts.value = new Set();
     shell.requestTreeRescan(data.rel_path);
-    const msg = `已重命名为 ${data.filename} · 正在按旧名扫描引用…`;
-    logIncoming(msg);
-    shell.setStatus(msg);
-    emit("renamed");
-    await onScanRefs();
-  } catch (e) {
-    pageError.value = String(e);
-    logIncoming(`重命名失败：${String(e)}`);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function onScanRefs() {
-  if (!rel.value) return;
-  busy.value = true;
-  logIncoming(`开始扫描（${transitiveLabel()}）…`);
-  try {
-    const log = lastRenameLog.value;
-    const body: Parameters<typeof analyzeRenameReferences>[0] = {
-      target_repo_rel: rel.value,
-      transitive: includeTransitive.value,
-      persist: Boolean(renameLogId.value),
-    };
-    if (renameLogId.value) {
-      body.rename_log_id = renameLogId.value;
+    await loadFileRenameLogs();
+    const log = data.rename_log ?? null;
+    if (log) {
+      const msg = `已重命名为 ${data.filename} · 记录 #${log.id}，请在下方点「改名分析」修正引用`;
+      shell.appendLog(`[文件详情] ${msg}`, { source: "file_detail" });
+      shell.setStatus(msg);
     } else {
-      body.old_basename = originalFilename.value.trim();
-      body.new_basename = newFilename.value.trim() || originalFilename.value.trim();
-      body.old_repo_rel_path = rel.value;
+      const msg = `已重命名为 ${data.filename}`;
+      shell.appendLog(`[文件详情] ${msg}`, { source: "file_detail" });
+      shell.setStatus(msg);
     }
-    if (log?.new_repo_rel_path) body.new_repo_rel_path = log.new_repo_rel_path;
-    const data = await analyzeRenameReferences(body);
-    scan.value = data;
-    selectedHosts.value = new Set(data.hosts.map((h) => h.host_repo_rel_path));
-    const summary = formatHostSummary({
-      hostCount: data.host_count,
-      directHostCount: data.direct_host_count ?? data.host_count,
-      hitCount: data.hit_count,
-      pendingHitCount: data.pending_hit_count ?? data.hit_count,
-      mode: "analyze",
-    });
-    logIncoming(summary);
-    shell.setStatus(summary);
+    emit("renamed");
   } catch (e) {
     pageError.value = String(e);
-    logIncoming(`失败：${String(e)}`);
+    shell.appendLog(String(e), { source: "file_detail" });
   } finally {
     busy.value = false;
   }
 }
-
-async function onApplyRefs() {
-  const hosts = [...selectedHosts.value];
-  if (!hosts.length || !scan.value) return;
-  busy.value = true;
-  logIncoming(`开始修正 XLink · ${hosts.length} 个宿主…`);
-  try {
-    const data = await applyRenameAnalysisCorrections(hosts, buildApplyOpts());
-    scan.value = data.scan;
-    const msg = `已修正 ${data.applied_hosts.length} 个宿主 · ${data.xlink_patches} 处 XLink`;
-    logIncoming(msg);
-    shell.setStatus(msg);
-    await refreshXrefCounts();
-  } catch (e) {
-    pageError.value = String(e);
-    logIncoming(`失败：${String(e)}`);
-  } finally {
-    busy.value = false;
-  }
-}
-
 </script>
 
 <template>
@@ -278,6 +239,15 @@ async function onApplyRefs() {
           {{ busy ? "…" : "执行改名" }}
         </button>
         <button
+          type="button"
+          class="btn"
+          :disabled="busy || logsLoading || !rel.trim()"
+          title="从数据库重新加载本文件的改名记录"
+          @click="onRefreshLogs"
+        >
+          {{ logsLoading ? "…" : "刷新记录" }}
+        </button>
+        <button
           v-if="renamed"
           type="button"
           class="btn"
@@ -287,40 +257,52 @@ async function onApplyRefs() {
         >
           再次改名
         </button>
-        <span v-if="renamed && renameLogId" class="ok">本页已执行过改名 · 记录 #{{ renameLogId }}</span>
       </div>
       <p v-if="renamed && newFilename.trim() === originalFilename.trim()" class="rename-warn muted">
         目标名与磁盘当前名相同。若属性里填了新的文件名，请点「再次改名」或回「编辑属性」确认后重新点「去改名」。
       </p>
     </section>
 
-    <section class="refs-block">
-      <h3 class="block-title">引用写回</h3>
-      <p v-if="renamed && lastRenameLog" class="next-step">
-        磁盘已改为 <strong class="mono">{{ lastRenameLog.new_basename }}</strong>。
-        请用下方「分析引用」查找仍引用旧名
-        <strong class="mono">{{ lastRenameLog.old_basename }}</strong>
-        的装配，勾选后写回 XLink。
-        <button type="button" class="link-inline" @click="switchSubTab('xref')">显示名同步请到「引用」Tab →</button>
-      </p>
-      <div class="toolbar">
-        <label class="chk">
-          <input v-model="includeTransitive" type="checkbox" />
-          含间接宿主
-        </label>
-        <button type="button" class="btn" :disabled="busy" @click="onScanRefs">分析引用</button>
-      </div>
-
-      <RenameAnalysisPanel
-        :scan="scan"
-        :selected-hosts="selectedHosts"
-        :busy="busy"
-        :can-apply="canApplyRefs"
-        label-sync-ui="off"
-        @toggle-host="toggleHost"
-        @toggle-all="toggleAll"
-        @apply="onApplyRefs"
-      />
+    <section class="records-block">
+      <h3 class="block-title">改名记录</h3>
+      <p class="section-hint muted">历史改名（新→旧倒序）；点右侧按钮进入改名分析。</p>
+      <div v-if="logsLoading && !displayRenameLogs.length" class="empty muted">正在查询改名记录…</div>
+      <div v-else-if="!displayRenameLogs.length" class="empty muted">暂无改名记录</div>
+      <ul v-else class="record-list" :class="{ dimmed: logsLoading }">
+        <li
+          v-for="log in displayRenameLogs"
+          :key="log.id"
+          class="record-card"
+          :class="{ latest: isCurrentRenameLog(log) }"
+          :title="
+            isCurrentRenameLog(log)
+              ? `装配里可能仍引用旧名 ${log.old_basename}，请在改名分析中扫描并写回 XLink`
+              : undefined
+          "
+        >
+          <div class="record-row">
+            <div class="record-row-main">
+              <span v-if="isCurrentRenameLog(log)" class="record-badge">本次</span>
+              <span class="mono old" :title="log.old_repo_rel_path">{{ log.old_basename }}</span>
+              <span class="arrow" aria-hidden="true">→</span>
+              <span class="mono new" :title="log.new_repo_rel_path">{{ log.new_basename }}</span>
+            </div>
+            <button
+              type="button"
+              class="btn btn-compact"
+              :class="isCurrentRenameLog(log) ? 'primary' : 'accent'"
+              @click="openRenameAnalysisForLog(log)"
+            >
+              {{ isCurrentRenameLog(log) ? "改名分析" : "分析引用" }}
+            </button>
+          </div>
+          <div class="record-row-meta muted">
+            #{{ log.id }} · {{ formatLogTime(log.created_at) }}
+            <span v-if="isCurrentRenameLog(log)" class="record-meta-tip"> · 可能仍有旧名引用</span>
+          </div>
+        </li>
+      </ul>
+      <p v-if="logsLoading && displayRenameLogs.length" class="records-loading muted">正在刷新…</p>
     </section>
   </div>
 </template>
@@ -360,50 +342,32 @@ async function onApplyRefs() {
   gap: 12px;
   align-items: center;
 }
-.toolbar {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  margin-bottom: 10px;
-}
-.chk {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.82rem;
-}
 .btn {
   padding: 6px 12px;
   border-radius: 6px;
   border: 1px solid var(--border-strong);
   background: var(--btn-bg);
   font-size: 0.82rem;
+  cursor: pointer;
 }
 .btn.primary {
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
 }
+.btn.accent {
+  color: #1d4ed8;
+  background: #dbeafe;
+  border-color: #3b82f6;
+  font-weight: 600;
+}
+.btn.accent:hover {
+  background: #bfdbfe;
+  border-color: #2563eb;
+}
 .btn:disabled {
   opacity: 0.5;
-}
-.ok {
-  font-size: 0.82rem;
-  color: #047857;
-}
-.next-step {
-  margin: 0 0 12px;
-  padding: 10px 12px;
-  font-size: 0.82rem;
-  line-height: 1.5;
-  color: #0f172a;
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  border-radius: 8px;
-}
-.next-step strong.mono {
-  font-family: var(--font-mono);
-  font-weight: 600;
+  cursor: default;
 }
 .rename-warn {
   margin: 8px 0 0;
@@ -411,17 +375,109 @@ async function onApplyRefs() {
   line-height: 1.45;
   color: #b45309;
 }
-.link-inline {
-  margin-left: 4px;
+.records-block {
+  margin-bottom: 8px;
+}
+.section-hint {
+  margin: 0 0 10px;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+.record-list {
+  list-style: none;
+  margin: 0;
   padding: 0;
-  border: none;
-  background: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.record-list.dimmed {
+  opacity: 0.65;
+  pointer-events: none;
+}
+.record-card {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fafbfc;
+}
+.record-card.latest {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+.record-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.record-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.record-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
   color: #1d4ed8;
-  font-size: inherit;
-  text-decoration: underline;
-  cursor: pointer;
+  background: #dbeafe;
+  border: 1px solid #93c5fd;
+  flex-shrink: 0;
+}
+.record-row-main .old {
+  color: #64748b;
+  text-decoration: line-through;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 42%;
+}
+.record-row-main .new {
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 42%;
+}
+.arrow {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.record-row-meta {
+  margin-top: 4px;
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+.record-meta-tip {
+  color: #1d4ed8;
+}
+.btn-compact {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  font-size: 0.76rem;
+}
+.records-loading {
+  margin: 6px 0 0;
+  font-size: 0.74rem;
+  text-align: center;
+}
+.empty {
+  padding: 12px;
+  text-align: center;
+  font-size: 0.8rem;
 }
 .mono {
   font-family: var(--font-mono);
+}
+.muted {
+  color: var(--muted);
 }
 </style>

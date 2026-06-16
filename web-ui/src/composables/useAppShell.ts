@@ -63,6 +63,10 @@ export type AppShellContext = {
   appendLog: (text: string, opts?: LogAppendOptions) => void;
   clearLog: () => void;
   setLogOpen: (open: boolean) => void;
+  /** 全屏配置层（遮住主内容区，不占 Tab 栏） */
+  configOverlayOpen: Ref<boolean>;
+  openConfig: () => void;
+  closeConfig: () => void;
   goToPage: (pageId: string) => void;
   canNavigateToPage: (pageId: string) => boolean;
   /** 打开主页并滚动到新手指南区块 */
@@ -151,6 +155,7 @@ export function provideAppShell(): AppShellContext {
   const treeRescanToken = ref(0);
   const treeSelectAfterRescan = ref<string | null>(null);
   const scrollToGuideToken = ref(0);
+  const configOverlayOpen = ref(false);
   const onboarding = useOnboardingStore();
 
   function normalizePageId(pageId: string): string {
@@ -166,8 +171,33 @@ export function provideAppShell(): AppShellContext {
   function requireWorkspace(): boolean {
     if (onboarding.workspaceOk) return true;
     setStatus(WORKSPACE_GATE_MSG);
-    goToPage("config");
+    openConfig();
     return false;
+  }
+
+  /** 配置改为全屏层，不再作为工作台 Tab 保留 */
+  function purgeConfigTabs() {
+    const list = wb.tabs.value;
+    const rest = list.filter((t) => t.pageId !== "config");
+    if (rest.length === list.length) return;
+    const activeWasConfig = wb.activeTab()?.pageId === "config";
+    wb.tabs.value = rest;
+    if (activeWasConfig || !rest.some((t) => t.id === wb.activeTabId.value)) {
+      wb.activeTabId.value = rest[0]?.id ?? "";
+    }
+    if (!wb.tabs.value.length) {
+      wb.ensureInitialTab("home");
+    }
+  }
+
+  function openConfig() {
+    purgeConfigTabs();
+    configOverlayOpen.value = true;
+    navHover.value = null;
+  }
+
+  function closeConfig() {
+    configOverlayOpen.value = false;
   }
 
   function syncOnboardingFromTabs() {
@@ -301,9 +331,13 @@ export function provideAppShell(): AppShellContext {
 
   function goToPage(pageId: string) {
     const id = normalizePageId(pageId);
+    if (id === "config") {
+      openConfig();
+      return;
+    }
     if (!canNavigateToPage(id)) {
       setStatus(WORKSPACE_GATE_MSG);
-      wb.navigateToPage("config");
+      openConfig();
       navHover.value = null;
       return;
     }
@@ -604,6 +638,10 @@ export function provideAppShell(): AppShellContext {
       });
       return;
     }
+    if (page === "config") {
+      openConfig();
+      return;
+    }
     goToPage(page);
   }
 
@@ -615,15 +653,10 @@ export function provideAppShell(): AppShellContext {
     await onboarding.refreshStatus();
     await restoreWorkbenchSession();
     syncOnboardingFromTabs();
+    purgeConfigTabs();
     if (!onboarding.workspaceOk) {
       wb.ensureInitialTab("home");
-      if (!wb.tabs.value.some((t) => t.pageId === "config")) {
-        try {
-          wb.openTab({ pageId: "config", title: "配置" });
-        } catch {
-          /* 单页策略下可能已有 config */
-        }
-      }
+      openConfig();
     }
     applyUrlDeepLink();
     setupWorkbenchPersistence();
@@ -645,6 +678,9 @@ export function provideAppShell(): AppShellContext {
     appendLog,
     clearLog,
     setLogOpen,
+    configOverlayOpen,
+    openConfig,
+    closeConfig,
     goToPage,
     canNavigateToPage,
     openOnboardingGuide,

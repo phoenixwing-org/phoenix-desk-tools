@@ -60,6 +60,37 @@ const kindFilters = ref<BomKindFilters>({
 const isFcstd = computed(() => preview.value?.is_fcstd ?? false);
 const bomReadonly = computed(() => preview.value?.bom_readonly ?? false);
 const bomSourceRel = computed(() => preview.value?.bom_source_rel ?? null);
+const documentKindsDisplay = computed(
+  () => preview.value?.document_kinds?.display?.trim() || "",
+);
+const documentKindsSuffix = computed(
+  () => preview.value?.document_kinds?.recommended_suffix?.trim() || "",
+);
+
+type DocKindTag = {
+  key: string;
+  label: string;
+  tone: "part" | "assembly" | "drawing";
+};
+
+const docKindTags = computed((): DocKindTag[] => {
+  const dk = preview.value?.document_kinds;
+  if (!dk) return [];
+  const tags: DocKindTag[] = [];
+  if (dk.part) tags.push({ key: "part", label: "零件", tone: "part" });
+  if (dk.assembly) tags.push({ key: "assembly", label: "装配", tone: "assembly" });
+  if (dk.drawing) tags.push({ key: "drawing", label: "图纸", tone: "drawing" });
+  if (tags.length) return tags;
+  const display = documentKindsDisplay.value;
+  if (!display || display === "未识别") return [];
+  return display.split(/[、,]/).map((piece) => {
+    const label = piece.trim();
+    let tone: DocKindTag["tone"] = "part";
+    if (label.includes("装配")) tone = "assembly";
+    else if (label.includes("图纸")) tone = "drawing";
+    return { key: label, label, tone };
+  });
+});
 
 function openSourceModel() {
   const src = bomSourceRel.value;
@@ -271,6 +302,27 @@ onMounted(() => {
       </button>
     </section>
 
+    <section v-if="isFcstd" class="doc-kind-block">
+      <div class="doc-kind-row">
+        <span class="doc-kind-label">文档类型</span>
+        <div v-if="docKindTags.length || documentKindsSuffix" class="doc-kind-tags">
+          <span
+            v-for="tag in docKindTags"
+            :key="tag.key"
+            class="doc-kind-tag"
+            :class="`tone-${tag.tone}`"
+          >
+            {{ tag.label }}
+          </span>
+          <span v-if="documentKindsSuffix" class="doc-suffix-wrap">
+            <span class="doc-suffix-label">推荐后缀</span>
+            <code class="doc-suffix-tag">{{ documentKindsSuffix }}</code>
+          </span>
+        </div>
+        <span v-else class="doc-kind-empty muted">未识别（点「识别类型」或打开文件时自动识别）</span>
+      </div>
+    </section>
+
     <section class="kind-row">
       <span class="kind-label">推荐文件名时匹配：</span>
       <label class="chk"><input v-model="kindFilters.part" type="checkbox" /> 零件</label>
@@ -366,6 +418,81 @@ onMounted(() => {
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 10px;
+}
+.doc-kind-block {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+.doc-kind-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  font-size: 0.84rem;
+}
+.doc-kind-label {
+  font-weight: 600;
+  color: #475569;
+  min-width: 4.5em;
+  flex-shrink: 0;
+}
+.doc-kind-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.doc-kind-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.3;
+  border: 1px solid transparent;
+}
+.doc-kind-tag.tone-part {
+  color: #334155;
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+.doc-kind-tag.tone-assembly {
+  color: #1d4ed8;
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+.doc-kind-tag.tone-drawing {
+  color: #b45309;
+  background: #fef3c7;
+  border-color: #fcd34d;
+}
+.doc-suffix-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 2px;
+}
+.doc-suffix-label {
+  font-size: 0.76rem;
+  color: #64748b;
+}
+.doc-suffix-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #0f766e;
+  background: #ecfdf5;
+  border: 1px solid #6ee7b7;
+}
+.doc-kind-empty {
+  font-size: 0.82rem;
 }
 .kind-row {
   display: flex;

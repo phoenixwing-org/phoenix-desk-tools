@@ -1624,22 +1624,36 @@ def phoenix_reports_dir(repo_root: Path) -> Path:
     return d
 
 
-def list_rename_logs(repo_root: Path, *, limit: int = 50) -> list[dict[str, Any]]:
-    """最近改名记录（新 → 旧）。"""
+def list_rename_logs(
+    repo_root: Path,
+    *,
+    limit: int = 50,
+    repo_rel_path: str | None = None,
+) -> list[dict[str, Any]]:
+    """最近改名记录（新 → 旧）；可按新/旧仓库路径筛选。"""
     rr = repo_root.expanduser().resolve(strict=False)
     if not cad_database_path(rr).is_file():
         return []
     cap = max(1, min(int(limit), 200))
+    where = ""
+    params: list[Any] = []
+    rel_key = (repo_rel_path or "").strip().replace("\\", "/")
+    if rel_key:
+        key = _norm_key(rel_key)
+        where = "WHERE rl.new_repo_rel_path = ? OR rl.old_repo_rel_path = ?"
+        params.extend([key, key])
+    params.append(cap)
     with connect(rr) as conn:
         rows = conn.execute(
-            """
+            f"""
             SELECT rl.*, ce.created_at AS event_created_at, ce.source AS event_source
             FROM rename_log rl
             JOIN change_event ce ON ce.id = rl.event_id
+            {where}
             ORDER BY ce.created_at DESC, rl.id DESC
             LIMIT ?
             """,
-            (cap,),
+            tuple(params),
         ).fetchall()
     return [_rename_log_row_to_dict(r) for r in rows]
 
