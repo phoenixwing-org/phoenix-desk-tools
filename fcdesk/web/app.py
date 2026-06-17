@@ -37,6 +37,10 @@ from fcdesk.services.fcstd_map_service import (
     search_fcstd_map_entries,
 )
 from fcdesk.services.onboarding_service import onboarding_status_payload
+from fcdesk.services.phoenix_database_service import (
+    phoenix_database_recreate,
+    phoenix_database_status,
+)
 from fcdesk.services.launcher_service import (
     activate_workspace,
     add_recent_workspace_entry,
@@ -470,6 +474,17 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
     @app.get("/api/onboarding/status")
     def api_onboarding_status() -> dict:
         return onboarding_status_payload(get_workspace())
+
+    @app.get("/api/phoenix/database/status")
+    def api_phoenix_database_status() -> dict:
+        return phoenix_database_status(get_workspace())
+
+    @app.post("/api/phoenix/database/recreate")
+    def api_phoenix_database_recreate() -> dict:
+        try:
+            return phoenix_database_recreate(get_workspace())
+        except OSError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
 
     @app.post("/api/workspace")
     def api_set_workspace(body: WorkspaceBody) -> dict[str, str]:

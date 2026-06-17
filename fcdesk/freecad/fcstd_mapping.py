@@ -630,7 +630,7 @@ def try_load_fcstd_entry_from_workspace_map(
     repo_root: Path,
     rel_workspace: Path,
 ) -> FcstdMapEntry | None:
-    """按 ``repo_rel_path`` 查找索引条目（``.phoenix/cad-database.sqlite``）。"""
+    """按 ``repo_rel_path`` 查找索引条目（``.phoenix/phoenix-cad.sqlite``）。"""
     from fcdesk.freecad.phoenix_store import find_fcstd_entry, migrate_fcstd_map_json
 
     root = repo_root.expanduser().resolve(strict=False)

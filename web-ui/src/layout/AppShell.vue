@@ -18,6 +18,7 @@ import PartKeyDetailPage from "../pages/PartKeyDetailPage.vue";
 import FileRenamePage from "../pages/FileRenamePage.vue";
 import BomExportPage from "../pages/BomExportPage.vue";
 import PlaceholderPage from "../pages/PlaceholderPage.vue";
+import { fetchPhoenixDatabaseStatus, recreatePhoenixDatabase } from "../api";
 import { provideAppShell } from "../composables/useAppShell";
 import ChoiceDialogHost from "../components/ChoiceDialogHost.vue";
 import AppModalOverlay from "../components/AppModalOverlay.vue";
@@ -25,6 +26,10 @@ import AppModalOverlay from "../components/AppModalOverlay.vue";
 const shell = provideAppShell();
 const loading = ref(true);
 const loadError = ref("");
+const legacyDbBanner = ref(false);
+const legacyDbReasons = ref<string[]>([]);
+const legacyDbRecreating = ref(false);
+const legacyDbError = ref("");
 
 const activeTab = computed(() => shell.activeTab());
 
@@ -77,9 +82,39 @@ function onResizeStart(e: MouseEvent) {
   window.addEventListener("mouseup", onUp);
 }
 
+async function refreshLegacyDatabaseBanner() {
+  try {
+    const status = await fetchPhoenixDatabaseStatus();
+    legacyDbBanner.value = status.needs_recreate;
+    legacyDbReasons.value = status.reasons;
+    legacyDbError.value = "";
+  } catch (e) {
+    legacyDbError.value = String(e);
+  }
+}
+
+async function confirmRecreateLegacyDatabase() {
+  const ok = window.confirm(
+    "将删除旧版 cad-database.sqlite 并创建空的 phoenix-cad.sqlite（schema v10）。\n"
+      + "CAD 索引、BOM 引用与改名历史需重新扫描。\n\n确定继续？",
+  );
+  if (!ok) return;
+  legacyDbRecreating.value = true;
+  legacyDbError.value = "";
+  try {
+    await recreatePhoenixDatabase();
+    window.location.reload();
+  } catch (e) {
+    legacyDbError.value = String(e);
+  } finally {
+    legacyDbRecreating.value = false;
+  }
+}
+
 onMounted(async () => {
   try {
     await shell.init();
+    await refreshLegacyDatabaseBanner();
   } catch (e) {
     loadError.value = String(e);
   } finally {
@@ -98,6 +133,22 @@ onUnmounted(() => {
   <div v-if="loading" class="shell-loading">载入中…</div>
   <div v-else-if="loadError" class="shell-loading err">{{ loadError }}</div>
   <div v-else class="shell">
+    <div v-if="legacyDbBanner" class="legacy-db-banner" role="alert">
+      <div class="legacy-db-banner-text">
+        <strong>检测到旧版 CAD 数据库</strong>
+        <span>（cad-database.sqlite 或旧表名）。需重建为 phoenix-cad.sqlite 后才能继续使用索引与 BOM 功能。</span>
+        <span v-if="legacyDbReasons.length" class="legacy-db-reasons">{{ legacyDbReasons.join(" · ") }}</span>
+        <span v-if="legacyDbError" class="legacy-db-error">{{ legacyDbError }}</span>
+      </div>
+      <button
+        type="button"
+        class="legacy-db-action"
+        :disabled="legacyDbRecreating"
+        @click="confirmRecreateLegacyDatabase"
+      >
+        {{ legacyDbRecreating ? "重建中…" : "确认重建数据库" }}
+      </button>
+    </div>
     <AppToolbar />
     <div class="shell-body">
       <NavSidebar />
@@ -144,6 +195,51 @@ onUnmounted(() => {
   flex-direction: column;
   overflow: hidden;
   background: var(--shell-bg);
+}
+
+.legacy-db-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 16px;
+  background: #fef3c7;
+  border-bottom: 1px solid #f59e0b;
+  color: #92400e;
+  font-size: 13px;
+}
+
+.legacy-db-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.legacy-db-reasons,
+.legacy-db-error {
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.legacy-db-error {
+  color: #b45309;
+}
+
+.legacy-db-action {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border: 1px solid #d97706;
+  border-radius: 6px;
+  background: #fff;
+  color: #92400e;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.legacy-db-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .shell-loading {

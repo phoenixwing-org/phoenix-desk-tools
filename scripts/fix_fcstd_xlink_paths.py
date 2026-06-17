@@ -463,7 +463,7 @@ def main() -> None:
         "--map-sqlite",
         metavar="DIR",
         default=None,
-        help="工作空间根：从 <DIR>/.phoenix/cad-database.sqlite 读索引（不写 fcstd_map.json）",
+        help="工作空间根：从 <DIR>/.phoenix/phoenix-cad.sqlite 读索引（不写 fcstd_map.json）",
     )
     parser.add_argument(
         "--map-anchor",
@@ -535,20 +535,22 @@ def main() -> None:
         anchor = repo
         map_source_for_report = repo
         sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        from fcdesk.freecad.phoenix_schema import cad_database_path
         from fcdesk.freecad.phoenix_store import fcstd_map_json_dict, migrate_fcstd_map_json
 
         migrate_fcstd_map_json(repo)
+        db_display = cad_database_path(repo)
         try:
             raw = fcstd_map_json_dict(repo)
         except FileNotFoundError as e:
             print(
-                f"\n错误：索引库为空：{repo / '.phoenix' / 'cad-database.sqlite'}\n"
+                f"\n错误：索引库为空：{db_display}\n"
                 "请先在「FCStd 索引」页执行工程内搜索，或使用 --map-json / --live-scan。",
                 file=sys.stderr,
             )
             raise SystemExit(2) from e
         fcstd_map = rel_fcstd_map_to_abs(raw, anchor)
-        print(f"载入索引库: {repo / '.phoenix' / 'cad-database.sqlite'}")
+        print(f"载入索引库: {db_display}")
         print(f"相对路径基准: {anchor}")
     else:
         map_path_arg = Path(args.map_json).expanduser() if args.map_json else None
@@ -569,7 +571,7 @@ def main() -> None:
                 '  python scripts/fcstd_map.py --root "<遍历根>" '
                 f'--relative-to "<工作空间根>" '
                 f'--json "<工作空间根>/fcstd_map.json"\n\n'
-                "亦可使用 --map-sqlite <工作空间根> 直接读 .phoenix/cad-database.sqlite，"
+                "亦可使用 --map-sqlite <工作空间根> 直接读 .phoenix/phoenix-cad.sqlite，"
                 "或 --live-scan 即时扫描。",
                 file=sys.stderr,
             )

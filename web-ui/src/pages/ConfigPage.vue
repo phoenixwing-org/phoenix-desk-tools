@@ -91,8 +91,14 @@ onMounted(async () => {
   repoInput.value = workspacePath.value;
   fcInput.value = launcher.value?.freecad_dir ?? "";
   await refreshWebStatus();
+  await onboarding.refreshStatus();
   window.addEventListener("keydown", onConfigKeydown);
 });
+
+function openCadIndex() {
+  shell.goToPage("fcstd_map");
+  shell.closeConfig();
+}
 
 onUnmounted(() => {
   window.removeEventListener("keydown", onConfigKeydown);
@@ -141,6 +147,7 @@ async function savePrefs() {
     await shell.switchWorkspace(repo);
     fcInput.value = fcResult.freecad_dir || fc;
     workspaceSwitchHint.value = "";
+    await onboarding.refreshStatus();
     alert("已保存启动器偏好。");
   } catch (e) {
     alert(String(e));
@@ -321,6 +328,10 @@ const navItems = () =>
       <p v-if="launcher?.legacy_launcher_exists" class="hint">
         检测到旧启动器：
         <code>{{ launcher.legacy_launcher_path }}</code>
+      </p>
+      <p v-if="onboarding.workspaceOk && !onboarding.indexScanned" class="hint scan-hint">
+        该工作空间尚未执行 CAD 索引扫描，BOM/引用功能可能不完整。
+        <button type="button" class="link-btn" @click="openCadIndex">打开 CAD 索引</button>
       </p>
     </section>
 
@@ -534,6 +545,27 @@ const navItems = () =>
   border: 1px solid #fcd34d;
   background: #fffbeb;
   color: #92400e;
+}
+
+.scan-hint {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+.link-btn {
+  margin-left: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent, #2563eb);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  text-decoration: underline;
 }
 
 .recent-list {

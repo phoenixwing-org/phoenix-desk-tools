@@ -61,7 +61,7 @@ def flatten_tree_occurrences(
 
 
 def rebuild_bom_tree_occurrences(repo_root: Path) -> dict[str, Any]:
-    """引用表重建后：为每个总成展开 full 树并写入 ``bom_tree_occurrence``。"""
+    """引用表重建后：为每个总成展开 full 树并写入 ``phoenix_cad_bom_tree_occurrence``。"""
     rr = repo_root.expanduser().resolve(strict=False)
     if not cad_database_path(rr).is_file():
         return {"root_count": 0, "occurrence_count": 0}
@@ -84,11 +84,11 @@ def rebuild_bom_tree_occurrences(repo_root: Path) -> dict[str, Any]:
         )
 
     with connect(rr) as conn:
-        conn.execute("DELETE FROM bom_tree_occurrence")
+        conn.execute("DELETE FROM phoenix_cad_bom_tree_occurrence")
         if rows:
             conn.executemany(
                 """
-                INSERT INTO bom_tree_occurrence (
+                INSERT INTO phoenix_cad_bom_tree_occurrence (
                     root_host_repo_rel_path, tree_path, depth,
                     host_repo_rel_path, target_repo_rel_path,
                     xlink_file_attr, link_label, built_at
@@ -132,26 +132,22 @@ def query_target_usage_stats(repo_root: Path, target_repo_rel: str) -> dict[str,
         }
 
     with connect(rr) as conn:
-        direct_row = conn.execute(
+        stats_row = conn.execute(
             """
-            SELECT COUNT(DISTINCT host_repo_rel_path) AS n
-            FROM bom_xref
-            WHERE target_repo_rel_path = ?
+            SELECT
+                (SELECT COUNT(DISTINCT host_repo_rel_path)
+                 FROM phoenix_cad_bom_xref WHERE target_repo_rel_path = ?) AS direct_n,
+                (SELECT COUNT(*) FROM phoenix_cad_bom_tree_occurrence
+                 WHERE target_repo_rel_path = ?) AS slots,
+                (SELECT COUNT(DISTINCT root_host_repo_rel_path)
+                 FROM phoenix_cad_bom_tree_occurrence WHERE target_repo_rel_path = ?) AS roots
             """,
-            (key,),
-        ).fetchone()
-        occ_row = conn.execute(
-            """
-            SELECT COUNT(*) AS slots, COUNT(DISTINCT root_host_repo_rel_path) AS roots
-            FROM bom_tree_occurrence
-            WHERE target_repo_rel_path = ?
-            """,
-            (key,),
+            (key, key, key),
         ).fetchone()
         occ_rows = conn.execute(
             """
             SELECT root_host_repo_rel_path, tree_path, host_repo_rel_path, link_label
-            FROM bom_tree_occurrence
+            FROM phoenix_cad_bom_tree_occurrence
             WHERE target_repo_rel_path = ?
             ORDER BY root_host_repo_rel_path, tree_path
             LIMIT 200
@@ -161,9 +157,9 @@ def query_target_usage_stats(repo_root: Path, target_repo_rel: str) -> dict[str,
 
     return {
         "target_repo_rel_path": key,
-        "direct_incoming_host_count": int(direct_row["n"]) if direct_row else 0,
-        "bom_occurrence_count": int(occ_row["slots"]) if occ_row else 0,
-        "bom_root_count": int(occ_row["roots"]) if occ_row else 0,
+        "direct_incoming_host_count": int(stats_row["direct_n"]) if stats_row else 0,
+        "bom_occurrence_count": int(stats_row["slots"]) if stats_row else 0,
+        "bom_root_count": int(stats_row["roots"]) if stats_row else 0,
         "occurrences": [
             {
                 "root_host_repo_rel_path": str(r["root_host_repo_rel_path"]),
@@ -180,7 +176,7 @@ def query_incoming_host_counts_for_targets(
     repo_root: Path,
     target_paths: list[str],
 ) -> dict[str, int]:
-    """批量：各 ``target_repo_rel_path`` 的直接入向宿主数（来自 ``bom_xref``）。"""
+    """批量：各 ``target_repo_rel_path`` 的直接入向宿主数（来自 ``phoenix_cad_bom_xref``）。"""
     rr = repo_root.expanduser().resolve(strict=False)
     keys = sorted({_norm_key(p) for p in target_paths if str(p).strip()})
     if not keys or not cad_database_path(rr).is_file():
@@ -190,7 +186,7 @@ def query_incoming_host_counts_for_targets(
         rows = conn.execute(
             f"""
             SELECT target_repo_rel_path, COUNT(DISTINCT host_repo_rel_path) AS n
-            FROM bom_xref
+            FROM phoenix_cad_bom_xref
             WHERE target_repo_rel_path IN ({placeholders})
             GROUP BY target_repo_rel_path
             """,

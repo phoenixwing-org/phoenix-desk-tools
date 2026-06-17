@@ -109,6 +109,40 @@ export function fetchOnboardingStatus() {
   return jsonFetch<OnboardingStatus>("/api/onboarding/status");
 }
 
+export type PhoenixDatabaseStatus = {
+  legacy_detected: boolean;
+  needs_recreate: boolean;
+  reasons: string[];
+  old_tables_found: string[];
+  legacy_file_exists: boolean;
+  database_exists: boolean;
+  database_path: string;
+  legacy_database_path: string;
+  database_filename: string;
+  legacy_database_filename: string;
+  expected_schema_version: number;
+  schema_version: number | null;
+  database_path_display: string;
+};
+
+export type PhoenixDatabaseRecreateResult = {
+  status: string;
+  removed_files: string[];
+  database_path: string;
+  schema_version: number;
+  recreated_at: string;
+};
+
+export function fetchPhoenixDatabaseStatus() {
+  return jsonFetch<PhoenixDatabaseStatus>("/api/phoenix/database/status");
+}
+
+export function recreatePhoenixDatabase() {
+  return jsonFetch<PhoenixDatabaseRecreateResult>("/api/phoenix/database/recreate", {
+    method: "POST",
+  });
+}
+
 export function fetchAppConfig() {
   return jsonFetch<AppConfig>("/api/config/app");
 }

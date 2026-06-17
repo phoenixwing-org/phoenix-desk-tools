@@ -1,4 +1,4 @@
-"""装配树预计算：一次加载 ``bom_xref`` 邻接表在内存展开，结果 JSON 缓存到 SQLite。"""
+"""装配树预计算：一次加载 ``phoenix_cad_bom_xref`` 邻接表在内存展开，结果 JSON 缓存到 SQLite。"""
 
 from __future__ import annotations
 
@@ -153,8 +153,8 @@ def _batch_enrich_file_roles(repo_root: Path, nodes: list[dict[str, Any]]) -> No
             SELECT fa.repo_rel_path, fa.filename, fa.part_number, fa.part_version,
                    fa.type_code, fa.model_series, fa.part_name, fa.label,
                    pfl.file_role
-            FROM file_asset fa
-            LEFT JOIN part_file_link pfl ON pfl.file_asset_id = fa.id
+            FROM phoenix_cad_file_asset fa
+            LEFT JOIN phoenix_cad_part_file_link pfl ON pfl.file_asset_id = fa.id
             WHERE fa.repo_rel_path IN ({placeholders})
             """,
             keys,

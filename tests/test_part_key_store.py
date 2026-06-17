@@ -1,4 +1,4 @@
-"""part_key / part_file_link 与 file_asset 同步。"""
+"""phoenix_cad_part_key / phoenix_cad_part_file_link 与 phoenix_cad_file_asset 同步。"""
 
 from __future__ import annotations
 
@@ -99,7 +99,7 @@ class TestPartKeyStore(unittest.TestCase):
             save_fcstd_document(root, doc, scan_root=".", stats={"total_entries": 1})
 
             with connect(root) as conn:
-                row1 = conn.execute("SELECT id FROM file_asset").fetchone()
+                row1 = conn.execute("SELECT id FROM phoenix_cad_file_asset").fetchone()
                 assert row1 is not None
                 id1 = int(row1["id"])
 
@@ -112,7 +112,7 @@ class TestPartKeyStore(unittest.TestCase):
             )
 
             with connect(root) as conn:
-                row2 = conn.execute("SELECT id, part_name FROM file_asset").fetchone()
+                row2 = conn.execute("SELECT id, part_name FROM phoenix_cad_file_asset").fetchone()
                 assert row2 is not None
                 self.assertEqual(int(row2["id"]), id1)
                 self.assertEqual(row2["part_name"], "灯座-改")

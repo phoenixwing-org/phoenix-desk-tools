@@ -74,7 +74,7 @@ class TestFcstdMapService(unittest.TestCase):
             self.assertTrue(missing["last_seen_at"])
 
             with sqlite3.connect(str(cad_database_path(td))) as conn:
-                n = conn.execute("SELECT COUNT(*) FROM file_asset").fetchone()[0]
+                n = conn.execute("SELECT COUNT(*) FROM phoenix_cad_file_asset").fetchone()[0]
                 self.assertEqual(n, 2)
         finally:
             shutil.rmtree(td, ignore_errors=True)
@@ -198,7 +198,7 @@ class TestFcstdMapService(unittest.TestCase):
             self.assertEqual(page1["total"], 2)
             self.assertEqual(page1["count"], 1)
             self.assertIn("debug_sql", page1)
-            self.assertIn("FROM file_asset", page1["debug_sql"])
+            self.assertIn("FROM phoenix_cad_file_asset", page1["debug_sql"])
             self.assertIn("LIMIT 1", page1["debug_sql"])
 
             page2 = search_fcstd_map_entries(td, offset=1, limit=1)

@@ -147,7 +147,7 @@ def lookup_part_key_in_index(
     basename: str = "",
     repo_rel: str = "",
 ) -> dict[str, str]:
-    """在 CAD 索引 ``file_asset`` 中按路径或文件名查已登记的 Part Key。"""
+    """在 CAD 索引 ``phoenix_cad_file_asset`` 中按路径或文件名查已登记的 Part Key。"""
     rr = repo_root.expanduser().resolve(strict=False)
     migrate_fcstd_map_json(rr)
     rel_norm = normalize_repo_rel_path_for_map(repo_rel.strip()) if repo_rel.strip() else ""
@@ -167,7 +167,7 @@ def lookup_part_key_in_index(
     where = " OR ".join(clauses)
     sql = f"""
         SELECT part_number, part_version, repo_rel_path
-        FROM file_asset
+        FROM phoenix_cad_file_asset
         WHERE ({where})
           AND part_number IS NOT NULL AND TRIM(part_number) != ''
           AND part_version IS NOT NULL AND TRIM(part_version) != ''

@@ -443,7 +443,7 @@ class TestRenameRefFix(unittest.TestCase):
             with connect(root) as conn:
                 conn.execute(
                     """
-                    UPDATE file_asset
+                    UPDATE phoenix_cad_file_asset
                     SET part_number = ?, part_version = ?, part_name = ?, label = ?
                     WHERE repo_rel_path = ?
                     """,

@@ -718,49 +718,6 @@ def _host_groups_from_hit_map(hit_map: dict[str, list[XLinkBasenameHit]]) -> lis
     return out
 
 
-def _enrich_tree_node(repo_root: Path, node: dict[str, Any]) -> None:
-    from fcdesk.freecad.fcstd_mapping import infer_part_key_from_filename
-    from fcdesk.freecad.phoenix_store import connect, format_part_key, infer_part_file_role
-
-    rel = str(node.get("repo_rel_path") or "").strip()
-    if not rel:
-        base = str(node.get("basename") or "").strip()
-        if base:
-            pn, pv = infer_part_key_from_filename(base)
-            if pn and pv:
-                node["part_number"] = pn
-                node["part_version"] = pv
-                node["part_key"] = format_part_key(pn, pv)
-        node["file_role"] = infer_part_file_role(base)
-        return
-    rr = repo_root.expanduser().resolve(strict=False)
-    with connect(rr) as conn:
-        row = conn.execute(
-            """
-            SELECT fa.filename, fa.part_number, fa.part_version, fa.type_code,
-                   fa.model_series, fa.part_name, fa.label, pfl.file_role
-            FROM file_asset fa
-            LEFT JOIN part_file_link pfl ON pfl.file_asset_id = fa.id
-            WHERE fa.repo_rel_path = ?
-            LIMIT 1
-            """,
-            (rel,),
-        ).fetchone()
-    if row is None:
-        node["file_role"] = infer_part_file_role(node.get("basename") or Path(rel).name)
-        return
-    pn = str(row["part_number"] or "").strip()
-    pv = str(row["part_version"] or "").strip()
-    node["part_number"] = pn
-    node["part_version"] = pv
-    node["part_key"] = format_part_key(pn, pv) if pn and pv else ""
-    node["TypeCode"] = str(row["type_code"] or "")
-    node["ModelSeries"] = str(row["model_series"] or "")
-    node["PartName"] = str(row["part_name"] or "")
-    node["label"] = str(row["label"] or "")
-    node["file_role"] = str(row["file_role"] or infer_part_file_role(str(row["filename"] or "")))
-
-
 def _assign_tree_node_ids(nodes: list[dict[str, Any]], *, prefix: str = "") -> None:
     for index, node in enumerate(nodes):
         rel = str(node.get("repo_rel_path") or index)

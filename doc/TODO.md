@@ -13,7 +13,7 @@
 - [x] `bom_xref` 冗余 `rule_label` + 子件 BOM 快照；查询单表、不读盘补 Label
 - [x] 文件详情：引用 Tab 懒加载、分 scope 请求、角标单条 SQL
 - [ ] `rebuild_bom_tree_occurrences`：邻接表只查一次，消除 per-host 重复全表 SQL
-- [ ] `query_bom_xrefs_incoming`：合并 `get_file_asset_id` 为单条 SQL
+- [x] `query_bom_xrefs_incoming`：合并 `get_file_asset_id` 为单条 SQL
 
 ---
 
@@ -30,8 +30,8 @@
 
 ## P1 — Web 壳层 / UX
 
-- [x] **配置**：全屏 frame 层；工作空间 **浏览…** 走 Python 原生选目录
-- [ ] 配置层：保存工作空间后若从未扫描，引导一键打开 CAD 索引
+- [x] **配置**：居中 Modal 弹层；工作空间 **浏览…** 走 Python 原生选目录（macOS osascript）
+- [x] 配置：未扫描工作空间时提示并跳转 **CAD 索引**
 - [ ] 桌面 `fcstd_map_page` 分页，去掉 `load_fcstd_document` 全表
 - [ ] 统一运行日志：长任务进度条 / 取消（见 [统一运行日志窗口-规划讨论.md](统一运行日志窗口-规划讨论.md)）
 
@@ -39,10 +39,32 @@
 
 ## P2 — 清理 / 技术债
 
-- [ ] 删除或收敛 `_enrich_tree_node` 等死代码
-- [ ] `query_target_usage_stats` 合并多条查询
-- [ ] 旧库 `bom_xref.link_label` 为空：文档说明「重扫 / 重建引用索引」运维步骤
-- [ ] `FIX_CODE.py`：已废弃的一次性补丁脚本，可删或移入 `scripts/archive`
+- [x] 删除 `_enrich_tree_node` 死代码（无调用方）
+- [x] `query_target_usage_stats` 统计合并为单条 SQL（明细列表仍单独查）
+- [x] 旧库 `bom_xref.link_label` / `rule_label` 为空：见下方运维备忘
+- [x] `FIX_CODE.py`：仓库中已不存在，无需处理
+
+---
+
+## P2 — 数据库命名（schema v10 · 已落地）
+
+> 现网：[CAD数据库表结构.md](CAD数据库表结构.md) · 库文件：`.phoenix/phoenix-cad.sqlite`
+
+- [x] `phoenix_schema.py` + v10 DDL（`phoenix_cad_*` / `phoenix_audit_*` / `phoenix_meta` / `phoenix_ui_session`）
+- [x] 不迁移旧库：检测到 `cad-database.sqlite` 或旧表名 → Web 横幅 **确认重建**（`LegacyPhoenixDatabaseError` 阻断 `connect()`）
+- [x] `GET/POST /api/phoenix/database/*` + AppShell 旧库提示条
+- [ ] 文档中旧表名/旧库名全文替换（进行中）
+
+---
+
+## P3 — 平台化（讨论稿 · 未立项）
+
+> [Phoenix平台-多应用壳层-规划讨论.md](Phoenix平台-多应用壳层-规划讨论.md)
+
+- [ ] 确认：同仓分包 vs 独立 `phoenix-shell` 仓库
+- [ ] `web-ui/src/plugins/freecad/` 页面分包（无行为变化）
+- [ ] Python 路由 `register_freecad_routes` 拆分
+- [ ] 第二个插件原型（验证表前缀 `phoenix_<app>_`）
 
 ---
 
@@ -50,6 +72,9 @@
 
 | 文档 | 主题 |
 | --- | --- |
+| [CAD数据库表结构.md](CAD数据库表结构.md) | 现网 13 表、ER（schema v10） |
+| [CAD数据库表结构-重命名规划.md](CAD数据库表结构-重命名规划.md) | v10 重命名决策（删库重建） |
+| [Phoenix平台-多应用壳层-规划讨论.md](Phoenix平台-多应用壳层-规划讨论.md) | 多应用壳层、子插件、是否拆仓 |
 | [文件变更历史与引用证据-待办讨论.md](文件变更历史与引用证据-待办讨论.md) | 改名历史、引用证据、统一修正算法 |
 | [Phoenix工作空间存储-规划讨论.md](Phoenix工作空间存储-规划讨论.md) | SQLite 默认、按需导出 JSON |
 | [Web与桌面迁移-待办.md](Web与桌面迁移-待办.md) | 页面对照、桌面功能迁移 |
@@ -62,3 +87,4 @@
 - 修改前端后：**硬刷新**或重启 `python -m fcdesk.web --dev`
 - 索引字段变更后：工作空间内 **CAD 重扫** 或单文件 **重建引用索引**
 - 查询路径**不读 FCStd 补全**；缺 `link_label` / `rule_label` 需重建索引
+- **旧库 / 空索引**：若顶部出现旧库横幅，点 **确认重建数据库** 后 **CAD 索引 → 工程内搜索**；仍异常时可删除 `.phoenix/phoenix-cad.sqlite` 再全量重扫

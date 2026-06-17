@@ -1,4 +1,4 @@
-"""CAD 索引：工程内扫描、属性采集、缺失标记；持久化至 ``.phoenix/cad-database.sqlite``。"""
+"""CAD 索引：工程内扫描、属性采集、缺失标记；持久化至 ``.phoenix/phoenix-cad.sqlite``。"""
 
 from __future__ import annotations
 
@@ -339,7 +339,7 @@ def search_fcstd_map_entries(
     kind: str | None = None,
     search: str | None = None,
 ) -> dict[str, Any]:
-    """分页返回 CAD 索引条目（单次 ``file_asset`` 查询，无 JOIN）。"""
+    """分页返回 CAD 索引条目（单次 ``phoenix_cad_file_asset`` 查询，无 JOIN）。"""
     rr = repo_root.expanduser().resolve(strict=False)
     _ensure_index_loaded(rr)
     cap = max(1, min(int(limit), 500))
@@ -405,7 +405,7 @@ def load_fcstd_map_payload(repo_root: Path, *, include_entries: bool = True) -> 
         }
 
     with connect(rr) as conn:
-        n_row = conn.execute("SELECT COUNT(*) AS n FROM file_asset").fetchone()
+        n_row = conn.execute("SELECT COUNT(*) AS n FROM phoenix_cad_file_asset").fetchone()
         row_count = int(n_row["n"]) if n_row else 0
         if row_count == 0:
             return {
@@ -472,7 +472,7 @@ def run_fcstd_map_scan(
     *,
     force_update_part_name: bool | None = None,
 ) -> dict[str, Any]:
-    """从工作空间根递归扫描 CAD 文件，写入 ``.phoenix/cad-database.sqlite``。"""
+    """从工作空间根递归扫描 CAD 文件，写入 ``.phoenix/phoenix-cad.sqlite``。"""
     rr = repo_root.expanduser().resolve(strict=False)
     merge_workspace_section("fcstd_map", {"scan_root": None}, rr)
 

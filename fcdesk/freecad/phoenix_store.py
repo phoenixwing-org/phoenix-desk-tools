@@ -1,4 +1,4 @@
-"""工作空间 ``.phoenix/cad-database.sqlite`` — FCStd 索引与扫描元数据。"""
+"""工作空间 ``.phoenix/phoenix-cad.sqlite`` — FCStd 索引与扫描元数据。"""
 
 from __future__ import annotations
 
@@ -19,11 +19,16 @@ from fcdesk.freecad.fcstd_mapping import (
     FcstdMapEntry,
     normalize_repo_rel_path_for_map,
 )
+from fcdesk.freecad.phoenix_schema import (
+    CAD_DATABASE_FILENAME,
+    CREATE_SCHEMA_DDL,
+    SCHEMA_VERSION,
+    T_META,
+    discard_legacy_database_files,
+    phoenix_dir as _schema_phoenix_dir,
+)
 
-PHOENIX_DIR_NAME = ".phoenix"
-CAD_DATABASE_FILENAME = "cad-database.sqlite"
 FCSTD_MAP_JSON_NAME = "fcstd_map.json"
-STORE_SCHEMA_VERSION = 2
 
 PART_KEY_STATUS_ACTIVE = "active"
 PART_KEY_STATUS_OBSOLETE = "obsolete"
@@ -46,11 +51,13 @@ LINK_STATUS_OBSOLETE = "obsolete"
 
 
 def phoenix_dir(repo_root: Path) -> Path:
-    return repo_root.expanduser().resolve(strict=False) / PHOENIX_DIR_NAME
+    return _schema_phoenix_dir(repo_root)
 
 
 def cad_database_path(repo_root: Path) -> Path:
-    return phoenix_dir(repo_root) / CAD_DATABASE_FILENAME
+    from fcdesk.freecad.phoenix_schema import cad_database_path as _cad_path
+
+    return _cad_path(repo_root)
 
 
 def fcstd_map_json_path(repo_root: Path) -> Path:
@@ -139,6 +146,7 @@ class _LoggingConnection:
 def connect(repo_root: Path) -> Iterator[sqlite3.Connection]:
     rr = repo_root.expanduser().resolve(strict=False)
     phoenix_dir(rr).mkdir(parents=True, exist_ok=True)
+    discard_legacy_database_files(rr)
     db = cad_database_path(rr)
     conn = sqlite3.connect(str(db), timeout=30.0)
     conn.row_factory = sqlite3.Row
@@ -156,340 +164,24 @@ def connect(repo_root: Path) -> Iterator[sqlite3.Connection]:
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
-    conn.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS meta (
-            key TEXT PRIMARY KEY NOT NULL,
-            value TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS fcstd_scan (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            scanned_at TEXT NOT NULL,
-            scan_root TEXT NOT NULL,
-            stats_json TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS file_asset (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            repo_rel_path TEXT NOT NULL UNIQUE,
-            filename TEXT NOT NULL,
-            asset_kind TEXT,
-            part_number TEXT,
-            part_version TEXT,
-            type_code TEXT,
-            model_series TEXT,
-            part_name TEXT,
-            label TEXT,
-            file_status TEXT NOT NULL DEFAULT 'present',
-            last_seen_at TEXT,
-            updated_at TEXT NOT NULL
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_file_asset_filename ON file_asset(filename);
-        CREATE INDEX IF NOT EXISTS idx_file_asset_status ON file_asset(file_status);
-        CREATE INDEX IF NOT EXISTS idx_file_asset_part ON file_asset(part_number, part_version);
-        """
-    )
-    _migrate_schema(conn)
-
-
-def _migrate_schema(conn: sqlite3.Connection) -> None:
-    row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
-    version = int(row["value"]) if row else 0
-    if version < 1:
+    conn.executescript(CREATE_SCHEMA_DDL)
+    row = conn.execute(
+        f"SELECT value FROM {T_META} WHERE key = 'schema_version'"
+    ).fetchone()
+    if row is None:
         conn.execute(
-            "INSERT INTO meta(key, value) VALUES ('schema_version', '1') "
-            "ON CONFLICT(key) DO UPDATE SET value = excluded.value"
-        )
-        version = 1
-    if version < 2:
-        conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS part_key (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                part_number TEXT NOT NULL,
-                part_version TEXT NOT NULL,
-                type_code TEXT,
-                model_series TEXT,
-                part_name TEXT,
-                label TEXT,
-                notes TEXT,
-                status TEXT NOT NULL DEFAULT 'active',
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                UNIQUE(part_number, part_version)
-            );
-
-            CREATE TABLE IF NOT EXISTS part_file_link (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                part_key_id INTEGER NOT NULL REFERENCES part_key(id) ON DELETE CASCADE,
-                file_asset_id INTEGER NOT NULL UNIQUE REFERENCES file_asset(id) ON DELETE CASCADE,
-                file_role TEXT NOT NULL DEFAULT 'part',
-                notes TEXT,
-                link_status TEXT NOT NULL DEFAULT 'active',
-                linked_at TEXT NOT NULL
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_part_key_pn_pv ON part_key(part_number, part_version);
-            CREATE INDEX IF NOT EXISTS idx_part_file_link_key ON part_file_link(part_key_id);
-            """
-        )
-        conn.execute(
-            "UPDATE meta SET value = '2' WHERE key = 'schema_version'"
-        )
-        sync_part_keys_from_file_assets(conn)
-    if version < 3:
-        cols = {r["name"] for r in conn.execute("PRAGMA table_info(file_asset)").fetchall()}
-        if "asset_kind" not in cols:
-            conn.execute("ALTER TABLE file_asset ADD COLUMN asset_kind TEXT")
-        conn.execute(
-            """
-            UPDATE file_asset
-            SET asset_kind = 'fcstd'
-            WHERE asset_kind IS NULL OR TRIM(asset_kind) = ''
-            """
-        )
-        conn.execute(
-            "UPDATE meta SET value = '3' WHERE key = 'schema_version'"
-        )
-        version = 3
-    if version < 4:
-        conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS change_event (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                kind TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                actor TEXT,
-                source TEXT,
-                note TEXT,
-                stats_json TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS rename_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                event_id INTEGER NOT NULL REFERENCES change_event(id) ON DELETE CASCADE,
-                file_asset_id INTEGER REFERENCES file_asset(id) ON DELETE SET NULL,
-                old_repo_rel_path TEXT NOT NULL,
-                new_repo_rel_path TEXT NOT NULL,
-                old_filename TEXT NOT NULL,
-                new_filename TEXT NOT NULL,
-                old_basename TEXT NOT NULL,
-                new_basename TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS ref_hit (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                event_id INTEGER NOT NULL REFERENCES change_event(id) ON DELETE CASCADE,
-                rename_log_id INTEGER REFERENCES rename_log(id) ON DELETE SET NULL,
-                host_repo_rel_path TEXT NOT NULL,
-                host_asset_kind TEXT,
-                ref_kind TEXT NOT NULL DEFAULT 'xlink_file_attr',
-                locator TEXT NOT NULL DEFAULT 'Document.xml',
-                matched_text TEXT NOT NULL,
-                proposed_text TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'pending',
-                detail_json TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS ref_patch_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                event_id INTEGER NOT NULL REFERENCES change_event(id) ON DELETE CASCADE,
-                ref_hit_id INTEGER REFERENCES ref_hit(id) ON DELETE SET NULL,
-                host_repo_rel_path TEXT NOT NULL,
-                old_text TEXT NOT NULL,
-                new_text TEXT NOT NULL,
-                applied_at TEXT,
-                error TEXT
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_rename_log_old_basename ON rename_log(old_basename);
-            CREATE INDEX IF NOT EXISTS idx_ref_hit_rename ON ref_hit(rename_log_id);
-            CREATE INDEX IF NOT EXISTS idx_ref_hit_host ON ref_hit(host_repo_rel_path);
-            """
-        )
-        conn.execute(
-            "UPDATE meta SET value = '4' WHERE key = 'schema_version'"
-        )
-        version = 4
-    if version < 5:
-        conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS ui_session (
-                scope TEXT PRIMARY KEY NOT NULL,
-                payload_json TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-            """
-        )
-        conn.execute(
-            "UPDATE meta SET value = '5' WHERE key = 'schema_version'"
-        )
-        version = 5
-    if version < 6:
-        conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS bom_xref (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                scan_id INTEGER NOT NULL REFERENCES fcstd_scan(id) ON DELETE CASCADE,
-                host_file_asset_id INTEGER NOT NULL REFERENCES file_asset(id) ON DELETE CASCADE,
-                host_repo_rel_path TEXT NOT NULL,
-                ref_kind TEXT NOT NULL DEFAULT 'xlink_file_attr',
-                locator TEXT NOT NULL DEFAULT 'Document.xml',
-                xlink_file_attr TEXT NOT NULL,
-                target_basename TEXT NOT NULL,
-                target_file_asset_id INTEGER REFERENCES file_asset(id) ON DELETE SET NULL,
-                target_repo_rel_path TEXT,
-                resolve_status TEXT NOT NULL DEFAULT 'missing',
-                detail_json TEXT,
-                last_seen_at TEXT NOT NULL,
-                UNIQUE(host_file_asset_id, xlink_file_attr)
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_bom_xref_host ON bom_xref(host_file_asset_id);
-            CREATE INDEX IF NOT EXISTS idx_bom_xref_host_path ON bom_xref(host_repo_rel_path);
-            CREATE INDEX IF NOT EXISTS idx_bom_xref_target_asset ON bom_xref(target_file_asset_id);
-            CREATE INDEX IF NOT EXISTS idx_bom_xref_target_basename ON bom_xref(target_basename);
-            CREATE INDEX IF NOT EXISTS idx_bom_xref_target_path ON bom_xref(target_repo_rel_path);
-            CREATE INDEX IF NOT EXISTS idx_bom_xref_scan ON bom_xref(scan_id);
-            """
-        )
-        conn.execute(
-            "UPDATE meta SET value = '6' WHERE key = 'schema_version'"
-        )
-        version = 6
-    if version < 7:
-        cols = {r["name"] for r in conn.execute("PRAGMA table_info(bom_xref)").fetchall()}
-        if "link_label" not in cols:
-            conn.execute(
-                "ALTER TABLE bom_xref ADD COLUMN link_label TEXT NOT NULL DEFAULT ''"
-            )
-        conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS bom_assembly_cache (
-                host_repo_rel_path TEXT NOT NULL,
-                mode TEXT NOT NULL,
-                tree_json TEXT NOT NULL,
-                node_count INTEGER NOT NULL DEFAULT 0,
-                bom_xref_at TEXT NOT NULL DEFAULT '',
-                built_at TEXT NOT NULL,
-                PRIMARY KEY (host_repo_rel_path, mode)
-            );
-            CREATE INDEX IF NOT EXISTS idx_bom_asm_cache_built
-                ON bom_assembly_cache(bom_xref_at);
-            """
-        )
-        conn.execute(
-            "UPDATE meta SET value = '7' WHERE key = 'schema_version'"
-        )
-        version = 7
-    if version < 8:
-        conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS bom_tree_occurrence (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                root_host_repo_rel_path TEXT NOT NULL,
-                tree_path TEXT NOT NULL,
-                depth INTEGER NOT NULL,
-                host_repo_rel_path TEXT NOT NULL,
-                target_repo_rel_path TEXT,
-                xlink_file_attr TEXT NOT NULL,
-                link_label TEXT,
-                built_at TEXT NOT NULL,
-                UNIQUE(root_host_repo_rel_path, tree_path)
-            );
-            CREATE INDEX IF NOT EXISTS idx_bom_occ_target
-                ON bom_tree_occurrence(target_repo_rel_path);
-            CREATE INDEX IF NOT EXISTS idx_bom_occ_root
-                ON bom_tree_occurrence(root_host_repo_rel_path);
-            CREATE INDEX IF NOT EXISTS idx_bom_occ_host_target
-                ON bom_tree_occurrence(host_repo_rel_path, target_repo_rel_path);
-            """
-        )
-        conn.execute(
-            "UPDATE meta SET value = '8' WHERE key = 'schema_version'"
-        )
-        version = 8
-    if version < 9:
-        cols = {r["name"] for r in conn.execute("PRAGMA table_info(bom_xref)").fetchall()}
-        redundant = (
-            ("rule_label", "TEXT NOT NULL DEFAULT ''"),
-            ("target_part_number", "TEXT NOT NULL DEFAULT ''"),
-            ("target_part_version", "TEXT NOT NULL DEFAULT ''"),
-            ("target_type_code", "TEXT NOT NULL DEFAULT ''"),
-            ("target_model_series", "TEXT NOT NULL DEFAULT ''"),
-            ("target_part_name", "TEXT NOT NULL DEFAULT ''"),
-            ("target_asset_label", "TEXT NOT NULL DEFAULT ''"),
-        )
-        for name, ddl in redundant:
-            if name not in cols:
-                conn.execute(f"ALTER TABLE bom_xref ADD COLUMN {name} {ddl}")
-        _backfill_bom_xref_redundant_columns(conn)
-        conn.execute("DELETE FROM bom_assembly_cache")
-        conn.execute(
-            "UPDATE meta SET value = '9' WHERE key = 'schema_version'"
+            f"INSERT INTO {T_META}(key, value) VALUES ('schema_version', ?)",
+            (str(SCHEMA_VERSION),),
         )
 
 
-def _backfill_bom_xref_redundant_columns(conn: sqlite3.Connection) -> None:
-    """将既有 ``bom_xref`` 行的子件快照与 ``rule_label`` 从 ``file_asset`` 回填进冗余列。"""
-    from fcdesk.freecad.fcstd_mapping import compute_rule_label_from_target_fields
-
-    rows = conn.execute(
-        """
-        SELECT bx.id, bx.target_basename, bx.target_repo_rel_path,
-               COALESCE(ta.part_number, '') AS target_part_number,
-               COALESCE(ta.part_version, '') AS target_part_version,
-               COALESCE(ta.type_code, '') AS target_type_code,
-               COALESCE(ta.model_series, '') AS target_model_series,
-               COALESCE(ta.part_name, '') AS target_part_name,
-               COALESCE(ta.label, '') AS target_asset_label
-        FROM bom_xref bx
-        LEFT JOIN file_asset ta ON ta.id = bx.target_file_asset_id
-        """
-    ).fetchall()
-    updates: list[tuple[Any, ...]] = []
-    for row in rows:
-        pn = str(row["target_part_number"] or "")
-        pv = str(row["target_part_version"] or "")
-        tc = str(row["target_type_code"] or "")
-        ms = str(row["target_model_series"] or "")
-        pname = str(row["target_part_name"] or "")
-        label = str(row["target_asset_label"] or "")
-        base = str(row["target_basename"] or "")
-        trel = str(row["target_repo_rel_path"] or "")
-        rule_label = compute_rule_label_from_target_fields(
-            target_asset_label=label,
-            target_part_number=pn,
-            target_part_version=pv,
-            target_part_name=pname,
-            target_basename=base,
-            target_repo_rel_path=trel,
-        )
-        updates.append((rule_label, pn, pv, tc, ms, pname, label, int(row["id"])))
-    if updates:
-        conn.executemany(
-            """
-            UPDATE bom_xref SET
-                rule_label = ?,
-                target_part_number = ?,
-                target_part_version = ?,
-                target_type_code = ?,
-                target_model_series = ?,
-                target_part_name = ?,
-                target_asset_label = ?
-            WHERE id = ?
-            """,
-            updates,
-        )
 
 
 def enrich_bom_xref_edges_target_fields(
     repo_root: Path,
     edges: list[dict[str, Any]],
 ) -> None:
-    """索引写入前：批量从 ``file_asset`` 填充 ``bom_xref`` 冗余子件字段与 ``rule_label``。"""
+    """索引写入前：批量从 ``phoenix_cad_file_asset`` 填充 ``phoenix_cad_bom_xref`` 冗余子件字段与 ``rule_label``。"""
     from fcdesk.freecad.fcstd_mapping import compute_rule_label_from_target_fields
 
     rr = repo_root.expanduser().resolve(strict=False)
@@ -509,7 +201,7 @@ def enrich_bom_xref_edges_target_fields(
             rows = conn.execute(
                 f"""
                 SELECT id, part_number, part_version, type_code, model_series, part_name, label
-                FROM file_asset
+                FROM phoenix_cad_file_asset
                 WHERE id IN ({placeholders})
                 """,
                 ids,
@@ -545,13 +237,13 @@ def enrich_bom_xref_edges_target_fields(
 
 
 def _meta_get(conn: sqlite3.Connection, key: str) -> str | None:
-    row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+    row = conn.execute("SELECT value FROM phoenix_meta WHERE key = ?", (key,)).fetchone()
     return str(row["value"]) if row else None
 
 
 def _meta_set(conn: sqlite3.Connection, key: str, value: str) -> None:
     conn.execute(
-        "INSERT INTO meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        "INSERT INTO phoenix_meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         (key, value),
     )
 
@@ -653,7 +345,7 @@ def _pick_scan_attr(files: list[sqlite3.Row], field: str) -> str | None:
 
 
 def sync_part_keys_from_file_assets(conn: sqlite3.Connection) -> None:
-    """按 ``file_asset`` 的零件号+版本重建 ``part_key`` 与 ``part_file_link``。
+    """按 ``phoenix_cad_file_asset`` 的零件号+版本重建 ``phoenix_cad_part_key`` 与 ``phoenix_cad_part_file_link``。
 
     批量 UPSERT（``executemany``），避免逐文件 SELECT+UPDATE 的 N+1 查库。
     """
@@ -662,7 +354,7 @@ def sync_part_keys_from_file_assets(conn: sqlite3.Connection) -> None:
         """
         SELECT id, part_number, part_version, type_code, model_series, part_name, label,
                filename, file_status
-        FROM file_asset
+        FROM phoenix_cad_file_asset
         WHERE part_number IS NOT NULL AND TRIM(part_number) != ''
           AND part_version IS NOT NULL AND TRIM(part_version) != ''
         ORDER BY file_status, repo_rel_path
@@ -693,7 +385,7 @@ def sync_part_keys_from_file_assets(conn: sqlite3.Connection) -> None:
     if key_upserts:
         conn.executemany(
             """
-            INSERT INTO part_key (
+            INSERT INTO phoenix_cad_part_key (
                 part_number, part_version, type_code, model_series, part_name, label,
                 notes, status, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
@@ -711,7 +403,7 @@ def sync_part_keys_from_file_assets(conn: sqlite3.Connection) -> None:
     if groups:
         pk_rows = conn.execute(
             """
-            SELECT id, part_number, part_version FROM part_key
+            SELECT id, part_number, part_version FROM phoenix_cad_part_key
             WHERE part_number IS NOT NULL AND TRIM(part_number) != ''
               AND part_version IS NOT NULL AND TRIM(part_version) != ''
             """
@@ -742,7 +434,7 @@ def sync_part_keys_from_file_assets(conn: sqlite3.Connection) -> None:
     if link_upserts:
         conn.executemany(
             """
-            INSERT INTO part_file_link (
+            INSERT INTO phoenix_cad_part_file_link (
                 part_key_id, file_asset_id, file_role, notes, link_status, linked_at
             ) VALUES (?, ?, ?, NULL, ?, ?)
             ON CONFLICT(file_asset_id) DO UPDATE SET
@@ -756,17 +448,17 @@ def sync_part_keys_from_file_assets(conn: sqlite3.Connection) -> None:
     if touched_key_ids:
         placeholders = ",".join("?" * len(touched_key_ids))
         conn.execute(
-            f"DELETE FROM part_key WHERE id NOT IN ({placeholders})",
+            f"DELETE FROM phoenix_cad_part_key WHERE id NOT IN ({placeholders})",
             tuple(touched_key_ids),
         )
     else:
-        conn.execute("DELETE FROM part_key")
+        conn.execute("DELETE FROM phoenix_cad_part_key")
 
     conn.execute(
         """
-        DELETE FROM part_file_link
+        DELETE FROM phoenix_cad_part_file_link
         WHERE file_asset_id NOT IN (
-            SELECT id FROM file_asset
+            SELECT id FROM phoenix_cad_file_asset
             WHERE part_number IS NOT NULL AND TRIM(part_number) != ''
               AND part_version IS NOT NULL AND TRIM(part_version) != ''
         )
@@ -779,7 +471,7 @@ def _upsert_file_asset(conn: sqlite3.Connection, e: FcstdMapEntry, *, updated_at
     vals = _entry_to_row_values(e, updated_at=updated_at)
     conn.execute(
         """
-        INSERT INTO file_asset (
+        INSERT INTO phoenix_cad_file_asset (
             repo_rel_path, filename, asset_kind, part_number, part_version, type_code,
             model_series, part_name, label, file_status, last_seen_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -801,7 +493,7 @@ def _upsert_file_asset(conn: sqlite3.Connection, e: FcstdMapEntry, *, updated_at
 
 
 def read_fcstd_map_meta(repo_root: Path) -> dict[str, str | None]:
-    """读取 CAD 索引扫描元数据（不加载 ``file_asset`` 行）。"""
+    """读取 CAD 索引扫描元数据（不加载 ``phoenix_cad_file_asset`` 行）。"""
     rr = repo_root.expanduser().resolve(strict=False)
     if not cad_database_path(rr).is_file():
         return {
@@ -826,7 +518,7 @@ def query_file_asset_entries_paged(
     kind: str | None = None,
     search: str | None = None,
 ) -> tuple[list[dict[str, Any]], int, str]:
-    """单次 SQL 分页列出 ``file_asset``（``COUNT(*) OVER()`` 同查总数）。"""
+    """单次 SQL 分页列出 ``phoenix_cad_file_asset``（``COUNT(*) OVER()`` 同查总数）。"""
     rr = repo_root.expanduser().resolve(strict=False)
     if not cad_database_path(rr).is_file():
         return [], 0, ""
@@ -878,7 +570,7 @@ def query_file_asset_entries_paged(
             file_status,
             last_seen_at,
             COUNT(*) OVER() AS _total_count
-        FROM file_asset
+        FROM phoenix_cad_file_asset
         {where_sql}
         ORDER BY repo_rel_path, file_status
         LIMIT ? OFFSET ?
@@ -926,7 +618,7 @@ def load_fcstd_document(repo_root: Path) -> FcstdMapDocument | None:
 
     with connect(rr) as conn:
         rows = conn.execute(
-            "SELECT * FROM file_asset ORDER BY repo_rel_path, file_status"
+            "SELECT * FROM phoenix_cad_file_asset ORDER BY repo_rel_path, file_status"
         ).fetchall()
         if not rows:
             return None
@@ -950,7 +642,7 @@ def load_fcstd_document(repo_root: Path) -> FcstdMapDocument | None:
             scan_root=scan_root,
             scan_stats=stats,
             anchor_note=(
-                "repo_rel_path 相对工作空间根；数据存于 .phoenix/cad-database.sqlite。"
+                "repo_rel_path 相对工作空间根；数据存于 .phoenix/phoenix-cad.sqlite。"
             ),
         )
 
@@ -962,7 +654,7 @@ def save_fcstd_document(
     scan_root: str,
     stats: Mapping[str, int],
 ) -> int:
-    """写入索引并记录扫描历史，返回 ``fcstd_scan.id``。"""
+    """写入索引并记录扫描历史，返回 ``phoenix_cad_scan.id``。"""
     rr = repo_root.expanduser().resolve(strict=False)
     now = doc.last_scan_at or _utc_now_iso()
     stats_json = json.dumps(dict(stats), ensure_ascii=False)
@@ -978,18 +670,18 @@ def save_fcstd_document(
         if seen:
             placeholders = ",".join("?" * len(seen))
             conn.execute(
-                f"DELETE FROM file_asset WHERE repo_rel_path NOT IN ({placeholders})",
+                f"DELETE FROM phoenix_cad_file_asset WHERE repo_rel_path NOT IN ({placeholders})",
                 tuple(sorted(seen)),
             )
         else:
-            conn.execute("DELETE FROM file_asset")
+            conn.execute("DELETE FROM phoenix_cad_file_asset")
 
         sync_part_keys_from_file_assets(conn)
         _meta_set(conn, "last_scan_at", now)
         _meta_set(conn, "scan_root", scan_root)
         _meta_set(conn, "last_scan_stats", stats_json)
         cur = conn.execute(
-            "INSERT INTO fcstd_scan(scanned_at, scan_root, stats_json) VALUES (?, ?, ?)",
+            "INSERT INTO phoenix_cad_scan(scanned_at, scan_root, stats_json) VALUES (?, ?, ?)",
             (now, scan_root, stats_json),
         )
         scan_id = int(cur.lastrowid)
@@ -998,20 +690,20 @@ def save_fcstd_document(
 
 
 def delete_missing_file_assets(repo_root: Path) -> int:
-    """从 ``file_asset`` 永久删除 ``file_status=missing`` 行，并同步 ``part_key`` / ``part_file_link``。"""
+    """从 ``phoenix_cad_file_asset`` 永久删除 ``file_status=missing`` 行，并同步 ``phoenix_cad_part_key`` / ``phoenix_cad_part_file_link``。"""
     rr = repo_root.expanduser().resolve(strict=False)
     if not cad_database_path(rr).is_file():
         return 0
     with connect(rr) as conn:
         row = conn.execute(
-            "SELECT COUNT(*) AS c FROM file_asset WHERE file_status = ?",
+            "SELECT COUNT(*) AS c FROM phoenix_cad_file_asset WHERE file_status = ?",
             (FILE_STATUS_MISSING,),
         ).fetchone()
         n = int(row["c"]) if row else 0
         if n == 0:
             return 0
         conn.execute(
-            "DELETE FROM file_asset WHERE file_status = ?",
+            "DELETE FROM phoenix_cad_file_asset WHERE file_status = ?",
             (FILE_STATUS_MISSING,),
         )
         sync_part_keys_from_file_assets(conn)
@@ -1029,7 +721,7 @@ def find_file_asset_entry(
     repo_root: Path,
     rel_workspace: Path,
 ) -> tuple[FcstdMapEntry | None, str]:
-    """按 ``repo_rel_path`` 单次查询 ``file_asset``。"""
+    """按 ``repo_rel_path`` 单次查询 ``phoenix_cad_file_asset``。"""
     rr = repo_root.expanduser().resolve(strict=False)
     if not cad_database_path(rr).is_file():
         migrate_fcstd_map_json(repo_root)
@@ -1039,7 +731,7 @@ def find_file_asset_entry(
     sql = """
         SELECT repo_rel_path, filename, asset_kind, part_number, part_version,
                type_code, model_series, part_name, label, file_status, last_seen_at
-        FROM file_asset
+        FROM phoenix_cad_file_asset
         WHERE repo_rel_path = ?
     """
     params = (want,)
@@ -1072,14 +764,14 @@ def update_fcstd_entry_rename(
 
     with connect(rr) as conn:
         row = conn.execute(
-            "SELECT id FROM file_asset WHERE repo_rel_path = ?",
+            "SELECT id FROM phoenix_cad_file_asset WHERE repo_rel_path = ?",
             (want,),
         ).fetchone()
         if row is None:
             return False
         conn.execute(
             """
-            UPDATE file_asset
+            UPDATE phoenix_cad_file_asset
             SET repo_rel_path = ?, filename = ?, updated_at = ?
             WHERE repo_rel_path = ?
             """,
@@ -1107,7 +799,7 @@ def migrate_fcstd_map_json(repo_root: Path) -> bool:
 
     if cad_database_path(rr).is_file():
         with connect(rr) as conn:
-            n = conn.execute("SELECT COUNT(*) AS c FROM file_asset").fetchone()
+            n = conn.execute("SELECT COUNT(*) AS c FROM phoenix_cad_file_asset").fetchone()
             if n and int(n["c"]) > 0:
                 return False
 
@@ -1215,16 +907,16 @@ def list_part_keys(repo_root: Path) -> list[dict[str, Any]]:
                    SUM(CASE WHEN fa.file_status = ? THEN 1 ELSE 0 END) AS missing_count,
                    (
                      SELECT fa2.repo_rel_path
-                     FROM part_file_link pfl2
-                     JOIN file_asset fa2 ON fa2.id = pfl2.file_asset_id
+                     FROM phoenix_cad_part_file_link pfl2
+                     JOIN phoenix_cad_file_asset fa2 ON fa2.id = pfl2.file_asset_id
                      WHERE pfl2.part_key_id = pk.id
                        AND fa2.file_status = ?
                      ORDER BY fa2.repo_rel_path
                      LIMIT 1
                    ) AS primary_repo_rel
-            FROM part_key pk
-            LEFT JOIN part_file_link pfl ON pfl.part_key_id = pk.id
-            LEFT JOIN file_asset fa ON fa.id = pfl.file_asset_id
+            FROM phoenix_cad_part_key pk
+            LEFT JOIN phoenix_cad_part_file_link pfl ON pfl.part_key_id = pk.id
+            LEFT JOIN phoenix_cad_file_asset fa ON fa.id = pfl.file_asset_id
             GROUP BY pk.id
             ORDER BY pk.part_number, pk.part_version
             """,
@@ -1254,7 +946,7 @@ def get_part_key_detail(repo_root: Path, part_number: str, part_version: str) ->
     pv = part_version.strip()
     with connect(rr) as conn:
         pk = conn.execute(
-            "SELECT * FROM part_key WHERE part_number = ? AND part_version = ?",
+            "SELECT * FROM phoenix_cad_part_key WHERE part_number = ? AND part_version = ?",
             (pn, pv),
         ).fetchone()
         if pk is None:
@@ -1263,8 +955,8 @@ def get_part_key_detail(repo_root: Path, part_number: str, part_version: str) ->
         files = conn.execute(
             """
             SELECT fa.*, pfl.file_role, pfl.notes AS link_notes, pfl.link_status, pfl.linked_at
-            FROM part_file_link pfl
-            JOIN file_asset fa ON fa.id = pfl.file_asset_id
+            FROM phoenix_cad_part_file_link pfl
+            JOIN phoenix_cad_file_asset fa ON fa.id = pfl.file_asset_id
             WHERE pfl.part_key_id = ?
             ORDER BY fa.file_status, fa.repo_rel_path
             """,
@@ -1321,7 +1013,7 @@ def update_part_key_record(
 
     with connect(rr) as conn:
         row = conn.execute(
-            "SELECT id FROM part_key WHERE part_number = ? AND part_version = ?",
+            "SELECT id FROM phoenix_cad_part_key WHERE part_number = ? AND part_version = ?",
             (pn, pv),
         ).fetchone()
         if row is None:
@@ -1344,7 +1036,7 @@ def update_part_key_record(
 
         sets = ", ".join(f"{k} = ?" for k in fields)
         conn.execute(
-            f"UPDATE part_key SET {sets} WHERE part_number = ? AND part_version = ?",
+            f"UPDATE phoenix_cad_part_key SET {sets} WHERE part_number = ? AND part_version = ?",
             (*fields.values(), pn, pv),
         )
 
@@ -1367,14 +1059,14 @@ def update_part_file_link_record(
 
     with connect(rr) as conn:
         pk = conn.execute(
-            "SELECT id FROM part_key WHERE part_number = ? AND part_version = ?",
+            "SELECT id FROM phoenix_cad_part_key WHERE part_number = ? AND part_version = ?",
             (pn, pv),
         ).fetchone()
         if pk is None:
             return None
         link = conn.execute(
             """
-            SELECT id FROM part_file_link
+            SELECT id FROM phoenix_cad_part_file_link
             WHERE part_key_id = ? AND file_asset_id = ?
             """,
             (int(pk["id"]), file_asset_id),
@@ -1394,7 +1086,7 @@ def update_part_file_link_record(
 
         sets = ", ".join(f"{k} = ?" for k in fields)
         conn.execute(
-            f"UPDATE part_file_link SET {sets} WHERE id = ?",
+            f"UPDATE phoenix_cad_part_file_link SET {sets} WHERE id = ?",
             (*fields.values(), int(link["id"])),
         )
 
@@ -1408,7 +1100,7 @@ def insert_rename_log(
     new_rel: Path,
     source: str = "web",
 ) -> dict[str, Any]:
-    """记录一次磁盘改名事件，返回 ``rename_log`` 行摘要。"""
+    """记录一次磁盘改名事件，返回 ``phoenix_audit_rename_log`` 行摘要。"""
     rr = repo_root.expanduser().resolve(strict=False)
     old_rr = _norm_key(old_rel.as_posix())
     new_rr = _norm_key(new_rel.as_posix())
@@ -1416,14 +1108,14 @@ def insert_rename_log(
 
     with connect(rr) as conn:
         asset = conn.execute(
-            "SELECT id FROM file_asset WHERE repo_rel_path = ?",
+            "SELECT id FROM phoenix_cad_file_asset WHERE repo_rel_path = ?",
             (new_rr,),
         ).fetchone()
         file_asset_id = int(asset["id"]) if asset else None
 
         cur = conn.execute(
             """
-            INSERT INTO change_event(kind, created_at, actor, source, note, stats_json)
+            INSERT INTO phoenix_audit_change_event(kind, created_at, actor, source, note, stats_json)
             VALUES ('rename', ?, NULL, ?, NULL, NULL)
             """,
             (now, source),
@@ -1431,7 +1123,7 @@ def insert_rename_log(
         event_id = int(cur.lastrowid)
         cur = conn.execute(
             """
-            INSERT INTO rename_log (
+            INSERT INTO phoenix_audit_rename_log (
                 event_id, file_asset_id, old_repo_rel_path, new_repo_rel_path,
                 old_filename, new_filename, old_basename, new_basename
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -1458,8 +1150,8 @@ def get_rename_log(repo_root: Path, rename_log_id: int) -> dict[str, Any] | None
         row = conn.execute(
             """
             SELECT rl.*, ce.created_at AS event_created_at, ce.source AS event_source
-            FROM rename_log rl
-            JOIN change_event ce ON ce.id = rl.event_id
+            FROM phoenix_audit_rename_log rl
+            JOIN phoenix_audit_change_event ce ON ce.id = rl.event_id
             WHERE rl.id = ?
             """,
             (rename_log_id,),
@@ -1495,10 +1187,10 @@ def replace_ref_hits_for_rename_scan(
     rr = repo_root.expanduser().resolve(strict=False)
     now = _utc_now_iso()
     with connect(rr) as conn:
-        conn.execute("DELETE FROM ref_hit WHERE rename_log_id = ?", (rename_log_id,))
+        conn.execute("DELETE FROM phoenix_audit_ref_hit WHERE rename_log_id = ?", (rename_log_id,))
         cur = conn.execute(
             """
-            INSERT INTO change_event(kind, created_at, actor, source, note, stats_json)
+            INSERT INTO phoenix_audit_change_event(kind, created_at, actor, source, note, stats_json)
             VALUES ('ref_scan', ?, NULL, 'web', NULL, ?)
             """,
             (now, json.dumps({"hit_count": len(hits)}, ensure_ascii=False)),
@@ -1516,7 +1208,7 @@ def replace_ref_hits_for_rename_scan(
                 status = "ok"
             conn.execute(
                 """
-                INSERT INTO ref_hit (
+                INSERT INTO phoenix_audit_ref_hit (
                     event_id, rename_log_id, host_repo_rel_path, host_asset_kind,
                     ref_kind, locator, matched_text, proposed_text, status, detail_json
                 ) VALUES (?, ?, ?, 'fcstd', 'xlink_file_attr', 'Document.xml', ?, ?, ?, NULL)
@@ -1539,7 +1231,7 @@ def load_ref_hits_for_rename(repo_root: Path, rename_log_id: int) -> dict[str, A
         rows = conn.execute(
             """
             SELECT id, host_repo_rel_path, matched_text, proposed_text, status
-            FROM ref_hit
+            FROM phoenix_audit_ref_hit
             WHERE rename_log_id = ?
             ORDER BY host_repo_rel_path, id
             """,
@@ -1596,7 +1288,7 @@ def mark_ref_hits_applied(
     with connect(rr) as conn:
         conn.execute(
             f"""
-            UPDATE ref_hit
+            UPDATE phoenix_audit_ref_hit
             SET status = 'applied'
             WHERE rename_log_id = ? AND host_repo_rel_path IN ({placeholders})
             """,
@@ -1610,7 +1302,7 @@ def insert_ref_patch_event(repo_root: Path, *, stats: Mapping[str, Any]) -> int:
     with connect(rr) as conn:
         cur = conn.execute(
             """
-            INSERT INTO change_event(kind, created_at, actor, source, note, stats_json)
+            INSERT INTO phoenix_audit_change_event(kind, created_at, actor, source, note, stats_json)
             VALUES ('ref_patch', ?, NULL, 'web', NULL, ?)
             """,
             (now, json.dumps(dict(stats), ensure_ascii=False)),
@@ -1647,8 +1339,8 @@ def list_rename_logs(
         rows = conn.execute(
             f"""
             SELECT rl.*, ce.created_at AS event_created_at, ce.source AS event_source
-            FROM rename_log rl
-            JOIN change_event ce ON ce.id = rl.event_id
+            FROM phoenix_audit_rename_log rl
+            JOIN phoenix_audit_change_event ce ON ce.id = rl.event_id
             {where}
             ORDER BY ce.created_at DESC, rl.id DESC
             LIMIT ?
@@ -1668,7 +1360,7 @@ def load_ui_session(repo_root: Path, *, scope: str = UI_SESSION_SCOPE_WORKBENCH)
         return None
     with connect(rr) as conn:
         row = conn.execute(
-            "SELECT payload_json FROM ui_session WHERE scope = ?",
+            "SELECT payload_json FROM phoenix_ui_session WHERE scope = ?",
             (scope,),
         ).fetchone()
     if row is None:
@@ -1693,7 +1385,7 @@ def save_ui_session(
     with connect(rr) as conn:
         conn.execute(
             """
-            INSERT INTO ui_session(scope, payload_json, updated_at)
+            INSERT INTO phoenix_ui_session(scope, payload_json, updated_at)
             VALUES (?, ?, ?)
             ON CONFLICT(scope) DO UPDATE SET
                 payload_json = excluded.payload_json,
@@ -1710,7 +1402,7 @@ def ui_session_updated_at(repo_root: Path, *, scope: str = UI_SESSION_SCOPE_WORK
         return None
     with connect(rr) as conn:
         row = conn.execute(
-            "SELECT updated_at FROM ui_session WHERE scope = ?",
+            "SELECT updated_at FROM phoenix_ui_session WHERE scope = ?",
             (scope,),
         ).fetchone()
     return str(row["updated_at"]) if row else None
@@ -1722,13 +1414,13 @@ def get_last_fcstd_scan_id(repo_root: Path) -> int | None:
         return None
     with connect(rr) as conn:
         row = conn.execute(
-            "SELECT id FROM fcstd_scan ORDER BY id DESC LIMIT 1"
+            "SELECT id FROM phoenix_cad_scan ORDER BY id DESC LIMIT 1"
         ).fetchone()
     return int(row["id"]) if row else None
 
 
 def ensure_fcstd_scan_record(repo_root: Path) -> int | None:
-    """若已有 ``file_asset`` 但缺少 ``fcstd_scan`` 行，补一条扫描记录供 BOM 引用重建。"""
+    """若已有 ``phoenix_cad_file_asset`` 但缺少 ``phoenix_cad_scan`` 行，补一条扫描记录供 BOM 引用重建。"""
     rr = repo_root.expanduser().resolve(strict=False)
     if not cad_database_path(rr).is_file():
         return None
@@ -1736,14 +1428,14 @@ def ensure_fcstd_scan_record(repo_root: Path) -> int | None:
     if existing is not None:
         return existing
     with connect(rr) as conn:
-        row = conn.execute("SELECT COUNT(*) AS c FROM file_asset").fetchone()
+        row = conn.execute("SELECT COUNT(*) AS c FROM phoenix_cad_file_asset").fetchone()
         if not row or int(row["c"]) <= 0:
             return None
         now = _meta_get(conn, "last_scan_at") or _utc_now_iso()
         scan_root = _meta_get(conn, "scan_root") or "."
         stats_raw = _meta_get(conn, "last_scan_stats") or "{}"
         cur = conn.execute(
-            "INSERT INTO fcstd_scan(scanned_at, scan_root, stats_json) VALUES (?, ?, ?)",
+            "INSERT INTO phoenix_cad_scan(scanned_at, scan_root, stats_json) VALUES (?, ?, ?)",
             (now, scan_root, stats_raw),
         )
         return int(cur.lastrowid)
@@ -1754,14 +1446,14 @@ def get_file_asset_id(repo_root: Path, repo_rel_path: str) -> int | None:
     key = _norm_key(repo_rel_path)
     with connect(rr) as conn:
         row = conn.execute(
-            "SELECT id FROM file_asset WHERE repo_rel_path = ?",
+            "SELECT id FROM phoenix_cad_file_asset WHERE repo_rel_path = ?",
             (key,),
         ).fetchone()
     return int(row["id"]) if row else None
 
 
 def get_file_asset_bom_fields(repo_root: Path, repo_rel_path: str) -> dict[str, str] | None:
-    """从 CAD 索引 ``file_asset`` 读取 BOM 字段（规则 Label 优先来源）。"""
+    """从 CAD 索引 ``phoenix_cad_file_asset`` 读取 BOM 字段（规则 Label 优先来源）。"""
     rr = repo_root.expanduser().resolve(strict=False)
     if not cad_database_path(rr).is_file():
         return None
@@ -1770,7 +1462,7 @@ def get_file_asset_bom_fields(repo_root: Path, repo_rel_path: str) -> dict[str, 
         row = conn.execute(
             """
             SELECT part_number, part_version, part_name, label
-            FROM file_asset
+            FROM phoenix_cad_file_asset
             WHERE repo_rel_path = ?
             """,
             (key,),
@@ -1793,7 +1485,7 @@ def list_present_fcstd_file_assets(repo_root: Path) -> list[dict[str, Any]]:
         rows = conn.execute(
             """
             SELECT id, repo_rel_path, filename
-            FROM file_asset
+            FROM phoenix_cad_file_asset
             WHERE file_status = ? AND LOWER(filename) LIKE '%.fcstd'
             ORDER BY repo_rel_path
             """,
@@ -1825,7 +1517,7 @@ def _dedupe_bom_xref_edges(edges: list[Mapping[str, Any]]) -> list[dict[str, Any
 
 
 _BOM_XREF_UPSERT_SQL = """
-    INSERT INTO bom_xref (
+    INSERT INTO phoenix_cad_bom_xref (
         scan_id, host_file_asset_id, host_repo_rel_path, ref_kind, locator,
         xlink_file_attr, link_label, rule_label,
         target_basename, target_file_asset_id, target_repo_rel_path,
@@ -1910,9 +1602,9 @@ def replace_bom_xrefs(
     enrich_bom_xref_edges_target_fields(rr, edges)
 
     with connect(rr) as conn:
-        conn.execute("DELETE FROM bom_xref")
-        conn.execute("DELETE FROM bom_assembly_cache")
-        conn.execute("DELETE FROM bom_tree_occurrence")
+        conn.execute("DELETE FROM phoenix_cad_bom_xref")
+        conn.execute("DELETE FROM phoenix_cad_bom_assembly_cache")
+        conn.execute("DELETE FROM phoenix_cad_bom_tree_occurrence")
         for edge in edges:
             host_path = _norm_key(str(edge["host_repo_rel_path"]))
             status = str(edge.get("resolve_status") or "missing")
@@ -1939,22 +1631,22 @@ def replace_bom_xrefs(
 
 
 def delete_bom_xrefs_for_hosts(repo_root: Path, host_repo_rel_paths: list[str]) -> int:
-    """删除指定宿主在 ``bom_xref`` 中的引用边（写回 XLink 后局部刷新用）。"""
+    """删除指定宿主在 ``phoenix_cad_bom_xref`` 中的引用边（写回 XLink 后局部刷新用）。"""
     rr = repo_root.expanduser().resolve(strict=False)
     keys = [_norm_key(p) for p in host_repo_rel_paths if str(p).strip()]
     if not keys:
         return 0
     deleted = 0
     with connect(rr) as conn:
-        conn.execute("DELETE FROM bom_assembly_cache")
-        conn.execute("DELETE FROM bom_tree_occurrence")
+        conn.execute("DELETE FROM phoenix_cad_bom_assembly_cache")
+        conn.execute("DELETE FROM phoenix_cad_bom_tree_occurrence")
         for key in keys:
-            cur = conn.execute("DELETE FROM bom_xref WHERE host_repo_rel_path = ?", (key,))
+            cur = conn.execute("DELETE FROM phoenix_cad_bom_xref WHERE host_repo_rel_path = ?", (key,))
             deleted += int(cur.rowcount)
             asset_id = get_file_asset_id(rr, key)
             if asset_id is not None:
                 cur2 = conn.execute(
-                    "DELETE FROM bom_xref WHERE host_file_asset_id = ?",
+                    "DELETE FROM phoenix_cad_bom_xref WHERE host_file_asset_id = ?",
                     (asset_id,),
                 )
                 deleted += int(cur2.rowcount)
@@ -1968,7 +1660,7 @@ def insert_bom_xref_edges(
     edges: list[Mapping[str, Any]],
     rebuilt_at: str | None = None,
 ) -> dict[str, int]:
-    """向 ``bom_xref`` 追加边（不整表清空；配合 ``delete_bom_xrefs_for_hosts`` 使用）。"""
+    """向 ``phoenix_cad_bom_xref`` 追加边（不整表清空；配合 ``delete_bom_xrefs_for_hosts`` 使用）。"""
     rr = repo_root.expanduser().resolve(strict=False)
     now = rebuilt_at or _utc_now_iso()
     stats = {"edge_count": 0, "target_resolved": 0, "target_ambiguous": 0, "target_missing": 0}
@@ -2005,9 +1697,9 @@ def load_bom_xref_meta(repo_root: Path) -> dict[str, Any]:
     if not cad_database_path(rr).is_file():
         return {"edge_count": 0, "host_count": 0, "last_bom_xref_at": ""}
     with connect(rr) as conn:
-        count = conn.execute("SELECT COUNT(*) AS n FROM bom_xref").fetchone()
+        count = conn.execute("SELECT COUNT(*) AS n FROM phoenix_cad_bom_xref").fetchone()
         hosts = conn.execute(
-            "SELECT COUNT(DISTINCT host_repo_rel_path) AS n FROM bom_xref"
+            "SELECT COUNT(DISTINCT host_repo_rel_path) AS n FROM phoenix_cad_bom_xref"
         ).fetchone()
         last_at = _meta_get(conn, "last_bom_xref_at")
         raw_stats = _meta_get(conn, "last_bom_xref_stats")
@@ -2067,7 +1759,7 @@ def clear_bom_assembly_cache(repo_root: Path) -> None:
     if not cad_database_path(rr).is_file():
         return
     with connect(rr) as conn:
-        conn.execute("DELETE FROM bom_assembly_cache")
+        conn.execute("DELETE FROM phoenix_cad_bom_assembly_cache")
 
 
 def load_bom_assembly_cache(
@@ -2081,7 +1773,7 @@ def load_bom_assembly_cache(
     key = _norm_key(host_repo_rel)
     sql = """
         SELECT tree_json, node_count, bom_xref_at
-        FROM bom_assembly_cache
+        FROM phoenix_cad_bom_assembly_cache
         WHERE host_repo_rel_path = ? AND mode = ?
     """
     params = (key, mode)
@@ -2119,7 +1811,7 @@ def save_bom_assembly_cache(
     with connect(rr) as conn:
         conn.execute(
             """
-            INSERT INTO bom_assembly_cache (
+            INSERT INTO phoenix_cad_bom_assembly_cache (
                 host_repo_rel_path, mode, tree_json, node_count, bom_xref_at, built_at
             ) VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(host_repo_rel_path, mode) DO UPDATE SET
@@ -2133,10 +1825,10 @@ def save_bom_assembly_cache(
 
 
 def query_all_bom_xref_edges_enriched(repo_root: Path) -> tuple[list[dict[str, Any]], str]:
-    """一次查询全部引用边（子件快照与标签已冗余在 ``bom_xref``）。"""
+    """一次查询全部引用边（子件快照与标签已冗余在 ``phoenix_cad_bom_xref``）。"""
     rr = repo_root.expanduser().resolve(strict=False)
     sql = """
-        SELECT * FROM bom_xref
+        SELECT * FROM phoenix_cad_bom_xref
         ORDER BY host_repo_rel_path, xlink_file_attr
     """
     debug_sql = sql_one_line(sql)
@@ -2189,11 +1881,11 @@ def query_assembly_bom_hosts(
             SUM(CASE WHEN bx.resolve_status = 'ambiguous' THEN 1 ELSE 0 END) AS ambiguous_count,
             (
                 SELECT COUNT(DISTINCT bx_in.host_repo_rel_path)
-                FROM bom_xref bx_in
+                FROM phoenix_cad_bom_xref bx_in
                 WHERE bx_in.target_repo_rel_path = fa.repo_rel_path
             ) AS incoming_host_count
-        FROM bom_xref bx
-        INNER JOIN file_asset fa ON fa.id = bx.host_file_asset_id
+        FROM phoenix_cad_bom_xref bx
+        INNER JOIN phoenix_cad_file_asset fa ON fa.id = bx.host_file_asset_id
         WHERE fa.file_status = 'present'
           AND LOWER(fa.filename) LIKE '%.fcstd'
           AND LOWER(fa.filename) NOT LIKE '%.drawing.fcstd'
@@ -2247,7 +1939,7 @@ def query_all_bom_xref_edges(repo_root: Path) -> tuple[list[dict[str, Any]], str
             target_repo_rel_path,
             target_file_asset_id,
             resolve_status
-        FROM bom_xref
+        FROM phoenix_cad_bom_xref
         ORDER BY host_repo_rel_path, xlink_file_attr
     """
     debug_sql = sql_one_line(sql)
@@ -2303,7 +1995,7 @@ def query_bom_xrefs_incoming(
 
     where = " OR ".join(f"({c})" for c in clauses) if len(clauses) > 1 else clauses[0]
     sql = f"""
-        SELECT * FROM bom_xref
+        SELECT * FROM phoenix_cad_bom_xref
         WHERE {where}
         ORDER BY host_repo_rel_path, xlink_file_attr
         LIMIT ?
@@ -2324,7 +2016,7 @@ def query_bom_xref_edges_paged(
     limit: int = 100,
     search: str | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
-    """分页列出 ``bom_xref`` 引用边（可选关键词过滤宿主/子件路径）。"""
+    """分页列出 ``phoenix_cad_bom_xref`` 引用边（可选关键词过滤宿主/子件路径）。"""
     rr = repo_root.expanduser().resolve(strict=False)
     if not cad_database_path(rr).is_file():
         return [], 0
@@ -2343,13 +2035,13 @@ def query_bom_xref_edges_paged(
         params.extend([like, like, like])
     with connect(rr) as conn:
         total_row = conn.execute(
-            f"SELECT COUNT(*) AS n FROM bom_xref bx {where}",
+            f"SELECT COUNT(*) AS n FROM phoenix_cad_bom_xref bx {where}",
             params,
         ).fetchone()
         total = int(total_row["n"]) if total_row else 0
         rows = conn.execute(
             f"""
-            SELECT * FROM bom_xref bx
+            SELECT * FROM phoenix_cad_bom_xref bx
             {where}
             ORDER BY bx.host_repo_rel_path, bx.target_basename, bx.xlink_file_attr
             LIMIT ? OFFSET ?
@@ -2369,7 +2061,7 @@ def query_bom_xrefs_outgoing(
     key = _norm_key(host_repo_rel)
     cap = max(1, min(int(limit), 2000))
     sql = """
-        SELECT * FROM bom_xref
+        SELECT * FROM phoenix_cad_bom_xref
         WHERE host_repo_rel_path = ?
         ORDER BY target_basename, xlink_file_attr
         LIMIT ?
@@ -2387,12 +2079,12 @@ def query_bom_xrefs_outgoing_enriched(
     *,
     limit: int = 500,
 ) -> tuple[list[dict[str, Any]], str]:
-    """出向引用边（子件快照冗余在 ``bom_xref``，单表查询）。"""
+    """出向引用边（子件快照冗余在 ``phoenix_cad_bom_xref``，单表查询）。"""
     rr = repo_root.expanduser().resolve(strict=False)
     key = _norm_key(host_repo_rel)
     cap = max(1, min(int(limit), 2000))
     sql = """
-        SELECT * FROM bom_xref
+        SELECT * FROM phoenix_cad_bom_xref
         WHERE host_repo_rel_path = ?
         ORDER BY target_basename, xlink_file_attr
         LIMIT ?
@@ -2415,12 +2107,12 @@ def query_bom_xref_counts_for_rel(
     key = _norm_key(repo_rel)
     sql = """
         SELECT
-            (SELECT COUNT(*) FROM bom_xref WHERE host_repo_rel_path = ?) AS outgoing_count,
+            (SELECT COUNT(*) FROM phoenix_cad_bom_xref WHERE host_repo_rel_path = ?) AS outgoing_count,
             (
-                SELECT COUNT(DISTINCT host_repo_rel_path) FROM bom_xref
+                SELECT COUNT(DISTINCT host_repo_rel_path) FROM phoenix_cad_bom_xref
                 WHERE target_repo_rel_path = ?
                    OR target_file_asset_id = (
-                       SELECT id FROM file_asset WHERE repo_rel_path = ? LIMIT 1
+                       SELECT id FROM phoenix_cad_file_asset WHERE repo_rel_path = ? LIMIT 1
                    )
             ) AS direct_incoming_count
     """
@@ -2449,7 +2141,7 @@ def find_present_repo_rel_by_filename(repo_root: Path, filename: str) -> str | N
     with connect(rr) as conn:
         row = conn.execute(
             """
-            SELECT repo_rel_path FROM file_asset
+            SELECT repo_rel_path FROM phoenix_cad_file_asset
             WHERE lower(filename) = lower(?) AND file_status = ?
             ORDER BY repo_rel_path
             LIMIT 1
@@ -2483,7 +2175,7 @@ def query_bom_xrefs_for_rename_basename(
         target_param = f"%{_sql_like_escape(base)}%"
 
     sql = f"""
-        SELECT * FROM bom_xref
+        SELECT * FROM phoenix_cad_bom_xref
         WHERE ({target_clause}
                OR xlink_file_attr = ? COLLATE NOCASE
                OR xlink_file_attr LIKE ? ESCAPE '\\' COLLATE NOCASE

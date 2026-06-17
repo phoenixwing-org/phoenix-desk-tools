@@ -209,7 +209,7 @@ def _list_present_fcstd_by_basename(rr: Path, basename: str) -> list[dict[str, A
         rows = conn.execute(
             """
             SELECT id, repo_rel_path, filename, part_number, part_version, file_status
-            FROM file_asset
+            FROM phoenix_cad_file_asset
             WHERE file_status = ?
               AND lower(filename) LIKE '%.fcstd'
               AND (

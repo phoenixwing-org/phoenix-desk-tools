@@ -168,7 +168,7 @@ class TestBomXref(unittest.TestCase):
             from fcdesk.freecad.phoenix_store import connect
 
             with connect(root) as conn:
-                conn.execute("DELETE FROM bom_xref WHERE host_repo_rel_path = ?", ("./top-assy.FCStd",))
+                conn.execute("DELETE FROM phoenix_cad_bom_xref WHERE host_repo_rel_path = ?", ("./top-assy.FCStd",))
 
             out = refresh_bom_xref_index_for_host(root, "./top-assy.FCStd", recursive=True)
             self.assertGreaterEqual(out["hosts_refreshed"], 2)
@@ -439,10 +439,10 @@ class TestBomXref(unittest.TestCase):
             from fcdesk.freecad.phoenix_store import cad_database_path, connect
 
             with connect(root) as conn:
-                conn.execute("DELETE FROM bom_xref")
-                conn.execute("DELETE FROM fcstd_scan")
-                conn.execute("DELETE FROM meta WHERE key = 'last_bom_xref_at'")
-                conn.execute("DELETE FROM meta WHERE key = 'last_bom_xref_stats'")
+                conn.execute("DELETE FROM phoenix_cad_bom_xref")
+                conn.execute("DELETE FROM phoenix_cad_scan")
+                conn.execute("DELETE FROM phoenix_meta WHERE key = 'last_bom_xref_at'")
+                conn.execute("DELETE FROM phoenix_meta WHERE key = 'last_bom_xref_stats'")
 
             groups = host_ref_groups_from_db(
                 root,
@@ -462,9 +462,9 @@ class TestBomXref(unittest.TestCase):
             from fcdesk.freecad.phoenix_store import cad_database_path, connect
 
             with connect(root) as conn:
-                conn.execute("DELETE FROM bom_xref")
-                conn.execute("DELETE FROM meta WHERE key = 'last_bom_xref_at'")
-                conn.execute("DELETE FROM meta WHERE key = 'last_bom_xref_stats'")
+                conn.execute("DELETE FROM phoenix_cad_bom_xref")
+                conn.execute("DELETE FROM phoenix_meta WHERE key = 'last_bom_xref_at'")
+                conn.execute("DELETE FROM phoenix_meta WHERE key = 'last_bom_xref_stats'")
 
             groups = host_ref_groups_from_db(
                 root,
@@ -504,7 +504,7 @@ class TestBomXref(unittest.TestCase):
             self.assertIsNotNone(scan_id)
 
             with connect(root) as conn:
-                conn.execute("DELETE FROM bom_xref WHERE host_repo_rel_path = ?", ("./asm.FCStd",))
+                conn.execute("DELETE FROM phoenix_cad_bom_xref WHERE host_repo_rel_path = ?", ("./asm.FCStd",))
 
             child_id = get_file_asset_id(root, "./child.FCStd")
             insert_bom_xref_edges(
@@ -688,7 +688,7 @@ class TestBomXref(unittest.TestCase):
 
             with connect(root) as conn:
                 conn.execute(
-                    "UPDATE bom_xref SET link_label = '' WHERE host_repo_rel_path LIKE '%asm.FCStd'"
+                    "UPDATE phoenix_cad_bom_xref SET link_label = '' WHERE host_repo_rel_path LIKE '%asm.FCStd'"
                 )
                 conn.commit()
 
