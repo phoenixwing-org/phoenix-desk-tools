@@ -3,13 +3,10 @@
 """
 Reorder C++ class member declarations (.h) and definitions (.cpp) per cxx-code-style skill.
 
-Full rules (zh): doc/成员函数排序-reorder_member.md
-TODO list:        doc/待办-TODO.md
+Full rules (zh): doc/成员函数排序-reorder_members.md
 
 Usage:
-    python tools/reorder_members.py <directory|file> [options]
-    python tools/reorder_members.py <source_tree>
-    python tools/reorder_members.py <path/to/class.cpp>
+    python -m phoenix.code.reorder_members <directory|file> [options]
 
 Options:
     --dry-run       Print changes without writing files
@@ -35,7 +32,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, field
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Tuple
 
@@ -1391,6 +1388,77 @@ def iter_source_files(
         yield path
 
 
+@dataclass
+class ReorderMembersRunResult:
+    ok: bool
+    lines: list[str] = field(default_factory=list)
+    cpp_changed: int = 0
+    hdr_changed: int = 0
+    dry_run: bool = False
+    files_scanned: int = 0
+
+
+def run_reorder_members(
+    root: Path,
+    *,
+    files: list[Path] | None = None,
+    dry_run: bool = False,
+    cpp_only: bool = False,
+    header_only: bool = False,
+    sort_members: bool = False,
+    verbose: bool = False,
+) -> ReorderMembersRunResult:
+    """对目录或文件列表执行成员排序，返回结构化日志（供 Web / CLI 共用）。"""
+    root = root.expanduser().resolve(strict=False)
+    lines: list[str] = []
+    if not root.is_dir() and files is None:
+        return ReorderMembersRunResult(ok=False, lines=[f"Error: not a directory: {root}"])
+
+    cpp_changed = hdr_changed = 0
+    files_scanned = 0
+    source_iter: Iterable[Path]
+    if files is not None:
+        source_iter = sorted(f for f in files if f.suffix in {".cpp", ".h", ".hpp"})
+    else:
+        source_iter = iter_source_files(root, cpp_only, header_only)
+
+    for path in sorted(source_iter):
+        files_scanned += 1
+        try:
+            rel = path.relative_to(root)
+        except ValueError:
+            rel = path.name
+        rel_s = rel.as_posix() if hasattr(rel, "as_posix") else str(rel)
+        if verbose:
+            lines.append(f"processing {rel_s}...")
+        if path.suffix == ".cpp":
+            if reorder_cpp_file(path, dry_run):
+                cpp_changed += 1
+                prefix = "[dry-run] " if dry_run else ""
+                lines.append(f"{prefix}cpp  {rel_s}")
+        else:
+            changed, hints = reorder_header_file(path, dry_run, sort_members)
+            for hint in hints:
+                lines.append(f"hint  {rel_s}: {hint}")
+            if changed:
+                hdr_changed += 1
+                prefix = "[dry-run] " if dry_run else ""
+                lines.append(f"{prefix}header  {rel_s}")
+
+    mode = "would update" if dry_run else "updated"
+    lines.append(
+        f"Done: {mode} {cpp_changed} .cpp, {hdr_changed} header(s) ({files_scanned} file(s) scanned)"
+    )
+    return ReorderMembersRunResult(
+        ok=True,
+        lines=lines,
+        cpp_changed=cpp_changed,
+        hdr_changed=hdr_changed,
+        dry_run=dry_run,
+        files_scanned=files_scanned,
+    )
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         description="Reorder C++ class members in .h/.cpp per cxx-code-style skill.",
@@ -1425,31 +1493,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     else:
         files = None
 
-    cpp_changed = hdr_changed = 0
-    source_iter = (
-        [f for f in files if f.suffix in {".cpp", ".h", ".hpp"}]
-        if files is not None
-        else iter_source_files(root, args.cpp_only, args.header_only)
+    result = run_reorder_members(
+        root,
+        files=files,
+        dry_run=args.dry_run,
+        cpp_only=args.cpp_only,
+        header_only=args.header_only,
+        sort_members=args.sort_members,
+        verbose=args.verbose,
     )
-    for path in sorted(source_iter):
-        rel = path.relative_to(root)
-        if args.verbose:
-            print(f"processing {rel}...", flush=True)
-        if path.suffix == ".cpp":
-            if reorder_cpp_file(path, args.dry_run):
-                cpp_changed += 1
-                print(f"{'[dry-run] ' if args.dry_run else ''}cpp  {rel}")
-        else:
-            changed, hints = reorder_header_file(path, args.dry_run, args.sort_members)
-            for hint in hints:
-                print(f"hint  {rel}: {hint}", file=sys.stderr)
-            if changed:
-                hdr_changed += 1
-                print(f"{'[dry-run] ' if args.dry_run else ''}header  {rel}")
-
-    mode = "would update" if args.dry_run else "updated"
-    print(f"\nDone: {mode} {cpp_changed} .cpp, {hdr_changed} header(s)")
-    return 0
+    for line in result.lines:
+        stream = sys.stderr if line.startswith("hint  ") else sys.stdout
+        print(line, file=stream, flush=True)
+    return 0 if result.ok else 1
 
 
 if __name__ == "__main__":

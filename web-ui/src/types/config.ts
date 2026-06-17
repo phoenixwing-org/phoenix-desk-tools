@@ -66,4 +66,5 @@ export const DEFAULT_PAGE_ICONS: Record<string, string> = {
   part_catalog: "◉",
   part_key_detail: "◎",
   part_dedup: "≡",
+  reorder_members: "{ }",
 };

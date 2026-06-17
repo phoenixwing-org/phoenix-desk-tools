@@ -78,6 +78,12 @@
       "description": "SolidWorks 三维模型批量导出 STEP（COM，Windows）"
     },
     {
+      "id": "reorder_members",
+      "label": "C++ 成员排序",
+      "page": "reorder_members",
+      "description": "按 cxx-code-style 重排选定模块下 .h/.cpp 类成员"
+    },
+    {
       "id": "config",
       "label": "配置",
       "page": "config",
@@ -98,6 +104,7 @@
       "part_dedup": { "max_tabs": 1 },
       "step_batch": { "max_tabs": 1 },
       "sw_step_export": { "max_tabs": 1 },
+      "reorder_members": { "max_tabs": 1 },
       "bom_export": { "max_tabs": 1 },
       "home": { "max_tabs": 1 },
       "config": { "max_tabs": 1 }

@@ -153,6 +153,14 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
       tour("[data-tour-page-dedup-scan]", "开始扫描", "结果按三类重复分组展示。"),
     ],
   },
+  reorder_members: {
+    title: "C++ 成员排序",
+    bullets: [
+      "使用当前工作空间根作为 C++ 源码树；刷新一级子目录 → 勾选模块 → 预检或写盘排序。",
+      "默认预检（dry-run）；详细输出在底部运行日志。",
+    ],
+    docPath: "doc/成员函数排序-reorder_members.md",
+  },
 };
 
 /** 未单独配置的 pageId 使用通用说明 */

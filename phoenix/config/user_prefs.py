@@ -33,7 +33,15 @@ _EPHEMERAL_DIR_NAME_MARKERS = (
     "phoenix_xlink_",
 )
 
-_WORKSPACE_SECTIONS = ("fc_linkfix", "fcstd_map", "step_batch", "sw_step_export", "part_dedup", "bom_apply")
+_WORKSPACE_SECTIONS = (
+    "fc_linkfix",
+    "fcstd_map",
+    "step_batch",
+    "sw_step_export",
+    "part_dedup",
+    "bom_apply",
+    "code_reorder",
+)
 
 _WORKSPACE_DEFAULT: dict[str, Any] = {
     "PartVersion": 1,
@@ -70,6 +78,14 @@ _WORKSPACE_DEFAULT: dict[str, Any] = {
         "last_part_version": "001",
         "last_type_code": "H",
         "last_model_series": "",
+    },
+    "code_reorder": {
+        "dry_run": True,
+        "cpp_only": False,
+        "header_only": False,
+        "sort_members": False,
+        "verbose": True,
+        "last_selected": [],
     },
 }
 

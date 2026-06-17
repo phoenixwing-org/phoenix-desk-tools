@@ -34,6 +34,7 @@
 
 - [x] **配置**：居中 Modal 弹层；工作空间 **浏览…** 走 Python 原生选目录（macOS osascript）
 - [x] 配置：未扫描工作空间时提示并跳转 **CAD 索引**
+- [x] **Code · C++ 成员排序** Web 页：一级子目录勾选 + 后台排序 + 运行日志（见 [成员函数排序-reorder_members.md](成员函数排序-reorder_members.md)）
 - [ ] 桌面 `fcstd_map_page` 分页，去掉 `load_fcstd_document` 全表
 - [ ] 统一运行日志：长任务进度条 / 取消（见 [统一运行日志窗口-规划讨论.md](统一运行日志窗口-规划讨论.md)）
 
@@ -82,6 +83,15 @@
 - [ ] `web-ui/src/plugins/freecad/` 页面分包（无行为变化）
 - [ ] Python 路由 `register_freecad_routes` 拆分
 - [ ] 第二个插件原型（验证表前缀 `phoenix_<app>_`）
+- [ ] **`phoenix/code/` 模块**：`app_config.modules` 切换 CAD / Code 导航；Code 工具栏独立入口
+
+---
+
+## P3 — Code 工具（已起步）
+
+- [x] `phoenix/code/reorder_members.py` + Web 页 + API
+- [ ] 成员排序：单文件 diff 预览、Git 脏文件过滤
+- [ ] 其它 Code 工具迁入 `phoenix/code/`（按 skill 拆分）
 
 ---
 

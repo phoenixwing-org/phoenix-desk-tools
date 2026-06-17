@@ -65,6 +65,12 @@ from phoenix.services.part_dedup_service import (
     save_part_dedup_prefs,
     scan_part_dedup,
 )
+from phoenix.services.reorder_members_service import (
+    get_reorder_members_prefs,
+    list_reorder_top_level_dirs,
+    run_reorder_members_batch,
+    save_reorder_members_prefs,
+)
 from phoenix.services.step_batch_service import (
     get_step_batch_prefs,
     preview_step_batch,
@@ -343,6 +349,19 @@ class SwStepPrefsBody(BaseModel):
     source_dir: str | None = None
     out_step_dir: str | None = None
     recursive_scan: bool | None = None
+
+
+class ReorderMembersPrefsBody(BaseModel):
+    dry_run: bool | None = None
+    cpp_only: bool | None = None
+    header_only: bool | None = None
+    sort_members: bool | None = None
+    verbose: bool | None = None
+    last_selected: list[str] | None = None
+
+
+class ReorderMembersRunBody(ReorderMembersPrefsBody):
+    top_dirs: list[str]
 
 
 def _ensure_phoenix_logging() -> None:
@@ -1290,6 +1309,38 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
         patch = body.model_dump(exclude_none=True)
         try:
             return run_sw_step_export(ws, patch or None)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.get("/api/code/reorder-members/prefs")
+    def api_reorder_members_prefs_get() -> dict:
+        return get_reorder_members_prefs(get_workspace())
+
+    @app.put("/api/code/reorder-members/prefs")
+    def api_reorder_members_prefs_put(body: ReorderMembersPrefsBody) -> dict:
+        patch = body.model_dump(exclude_none=True)
+        try:
+            return save_reorder_members_prefs(get_workspace(), patch)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.get("/api/code/reorder-members/top-dirs")
+    def api_reorder_members_top_dirs() -> dict:
+        try:
+            return list_reorder_top_level_dirs(get_workspace())
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post("/api/code/reorder-members/run")
+    def api_reorder_members_run(body: ReorderMembersRunBody) -> dict:
+        patch = body.model_dump(exclude_none=True)
+        top_dirs = patch.pop("top_dirs", [])
+        try:
+            return run_reorder_members_batch(
+                get_workspace(),
+                top_dirs=top_dirs,
+                patch=patch or None,
+            )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 

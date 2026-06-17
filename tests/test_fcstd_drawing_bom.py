@@ -65,12 +65,9 @@ DRAWING_DOC = """<?xml version='1.0' encoding='utf-8'?>
 </Document>
 """
 
-SAMPLE_LINK_DRAWING = (
-    Path(__file__).resolve().parents[1] / "doc/samples/图纸-通过link来创建-Document.xml"
-)
-SAMPLE_INTERNAL_ASSY = (
-    Path(__file__).resolve().parents[1] / "doc/samples/内部装配示例-Document.xml"
-)
+_FIXTURES = Path(__file__).resolve().parent / "fixtures/workspaces/minimal/document-xml"
+SAMPLE_LINK_DRAWING = _FIXTURES / "图纸-通过link来创建-Document.xml"
+SAMPLE_INTERNAL_ASSY = _FIXTURES / "内部装配示例-Document.xml"
 
 
 def _write_fcstd(path: Path, xml: str) -> None:

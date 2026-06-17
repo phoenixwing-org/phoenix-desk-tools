@@ -1361,6 +1361,69 @@ export function exportPartDedupCsv(results?: PartDedupScanResult["results"]) {
   });
 }
 
+export type ReorderMembersPrefs = {
+  workspace_path: string;
+  workspace_path_display: string;
+  dry_run: boolean;
+  cpp_only: boolean;
+  header_only: boolean;
+  sort_members: boolean;
+  verbose: boolean;
+  last_selected: string[];
+};
+
+export type ReorderMembersTopDir = {
+  name: string;
+  source_file_count: number;
+};
+
+export type ReorderMembersTopDirsResponse = {
+  workspace_path: string;
+  workspace_path_display: string;
+  dirs: ReorderMembersTopDir[];
+};
+
+export type ReorderMembersRunResult = {
+  ok: boolean;
+  log: string;
+  lines: string[];
+  summary?: string;
+  dry_run: boolean;
+  cpp_changed?: number;
+  hdr_changed?: number;
+  files_scanned?: number;
+  dir_results?: Array<{
+    name: string;
+    cpp_changed: number;
+    hdr_changed: number;
+    files_scanned: number;
+  }>;
+};
+
+export function fetchReorderMembersPrefs() {
+  return jsonFetch<ReorderMembersPrefs>("/api/code/reorder-members/prefs");
+}
+
+export function saveReorderMembersPrefs(prefs: Partial<ReorderMembersPrefs>) {
+  return jsonFetch<ReorderMembersPrefs>("/api/code/reorder-members/prefs", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(prefs),
+  });
+}
+
+export function fetchReorderMembersTopDirs() {
+  return jsonFetch<ReorderMembersTopDirsResponse>("/api/code/reorder-members/top-dirs");
+}
+
+export function runReorderMembers(body: Partial<ReorderMembersPrefs> & { top_dirs: string[] }) {
+  return jsonFetch<ReorderMembersRunResult>("/api/code/reorder-members/run", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 export type StepBatchPrefs = {
   step_dir: string;
   out_dir: string;

@@ -13,6 +13,7 @@ import XlinkFixPage from "../pages/XlinkFixPage.vue";
 import PartDedupPage from "../pages/PartDedupPage.vue";
 import StepBatchPage from "../pages/StepBatchPage.vue";
 import SwStepExportPage from "../pages/SwStepExportPage.vue";
+import ReorderMembersPage from "../pages/ReorderMembersPage.vue";
 import PartCatalogPage from "../pages/PartCatalogPage.vue";
 import PartKeyDetailPage from "../pages/PartKeyDetailPage.vue";
 import FileRenamePage from "../pages/FileRenamePage.vue";
@@ -52,6 +53,7 @@ const PAGE_COMPONENTS: Record<string, Component> = {
   part_dedup: PartDedupPage,
   step_batch: StepBatchPage,
   sw_step_export: SwStepExportPage,
+  reorder_members: ReorderMembersPage,
   bom_export: BomExportPage,
 };
 
