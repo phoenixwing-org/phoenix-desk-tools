@@ -12,7 +12,6 @@ from pathlib import Path
 
 import uvicorn
 
-from phoenix.config.user_prefs import migrate_launcher_prefs_to_web
 from phoenix.web.app import create_app, set_workspace
 from phoenix.web.browser_open import find_ide_cli, open_in_ide_browser, print_terminal_link
 from phoenix.web.paths import (
@@ -63,7 +62,6 @@ def _schedule_open_browser(url: str, *, use_system: bool = False, delay_s: float
 def _resolve_workspace_path(raw: str) -> Path:
     if raw.strip():
         return Path(raw)
-    migrate_launcher_prefs_to_web()
     return default_workspace_path()
 
 
@@ -113,7 +111,7 @@ def _run_dev_mode(
 
     env = os.environ.copy()
     env["PHOENIX_API_PORT"] = str(api_port)
-    env["FCDESK_API_PORT"] = str(api_port)  # 兼容 Vite 旧环境变量名
+    env["PHOENIX_API_PORT"] = str(api_port)  # 兼容 Vite 旧环境变量名
     try:
         run_pnpm(["dev"], cwd=pnpm_cwd, env=env)
     except FileNotFoundError:

@@ -20,7 +20,6 @@ from phoenix.freecad.phoenix_store import (
     WORKSPACE_DATABASE_FILENAME,
     cad_database_path,
     get_part_key_detail,
-    migrate_fcstd_map_json,
 )
 from phoenix.services.fcstd_map_service import (
     load_fcstd_map_payload,
@@ -216,33 +215,6 @@ class TestFcstdMapService(unittest.TestCase):
             filtered = search_fcstd_map_entries(td, kind="markdown", search="b.md")
             self.assertEqual(filtered["total"], 1)
             self.assertTrue(filtered["entries"][0]["filename"].endswith(".md"))
-        finally:
-            shutil.rmtree(td, ignore_errors=True)
-
-    def test_migrate_json_to_sqlite(self) -> None:
-        td = Path(tempfile.mkdtemp(prefix="fcstd_map_mig_"))
-        try:
-            doc = {
-                "schema_version": 2,
-                "entries": [
-                    {
-                        "repo_rel_path": "./old.FCStd",
-                        "filename": "old.FCStd",
-                        "PartNumber": "100001",
-                        "PartVersion": "001",
-                        "file_status": "present",
-                        "last_seen_at": "2026-01-01T00:00:00+00:00",
-                    }
-                ],
-                "last_scan_at": "2026-01-01T00:00:00+00:00",
-                "scan_stats": {"total_entries": 1, "present": 1, "missing": 0},
-            }
-            (td / "fcstd_map.json").write_text(json.dumps(doc), encoding="utf-8")
-
-            self.assertTrue(migrate_fcstd_map_json(td))
-            payload = load_fcstd_map_payload(td)
-            self.assertTrue(payload["exists"])
-            self.assertEqual(payload["entries"][0]["PartNumber"], "100001")
         finally:
             shutil.rmtree(td, ignore_errors=True)
 

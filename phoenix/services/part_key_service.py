@@ -12,7 +12,6 @@ from phoenix.freecad.phoenix_store import (
     format_part_key,
     get_part_key_detail,
     list_part_keys,
-    migrate_fcstd_map_json,
     update_part_file_link_record,
     update_part_key_record,
 )
@@ -22,13 +21,8 @@ from phoenix.freecad.rename_analysis.types import RenameAnalysisError
 from phoenix.services.bom_xref_service import load_assembly_tree
 
 
-def _ensure_index_loaded(repo_root: Path) -> None:
-    migrate_fcstd_map_json(repo_root)
-
-
 def load_part_keys_payload(repo_root: Path) -> dict[str, Any]:
     rr = repo_root.expanduser().resolve(strict=False)
-    _ensure_index_loaded(rr)
     db = cad_database_path(rr)
     entries = list_part_keys(rr)
     total_files = sum(int(e.get("file_count") or 0) for e in entries)
@@ -51,7 +45,6 @@ def load_part_key_detail_payload(
     part_version: str,
 ) -> dict[str, Any]:
     rr = repo_root.expanduser().resolve(strict=False)
-    _ensure_index_loaded(rr)
     detail = get_part_key_detail(rr, part_number, part_version)
     if detail is None:
         raise LookupError(f"未找到零件键: {part_number}.{part_version}")
@@ -71,7 +64,6 @@ def patch_part_key(
     status: str | None = None,
 ) -> dict[str, Any]:
     rr = repo_root.expanduser().resolve(strict=False)
-    migrate_fcstd_map_json(rr)
     detail = update_part_key_record(
         rr,
         part_number,
@@ -99,7 +91,6 @@ def patch_part_file_link(
     link_status: str | None = None,
 ) -> dict[str, Any]:
     rr = repo_root.expanduser().resolve(strict=False)
-    migrate_fcstd_map_json(rr)
     detail = update_part_file_link_record(
         rr,
         part_number,
@@ -149,7 +140,6 @@ def lookup_part_key_in_index(
 ) -> dict[str, str]:
     """在 CAD 索引 ``phoenix_cad_file_asset`` 中按路径或文件名查已登记的 Part Key。"""
     rr = repo_root.expanduser().resolve(strict=False)
-    migrate_fcstd_map_json(rr)
     rel_norm = normalize_repo_rel_path_for_map(repo_rel.strip()) if repo_rel.strip() else ""
     name = Path(basename.replace("\\", "/")).name if basename.strip() else ""
 

@@ -8,7 +8,7 @@
 
 - **`freecad_batch_step_runner.py`**：读环境变量 `FCD_BATCH_*`，批量 STEP→FCStd；桌面「STEP 批量」页会调用它。实现细节见 `doc/STEP批量转FCStd.md`。
 - **`freecad_batch_step_fc.py`**：供 runner / 收件箱监听导入，依赖 FreeCAD 解释器。
-- **`freecad_fcdesk_inbox_listener.py`**：在 **FreeCAD 已打开的 GUI** 内执行一遍，Phoenix「STEP 批量」可勾选 **收件箱桥接** 投递任务（见 `doc/FreeCAD-fcdesk桥接.md`）。
+- **`freecad_phoenix_inbox_listener.py`**：在 **FreeCAD 已打开的 GUI** 内执行一遍，Phoenix「STEP 批量」可勾选 **收件箱桥接** 投递任务（见 `doc/FreeCAD-Phoenix桥接.md`）。
 
 手写验收（**须 `export` 环境变量**，见 `example_run_step_batch.sh` 与 `doc/STEP批量转FCStd.md`）。
 

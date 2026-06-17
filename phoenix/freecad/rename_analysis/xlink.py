@@ -119,7 +119,7 @@ def _rewrite_fcstd_document_xml(fcstd_path: Path, document_xml: str) -> None:
     except zipfile.BadZipFile as e:
         raise RenameAnalysisError(f"无效的 FCStd/ZIP：{fcstd_path}") from e
 
-    fd, tmp_name = tempfile.mkstemp(prefix=".fcdesk_", suffix=".partial", dir=str(directory))
+    fd, tmp_name = tempfile.mkstemp(prefix=".phoenix_", suffix=".partial", dir=str(directory))
     os.close(fd)
     tmp_path = Path(tmp_name)
     xml_bytes = document_xml.encode("utf-8")
@@ -175,12 +175,12 @@ def _patch_xlink_attrs_in_xml(xml: str, replacements: dict[str, str]) -> tuple[s
 
 def resolve_fcstd_display_label(fcstd_path: Path) -> str:
     """读取 FCStd 挂载对象的显示 Label（Document → 索引字段组合 → 文件名兜底）。"""
-    from phoenix.freecad.fcstd_embedded_attrs import FcdeskFcstdEmbeddedError, read_embedded_bom_attrs
+    from phoenix.freecad.fcstd_embedded_attrs import PhoenixFcstdEmbeddedError, read_embedded_bom_attrs
     from phoenix.freecad.fcstd_mapping import compose_fcstd_body_label_display, infer_fcstd_name_suffix
 
     try:
         attrs = read_embedded_bom_attrs(fcstd_path)
-    except FcdeskFcstdEmbeddedError:
+    except PhoenixFcstdEmbeddedError:
         attrs = {}
     label = (attrs.get("label") or "").strip()
     if label:

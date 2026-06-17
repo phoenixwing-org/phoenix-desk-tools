@@ -25,7 +25,7 @@
 
 | 变量 | 含义 |
 | --- | --- |
-| `PHOENIX_LAUNCHER_CONFIG` | 指定 launcher JSON 绝对路径（`FCDESK_LAUNCHER_CONFIG` 仍兼容） |
+| `PHOENIX_LAUNCHER_CONFIG` | 指定 launcher JSON 绝对路径（`PHOENIX_LAUNCHER_CONFIG` 仍兼容） |
 
 ## 内容
 

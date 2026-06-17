@@ -13,7 +13,6 @@ from tkinter import messagebox
 from phoenix.config.loader import load_app_config
 from phoenix.config.user_prefs import (
     apply_launcher_prefs_to_state,
-    migrate_legacy_workspace_prefs,
     save_launcher_window_geometry,
 )
 from phoenix.pages.home import HomePage
@@ -33,7 +32,6 @@ class AppShell(ctk.CTk):
 
         super().__init__()
         self.app_state = AppState()
-        migrate_legacy_workspace_prefs()
         apply_launcher_prefs_to_state(self.app_state)
 
         self._app_title_base = str(app_cfg.get("title") or "FreeCAD 管理工具")

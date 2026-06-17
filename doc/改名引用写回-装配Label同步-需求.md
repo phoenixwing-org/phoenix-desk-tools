@@ -1,7 +1,7 @@
 # 改名引用写回 — 装配 Label 同步需求
 
 > [文档索引](文档索引.md) · 状态：**已实现**（默认勾选「同时修正引用名」）  
-> 关联：[改名与XLink引用修正-规划讨论.md](改名与XLink引用修正-规划讨论.md) · [Fcdesk嵌入式BOM属性约定.md](Fcdesk嵌入式BOM属性约定.md)  
+> 关联：[改名与XLink引用修正-规划讨论.md](改名与XLink引用修正-规划讨论.md) · [Phoenix嵌入式BOM属性约定.md](Phoenix嵌入式BOM属性约定.md)  
 > 入口：Web「改名与引用」→ **修正选中引用** / **修正引用名**（`POST /api/rename-analysis/apply`，`labels_only`）
 
 ---
@@ -59,7 +59,7 @@ FreeCAD 装配树中，每个外部引用在 `Document.xml` 里还有对应对�
 
 ### 3.2 「目标 Label」取值优先级
 
-1. 目标 FCStd **`Document.xml`** 挂载对象（Body / 装配 / Part，顺序同 [Fcdesk嵌入式BOM属性约定.md](Fcdesk嵌入式BOM属性约定.md)）上的 **`Label` / `String/@value`**
+1. 目标 FCStd **`Document.xml`** 挂载对象（Body / 装配 / Part，顺序同 [Phoenix嵌入式BOM属性约定.md](Phoenix嵌入式BOM属性约定.md)）上的 **`Label` / `String/@value`**
 2. 若为空：CAD 索引 **`PartNumber` + `PartVersion` + `PartName`** → `compose_fcstd_body_label_display(...)`
 3. 若仍为空：用 **`new_basename` 去扩展名** 作为兜底（并在报告中标注「Label 推断」）
 

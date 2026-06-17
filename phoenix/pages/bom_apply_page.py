@@ -2,7 +2,7 @@
 （挂载到 PartDesign::Body，或总成 ``Object.type`` 含 assembly / ``App::Part``，见 ``fcstd_document_bom_props``）。
 
 ``PartNumber`` / … / ``label``（Body 等挂载对象的 ``Label``）等与
-``FcstdMapEntry`` / ``fcstd_map.json`` 键名一致；其余路径类字段仍为 snake_case。约定见 ``doc/Fcdesk嵌入式BOM属性约定.md``。
+``FcstdMapEntry`` / ``fcstd_map.json`` 键名一致；其余路径类字段仍为 snake_case。约定见 ``doc/Phoenix嵌入式BOM属性约定.md``。
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from phoenix.fcstd_document_kind import (
 )
 from phoenix.fcstd_embedded_attrs import (
     EDITABLE_ENTRY_ATTRS,
-    FcdeskFcstdEmbeddedError,
+    PhoenixFcstdEmbeddedError,
     read_embedded_bom_attrs,
     write_embedded_bom_attrs,
 )
@@ -350,7 +350,7 @@ class BomApplyPage(BasePage):
                 "上方勾选用于过滤「从 ZIP 读取 / 推荐文件名」是否对该类型生效；选中文件时会自动识别类型（亦可点「识别类型」）。\n"
                 "「推荐文件名」仅填入文件名字段；**改名** 前有未写入属性时会询问是否**写入并改名**。\n"
                 "保存将把属性写入 ``Document.xml`` 内 BOM 挂载对象的 Property（Body → type 含 assembly → App::Part）。"
-                "``PartNumber`` 等与手动「添加属性」一致：**组**默认为 **「CustomDefine」**（常量 ``FCDESK_EMBEDDED_BOM_PROPERTY_GROUP``），**工具提示**写入 ``Property/@doc``。 "
+                "``PartNumber`` 等与手动「添加属性」一致：**组**默认为 **「CustomDefine」**（常量 ``PHOENIX_EMBEDDED_BOM_PROPERTY_GROUP``），**工具提示**写入 ``Property/@doc``。 "
                 "若包内仍存在旧版 ``FcdeskBomAttrs.xml``，保存时会移除该文件并完成迁移。\n"
                 "若 FreeCAD 正打开该文件，保存常因占用失败——请先关闭 FreeCAD 或其它占用程序。\n"
                 "切换到树中另一个文件而未保存将丢弃当前未保存改动。"
@@ -670,7 +670,7 @@ class BomApplyPage(BasePage):
                 embedded = read_embedded_bom_attrs(full)
                 if embedded:
                     note += "\n已读取 Document.xml / 遗留侧车内的可写字段。"
-            except FcdeskFcstdEmbeddedError as ex:
+            except PhoenixFcstdEmbeddedError as ex:
                 self._set_status(f"嵌入式属性读取警告：{ex}", ok=False)
         merged = self._merge_embedded_over(plain, embedded)
         merged = self._merged_with_partname_coerce(merged)
@@ -798,7 +798,7 @@ class BomApplyPage(BasePage):
             return
         try:
             embedded = read_embedded_bom_attrs(full)
-        except FcdeskFcstdEmbeddedError as ex:
+        except PhoenixFcstdEmbeddedError as ex:
             messagebox.showerror("从 ZIP 嵌入读取", str(ex), parent=self)
             self._set_status("嵌入读取失败", ok=False)
             return
@@ -1028,7 +1028,7 @@ class BomApplyPage(BasePage):
                 messagebox.showerror("保存失败", str(e), parent=self)
             self._set_status("保存失败", ok=False)
             return False
-        except FcdeskFcstdEmbeddedError as e:
+        except PhoenixFcstdEmbeddedError as e:
             if not silent:
                 messagebox.showerror("保存失败", str(e), parent=self)
             self._set_status("保存失败：ZIP/XML", ok=False)

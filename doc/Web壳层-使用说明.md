@@ -95,7 +95,7 @@
 | STEP 批量 | 需 FreeCAD 目录 | [STEP批量转FCStd.md](STEP批量转FCStd.md) |
 | SW→STEP | Windows COM | [SolidWorks批量STEP导出.md](SolidWorks批量STEP导出.md) |
 
-完整字段约定：[Fcdesk嵌入式BOM属性约定.md](Fcdesk嵌入式BOM属性约定.md)、[BOM工具说明.md](BOM工具说明.md)。
+完整字段约定：[Phoenix嵌入式BOM属性约定.md](Phoenix嵌入式BOM属性约定.md)、[BOM工具说明.md](BOM工具说明.md)。
 
 ---
 

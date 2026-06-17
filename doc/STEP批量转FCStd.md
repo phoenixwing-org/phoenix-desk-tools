@@ -6,7 +6,7 @@
 
 选 **STEP 目录**、**输出目录**（相对工作空间即可）；**配置**页设 **FreeCAD 目录**。调用 **`scripts/freecad_batch_step_runner.py`**。macOS 选 **`/Applications/FreeCAD.app`** 即可。
 
-**收件箱桥接**：页内勾选后在 **已打开的 FreeCAD** 执行一次 **`scripts/freecad_fcdesk_inbox_listener.py`**；见 [FreeCAD-fcdesk桥接.md](FreeCAD-fcdesk桥接.md)。偏好存工作空间 **`step_batch`**（当前为 dotfile；目标态 SQLite 见 [Phoenix工作空间存储-规划讨论.md](Phoenix工作空间存储-规划讨论.md)）。
+**收件箱桥接**：页内勾选后在 **已打开的 FreeCAD** 执行一次 **`scripts/freecad_phoenix_inbox_listener.py`**；见 [FreeCAD-Phoenix桥接.md](FreeCAD-Phoenix桥接.md)。偏好存工作空间 **`step_batch`**（当前为 dotfile；目标态 SQLite 见 [Phoenix工作空间存储-规划讨论.md](Phoenix工作空间存储-规划讨论.md)）。
 
 ## 目录
 

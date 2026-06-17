@@ -5,7 +5,7 @@
 用法（每台机只需做一次路径配置）：
 
 1. 宏 → Macros… → 「文档」打开宏路径，或直接「添加宏路径」指向本仓库的 ``scripts/``。
-2. 在菜单 **宏 → executeMacro**（或快捷键）中选本文件 ``freecad_fcdesk_inbox_listener.py``，
+2. 在菜单 **宏 → executeMacro**（或快捷键）中选本文件 ``freecad_phoenix_inbox_listener.py``，
    **执行一次**（或勾选「添加到启动宏」）。
 3. 桌面上 phoenix「STEP 批量」勾选 **通过已打开的 FreeCAD**，再点运行。
 
@@ -69,12 +69,12 @@ def _process_one(queue: Path, done_dir: Path) -> bool:
         return True
 
     uid = raw.get("id") or p.stem.replace("_queued", "")
-    traw = raw.get("fcdesk_clone_root") or raw.get("repo_root")
+    traw = raw.get("phoenix_clone_root") or raw.get("repo_root")
     if not traw:
         try:
             rsp = done_dir / f"{uid}_result.json"
             rsp.write_text(
-                json.dumps({"ok": False, "error": "缺少 fcdesk_clone_root"}, ensure_ascii=False) + "\n",
+                json.dumps({"ok": False, "error": "缺少 phoenix_clone_root"}, ensure_ascii=False) + "\n",
                 encoding="utf-8",
             )
         except OSError:
@@ -140,8 +140,8 @@ def start(interval_ms: int = 750) -> None:
         print("phoenix inbox: FreeCADGui 不可用")
         return
 
-    if getattr(Gui, "_fcdesk_listener_timer", None) is not None:
-        Gui._fcdesk_listener_timer.start(interval_ms)
+    if getattr(Gui, "_phoenix_listener_timer", None) is not None:
+        Gui._phoenix_listener_timer.start(interval_ms)
         try:
             import FreeCAD as App
 
@@ -185,7 +185,7 @@ def start(interval_ms: int = 750) -> None:
     timer.start(interval_ms)
     _TIMER = timer
     _POLL_ATTACHED = True
-    Gui._fcdesk_listener_timer = timer
+    Gui._phoenix_listener_timer = timer
 
     try:
         import FreeCAD as App
@@ -199,7 +199,7 @@ def stop() -> None:
     try:
         import FreeCADGui as Gui
 
-        t = getattr(Gui, "_fcdesk_listener_timer", None)
+        t = getattr(Gui, "_phoenix_listener_timer", None)
         if t is not None:
             t.stop()
     except Exception:

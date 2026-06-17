@@ -50,9 +50,6 @@ export type LauncherPrefs = {
   platform?: string;
   shell_layout: ShellLayout;
   launcher_config_path?: string;
-  legacy_launcher_path?: string;
-  legacy_launcher_exists?: boolean;
-  migrated_from_legacy?: boolean;
 };
 
 export const DEFAULT_PAGE_ICONS: Record<string, string> = {

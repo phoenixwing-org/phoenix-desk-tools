@@ -55,7 +55,7 @@ python -m phoenix.web --api-only --port 8765 -w /path/to/CAD/workspace
 PHOENIX_API_PORT=8765 pnpm dev
 ```
 
-换 API 端口：`python -m phoenix.web --dev --api-port 9000`（Vite 读 `PHOENIX_API_PORT` 或 `FCDESK_API_PORT`）。
+换 API 端口：`python -m phoenix.web --dev --api-port 9000`（Vite 读 `PHOENIX_API_PORT` 或 `PHOENIX_API_PORT`）。
 
 ## 浏览器
 

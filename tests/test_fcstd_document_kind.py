@@ -97,7 +97,7 @@ class TestKindFilters(unittest.TestCase):
 
 class TestReadZip(unittest.TestCase):
     def test_read_from_fcstd_zip(self) -> None:
-        td = Path(tempfile.mkdtemp(prefix="fcdesk_kind_"))
+        td = Path(tempfile.mkdtemp(prefix="phoenix_kind_"))
         try:
             fc = td / "t.FCStd"
             with zipfile.ZipFile(fc, "w") as z:

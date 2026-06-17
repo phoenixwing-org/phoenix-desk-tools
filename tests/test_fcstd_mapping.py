@@ -340,19 +340,12 @@ class TestRenameWorkspaceFcstd(unittest.TestCase):
             rename_workspace_fcstd_file,
             try_update_fcstd_map_entry_rename,
         )
+        from phoenix.freecad.phoenix_store import find_fcstd_entry, save_fcstd_document
 
-        td = Path(tempfile.mkdtemp(prefix="fcdesk_rename_"))
+        td = Path(tempfile.mkdtemp(prefix="phoenix_rename_"))
         try:
             src = td / "old.FCStd"
             src.write_bytes(b"zip")
-            new_rel = rename_workspace_fcstd_file(
-                repo_root=td,
-                rel=Path("old.FCStd"),
-                new_basename="new.FCStd",
-            )
-            self.assertEqual(new_rel, Path("new.FCStd"))
-            self.assertFalse(src.is_file())
-            self.assertTrue((td / "new.FCStd").is_file())
 
             doc = FcstdMapDocument(
                 entries=[
@@ -363,10 +356,22 @@ class TestRenameWorkspaceFcstd(unittest.TestCase):
                     )
                 ]
             )
-            (td / "fcstd_map.json").write_text(
-                json.dumps(doc.to_json_dict(), ensure_ascii=False, indent=2),
-                encoding="utf-8",
+            save_fcstd_document(
+                td,
+                doc,
+                scan_root=".",
+                stats={"total_entries": 1, "present": 1, "missing": 0},
             )
+
+            new_rel = rename_workspace_fcstd_file(
+                repo_root=td,
+                rel=Path("old.FCStd"),
+                new_basename="new.FCStd",
+            )
+            self.assertEqual(new_rel, Path("new.FCStd"))
+            self.assertFalse(src.is_file())
+            self.assertTrue((td / "new.FCStd").is_file())
+
             self.assertTrue(
                 try_update_fcstd_map_entry_rename(
                     repo_root=td,
@@ -374,7 +379,6 @@ class TestRenameWorkspaceFcstd(unittest.TestCase):
                     new_rel=Path("new.FCStd"),
                 )
             )
-            from phoenix.freecad.phoenix_store import find_fcstd_entry
 
             entry = find_fcstd_entry(td, Path("new.FCStd"))
             self.assertIsNotNone(entry)

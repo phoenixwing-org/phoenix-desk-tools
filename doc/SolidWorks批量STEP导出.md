@@ -16,8 +16,8 @@
 
 | 变量 | 含义 | 默认 |
 | --- | --- | --- |
-| `FCDESK_SW_OPEN_OPTIONS` | `OpenDoc6` 的 Options | `1` |
-| `FCDESK_SW_SAVEAS_SILENT_OPTS` | `SaveAs3`/`SaveAs2` 静默参数，`,` 隔开两整数 | `128,8` |
+| `PHOENIX_SW_OPEN_OPTIONS` | `OpenDoc6` 的 Options | `1` |
+| `PHOENIX_SW_SAVEAS_SILENT_OPTS` | `SaveAs3`/`SaveAs2` 静默参数，`,` 隔开两整数 | `128,8` |
 
 ## 代码
 

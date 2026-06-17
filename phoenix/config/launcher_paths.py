@@ -31,15 +31,5 @@ def platform_launcher_prefs_dir() -> Path:
     return _platform_config_root() / _VENDOR_ID / _APP_ID
 
 
-def legacy_vendor_fcdesk_launcher_prefs_file() -> Path:
-    """旧版 ``…/phoenix-wing/fcdesk/launcher.json``（import 包名 ``fcdesk`` 时期）。"""
-    return _platform_config_root() / _VENDOR_ID / "fcdesk" / _LAUNCHER_FILENAME
-
-
-def legacy_flat_launcher_prefs_file() -> Path:
-    """更旧单层 ``…/fcdesk/launcher.json``（仅迁移读取）。"""
-    return _platform_config_root() / "fcdesk" / _LAUNCHER_FILENAME
-
-
 def platform_launcher_prefs_file() -> Path:
     return platform_launcher_prefs_dir() / _LAUNCHER_FILENAME

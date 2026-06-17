@@ -1,4 +1,4 @@
-"""phoenix.fcstd_embedded_attrs：Document.xml Body Property 读写与旧侧车迁移。"""
+"""phoenix.freecad.fcstd_embedded_attrs：Document.xml Body Property 读写。"""
 
 import zipfile
 import xml.etree.ElementTree as ET
@@ -6,10 +6,11 @@ from pathlib import Path
 
 import unittest
 
-from phoenix.fcstd_document_bom_props import FCDESK_EMBEDDED_BOM_PROPERTY_GROUP
-from phoenix.fcstd_embedded_attrs import (
-    EDITABLE_ENTRY_ATTRS,
-    EMBEDDED_BOM_XML,
+from phoenix.freecad.fcstd_document_bom_props import (
+    EDITABLE_DOCUMENT_ATTRS as EDITABLE_ENTRY_ATTRS,
+    PHOENIX_EMBEDDED_BOM_PROPERTY_GROUP,
+)
+from phoenix.freecad.fcstd_embedded_attrs import (
     read_embedded_bom_attrs,
     write_embedded_bom_attrs,
 )
@@ -188,13 +189,12 @@ class EmbeddedBomAttrsTest(unittest.TestCase):
         self.assertEqual(got["label"], "灯座")
 
         with zipfile.ZipFile(fc, "r") as z:
-            self.assertNotIn(EMBEDDED_BOM_XML, z.namelist())
             raw = z.read("Document.xml")
         self.assertEqual(_prop_value_from_document_xml(raw, "PartNumber"), "100346")
         self.assertEqual(_prop_value_from_document_xml(raw, "Label"), "灯座")
         self.assertEqual(
             _property_wrapper_attrib(raw, "PartNumber").get("group"),
-            FCDESK_EMBEDDED_BOM_PROPERTY_GROUP,
+            PHOENIX_EMBEDDED_BOM_PROPERTY_GROUP,
         )
         self.assertEqual(_property_wrapper_attrib(raw, "PartNumber").get("doc"), "零件号")
         self.assertEqual(_property_wrapper_attrib(raw, "PartVersion").get("doc"), "零件版本")
@@ -229,7 +229,6 @@ class EmbeddedBomAttrsTest(unittest.TestCase):
             names = z.namelist()
             raw_doc = z.read("Document.xml")
             gui_got = z.read("GuiDocument.xml")
-        self.assertNotIn(EMBEDDED_BOM_XML, names)
         self.assertNotEqual(raw_doc, doc_stub)
         self.assertEqual(gui_got, gui_stub)
 
@@ -245,7 +244,7 @@ class EmbeddedBomAttrsTest(unittest.TestCase):
         self.assertEqual(read_embedded_bom_attrs(fc), vals)
 
     def test_bom_props_clone_property_wrapper_from_existing_user_strings(self) -> None:
-        """Bitmask 等与参照一致；分组为 ``CustomDefine``（``FCDESK_EMBEDDED_BOM_PROPERTY_GROUP``），且 ``doc`` 为工具提示。"""
+        """Bitmask 等与参照一致；分组为 ``CustomDefine``（``PHOENIX_EMBEDDED_BOM_PROPERTY_GROUP``），且 ``doc`` 为工具提示。"""
         td = Path(self.tmp)
         fc = td / "ref.FCStd"
         fc.parent.mkdir(parents=True, exist_ok=True)
@@ -267,34 +266,9 @@ class EmbeddedBomAttrsTest(unittest.TestCase):
         self.assertEqual(p_name, "PartNumber")
         self.assertEqual(ref_wrap.pop("group", None), "Base")
         self.assertEqual(ref_wrap.pop("doc", None), "")
-        self.assertEqual(pn_wrap.pop("group", None), FCDESK_EMBEDDED_BOM_PROPERTY_GROUP)
+        self.assertEqual(pn_wrap.pop("group", None), PHOENIX_EMBEDDED_BOM_PROPERTY_GROUP)
         self.assertEqual(pn_wrap.pop("doc", None), "零件号")
         self.assertEqual(pn_wrap, ref_wrap)
-
-    def test_legacy_sidecar_fallback_until_saved(self) -> None:
-        td = Path(self.tmp)
-        fc = td / "mig.FCStd"
-        fc.parent.mkdir(parents=True, exist_ok=True)
-        legacy = (
-            "<?xml version='1.0' encoding='utf-8'?>"
-            '<FcdeskBomAttrs version="1">'
-            "<PartNumber>LEG-99</PartNumber>"
-            "</FcdeskBomAttrs>"
-        )
-        with zipfile.ZipFile(fc, "w") as z:
-            z.writestr("Document.xml", MIN_DOC_TEMPLATE.strip().encode("utf-8"))
-            z.writestr(EMBEDDED_BOM_XML, legacy.encode("utf-8"))
-
-        got = read_embedded_bom_attrs(fc)
-        self.assertEqual(got["PartNumber"], "LEG-99")
-
-        mig = {k: "" for k in EDITABLE_ENTRY_ATTRS}
-        mig["PartNumber"] = "LEG-99"
-        write_embedded_bom_attrs(fc, mig)
-        with zipfile.ZipFile(fc, "r") as z:
-            self.assertNotIn(EMBEDDED_BOM_XML, z.namelist())
-            pn = _prop_value_from_document_xml(z.read("Document.xml"), "PartNumber")
-        self.assertEqual(pn, "LEG-99")
 
     def test_assembly_only_document_mounts_on_assembly_object(self) -> None:
         """无 Body 时，`Object.type` 含 assembly 的根对象可作为挂载点。"""
@@ -342,7 +316,7 @@ class EmbeddedBomAttrsTest(unittest.TestCase):
     def setUp(self) -> None:
         import tempfile
 
-        self.tmp = tempfile.mkdtemp(prefix="fcdesk_embedded_")
+        self.tmp = tempfile.mkdtemp(prefix="phoenix_embedded_")
 
     def tearDown(self) -> None:
         import shutil

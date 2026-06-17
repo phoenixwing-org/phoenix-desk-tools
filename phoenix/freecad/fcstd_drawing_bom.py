@@ -13,7 +13,7 @@ from phoenix.freecad.bom_xref.resolve import resolve_xlink_target
 from phoenix.freecad.fcstd_document_bom_props import (
     DOCUMENT_XML,
     EDITABLE_DOCUMENT_ATTRS,
-    FcdeskDocumentBomError,
+    PhoenixDocumentBomError,
     _first_bom_target_object_name,
     bom_mount_object_type,
     is_drawing_primary_mount_context,
@@ -55,12 +55,12 @@ def _load_document_xml(path: Path) -> str:
     try:
         with zipfile.ZipFile(path, "r") as zf:
             if DOCUMENT_XML not in zf.namelist():
-                raise FcdeskDocumentBomError(f"ZIP 内缺少 {DOCUMENT_XML!r}：{path}")
+                raise PhoenixDocumentBomError(f"ZIP 内缺少 {DOCUMENT_XML!r}：{path}")
             return zf.read(DOCUMENT_XML).decode("utf-8")
     except zipfile.BadZipFile as e:
-        raise FcdeskDocumentBomError(f"无效的 FCStd/ZIP：{path}") from e
+        raise PhoenixDocumentBomError(f"无效的 FCStd/ZIP：{path}") from e
     except OSError as e:
-        raise FcdeskDocumentBomError(str(e)) from e
+        raise PhoenixDocumentBomError(str(e)) from e
 
 
 def _guess_model_path_by_filename(drawing_path: Path) -> Path | None:
@@ -209,7 +209,7 @@ def resolve_drawing_bom(
                 mount_object_type=mount_type,
                 note="图纸 · App::Link 只读 Property",
             )
-    except FcdeskDocumentBomError:
+    except PhoenixDocumentBomError:
         pass
 
     # 2) 从 Link.LinkedObject / XLink 指向的模型读取
@@ -255,7 +255,7 @@ def resolve_drawing_bom(
 
     try:
         model_vals = _read_bom_from_model_path(model_path)
-    except FcdeskDocumentBomError as ex:
+    except PhoenixDocumentBomError as ex:
         return DrawingBomResolution(
             values={k: "" for k in EDITABLE_DOCUMENT_ATTRS},
             readonly=True,

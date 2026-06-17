@@ -30,7 +30,6 @@ Repository = "https://gitee.com/PhoenixWing321/phoenix-freecad-desktop"
 
 [project.scripts]
 phoenix-desktop = "phoenix.shell.app:run_app"
-phoenix-fcdesktop = "phoenix.shell.app:run_app"  # 兼容旧 CLI 名
 phoenix-web = "phoenix.web.__main__:main"
 
 [tool.setuptools.packages.find]

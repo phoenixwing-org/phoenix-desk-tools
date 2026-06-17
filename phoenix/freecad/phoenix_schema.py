@@ -9,13 +9,7 @@ from typing import Any
 
 PHOENIX_DIR_NAME = ".phoenix"
 WORKSPACE_DATABASE_FILENAME = "phoenix-workspace.sqlite"
-LEGACY_DATABASE_FILENAMES: tuple[str, ...] = (
-    "cad-database.sqlite",
-    "phoenix-cad.sqlite",
-)
-# 兼容旧常量名（新代码请用 WORKSPACE_*）
 CAD_DATABASE_FILENAME = WORKSPACE_DATABASE_FILENAME
-LEGACY_DATABASE_FILENAME = LEGACY_DATABASE_FILENAMES[0]
 SCHEMA_VERSION = 10
 
 T_META = "phoenix_meta"
@@ -31,22 +25,6 @@ T_RENAME_LOG = "phoenix_audit_rename_log"
 T_REF_HIT = "phoenix_audit_ref_hit"
 T_REF_PATCH_LOG = "phoenix_audit_ref_patch_log"
 T_UI_SESSION = "phoenix_ui_session"
-
-OLD_TABLE_NAMES: tuple[str, ...] = (
-    "meta",
-    "fcstd_scan",
-    "file_asset",
-    "part_key",
-    "part_file_link",
-    "bom_xref",
-    "bom_assembly_cache",
-    "bom_tree_occurrence",
-    "change_event",
-    "rename_log",
-    "ref_hit",
-    "ref_patch_log",
-    "ui_session",
-)
 
 CREATE_SCHEMA_DDL = f"""
 CREATE TABLE IF NOT EXISTS {T_META} (
@@ -247,12 +225,16 @@ CREATE INDEX IF NOT EXISTS idx_phoenix_cad_bom_occ_host_target
 """
 
 
-class LegacyPhoenixDatabaseError(RuntimeError):
-    """检测到旧库文件或旧表名；需用户确认重建 phoenix-workspace.sqlite。"""
+class PhoenixDatabaseError(RuntimeError):
+    """工作空间 SQLite schema 与当前版本不一致。"""
 
     def __init__(self, message: str, *, reasons: list[str] | None = None) -> None:
         super().__init__(message)
         self.reasons = reasons or []
+
+
+# 兼容旧异常名
+LegacyPhoenixDatabaseError = PhoenixDatabaseError
 
 
 def phoenix_dir(repo_root: Path) -> Path:
@@ -268,14 +250,6 @@ def cad_database_path(repo_root: Path) -> Path:
     return workspace_database_path(repo_root)
 
 
-def legacy_database_paths(repo_root: Path) -> list[Path]:
-    return [phoenix_dir(repo_root) / name for name in LEGACY_DATABASE_FILENAMES]
-
-
-def legacy_database_path(repo_root: Path) -> Path:
-    return legacy_database_paths(repo_root)[0]
-
-
 def _list_user_tables(conn: sqlite3.Connection) -> set[str]:
     rows = conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
@@ -283,117 +257,57 @@ def _list_user_tables(conn: sqlite3.Connection) -> set[str]:
     return {str(r[0]) for r in rows}
 
 
-def discard_legacy_database_files(repo_root: Path) -> list[str]:
-    """删除旧文件名或含旧表名的库（不迁移数据）。"""
-    rr = repo_root.expanduser().resolve(strict=False)
-    removed: list[str] = []
-    for path in legacy_database_paths(rr):
-        if path.is_file():
-            path.unlink()
-            removed.append(path.name)
-    db = workspace_database_path(rr)
-    if db.is_file():
-        conn = sqlite3.connect(str(db))
-        try:
-            tables = _list_user_tables(conn)
-            if set(OLD_TABLE_NAMES) & tables:
-                db.unlink()
-                removed.append(db.name)
-        finally:
-            conn.close()
-    return removed
-
-
-def detect_legacy_database(repo_root: Path) -> dict[str, Any]:
-    """检测遗留库文件名或库内旧表名。"""
-    rr = repo_root.expanduser().resolve(strict=False)
-    new_file = workspace_database_path(rr)
-    reasons: list[str] = []
-
-    for name in LEGACY_DATABASE_FILENAMES:
-        legacy_path = phoenix_dir(rr) / name
-        if legacy_path.is_file():
-            reasons.append(f"legacy_file:{name}")
-
-    db_path: Path | None = None
-    if new_file.is_file():
-        db_path = new_file
-    else:
-        for name in LEGACY_DATABASE_FILENAMES:
-            legacy_path = phoenix_dir(rr) / name
-            if legacy_path.is_file():
-                db_path = legacy_path
-                break
-
-    old_tables_found: list[str] = []
-    schema_version: int | None = None
-    if db_path is not None:
-        conn = sqlite3.connect(str(db_path))
-        try:
-            tables = _list_user_tables(conn)
-            for old in OLD_TABLE_NAMES:
-                if old in tables:
-                    old_tables_found.append(old)
-            meta_table = T_META if T_META in tables else ("meta" if "meta" in tables else None)
-            if meta_table:
-                row = conn.execute(
-                    f"SELECT value FROM {meta_table} WHERE key = 'schema_version'"
-                ).fetchone()
-                if row:
-                    try:
-                        schema_version = int(row[0])
-                    except (TypeError, ValueError):
-                        schema_version = None
-        finally:
-            conn.close()
-
-    for name in old_tables_found:
-        reasons.append(f"old_table:{name}")
-
-    return {
-        "legacy_detected": bool(reasons),
-        "reasons": reasons,
-        "old_tables_found": old_tables_found,
-        "legacy_file_exists": any(
-            (phoenix_dir(rr) / name).is_file() for name in LEGACY_DATABASE_FILENAMES
-        ),
-        "database_exists": new_file.is_file() or any(
-            (phoenix_dir(rr) / name).is_file() for name in LEGACY_DATABASE_FILENAMES
-        ),
-        "database_path": str(new_file),
-        "legacy_database_path": str(legacy_database_paths(rr)[0]),
-        "legacy_database_paths": [str(p) for p in legacy_database_paths(rr)],
-        "schema_version": schema_version,
-    }
+def _read_schema_version(conn: sqlite3.Connection) -> int | None:
+    tables = _list_user_tables(conn)
+    if T_META not in tables:
+        return None
+    row = conn.execute(
+        f"SELECT value FROM {T_META} WHERE key = 'schema_version'"
+    ).fetchone()
+    if not row:
+        return None
+    try:
+        return int(row[0])
+    except (TypeError, ValueError):
+        return None
 
 
 def database_status_payload(repo_root: Path) -> dict[str, Any]:
     rr = repo_root.expanduser().resolve(strict=False)
-    discard_legacy_database_files(rr)
-    info = detect_legacy_database(rr)
-    new_file = workspace_database_path(rr)
+    db_path = workspace_database_path(rr)
+    reasons: list[str] = []
+    schema_version: int | None = None
+    if db_path.is_file():
+        conn = sqlite3.connect(str(db_path))
+        try:
+            schema_version = _read_schema_version(conn)
+            if schema_version != SCHEMA_VERSION:
+                reasons.append("schema_version_mismatch")
+        finally:
+            conn.close()
     return {
-        **info,
+        "database_exists": db_path.is_file(),
+        "needs_recreate": bool(reasons),
+        "reasons": reasons,
+        "schema_version": schema_version,
         "expected_schema_version": SCHEMA_VERSION,
-        "needs_recreate": info["legacy_detected"],
         "database_filename": WORKSPACE_DATABASE_FILENAME,
-        "legacy_database_filenames": list(LEGACY_DATABASE_FILENAMES),
-        "legacy_database_filename": LEGACY_DATABASE_FILENAMES[0],
-        "database_path_display": str(new_file.relative_to(rr)) if new_file.is_file() else "",
+        "database_path": str(db_path),
+        "database_path_display": str(db_path.relative_to(rr)) if db_path.is_file() else "",
     }
 
 
 def recreate_database(repo_root: Path) -> dict[str, Any]:
-    """删除旧/新库文件并创建空 v10 库（不迁移数据）。"""
+    """删除工作空间库并创建空 v10 库。"""
     rr = repo_root.expanduser().resolve(strict=False)
     phoenix_dir(rr).mkdir(parents=True, exist_ok=True)
     removed: list[str] = []
-    for path in (*legacy_database_paths(rr), workspace_database_path(rr)):
-        if path.is_file():
-            path.unlink()
-            removed.append(path.name)
+    db = workspace_database_path(rr)
+    if db.is_file():
+        db.unlink()
+        removed.append(db.name)
 
-    conn = sqlite3.connect(str(workspace_database_path(rr)), timeout=30.0)
+    conn = sqlite3.connect(str(db), timeout=30.0)
     try:
         conn.execute("PRAGMA foreign_keys = ON")
         conn.execute("PRAGMA journal_mode = WAL")
@@ -410,7 +324,7 @@ def recreate_database(repo_root: Path) -> dict[str, Any]:
     return {
         "status": "recreated",
         "removed_files": removed,
-        "database_path": str(workspace_database_path(rr)),
+        "database_path": str(db),
         "schema_version": SCHEMA_VERSION,
         "recreated_at": now,
     }

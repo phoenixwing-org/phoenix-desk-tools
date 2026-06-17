@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { addRecentWorkspace, pickWorkspaceDirectory, pruneRecentWorkspaces, removeRecentWorkspace, saveLauncherFreecad, shutdownWebServer, syncLauncherFromLegacy } from "../api";
+import { addRecentWorkspace, pickWorkspaceDirectory, pruneRecentWorkspaces, removeRecentWorkspace, saveLauncherFreecad, shutdownWebServer } from "../api";
 import { useAppShell } from "../composables/useAppShell";
 import PageHelpButton from "../components/PageHelpButton.vue";
 import { useShellTour } from "../composables/useShellTour";
@@ -20,7 +20,6 @@ const { startShellTour } = useShellTour(shell);
 
 const repoInput = ref("");
 const fcInput = ref("");
-const syncNote = ref("");
 const pickingWorkspace = ref(false);
 const workspaceSwitchHint = ref("");
 
@@ -69,22 +68,6 @@ function setWorkspaceSwitchHint(targetPath: string) {
 function fillDefaultFreecad() {
   const p = defaultFreecadDir.value.trim();
   if (p) fcInput.value = p;
-}
-
-async function syncLegacyLauncher() {
-  try {
-    const data = await syncLauncherFromLegacy();
-    await shell.reloadLauncher();
-    if (data.migrated_from_legacy) {
-      syncNote.value = "已从旧 workspace.custom.json 合并最近工作空间。";
-    } else if (data.legacy_launcher_exists) {
-      syncNote.value = "旧配置已读取（无新增项需合并）。";
-    } else {
-      syncNote.value = "";
-    }
-  } catch (e) {
-    syncNote.value = String(e);
-  }
 }
 
 onMounted(async () => {
@@ -322,13 +305,7 @@ const navItems = () =>
       <div class="btn-row">
         <button type="button" class="btn primary" @click="savePrefs">保存偏好</button>
         <button type="button" class="btn" @click="refreshFields">刷新</button>
-        <button type="button" class="btn" @click="syncLegacyLauncher">从旧配置合并</button>
       </div>
-      <p v-if="syncNote" class="hint sync-note">{{ syncNote }}</p>
-      <p v-if="launcher?.legacy_launcher_exists" class="hint">
-        检测到旧启动器：
-        <code>{{ launcher.legacy_launcher_path }}</code>
-      </p>
       <p v-if="onboarding.workspaceOk && !onboarding.indexScanned" class="hint scan-hint">
         该工作空间尚未执行 CAD 索引扫描，BOM/引用功能可能不完整。
         <button type="button" class="link-btn" @click="openCadIndex">打开 CAD 索引</button>

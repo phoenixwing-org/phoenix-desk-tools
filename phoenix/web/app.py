@@ -10,8 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from phoenix.freecad.fcstd_embedded_attrs import FcdeskFcstdEmbeddedError
-from phoenix.config.user_prefs import migrate_launcher_prefs_to_web, migrate_legacy_workspace_prefs
+from phoenix.freecad.fcstd_embedded_attrs import PhoenixFcstdEmbeddedError
 from phoenix.services.bom_apply_service import (
     KindFiltersInput,
     apply_label_formula,
@@ -49,7 +48,6 @@ from phoenix.services.launcher_service import (
     pick_workspace_directory_via_dialog,
     remove_recent_workspace_entry,
     prune_recent_workspace_entries,
-    sync_launcher_from_legacy,
     update_launcher_freecad,
     update_shell_layout,
 )
@@ -371,11 +369,6 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
-    @app.on_event("startup")
-    def _migrate_launcher_on_startup() -> None:
-        migrate_launcher_prefs_to_web()
-        migrate_legacy_workspace_prefs()
-
     @app.get("/api/config/app")
     def api_config_app() -> dict:
         return app_config_payload()
@@ -383,10 +376,6 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
     @app.get("/api/config/launcher")
     def api_config_launcher_get() -> dict:
         return launcher_prefs_payload()
-
-    @app.post("/api/config/launcher/sync-legacy")
-    def api_config_launcher_sync_legacy() -> dict:
-        return sync_launcher_from_legacy()
 
     @app.post("/api/config/launcher/freecad")
     def api_config_launcher_freecad(body: LauncherFreecadBody) -> dict[str, str]:
@@ -561,7 +550,7 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
             save_bom_to_fcstd(ws, Path(rel), vals)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
-        except FcdeskFcstdEmbeddedError as e:
+        except PhoenixFcstdEmbeddedError as e:
             raise HTTPException(status_code=422, detail=str(e)) from e
         except PermissionError as e:
             raise HTTPException(status_code=409, detail=f"文件占用或权限: {e}") from e
@@ -633,7 +622,7 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
-        except FcdeskFcstdEmbeddedError as e:
+        except PhoenixFcstdEmbeddedError as e:
             raise HTTPException(status_code=422, detail=str(e)) from e
 
     @app.post("/api/bom/fill-from-filename")
@@ -691,7 +680,7 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
             return load_file_rename_context(ws, Path(rel))
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
-        except FcdeskFcstdEmbeddedError as e:
+        except PhoenixFcstdEmbeddedError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
     @app.post("/api/file-rename/rename")

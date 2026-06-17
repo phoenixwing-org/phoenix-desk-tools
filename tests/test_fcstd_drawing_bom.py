@@ -81,7 +81,7 @@ def _write_fcstd(path: Path, xml: str) -> None:
 
 class DrawingBomTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.tmp = tempfile.mkdtemp(prefix="fcdesk_drawing_bom_")
+        self.tmp = tempfile.mkdtemp(prefix="phoenix_drawing_bom_")
         self.root = Path(self.tmp)
 
     def test_internal_assy_mounts_on_structural_root_part(self) -> None:

@@ -24,7 +24,6 @@ from phoenix.freecad.phoenix_schema import (
     CREATE_SCHEMA_DDL,
     SCHEMA_VERSION,
     T_META,
-    discard_legacy_database_files,
     phoenix_dir as _schema_phoenix_dir,
     workspace_database_path,
 )
@@ -148,7 +147,6 @@ class _LoggingConnection:
 def connect(repo_root: Path) -> Iterator[sqlite3.Connection]:
     rr = repo_root.expanduser().resolve(strict=False)
     phoenix_dir(rr).mkdir(parents=True, exist_ok=True)
-    discard_legacy_database_files(rr)
     db = cad_database_path(rr)
     conn = sqlite3.connect(str(db), timeout=30.0)
     conn.row_factory = sqlite3.Row
@@ -611,11 +609,6 @@ def query_file_asset_entries_paged(
 def load_fcstd_document(repo_root: Path) -> FcstdMapDocument | None:
     rr = repo_root.expanduser().resolve(strict=False)
     if not cad_database_path(rr).is_file():
-        if migrate_fcstd_map_json(repo_root):
-            pass
-        else:
-            return None
-    if not cad_database_path(rr).is_file():
         return None
 
     with connect(rr) as conn:
@@ -726,8 +719,6 @@ def find_file_asset_entry(
     """按 ``repo_rel_path`` 单次查询 ``phoenix_cad_file_asset``。"""
     rr = repo_root.expanduser().resolve(strict=False)
     if not cad_database_path(rr).is_file():
-        migrate_fcstd_map_json(repo_root)
-    if not cad_database_path(rr).is_file():
         return None, ""
     want = _norm_key(rel_workspace.as_posix())
     sql = """
@@ -756,7 +747,6 @@ def update_fcstd_entry_rename(
     new_rel: Path,
 ) -> bool:
     rr = repo_root.expanduser().resolve(strict=False)
-    migrate_fcstd_map_json(rr)
     if not cad_database_path(rr).is_file():
         return False
 
@@ -785,62 +775,10 @@ def update_fcstd_entry_rename(
 def fcstd_map_json_dict(repo_root: Path) -> dict[str, Any]:
     """从 SQLite 加载索引，返回与 ``fcstd_map.json`` 同结构的 dict（不写盘）。"""
     rr = repo_root.expanduser().resolve(strict=False)
-    migrate_fcstd_map_json(rr)
     doc = load_fcstd_document(rr)
     if doc is None:
         raise FileNotFoundError("索引库为空，请先执行 FCStd 工程内搜索")
     return doc.to_json_dict()
-
-
-def migrate_fcstd_map_json(repo_root: Path) -> bool:
-    """若库为空且存在 ``fcstd_map.json``，一次性导入 SQLite。"""
-    rr = repo_root.expanduser().resolve(strict=False)
-    jp = fcstd_map_json_path(rr)
-    if not jp.is_file():
-        return False
-
-    if cad_database_path(rr).is_file():
-        with connect(rr) as conn:
-            n = conn.execute("SELECT COUNT(*) AS c FROM phoenix_cad_file_asset").fetchone()
-            if n and int(n["c"]) > 0:
-                return False
-
-    try:
-        raw = json.loads(jp.read_text(encoding="utf-8"))
-        if not isinstance(raw, dict):
-            return False
-        if "schema_version" not in raw:
-            raw = dict(raw)
-            raw["schema_version"] = 2
-        doc = FcstdMapDocument.from_json_mapping(raw)
-    except (OSError, json.JSONDecodeError, TypeError, ValueError):
-        return False
-
-    if not doc.entries:
-        return False
-
-    stats = doc.scan_stats or {
-        "total_entries": len(doc.entries),
-        "present": sum(1 for e in doc.entries if e.file_status != FILE_STATUS_MISSING),
-        "missing": sum(1 for e in doc.entries if e.file_status == FILE_STATUS_MISSING),
-    }
-    save_fcstd_document(
-        rr,
-        doc,
-        scan_root=doc.scan_root or ".",
-        stats=stats,
-    )
-    _meta_set_migration_note(rr, jp)
-    return True
-
-
-def _meta_set_migration_note(repo_root: Path, jp: Path) -> None:
-    with connect(repo_root) as conn:
-        _meta_set(
-            conn,
-            "migrated_from_fcstd_map_json",
-            f"{jp.name}@{_utc_now_iso()}",
-        )
 
 
 def export_fcstd_map_json(repo_root: Path, dest: Path | None = None) -> Path:
@@ -896,7 +834,6 @@ def _part_key_row_to_dict(row: sqlite3.Row, *, file_count: int = 0, present_coun
 
 def list_part_keys(repo_root: Path) -> list[dict[str, Any]]:
     rr = repo_root.expanduser().resolve(strict=False)
-    migrate_fcstd_map_json(rr)
     if not cad_database_path(rr).is_file():
         return []
 
@@ -940,7 +877,6 @@ def list_part_keys(repo_root: Path) -> list[dict[str, Any]]:
 
 def get_part_key_detail(repo_root: Path, part_number: str, part_version: str) -> dict[str, Any] | None:
     rr = repo_root.expanduser().resolve(strict=False)
-    migrate_fcstd_map_json(rr)
     if not cad_database_path(rr).is_file():
         return None
 

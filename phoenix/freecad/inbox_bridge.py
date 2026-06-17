@@ -10,18 +10,18 @@ from phoenix.freecad.batch_step.job import StepBatchJob
 from phoenix.freecad.bridge_paths import ensure_bridge_dirs, inbox_dir
 
 
-def enqueue_step_batch(fcdesk_clone_root: Path | str, job: StepBatchJob) -> str:
-    """写成 ``{uuid}_queued.json``；``fcdesk_clone_root`` 为 **phoenix-freecad-desktop** 克隆根（含 ``phoenix/``）。
+def enqueue_step_batch(phoenix_clone_root: Path | str, job: StepBatchJob) -> str:
+    """写成 ``{uuid}_queued.json``；``phoenix_clone_root`` 为 **phoenix-freecad-desktop** 克隆根（含 ``phoenix/``）。
 
     （与工具条所选「数据仓库」无关——FreeCAD 里要从该克隆根导入 ``phoenix`` 与 ``scripts``。）
     """
-    root = Path(fcdesk_clone_root).expanduser().resolve()
+    root = Path(phoenix_clone_root).expanduser().resolve()
     uid = uuid.uuid4().hex
     ensure_bridge_dirs()
     inbox = inbox_dir()
     payload = {
         "id": uid,
-        "fcdesk_clone_root": str(root),
+        "phoenix_clone_root": str(root),
         "env": job.subprocess_env(),
     }
     tmp = inbox / f"{uid}_queued.json.tmp"

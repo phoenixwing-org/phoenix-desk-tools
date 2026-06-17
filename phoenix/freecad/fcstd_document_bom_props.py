@@ -13,11 +13,10 @@
 子节点语义与 ``PropertyString::Save/Restore`` 一致（见 FreeCAD ``src/App/PropertyStandard.cpp``）。
 
 新建 ``PartNumber`` / ``PartVersion`` / ``TypeCode`` / ``ModelSeries`` / ``PartName`` 时，与 FreeCAD **「添加属性」**对话框一致：
-``type="App::PropertyString"``、``group`` 固定为常量 **``FCDESK_EMBEDDED_BOM_PROPERTY_GROUP``**
+``type="App::PropertyString"``、``group`` 固定为常量 **``PHOENIX_EMBEDDED_BOM_PROPERTY_GROUP``**
 （默认 **``CustomDefine``**，等价于对话框里的「组」），``doc`` 为工具提示（等价于「工具提示」）。
 其它 bitmask（``status``、``attr`` 等）仍优先从同一 Body 上已有的用户字符串属性拷贝（例如 ``TempKevin``），
 以贴近当前 FreeCAD 写盘；若无参照则用内置兜底字段集。
-不创建 ``FcdeskBomAttrs.xml``；保存时仍会移除旧侧车并完成迁移。
 """
 
 from __future__ import annotations
@@ -30,13 +29,9 @@ from typing import Mapping
 from xml.etree import ElementTree as ET
 
 DOCUMENT_XML = "Document.xml"
-SIDECAR_LEGACY = "FcdeskBomAttrs.xml"
 
-# BOM 四项在 FC「添加属性」里对应「组」名的默认文字（Document.xml 上 ``Property/@group``）。
-FCDESK_EMBEDDED_BOM_PROPERTY_GROUP = "CustomDefine"
-# 旧版曾用常量名保留为别名。
-FCDESK_BOM_PROPERTY_GROUP = FCDESK_EMBEDDED_BOM_PROPERTY_GROUP
-PHOENIX_BOM_PROPERTY_GROUP = FCDESK_EMBEDDED_BOM_PROPERTY_GROUP  # deprecated: 原为 "Phoenix"
+PHOENIX_EMBEDDED_BOM_PROPERTY_GROUP = "CustomDefine"
+PHOENIX_BOM_PROPERTY_GROUP = PHOENIX_EMBEDDED_BOM_PROPERTY_GROUP
 
 # 与「添加属性」里「工具提示」对应（写入 ``Property/@doc``）。
 _BOM_STRING_PROPERTY_DOC: dict[str, str] = {
@@ -52,7 +47,7 @@ _SKIP_STRING_PROP_TEMPLATE_NAMES: frozenset[str] = frozenset({"Label", "Label2"}
 
 _FREECAD_DYNAMIC_STRING_PROPERTY_FALLBACK: dict[str, str] = {
     "type": "App::PropertyString",
-    "group": FCDESK_EMBEDDED_BOM_PROPERTY_GROUP,
+    "group": PHOENIX_EMBEDDED_BOM_PROPERTY_GROUP,
     "doc": "",
     "attr": "0",
     "ro": "0",
@@ -72,7 +67,7 @@ EDITABLE_DOCUMENT_ATTRS: tuple[str, ...] = (
 )
 
 
-class FcdeskDocumentBomError(RuntimeError):
+class PhoenixDocumentBomError(RuntimeError):
     """读取或写回 Document.xml 挂载对象属性失败。"""
 
 
@@ -202,10 +197,10 @@ def is_link_bom_mount(mount_type: str | None) -> bool:
     return mount_type == "App::Link"
 
 
-def _no_bom_mount_error(path: Path, objs: list[tuple[str, str]]) -> FcdeskDocumentBomError:
+def _no_bom_mount_error(path: Path, objs: list[tuple[str, str]]) -> PhoenixDocumentBomError:
     sample = ", ".join(f"{t}" for t, _ in objs[:12])
     extra = f" 已列出部分 Object.type：{sample}" if sample else ""
-    return FcdeskDocumentBomError(
+    return PhoenixDocumentBomError(
         "未发现可挂载 BOM 的对象（结构顶级：PartDesign::Body → type 中含 assembly → App::Part"
         " → App::Link；图纸-primary 时 App::Link）："
         f"{path}.{extra}"
@@ -272,7 +267,7 @@ def _new_property_wrapper_attribs(properties_el: ET.Element, fc_name: str) -> di
         out = dict(ref.attrib)
         out.pop("name", None)
         out["type"] = "App::PropertyString"
-    out["group"] = FCDESK_EMBEDDED_BOM_PROPERTY_GROUP
+    out["group"] = PHOENIX_EMBEDDED_BOM_PROPERTY_GROUP
     out["doc"] = _BOM_STRING_PROPERTY_DOC.get(fc_name, "")
     out["name"] = fc_name
     return out
@@ -290,10 +285,10 @@ def read_body_bom_from_document(fcstd_path: Path) -> tuple[dict[str, str], froze
     try:
         with zipfile.ZipFile(path, "r") as zf:
             if DOCUMENT_XML not in zf.namelist():
-                raise FcdeskDocumentBomError(f"ZIP 内缺少 {DOCUMENT_XML!r}：{path}")
+                raise PhoenixDocumentBomError(f"ZIP 内缺少 {DOCUMENT_XML!r}：{path}")
             raw = zf.read(DOCUMENT_XML).decode("utf-8")
     except (zipfile.BadZipFile, OSError, UnicodeDecodeError) as e:
-        raise FcdeskDocumentBomError(str(e)) from e
+        raise PhoenixDocumentBomError(str(e)) from e
 
     doc_el = ET.fromstring(raw)
     objs = _iter_objects_typename_ordered(doc_el)
@@ -302,7 +297,7 @@ def read_body_bom_from_document(fcstd_path: Path) -> tuple[dict[str, str], froze
         raise _no_bom_mount_error(path, objs)
     props_el = _body_properties_el(doc_el, body_name)
     if props_el is None:
-        raise FcdeskDocumentBomError(
+        raise PhoenixDocumentBomError(
             f"ObjectData 中缺少挂载对象 {body_name!r} 的 <Properties>：{path}"
         )
 
@@ -327,7 +322,7 @@ def _set_or_remove_custom_string_prop(
 ) -> None:
     """写入 / 清空自定义 ``App::PropertyString``（非原生 ``Label``）。
 
-    **五项 BOM 自定义字段**（非 ``Label``）：``group``、``doc``（工具提示）与常量 ``FCDESK_EMBEDDED_BOM_PROPERTY_GROUP``及
+    **五项 BOM 自定义字段**（非 ``Label``）：``group``、``doc``（工具提示）与常量 ``PHOENIX_EMBEDDED_BOM_PROPERTY_GROUP``及
     内置映射（``_BOM_STRING_PROPERTY_DOC``，与「添加属性」里「工具提示」一致）在新建与每次写入时校正；
     其余 attrib（bitmask）尽量保留 FC 原有值，``String/@value`` 随表单更新。
     """
@@ -350,7 +345,7 @@ def _set_or_remove_custom_string_prop(
         s_el.set("value", trimmed)
         return
     if fc_name in _BOM_STRING_PROPERTY_NAMES:
-        existing.set("group", FCDESK_EMBEDDED_BOM_PROPERTY_GROUP)
+        existing.set("group", PHOENIX_EMBEDDED_BOM_PROPERTY_GROUP)
         doc_tip = _BOM_STRING_PROPERTY_DOC.get(fc_name, "")
         existing.set("doc", doc_tip)
         if readonly:
@@ -368,7 +363,7 @@ def _set_label_string(properties_el: ET.Element, value: str) -> None:
             label_prop = p
             break
     if label_prop is None:
-        raise FcdeskDocumentBomError("挂载对象缺少原生 Label Property，无法写入标签。")
+        raise PhoenixDocumentBomError("挂载对象缺少原生 Label Property，无法写入标签。")
     s_el = label_prop.find("String")
     if s_el is None:
         s_el = ET.SubElement(label_prop, "String")
@@ -379,7 +374,6 @@ def _rewrite_fcstd_zip(
     fcstd_path: Path,
     *,
     document_xml_bytes: bytes,
-    drop_sidecar_legacy: bool,
 ) -> None:
     fcstd_path = fcstd_path.expanduser().resolve(strict=False)
     directory = fcstd_path.parent
@@ -389,9 +383,9 @@ def _rewrite_fcstd_zip(
             for info in zin.infolist():
                 cached.append((info, zin.read(info.filename)))
     except zipfile.BadZipFile as e:
-        raise FcdeskDocumentBomError(f"无效的 FCStd/ZIP：{fcstd_path}") from e
+        raise PhoenixDocumentBomError(f"无效的 FCStd/ZIP：{fcstd_path}") from e
 
-    fd, tmp_name = tempfile.mkstemp(prefix=".fcdesk_", suffix=".partial", dir=str(directory))
+    fd, tmp_name = tempfile.mkstemp(prefix=".phoenix_", suffix=".partial", dir=str(directory))
     os.close(fd)
     tmp_path = Path(tmp_name)
     doc_written = False
@@ -399,15 +393,13 @@ def _rewrite_fcstd_zip(
         with zipfile.ZipFile(tmp_path, "w") as zout:
             for info, blob in cached:
                 fname = info.filename
-                if drop_sidecar_legacy and fname == SIDECAR_LEGACY:
-                    continue
                 if fname == DOCUMENT_XML:
                     zout.writestr(info, document_xml_bytes)
                     doc_written = True
                     continue
                 zout.writestr(info, blob)
             if not doc_written:
-                raise FcdeskDocumentBomError(f"ZIP 内缺少将被替换的 {DOCUMENT_XML!r}：{fcstd_path}")
+                raise PhoenixDocumentBomError(f"ZIP 内缺少将被替换的 {DOCUMENT_XML!r}：{fcstd_path}")
         os.replace(tmp_path, fcstd_path)
     except BaseException:
         tmp_path.unlink(missing_ok=True)
@@ -415,21 +407,21 @@ def _rewrite_fcstd_zip(
 
 
 def write_body_bom_to_document(fcstd_path: Path, values: Mapping[str, str]) -> None:
-    """把可编辑字段写入 ``Document.xml`` 的 BOM 挂载对象，并移除包内 ``FcdeskBomAttrs.xml``（若有）。
+    """把可编辑字段写入 ``Document.xml`` 的 BOM 挂载对象。
 
     挂载规则与 `read_body_bom_from_document` 一致。
     """
     path = fcstd_path.expanduser().resolve(strict=False)
     if not path.is_file():
-        raise FcdeskDocumentBomError(f"不存在或不可访问: {path}")
+        raise PhoenixDocumentBomError(f"不存在或不可访问: {path}")
 
     try:
         with zipfile.ZipFile(path, "r") as zf:
             if DOCUMENT_XML not in zf.namelist():
-                raise FcdeskDocumentBomError(f"ZIP 内缺少 {DOCUMENT_XML!r}：{path}")
+                raise PhoenixDocumentBomError(f"ZIP 内缺少 {DOCUMENT_XML!r}：{path}")
             raw = zf.read(DOCUMENT_XML).decode("utf-8")
     except (zipfile.BadZipFile, OSError, UnicodeDecodeError) as e:
-        raise FcdeskDocumentBomError(str(e)) from e
+        raise PhoenixDocumentBomError(str(e)) from e
 
     doc_el = ET.fromstring(raw)
     objs = _iter_objects_typename_ordered(doc_el)
@@ -438,7 +430,7 @@ def write_body_bom_to_document(fcstd_path: Path, values: Mapping[str, str]) -> N
         raise _no_bom_mount_error(path, objs)
     props_el = _body_properties_el(doc_el, body_name)
     if props_el is None:
-        raise FcdeskDocumentBomError(f"缺少挂载对象 {body_name!r} 的 <Properties>：{path}")
+        raise PhoenixDocumentBomError(f"缺少挂载对象 {body_name!r} 的 <Properties>：{path}")
 
     trimmed = {k: str(values.get(k, "")).strip() for k in EDITABLE_DOCUMENT_ATTRS}
 
@@ -449,4 +441,4 @@ def write_body_bom_to_document(fcstd_path: Path, values: Mapping[str, str]) -> N
     _recount_regular_properties(props_el)
 
     new_doc = ET.tostring(doc_el, encoding="utf-8", xml_declaration=True)
-    _rewrite_fcstd_zip(path, document_xml_bytes=new_doc, drop_sidecar_legacy=True)
+    _rewrite_fcstd_zip(path, document_xml_bytes=new_doc)

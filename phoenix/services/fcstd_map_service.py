@@ -17,7 +17,7 @@ from phoenix.freecad.cad_index_types import (
     cad_asset_kind,
     is_fcstd_filename,
 )
-from phoenix.freecad.fcstd_embedded_attrs import FcdeskFcstdEmbeddedError, read_embedded_bom_attrs
+from phoenix.freecad.fcstd_embedded_attrs import PhoenixFcstdEmbeddedError, read_embedded_bom_attrs
 from phoenix.freecad.fcstd_mapping import (
     FILE_STATUS_MISSING,
     FILE_STATUS_PRESENT,
@@ -36,7 +36,6 @@ from phoenix.freecad.phoenix_store import (
     export_fcstd_map_json,
     fcstd_map_json_path,
     load_fcstd_document,
-    migrate_fcstd_map_json,
     query_file_asset_entries_paged,
     read_fcstd_map_meta,
     save_fcstd_document,
@@ -115,7 +114,7 @@ def _merge_props_from_disk(
                 pname = emb["PartName"]
             if emb.get("label"):
                 embedded_label = emb["label"]
-        except FcdeskFcstdEmbeddedError:
+        except PhoenixFcstdEmbeddedError:
             pass
 
     label = resolve_label_for_index_scan(embedded_label, stored_label=label)
@@ -314,10 +313,6 @@ def _compute_stats(entries: list[FcstdMapEntry], basename_map: dict[str, list[st
     }
 
 
-def _ensure_index_loaded(repo_root: Path) -> None:
-    migrate_fcstd_map_json(repo_root)
-
-
 def _parse_scan_stats_json(raw: str | None) -> dict[str, int] | None:
     if not raw:
         return None
@@ -341,7 +336,6 @@ def search_fcstd_map_entries(
 ) -> dict[str, Any]:
     """分页返回 CAD 索引条目（单次 ``phoenix_cad_file_asset`` 查询，无 JOIN）。"""
     rr = repo_root.expanduser().resolve(strict=False)
-    _ensure_index_loaded(rr)
     cap = max(1, min(int(limit), 500))
     off = max(0, int(offset))
     st = (status or "").strip().lower()
@@ -370,7 +364,6 @@ def search_fcstd_map_entries(
 
 def load_fcstd_map_payload(repo_root: Path, *, include_entries: bool = True) -> dict[str, Any]:
     rr = repo_root.expanduser().resolve(strict=False)
-    _ensure_index_loaded(rr)
     prefs = get_fcstd_map_prefs(rr)
     db = cad_database_path(rr)
     jp = fcstd_map_json_path(rr)
@@ -476,8 +469,6 @@ def run_fcstd_map_scan(
     rr = repo_root.expanduser().resolve(strict=False)
     merge_workspace_section("fcstd_map", {"scan_root": None}, rr)
 
-    _ensure_index_loaded(rr)
-
     ws_pref = load_workspace_prefs(rr).get("fcstd_map") or {}
     force_part_name = (
         bool(force_update_part_name)
@@ -568,7 +559,6 @@ def run_fcstd_map_scan(
 def purge_missing_fcstd_map_entries(repo_root: Path) -> dict[str, Any]:
     """从 CAD 索引库删除所有「缺失」条目（上次扫描存在、本次未找到的文件）。"""
     rr = repo_root.expanduser().resolve(strict=False)
-    _ensure_index_loaded(rr)
     deleted = delete_missing_file_assets(rr)
     doc = load_fcstd_document(rr)
     if doc and doc.entries:

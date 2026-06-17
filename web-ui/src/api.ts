@@ -152,12 +152,6 @@ export function fetchLauncherPrefs() {
   return jsonFetch<LauncherPrefs>("/api/config/launcher");
 }
 
-export function syncLauncherFromLegacy() {
-  return jsonFetch<LauncherPrefs>("/api/config/launcher/sync-legacy", {
-    method: "POST",
-  });
-}
-
 export function saveLauncherFreecad(path: string) {
   return jsonFetch<{ freecad_dir: string }>("/api/config/launcher/freecad", {
     method: "POST",

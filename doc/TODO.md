@@ -14,6 +14,8 @@
 - [x] 文件详情：引用 Tab 懒加载、分 scope 请求、角标单条 SQL
 - [ ] `rebuild_bom_tree_occurrences`：邻接表只查一次，消除 per-host 重复全表 SQL
 - [x] `query_bom_xrefs_incoming`：合并 `get_file_asset_id` 为单条 SQL
+- [ ] 改名 XLink 修正 + **同步引用 Label**：`apply_host_xlink_corrections(sync_reference_labels=True)` 在目标文件尚未改名、且无 CAD 索引时应仍从磁盘 FCStd 读 rule Label（现会退化为 basename）；补单测：单引用、同 Group 双 XLink 的 `.002` 后缀、跨路径同目标不重复编号（见 [改名引用写回-装配Label同步-需求.md](改名引用写回-装配Label同步-需求.md)）
+- [ ] 内部装配 **结构感知 BOM 挂载**：优先入度 0 的顶 `App::Part`（样例 `PCB` 非 `_6222656233`），见 [samples/内部装配示例-挂载分析.md](samples/内部装配示例-挂载分析.md) + `tests/fixtures/workspaces/minimal/document-xml/`
 
 ---
 
@@ -42,12 +44,12 @@
 > Python **import 包名**与目录 `phoenix/` 对齐；Gitee 仓库名仍为 `phoenix-freecad-desktop`。
 
 - [x] 目录 `phoenix/`、文档与 `python -m phoenix` 命令
-- [x] `pyproject.toml`：`include = ["phoenix*"]`，入口 `phoenix-desktop` + 旧名 `phoenix-fcdesktop`
+- [x] `pyproject.toml`：`include = ["phoenix*"]`，入口 `phoenix-desktop` + 旧名 `phoenix-desktop`
 - [x] `launcher_paths.py`：`_APP_ID` → `phoenix`，迁移读取 `phoenix-wing/fcdesk/`
 - [x] 全仓 `from phoenix`（无残留 `from fcdesk`）
 - [~] 环境变量 `PHOENIX_*`（`FCDESK_*` 仍兼容）
 - [ ] Web localStorage 兼容读旧 `fcdesk.workbench.v1:`
-- [ ] 异常类 / 常量重命名（`FcdeskFcstdEmbeddedError` 等，可选）
+- [ ] 异常类 / 常量重命名（`PhoenixFcstdEmbeddedError` 等，可选）
 - [x] 删除重复目录 `fcdesk/`
 
 ---

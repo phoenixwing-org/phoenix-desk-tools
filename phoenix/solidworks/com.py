@@ -57,7 +57,7 @@ def _env(name: str, legacy: str, default: str = "") -> str:
 
 
 def _parsed_save_pair(default_a: int, default_b: int) -> tuple[int, int]:
-    raw = _env("PHOENIX_SW_SAVEAS_SILENT_OPTS", "FCDESK_SW_SAVEAS_SILENT_OPTS")
+    raw = _env("PHOENIX_SW_SAVEAS_SILENT_OPTS", "PHOENIX_SW_SAVEAS_SILENT_OPTS")
     if not raw:
         return default_a, default_b
     ps = raw.split(",")
@@ -165,7 +165,7 @@ def batch_export_models_to_step(
     outs = BatchExportOutcome()
     sw_app.Visible = True
 
-    open_opts = int(_env("PHOENIX_SW_OPEN_OPTIONS", "FCDESK_SW_OPEN_OPTIONS", "1"))
+    open_opts = int(_env("PHOENIX_SW_OPEN_OPTIONS", "PHOENIX_SW_OPEN_OPTIONS", "1"))
 
     for src in paths:
         dt = sw_doc_type_suffix(src.name)

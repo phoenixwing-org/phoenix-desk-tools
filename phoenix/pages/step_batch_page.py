@@ -292,7 +292,7 @@ class StepBatchPage(BasePage):
             )
             return
 
-        listener = _SCRIPTS_DIR / "freecad_fcdesk_inbox_listener.py"
+        listener = _SCRIPTS_DIR / "freecad_phoenix_inbox_listener.py"
         uid = enqueue_step_batch(clone, job)
 
         self._log_line(
@@ -332,7 +332,7 @@ class StepBatchPage(BasePage):
             if time.monotonic() > deadline:
                 self._log_line(
                     "\n[超时] 未收到回信。请先打开 FreeCAD，菜单 宏 → 执行 "
-                    "`freecad_fcdesk_inbox_listener.py`（或使用「添加宏路径」指向 scripts/），"
+                    "`freecad_phoenix_inbox_listener.py`（或使用「添加宏路径」指向 scripts/），"
                     "再重试投递；或直接取消勾选改用 freecadcmd 子进程。"
                 )
                 return

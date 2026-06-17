@@ -1,6 +1,6 @@
 # 图纸档 BOM 属性规划
 
-> [文档索引](文档索引.md) · 相关：[Fcdesk嵌入式BOM属性约定.md](Fcdesk嵌入式BOM属性约定.md) · [BOM工具说明.md](BOM工具说明.md)
+> [文档索引](文档索引.md) · 相关：[Phoenix嵌入式BOM属性约定.md](Phoenix嵌入式BOM属性约定.md) · [BOM工具说明.md](BOM工具说明.md)
 
 ## 1. 问题
 

@@ -74,7 +74,7 @@ python -m phoenix.web -w /path/to/CAD/workspace
 | --- | --- |
 | Gitee / 发行名 | `phoenix-freecad-desktop` |
 | Python import 包名 | `phoenix`（原 `phoenix`，迁移中） |
-| 桌面 CLI | `phoenix-desktop`（原 `phoenix-fcdesktop`） |
+| 桌面 CLI | `phoenix-desktop`（原 `phoenix-desktop`） |
 | Web CLI | `phoenix-web` |
 | 本机 launcher | `…/phoenix-wing/phoenix/launcher.json` |
 

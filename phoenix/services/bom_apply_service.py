@@ -24,7 +24,7 @@ from phoenix.freecad.fcstd_document_kind import (
 from phoenix.freecad.fcstd_drawing_bom import resolve_drawing_bom
 from phoenix.freecad.fcstd_embedded_attrs import (
     EDITABLE_ENTRY_ATTRS,
-    FcdeskFcstdEmbeddedError,
+    PhoenixFcstdEmbeddedError,
     read_embedded_bom_attrs,
     write_embedded_bom_attrs,
 )
@@ -45,7 +45,6 @@ from phoenix.freecad.fcstd_mapping import (
 from phoenix.freecad.phoenix_store import (
     find_file_asset_entry,
     get_part_key_detail,
-    migrate_fcstd_map_json,
 )
 
 _EDITABLE_FORM_KEYS = frozenset({*EDITABLE_ENTRY_ATTRS, "filename"})
@@ -243,8 +242,6 @@ def load_bom_preview(repo_root: Path, rel: Path) -> BomPreview:
     rr = repo_root.expanduser().resolve(strict=False)
     rel = Path(rel)
     full = rr / rel
-
-    migrate_fcstd_map_json(rr)
     mapped, _ = find_file_asset_entry(rr, rel)
     if mapped is not None:
         entry = mapped
@@ -276,7 +273,7 @@ def load_bom_preview(repo_root: Path, rel: Path) -> BomPreview:
                 embedded = read_embedded_bom_attrs(full)
                 if embedded:
                     note += " · 已读 Document.xml / 遗留侧车"
-            except FcdeskFcstdEmbeddedError as ex:
+            except PhoenixFcstdEmbeddedError as ex:
                 warning = str(ex)
 
     merged = _merged_with_partname_coerce(_merge_embedded_over(plain, embedded))
@@ -336,7 +333,7 @@ def fill_bom_from_embedded(
 
     try:
         embedded = read_embedded_bom_attrs(full)
-    except FcdeskFcstdEmbeddedError as ex:
+    except PhoenixFcstdEmbeddedError as ex:
         raise ValueError(str(ex)) from ex
 
     if not any((embedded.get(k) or "").strip() for k in EDITABLE_ENTRY_ATTRS):
@@ -576,7 +573,6 @@ def _collect_index_related(
 ) -> list[tuple[str, str]]:
     rr = repo_root.expanduser().resolve(strict=False)
     if detail is None:
-        migrate_fcstd_map_json(rr)
         detail = get_part_key_detail(rr, part_number, part_version)
     if not detail:
         return []
@@ -657,7 +653,6 @@ class _RecommendFieldCtx:
         rr = repo_root.expanduser().resolve(strict=False)
         rel = Path(rel)
         merged = _coerce_form_values(values)
-        migrate_fcstd_map_json(rr)
         mapped = try_load_fcstd_entry_from_workspace_map(repo_root=rr, rel_workspace=rel)
         full = rr / rel
         is_fcstd = _path_is_fcstd(full) or is_fcstd_filename(rel.name)

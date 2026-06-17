@@ -143,7 +143,7 @@ def run_pyinstaller(spec_path: Path):
 
 
 def main():
-    app_name = "phoenix-fcdesktop"
+    app_name = "phoenix-desktop"
     console = False
 
     if "--console" in sys.argv:

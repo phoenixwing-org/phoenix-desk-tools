@@ -12,7 +12,6 @@ from phoenix.config.user_prefs import (
     WORKSPACE_DOTFILE_NAME,
     format_absolute_config_path,
     is_ephemeral_workspace_path,
-    legacy_launcher_prefs_file,
     list_recent_workspace_paths_raw,
     load_launcher_prefs,
     prune_recent_workspaces,
@@ -53,7 +52,6 @@ def launcher_prefs_payload() -> dict[str, Any]:
     fd = launcher.get("freecad_dir")
     fc_path = format_absolute_config_path(Path(str(fd))) if fd else ""
     sl = launcher.get("shell_layout") or {}
-    legacy = legacy_launcher_prefs_file()
     default_fc = default_freecad_install_dir()
     return {
         "version": launcher.get("version", 2),
@@ -64,19 +62,7 @@ def launcher_prefs_payload() -> dict[str, Any]:
         "platform": sys.platform,
         "shell_layout": sl,
         "launcher_config_path": format_absolute_config_path(platform_launcher_prefs_file()),
-        "legacy_launcher_path": format_absolute_config_path(legacy),
-        "legacy_launcher_exists": legacy.is_file(),
     }
-
-
-def sync_launcher_from_legacy() -> dict[str, Any]:
-    """配置页：从旧 ``workspace.custom.json`` 合并最近工作空间等到 Web launcher。"""
-    from phoenix.config.user_prefs import migrate_launcher_prefs
-
-    migrated = migrate_launcher_prefs()
-    payload = launcher_prefs_payload()
-    payload["migrated_from_legacy"] = migrated
-    return payload
 
 
 def update_launcher_freecad(path: str | None) -> str:

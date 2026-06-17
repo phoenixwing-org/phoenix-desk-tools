@@ -29,7 +29,6 @@ from phoenix.freecad.phoenix_store import (
     connect,
     format_part_key,
     get_part_key_detail,
-    migrate_fcstd_map_json,
 )
 from phoenix.freecad.rename_analysis.types import RenameAnalysisError
 from phoenix.freecad.rename_analysis.xlink import (
@@ -111,8 +110,6 @@ def _run_xlink_script(
     batch_dir = _resolve_batch_dir(rr, batch_dir_input)
     if not batch_dir.is_dir():
         raise ValueError(f"修正目录不存在: {format_resolved_under_workspace(batch_dir, rr)}")
-
-    migrate_fcstd_map_json(rr)
     if not cad_database_path(rr).is_file():
         raise ValueError("请先在「CAD 索引」页执行工程内搜索")
 
@@ -134,7 +131,7 @@ def _run_xlink_script(
             raise ValueError("未找到 Document.xml（请勾选扫描目录内全部 FCStd 或选择含 Document.xml 的目录）")
         cmd.append(str(doc_xml))
 
-    fd_tmp, json_out = tempfile.mkstemp(prefix="fcdesk_xlink_", suffix=".json")
+    fd_tmp, json_out = tempfile.mkstemp(prefix="phoenix_xlink_", suffix=".json")
     os.close(fd_tmp)
     cmd += ["--desktop-json-results", json_out]
     cmd.append("--no-report")
@@ -234,7 +231,6 @@ def list_xlink_fix_candidates(
 ) -> dict[str, Any]:
     """未找到 XLink 的手选候选：优先 Part Key 关联 FCStd，否则按文件名查索引。"""
     rr = repo_root.expanduser().resolve(strict=False)
-    migrate_fcstd_map_json(rr)
     base = Path(basename.replace("\\", "/")).name
 
     pn = (part_number or "").strip()

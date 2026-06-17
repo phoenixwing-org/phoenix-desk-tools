@@ -536,9 +536,7 @@ def main() -> None:
         map_source_for_report = repo
         sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
         from phoenix.freecad.phoenix_schema import cad_database_path
-        from phoenix.freecad.phoenix_store import fcstd_map_json_dict, migrate_fcstd_map_json
-
-        migrate_fcstd_map_json(repo)
+        from phoenix.freecad.phoenix_store import fcstd_map_json_dict
         db_display = cad_database_path(repo)
         try:
             raw = fcstd_map_json_dict(repo)
