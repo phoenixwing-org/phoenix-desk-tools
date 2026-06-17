@@ -10,9 +10,9 @@
 
 | 项 | 决策 |
 | --- | --- |
-| 库文件名 | `phoenix-cad.sqlite`（旧：`cad-database.sqlite`） |
+| 库文件名 | `phoenix-workspace.sqlite`（旧：`cad-database.sqlite`、`phoenix-cad.sqlite`） |
 | 表前缀 | CAD/BOM/零件：`phoenix_cad_*`；审计：`phoenix_audit_*`；壳层：`phoenix_meta`、`phoenix_ui_session` |
-| 迁移策略 | **不做 RENAME TABLE 迁移**；检测到旧库 → 用户确认 → **删库重建** |
+| 迁移策略 | **不做 RENAME TABLE 迁移**；`discard_legacy_database_files` 自动删遗留文件/含旧表名的库；可选 Web **确认重建** |
 | API JSON | 逻辑字段名不变（如 `part_key`、`bom_xref` 统计键） |
 
 ---
@@ -42,7 +42,7 @@
 | 模块 | 职责 |
 | --- | --- |
 | `fcdesk/freecad/phoenix_schema.py` | 常量、`CREATE_SCHEMA_DDL`、`detect_legacy_database`、`recreate_database`、`database_status_payload` |
-| `fcdesk/freecad/phoenix_store.py` | `connect()`（旧库抛 `LegacyPhoenixDatabaseError`）、业务 SQL |
+| `fcdesk/freecad/phoenix_store.py` | `connect()` 前自动 `discard_legacy_database_files`、业务 SQL |
 | `fcdesk/services/phoenix_database_service.py` | 状态 / 重建封装 |
 | Web API | `GET /api/phoenix/database/status`、`POST /api/phoenix/database/recreate` |
 | Web UI | `AppShell` 旧库横幅 + 确认重建 |

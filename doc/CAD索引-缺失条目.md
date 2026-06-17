@@ -22,7 +22,7 @@ Web **CAD 索引 · 索引列表** 工具栏：**删除缺失（N）**。
 
 | 项 | 说明 |
 | --- | --- |
-| 作用 | 从 `.phoenix/cad-database.sqlite` 的 `file_asset` 表**永久删除**所有 `file_status=missing` 行 |
+| 作用 | 从 `.phoenix/phoenix-workspace.sqlite` 的 `phoenix_cad_file_asset` 表**永久删除**所有 `file_status=missing` 行 |
 | 确认 | 应用内对话框说明删除条数；**默认「取消」**，按 Esc 或点遮罩亦取消；选「删除 N 条」才执行 |
 | 连带 | 同步 `part_key` / `part_file_link`；`bom_xref` 中指向已删 `file_asset` 的外键按库规则清理（宿主删除级联、目标置空） |
 | 不删 | 磁盘文件（本来已不存在）；**存在** 条目不受影响 |

@@ -1,4 +1,4 @@
-"""CAD 索引：工程内扫描、属性采集、缺失标记；持久化至 ``.phoenix/phoenix-cad.sqlite``。"""
+"""CAD 索引：工程内扫描、属性采集、缺失标记；持久化至 ``.phoenix/phoenix-workspace.sqlite``。"""
 
 from __future__ import annotations
 
@@ -472,7 +472,7 @@ def run_fcstd_map_scan(
     *,
     force_update_part_name: bool | None = None,
 ) -> dict[str, Any]:
-    """从工作空间根递归扫描 CAD 文件，写入 ``.phoenix/phoenix-cad.sqlite``。"""
+    """从工作空间根递归扫描 CAD 文件，写入 ``.phoenix/phoenix-workspace.sqlite``。"""
     rr = repo_root.expanduser().resolve(strict=False)
     merge_workspace_section("fcstd_map", {"scan_root": None}, rr)
 

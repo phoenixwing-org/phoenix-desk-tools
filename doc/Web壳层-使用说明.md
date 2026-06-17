@@ -87,7 +87,7 @@
 
 | 导航标签 | 说明 | 深入文档 |
 | --- | --- | --- |
-| CAD 索引 | 工程内搜索 → `.phoenix/cad-database.sqlite` | [CAD索引-缺失条目.md](CAD索引-缺失条目.md) |
+| CAD 索引 | 工程内搜索 → `.phoenix/phoenix-workspace.sqlite` | [CAD索引-缺失条目.md](CAD索引-缺失条目.md) |
 | BOM 列表 | 装配 / 全部引用边 | [BOM列表页设计.md](BOM列表页设计.md) |
 | 零件目录 | PartKey 库 | — |
 | 文件详情 | 属性、引用、改名、装配结构 | [文件详情页-整改规划.md](文件详情页-整改规划.md) |

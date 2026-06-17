@@ -95,7 +95,8 @@ async function refreshLegacyDatabaseBanner() {
 
 async function confirmRecreateLegacyDatabase() {
   const ok = window.confirm(
-    "将删除旧版 cad-database.sqlite 并创建空的 phoenix-cad.sqlite（schema v10）。\n"
+    "将删除当前工作空间数据库并创建空的 phoenix-workspace.sqlite（schema v10）。\n"
+      + "遗留文件（cad-database.sqlite / phoenix-cad.sqlite）与含旧表名的库也会被清除。\n"
       + "CAD 索引、BOM 引用与改名历史需重新扫描。\n\n确定继续？",
   );
   if (!ok) return;
@@ -136,7 +137,7 @@ onUnmounted(() => {
     <div v-if="legacyDbBanner" class="legacy-db-banner" role="alert">
       <div class="legacy-db-banner-text">
         <strong>检测到旧版 CAD 数据库</strong>
-        <span>（cad-database.sqlite 或旧表名）。需重建为 phoenix-cad.sqlite 后才能继续使用索引与 BOM 功能。</span>
+        <span>（旧库文件名或旧表名）。需重建为 phoenix-workspace.sqlite 后才能继续使用索引与 BOM 功能。</span>
         <span v-if="legacyDbReasons.length" class="legacy-db-reasons">{{ legacyDbReasons.join(" · ") }}</span>
         <span v-if="legacyDbError" class="legacy-db-error">{{ legacyDbError }}</span>
       </div>

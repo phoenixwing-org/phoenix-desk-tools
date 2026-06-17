@@ -17,7 +17,7 @@ from fcdesk.freecad.cad_index_types import (
     ASSET_KIND_PDF,
 )
 from fcdesk.freecad.phoenix_store import (
-    CAD_DATABASE_FILENAME,
+    WORKSPACE_DATABASE_FILENAME,
     cad_database_path,
     get_part_key_detail,
     migrate_fcstd_map_json,
@@ -113,7 +113,7 @@ class TestFcstdMapService(unittest.TestCase):
             payload = load_fcstd_map_payload(td)
             self.assertEqual(len(payload["entries"]), 1)
             self.assertEqual(payload["entries"][0]["file_status"], FILE_STATUS_PRESENT)
-            self.assertIn(CAD_DATABASE_FILENAME, payload["database_path"])
+            self.assertIn(WORKSPACE_DATABASE_FILENAME, payload["database_path"])
         finally:
             shutil.rmtree(td, ignore_errors=True)
 

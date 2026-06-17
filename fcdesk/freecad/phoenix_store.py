@@ -1,4 +1,4 @@
-"""工作空间 ``.phoenix/phoenix-cad.sqlite`` — FCStd 索引与扫描元数据。"""
+"""工作空间 ``.phoenix/phoenix-workspace.sqlite`` — FCStd 索引与扫描元数据。"""
 
 from __future__ import annotations
 
@@ -20,13 +20,17 @@ from fcdesk.freecad.fcstd_mapping import (
     normalize_repo_rel_path_for_map,
 )
 from fcdesk.freecad.phoenix_schema import (
-    CAD_DATABASE_FILENAME,
+    WORKSPACE_DATABASE_FILENAME,
     CREATE_SCHEMA_DDL,
     SCHEMA_VERSION,
     T_META,
     discard_legacy_database_files,
     phoenix_dir as _schema_phoenix_dir,
+    workspace_database_path,
 )
+
+# 兼容导出
+CAD_DATABASE_FILENAME = WORKSPACE_DATABASE_FILENAME
 
 FCSTD_MAP_JSON_NAME = "fcstd_map.json"
 
@@ -55,9 +59,7 @@ def phoenix_dir(repo_root: Path) -> Path:
 
 
 def cad_database_path(repo_root: Path) -> Path:
-    from fcdesk.freecad.phoenix_schema import cad_database_path as _cad_path
-
-    return _cad_path(repo_root)
+    return workspace_database_path(repo_root)
 
 
 def fcstd_map_json_path(repo_root: Path) -> Path:
@@ -642,7 +644,7 @@ def load_fcstd_document(repo_root: Path) -> FcstdMapDocument | None:
             scan_root=scan_root,
             scan_stats=stats,
             anchor_note=(
-                "repo_rel_path 相对工作空间根；数据存于 .phoenix/phoenix-cad.sqlite。"
+                "repo_rel_path 相对工作空间根；数据存于 .phoenix/phoenix-workspace.sqlite。"
             ),
         )
 

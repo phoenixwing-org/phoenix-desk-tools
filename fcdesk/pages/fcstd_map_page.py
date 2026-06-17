@@ -33,7 +33,7 @@ class FcstdMapPage(BasePage):
             self,
             (
                 "从当前工作空间根递归扫描 FCStd、MD、PDF、图片、DXF/DWG 等，"
-                "写入 .phoenix/phoenix-cad.sqlite；条目路径相对工作空间根（供「链接路径修正」使用）。"
+                "写入 .phoenix/phoenix-workspace.sqlite；条目路径相对工作空间根（供「链接路径修正」使用）。"
             ),
             wraplength=880,
         ).grid(row=1, column=0, columnspan=2, padx=24, pady=(0, 10), sticky="nw")

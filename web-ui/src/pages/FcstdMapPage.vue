@@ -556,7 +556,7 @@ onMounted(() => applyInitialTabState());
         <h2 class="block-title">扫描</h2>
         <p class="block-desc">
           从<strong>当前工作空间根</strong>递归扫描 FCStd、Markdown、PDF、图片、DXF/DWG 等，写入
-          <code>.phoenix/phoenix-cad.sqlite</code>。请使用页顶「工程内搜索」；再次扫描时磁盘上已不存在的条目标记为缺失。
+          <code>.phoenix/phoenix-workspace.sqlite</code>。请使用页顶「工程内搜索」；再次扫描时磁盘上已不存在的条目标记为缺失。
         </p>
         <p v-if="shell.workspacePath" class="meta-line mono">工作空间：{{ shell.workspacePath }}</p>
         <label class="force-opt">

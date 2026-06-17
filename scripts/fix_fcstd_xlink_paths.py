@@ -463,7 +463,7 @@ def main() -> None:
         "--map-sqlite",
         metavar="DIR",
         default=None,
-        help="工作空间根：从 <DIR>/.phoenix/phoenix-cad.sqlite 读索引（不写 fcstd_map.json）",
+        help="工作空间根：从 <DIR>/.phoenix/phoenix-workspace.sqlite 读索引（不写 fcstd_map.json）",
     )
     parser.add_argument(
         "--map-anchor",
@@ -571,7 +571,7 @@ def main() -> None:
                 '  python scripts/fcstd_map.py --root "<遍历根>" '
                 f'--relative-to "<工作空间根>" '
                 f'--json "<工作空间根>/fcstd_map.json"\n\n'
-                "亦可使用 --map-sqlite <工作空间根> 直接读 .phoenix/phoenix-cad.sqlite，"
+                "亦可使用 --map-sqlite <工作空间根> 直接读 .phoenix/phoenix-workspace.sqlite，"
                 "或 --live-scan 即时扫描。",
                 file=sys.stderr,
             )

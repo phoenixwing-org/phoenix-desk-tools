@@ -35,7 +35,7 @@ class XLinkFixPage(BasePage):
         )
 
         hint = (
-            "映射来自 .phoenix/phoenix-cad.sqlite（由「FCStd 索引」页扫描生成）。"
+            "映射来自 .phoenix/phoenix-workspace.sqlite（由「FCStd 索引」页扫描生成）。"
             "本页只需选择修正目录与脚本选项（偏好 fc_linkfix）。"
         )
         fw.page_hint_label(self, hint, wraplength=920).grid(

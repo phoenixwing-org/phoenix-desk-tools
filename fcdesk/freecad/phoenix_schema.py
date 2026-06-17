@@ -8,8 +8,14 @@ from pathlib import Path
 from typing import Any
 
 PHOENIX_DIR_NAME = ".phoenix"
-LEGACY_DATABASE_FILENAME = "cad-database.sqlite"
-CAD_DATABASE_FILENAME = "phoenix-cad.sqlite"
+WORKSPACE_DATABASE_FILENAME = "phoenix-workspace.sqlite"
+LEGACY_DATABASE_FILENAMES: tuple[str, ...] = (
+    "cad-database.sqlite",
+    "phoenix-cad.sqlite",
+)
+# 兼容旧常量名（新代码请用 WORKSPACE_*）
+CAD_DATABASE_FILENAME = WORKSPACE_DATABASE_FILENAME
+LEGACY_DATABASE_FILENAME = LEGACY_DATABASE_FILENAMES[0]
 SCHEMA_VERSION = 10
 
 T_META = "phoenix_meta"
@@ -242,7 +248,7 @@ CREATE INDEX IF NOT EXISTS idx_phoenix_cad_bom_occ_host_target
 
 
 class LegacyPhoenixDatabaseError(RuntimeError):
-    """检测到旧库文件或旧表名；需用户确认重建 phoenix-cad.sqlite。"""
+    """检测到旧库文件或旧表名；需用户确认重建 phoenix-workspace.sqlite。"""
 
     def __init__(self, message: str, *, reasons: list[str] | None = None) -> None:
         super().__init__(message)
@@ -253,12 +259,21 @@ def phoenix_dir(repo_root: Path) -> Path:
     return repo_root.expanduser().resolve(strict=False) / PHOENIX_DIR_NAME
 
 
+def workspace_database_path(repo_root: Path) -> Path:
+    return phoenix_dir(repo_root) / WORKSPACE_DATABASE_FILENAME
+
+
 def cad_database_path(repo_root: Path) -> Path:
-    return phoenix_dir(repo_root) / CAD_DATABASE_FILENAME
+    """``workspace_database_path`` 的兼容别名。"""
+    return workspace_database_path(repo_root)
+
+
+def legacy_database_paths(repo_root: Path) -> list[Path]:
+    return [phoenix_dir(repo_root) / name for name in LEGACY_DATABASE_FILENAMES]
 
 
 def legacy_database_path(repo_root: Path) -> Path:
-    return phoenix_dir(repo_root) / LEGACY_DATABASE_FILENAME
+    return legacy_database_paths(repo_root)[0]
 
 
 def _list_user_tables(conn: sqlite3.Connection) -> set[str]:
@@ -272,11 +287,11 @@ def discard_legacy_database_files(repo_root: Path) -> list[str]:
     """删除旧文件名或含旧表名的库（不迁移数据）。"""
     rr = repo_root.expanduser().resolve(strict=False)
     removed: list[str] = []
-    legacy = legacy_database_path(rr)
-    if legacy.is_file():
-        legacy.unlink()
-        removed.append(legacy.name)
-    db = cad_database_path(rr)
+    for path in legacy_database_paths(rr):
+        if path.is_file():
+            path.unlink()
+            removed.append(path.name)
+    db = workspace_database_path(rr)
     if db.is_file():
         conn = sqlite3.connect(str(db))
         try:
@@ -290,20 +305,25 @@ def discard_legacy_database_files(repo_root: Path) -> list[str]:
 
 
 def detect_legacy_database(repo_root: Path) -> dict[str, Any]:
-    """检测旧文件名 ``cad-database.sqlite`` 或库内旧表名。"""
+    """检测遗留库文件名或库内旧表名。"""
     rr = repo_root.expanduser().resolve(strict=False)
-    legacy_file = legacy_database_path(rr)
-    new_file = cad_database_path(rr)
+    new_file = workspace_database_path(rr)
     reasons: list[str] = []
 
-    if legacy_file.is_file():
-        reasons.append("legacy_file:cad-database.sqlite")
+    for name in LEGACY_DATABASE_FILENAMES:
+        legacy_path = phoenix_dir(rr) / name
+        if legacy_path.is_file():
+            reasons.append(f"legacy_file:{name}")
 
     db_path: Path | None = None
     if new_file.is_file():
         db_path = new_file
-    elif legacy_file.is_file():
-        db_path = legacy_file
+    else:
+        for name in LEGACY_DATABASE_FILENAMES:
+            legacy_path = phoenix_dir(rr) / name
+            if legacy_path.is_file():
+                db_path = legacy_path
+                break
 
     old_tables_found: list[str] = []
     schema_version: int | None = None
@@ -334,10 +354,15 @@ def detect_legacy_database(repo_root: Path) -> dict[str, Any]:
         "legacy_detected": bool(reasons),
         "reasons": reasons,
         "old_tables_found": old_tables_found,
-        "legacy_file_exists": legacy_file.is_file(),
-        "database_exists": new_file.is_file() or legacy_file.is_file(),
+        "legacy_file_exists": any(
+            (phoenix_dir(rr) / name).is_file() for name in LEGACY_DATABASE_FILENAMES
+        ),
+        "database_exists": new_file.is_file() or any(
+            (phoenix_dir(rr) / name).is_file() for name in LEGACY_DATABASE_FILENAMES
+        ),
         "database_path": str(new_file),
-        "legacy_database_path": str(legacy_file),
+        "legacy_database_path": str(legacy_database_paths(rr)[0]),
+        "legacy_database_paths": [str(p) for p in legacy_database_paths(rr)],
         "schema_version": schema_version,
     }
 
@@ -346,13 +371,14 @@ def database_status_payload(repo_root: Path) -> dict[str, Any]:
     rr = repo_root.expanduser().resolve(strict=False)
     discard_legacy_database_files(rr)
     info = detect_legacy_database(rr)
-    new_file = cad_database_path(rr)
+    new_file = workspace_database_path(rr)
     return {
         **info,
         "expected_schema_version": SCHEMA_VERSION,
         "needs_recreate": info["legacy_detected"],
-        "database_filename": CAD_DATABASE_FILENAME,
-        "legacy_database_filename": LEGACY_DATABASE_FILENAME,
+        "database_filename": WORKSPACE_DATABASE_FILENAME,
+        "legacy_database_filenames": list(LEGACY_DATABASE_FILENAMES),
+        "legacy_database_filename": LEGACY_DATABASE_FILENAMES[0],
         "database_path_display": str(new_file.relative_to(rr)) if new_file.is_file() else "",
     }
 
@@ -362,12 +388,12 @@ def recreate_database(repo_root: Path) -> dict[str, Any]:
     rr = repo_root.expanduser().resolve(strict=False)
     phoenix_dir(rr).mkdir(parents=True, exist_ok=True)
     removed: list[str] = []
-    for path in (legacy_database_path(rr), cad_database_path(rr)):
+    for path in (*legacy_database_paths(rr), workspace_database_path(rr)):
         if path.is_file():
             path.unlink()
             removed.append(path.name)
 
-    conn = sqlite3.connect(str(cad_database_path(rr)), timeout=30.0)
+    conn = sqlite3.connect(str(workspace_database_path(rr)), timeout=30.0)
     try:
         conn.execute("PRAGMA foreign_keys = ON")
         conn.execute("PRAGMA journal_mode = WAL")
@@ -384,7 +410,7 @@ def recreate_database(repo_root: Path) -> dict[str, Any]:
     return {
         "status": "recreated",
         "removed_files": removed,
-        "database_path": str(cad_database_path(rr)),
+        "database_path": str(workspace_database_path(rr)),
         "schema_version": SCHEMA_VERSION,
         "recreated_at": now,
     }

@@ -48,7 +48,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
   fcstd_map: {
     title: "CAD 索引",
     bullets: [
-      "「工程内搜索」写入 .phoenix/phoenix-cad.sqlite，并重建 BOM 引用表。",
+      "「工程内搜索」写入 .phoenix/phoenix-workspace.sqlite，并重建 BOM 引用表。",
       "「删除缺失」清理索引里文件已不存在的条目。",
     ],
     docPath: "doc/CAD索引-缺失条目.md",

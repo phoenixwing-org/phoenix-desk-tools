@@ -120,6 +120,7 @@ export type PhoenixDatabaseStatus = {
   legacy_database_path: string;
   database_filename: string;
   legacy_database_filename: string;
+  legacy_database_filenames?: string[];
   expected_schema_version: number;
   schema_version: number | null;
   database_path_display: string;

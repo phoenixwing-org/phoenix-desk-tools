@@ -11,9 +11,9 @@
 
 | 项 | 值 |
 | --- | --- |
-| 路径 | `<工作空间根>/.phoenix/phoenix-cad.sqlite` |
+| 路径 | `<工作空间根>/.phoenix/phoenix-workspace.sqlite` |
 | 版本 | `phoenix_meta.schema_version` = **10** |
-| 旧文件 | `cad-database.sqlite` **不再使用**；检测到旧库时 Web 壳层提示 **确认重建**（不自动迁移数据） |
+| 旧文件 | `cad-database.sqlite`、`phoenix-cad.sqlite` **不再使用**；`connect()` 与状态 API 会**自动删除**遗留文件名；若 `phoenix-workspace.sqlite` 内仍为旧表名则删库重建路径（不迁移数据） |
 
 ---
 
@@ -58,7 +58,7 @@ BOM 数据流与字段说明见原文档各节逻辑；`phoenix_cad_bom_xref` �
 
 ## 4. 运维
 
-- 升级代码后：若仍存在 `cad-database.sqlite` 或旧表名，界面显示横幅 → **确认重建数据库** → 重新 **CAD 索引 → 工程内搜索**。
+- 升级代码后：遗留库文件通常会在首次连接或打开 Web 时**自动删除**；若需手动清空可点 **确认重建数据库** 或 `POST /api/phoenix/database/recreate`，再 **CAD 索引 → 工程内搜索** 全量重扫。
 - 手动清空：`POST /api/phoenix/database/recreate` 或配置/Web 顶部「确认重建数据库」。
 - API JSON 字段名（如 `file_asset` 逻辑概念）**未改**，仅 SQLite 表名变更。
 

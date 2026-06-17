@@ -31,7 +31,7 @@ flowchart TB
     FCD[fcdesk-freecad-desktop]
     FCD --> WEB[web-ui]
     FCD --> PY[fcdesk Python]
-    FCD --> DB[(cad-database.sqlite)]
+    FCD --> DB[(phoenix-workspace.sqlite)]
   end
 
   subgraph B [B. 平台 + 插件 同仓]
@@ -102,7 +102,7 @@ web-ui/
 
 ### 4.1 单库多域（推荐近期）
 
-仍用 **一个** `cad-database.sqlite`（或日后改名 `phoenix-workspace.sqlite`），按 **表前缀** 划域：
+工作空间内使用 **一个** `.phoenix/phoenix-workspace.sqlite`（已采用），按 **表前缀** 划域：
 
 | 前缀 | 域 | 现表 → 规划名 |
 | --- | --- | --- |

@@ -48,12 +48,12 @@
 
 ## P2 — 数据库命名（schema v10 · 已落地）
 
-> 现网：[CAD数据库表结构.md](CAD数据库表结构.md) · 库文件：`.phoenix/phoenix-cad.sqlite`
+> 现网：[CAD数据库表结构.md](CAD数据库表结构.md) · 库文件：`.phoenix/phoenix-workspace.sqlite`
 
 - [x] `phoenix_schema.py` + v10 DDL（`phoenix_cad_*` / `phoenix_audit_*` / `phoenix_meta` / `phoenix_ui_session`）
-- [x] 不迁移旧库：检测到 `cad-database.sqlite` 或旧表名 → Web 横幅 **确认重建**（`LegacyPhoenixDatabaseError` 阻断 `connect()`）
+- [x] 不迁移旧库：`connect()` / `GET …/database/status` 自动删除 `cad-database.sqlite`、`phoenix-cad.sqlite`；`phoenix-workspace.sqlite` 含旧表名时一并删除；Web 仍可 **确认重建** 空库
 - [x] `GET/POST /api/phoenix/database/*` + AppShell 旧库提示条
-- [ ] 文档中旧表名/旧库名全文替换（进行中）
+- [x] 用户向文档库文件名同步（`phoenix-workspace.sqlite`）；规划/研究稿中旧名待按需替换
 
 ---
 
@@ -87,4 +87,4 @@
 - 修改前端后：**硬刷新**或重启 `python -m fcdesk.web --dev`
 - 索引字段变更后：工作空间内 **CAD 重扫** 或单文件 **重建引用索引**
 - 查询路径**不读 FCStd 补全**；缺 `link_label` / `rule_label` 需重建索引
-- **旧库 / 空索引**：若顶部出现旧库横幅，点 **确认重建数据库** 后 **CAD 索引 → 工程内搜索**；仍异常时可删除 `.phoenix/phoenix-cad.sqlite` 再全量重扫
+- **旧库 / 空索引**：若顶部出现旧库横幅，点 **确认重建数据库** 后 **CAD 索引 → 工程内搜索**；仍异常时可删除 `.phoenix/phoenix-workspace.sqlite` 再全量重扫

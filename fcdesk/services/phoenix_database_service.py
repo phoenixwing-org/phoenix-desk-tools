@@ -1,4 +1,4 @@
-"""Phoenix CAD 数据库状态与重建（旧库检测 → 删库重建 v10）。"""
+"""Phoenix 工作空间数据库状态与重建（遗留库自动丢弃 + 可选删库重建 v10）。"""
 
 from __future__ import annotations
 
