@@ -6,13 +6,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from fcdesk.freecad.phoenix_store import (
+from phoenix.freecad.phoenix_store import (
     cad_database_path,
     load_ui_session,
     save_ui_session,
     ui_session_updated_at,
 )
-from fcdesk.services.workbench_service import get_workbench_session_payload, save_workbench_session
+from phoenix.services.workbench_service import get_workbench_session_payload, save_workbench_session
 
 
 class WorkbenchSessionTests(unittest.TestCase):

@@ -5,7 +5,7 @@
 
   ``{ "Part.A.FCStd": [ "cad/Part.A.FCStd" ], ... }``
 
-默认结构化（schema_version>=2），含每条零件号 / 版本 / 类型(H,S,R) / label — 详见 ``fcdesk.fcstd_mapping``.
+默认结构化（schema_version>=2），含每条零件号 / 版本 / 类型(H,S,R) / label — 详见 ``phoenix.fcstd_mapping``.
 
 用法::
 
@@ -14,7 +14,7 @@
   python scripts/fcstd_map.py --legacy-json fcstd_flat.json
   python scripts/fcstd_map.py --query Part.A.FCStd
 
-运行本脚本时请从软件仓库根执行，或通过 pip 安装了本包以使 ``fcdesk`` 可导入。
+运行本脚本时请从软件仓库根执行，或通过 pip 安装了本包以使 ``phoenix`` 可导入。
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ _REPO = Path(__file__).resolve().parents[1]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
-from fcdesk.fcstd_mapping import (  # noqa: E402
+from phoenix.fcstd_mapping import (  # noqa: E402
     legacy_flat_dict_to_document,
     map_json_payload_to_abs as rel_fcstd_map_to_abs,
     normalize_repo_rel_path_for_map,
@@ -119,7 +119,7 @@ def main() -> None:
     parser.add_argument(
         "--root",
         default=None,
-        help="扫描根目录（默认：本仓库根；fcdesk 桌面/Web 应用内固定为当前工作空间根）",
+        help="扫描根目录（默认：本仓库根；phoenix 桌面/Web 应用内固定为当前工作空间根）",
     )
     parser.add_argument(
         "--relative-to",
@@ -192,7 +192,7 @@ def main() -> None:
             note = (
                 "repo_rel_path 相对锚点为本 JSON 所在目录（与 CAD 扫描根 / --relative-to 相同）；"
                 f"锚点路径: {rel_base}; 扫描范围: {root}。"
-                " 详见 fcdesk.fcstd_mapping。"
+                " 详见 phoenix.fcstd_mapping。"
             )
             doc = legacy_flat_dict_to_document(fcstd_map, anchor_note=note)
             out.write_text(

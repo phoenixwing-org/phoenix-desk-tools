@@ -1,7 +1,7 @@
 # Web 与桌面迁移 — 待办与点检
 
 > [文档索引](文档索引.md)  
-> 状态：**进行中**（Web 壳功能页已齐；桌面 Tk 页逐步改调 `fcdesk/services/`）
+> 状态：**进行中**（Web 壳功能页已齐；桌面 Tk 页逐步改调 `phoenix/services/`）
 
 ---
 
@@ -56,9 +56,9 @@
 目标布局（分阶段迁移，非一次大挪）：
 
 ```
-fcdesk/
+phoenix/
   freecad/              # FreeCAD / FCStd / STEP 批处理
-    batch_step/         ← 从 fcdesk/batch_step/ 迁入
+    batch_step/         ← 从 phoenix/batch_step/ 迁入
     fcstd_*.py          ← 映射、BOM、嵌入属性、document_kind
     phoenix_store.py    ← CAD 索引 SQLite（FCStd 域）
     shell/freecad_exec.py
@@ -76,12 +76,12 @@ fcdesk/
 **原则：**
 
 - `freecad/` 与 `solidworks/` **不互相 import**（除 `services` 编排层）。
-- 旧路径保留 **兼容 re-export** 一个版本周期，例如 `fcdesk.integration.solidworks_com` → `fcdesk.solidworks.com`。
-- `services/sw_step_export_service.py` 只 import `fcdesk.solidworks.*`；`step_batch_service` 只 import `fcdesk.freecad.*`。
+- 旧路径保留 **兼容 re-export** 一个版本周期，例如 `phoenix.integration.solidworks_com` → `phoenix.solidworks.com`。
+- `services/sw_step_export_service.py` 只 import `phoenix.solidworks.*`；`step_batch_service` 只 import `phoenix.freecad.*`。
 
 **优先级：** 桌面页改调 services **先于** 物理挪目录（避免双重重构）。
 
-**状态（2026-05）：** 已完成物理迁移；旧路径（`fcdesk.batch_step`、`fcdesk.fcstd_*`、`fcdesk.integration.solidworks_*`、`fcdesk.shell.freecad_exec` 等）保留 **shim re-export**，新代码请用 `fcdesk.freecad.*` / `fcdesk.solidworks.*`。
+**状态（2026-05）：** 已完成物理迁移；旧路径（`phoenix.batch_step`、`phoenix.fcstd_*`、`phoenix.integration.solidworks_*`、`phoenix.shell.freecad_exec` 等）保留 **shim re-export**，新代码请用 `phoenix.freecad.*` / `phoenix.solidworks.*`。
 
 ---
 

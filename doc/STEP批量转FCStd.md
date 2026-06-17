@@ -2,7 +2,7 @@
 
 在 **FreeCADCmd**（或 FreeCAD Python 会话）中批量 **`step/**/*.stp|.step`** → 输出目录 **`.FCStd`**；**汇总与明细默认写入运行日志**（stderr / 界面日志区），**不**在输出目录生成 `batch_step_convert_report.md`。
 
-## fcdesk「STEP 批量」页
+## Phoenix「STEP 批量」页
 
 选 **STEP 目录**、**输出目录**（相对工作空间即可）；**配置**页设 **FreeCAD 目录**。调用 **`scripts/freecad_batch_step_runner.py`**。macOS 选 **`/Applications/FreeCAD.app`** 即可。
 
@@ -19,7 +19,7 @@
 
 | 模块 | 作用 |
 | --- | --- |
-| **`fcdesk.batch_step`** | 枚举 STEP、Markdown 报告、**`StepBatchJob`**、子进程环境 |
+| **`phoenix.batch_step`** | 枚举 STEP、Markdown 报告、**`StepBatchJob`**、子进程环境 |
 | **`scripts/freecad_batch_step_fc.py`** | 仅在 FreeCAD 内 `import`，Import/Body 等 |
 | **`scripts/freecad_batch_step_runner.py`** | 勿用系统 Python；须 **freecadcmd** 调起 |
 

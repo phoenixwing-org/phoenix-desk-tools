@@ -1,4 +1,4 @@
-"""fcdesk.fcstd_embedded_attrs：Document.xml Body Property 读写与旧侧车迁移。"""
+"""phoenix.fcstd_embedded_attrs：Document.xml Body Property 读写与旧侧车迁移。"""
 
 import zipfile
 import xml.etree.ElementTree as ET
@@ -6,8 +6,8 @@ from pathlib import Path
 
 import unittest
 
-from fcdesk.fcstd_document_bom_props import FCDESK_EMBEDDED_BOM_PROPERTY_GROUP
-from fcdesk.fcstd_embedded_attrs import (
+from phoenix.fcstd_document_bom_props import FCDESK_EMBEDDED_BOM_PROPERTY_GROUP
+from phoenix.fcstd_embedded_attrs import (
     EDITABLE_ENTRY_ATTRS,
     EMBEDDED_BOM_XML,
     read_embedded_bom_attrs,

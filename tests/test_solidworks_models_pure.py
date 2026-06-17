@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from fcdesk.integration.solidworks_models import iter_sw_model_paths, sw_doc_type_suffix
+from phoenix.integration.solidworks_models import iter_sw_model_paths, sw_doc_type_suffix
 
 
 class TestSwDocTypeSuffix(unittest.TestCase):

@@ -1,4 +1,4 @@
-"""fcdesk.fcstd_document_kind：Document.xml 类别推断。"""
+"""phoenix.fcstd_document_kind：Document.xml 类别推断。"""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 import tempfile
 import shutil
 
-from fcdesk.fcstd_document_kind import (
+from phoenix.fcstd_document_kind import (
     FcstdDocumentKinds,
     FcstdKindFilters,
     classify_document_xml,

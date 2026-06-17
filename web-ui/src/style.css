@@ -1,6 +1,6 @@
 :root {
-  --fcdesk-expand-size: 24px;
-  --fcdesk-expand-glyph: 16px;
+  --phoenix-expand-size: 24px;
+  --phoenix-expand-glyph: 16px;
   font-family: "SF Pro Text", "PingFang SC", system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, "Liberation Mono",
     "Courier New", monospace;
@@ -55,31 +55,31 @@ textarea {
 }
 
 /* 展开/折叠三角：尺寸由 Pinia uiPrefs + expandIconTheme 写入 CSS 变量 */
-.fcdesk-expand-twistie {
+.phoenix-expand-twistie {
   flex-shrink: 0;
   display: inline-block;
-  width: var(--fcdesk-expand-size);
-  height: var(--fcdesk-expand-size);
-  background: center / var(--fcdesk-expand-glyph) var(--fcdesk-expand-glyph) no-repeat;
-  background-image: var(--fcdesk-expand-icon-collapsed);
+  width: var(--phoenix-expand-size);
+  height: var(--phoenix-expand-size);
+  background: center / var(--phoenix-expand-glyph) var(--phoenix-expand-glyph) no-repeat;
+  background-image: var(--phoenix-expand-icon-collapsed);
 }
 
-.fcdesk-expand-twistie.is-expanded {
-  background-image: var(--fcdesk-expand-icon-expanded);
+.phoenix-expand-twistie.is-expanded {
+  background-image: var(--phoenix-expand-icon-expanded);
 }
 
-.fcdesk-expand-twistie-inline {
-  width: var(--fcdesk-expand-glyph);
-  height: var(--fcdesk-expand-glyph);
+.phoenix-expand-twistie-inline {
+  width: var(--phoenix-expand-glyph);
+  height: var(--phoenix-expand-glyph);
 }
 
-.fcdesk-expand-btn {
+.phoenix-expand-btn {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--fcdesk-expand-size);
-  height: var(--fcdesk-expand-size);
+  width: var(--phoenix-expand-size);
+  height: var(--phoenix-expand-size);
   margin: 0;
   padding: 0;
   border: none;
@@ -89,11 +89,11 @@ textarea {
   color: #475569;
 }
 
-.fcdesk-expand-btn:hover:not(:disabled) {
+.phoenix-expand-btn:hover:not(:disabled) {
   background: #f1f5f9;
 }
 
-.fcdesk-expand-btn:focus-visible {
+.phoenix-expand-btn:focus-visible {
   outline: 2px solid #93c5fd;
   outline-offset: 1px;
 }

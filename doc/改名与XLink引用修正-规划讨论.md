@@ -10,7 +10,7 @@
 
 ## 1. 背景
 
-fcdesk 已具备两条相关但**目标不同**的能力：
+Phoenix 已具备两条相关但**目标不同**的能力：
 
 | 能力 | 入口 | 主要解决的问题 |
 | --- | --- | --- |
@@ -240,7 +240,7 @@ CREATE TABLE xlink_patch_log (
 
 | 阶段 | 内容 | 产出 |
 | --- | --- | --- |
-| **P0** | 纯函数：`scan_xlink_basename_hits(host_fcstd, old→new)` + `apply_patches`；单元测试用最小 Document.xml / ZIP 桩 | `fcdesk/` 或 `scripts/` 可测模块 |
+| **P0** | 纯函数：`scan_xlink_basename_hits(host_fcstd, old→new)` + `apply_patches`；单元测试用最小 Document.xml / ZIP 桩 | `phoenix/` 或 `scripts/` 可测模块 |
 | **P1** | 改名后可选「预览引用修正」对话框；报告 md；**暂不引入 SQLite**（内存 + md） | 属性回写闭环 |
 | **P2** | `.phoenix/catalog.sqlite` + `change_event` / `rename_log` / `xlink_*` 表；索引任务写入 `file_asset` | 可查询历史 |
 | **P3** | 链接路径修正页：读取 DB 中 pending；与 `fix_fcstd_xlink_paths` 报告互链 | 统一运维入口 |
@@ -248,8 +248,8 @@ CREATE TABLE xlink_patch_log (
 
 **模块边界建议**：
 
-- `fcdesk/xlink_basename.py`（新）：basename 扫描/替换，供 UI 与 CLI 共用。
-- `fcdesk/phoenix_store.py`（新）：SQLite 连接、迁移、插入事件。
+- `phoenix/xlink_basename.py`（新）：basename 扫描/替换，供 UI 与 CLI 共用。
+- `phoenix/phoenix_store.py`（新）：SQLite 连接、迁移、插入事件。
 - `scripts/fix_fcstd_xlink_paths.py`：**暂不强行合并**；可在 P3 共用 `XLinkChange` 形状或报告模板。
 
 ---

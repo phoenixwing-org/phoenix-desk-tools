@@ -8,7 +8,7 @@
 
 ## 1. 问题从哪来
 
-当前仓库 **fcdesk-freecad-desktop** 已同时具备：
+当前仓库 **phoenix-freecad-desktop** 已同时具备：
 
 - Web 壳层（Tab、侧栏、配置、运行日志、`ui_session`）
 - FreeCAD 专用能力（CAD 索引、BOM、改名、XLink）
@@ -28,15 +28,15 @@
 ```mermaid
 flowchart TB
   subgraph A [A. 现状 Monorepo]
-    FCD[fcdesk-freecad-desktop]
+    FCD[phoenix-freecad-desktop]
     FCD --> WEB[web-ui]
-    FCD --> PY[fcdesk Python]
+    FCD --> PY[Phoenix Python]
     FCD --> DB[(phoenix-workspace.sqlite)]
   end
 
   subgraph B [B. 平台 + 插件 同仓]
     CORE[phoenix-core 包]
-    PLG[fcdesk-freecad 插件]
+    PLG[phoenix CAD 插件]
     CORE --> SHELL[壳层 API]
     PLG --> CAD[CAD 服务]
     CORE --> DB2[(phoenix.sqlite)]
@@ -45,7 +45,7 @@ flowchart TB
 
   subgraph C [C. 多仓库]
     REPO1[phoenix-shell 仓库]
-    REPO2[fcdesk-freecad 仓库]
+    REPO2[phoenix-freecad 仓库]
     REPO1 -->|pip / npm 依赖| REPO2
   end
 ```
@@ -53,8 +53,8 @@ flowchart TB
 | 选项 | 说明 | 优点 | 缺点 |
 | --- | --- | --- | --- |
 | **A. 保持单仓** | 仅做表前缀 + 模块分包 | 改动最小、发布一条线 | 「平台」边界仍模糊 |
-| **B. 同仓分包**（**推荐过渡**） | `fcdesk/shell/` + `fcdesk/freecad/` + 未来 `fcdesk/<app>/` | 可渐进抽 `phoenix_core`；插件注册表 | 需约定 API 面 |
-| **C. 独立仓库** | `phoenix-shell` PyPI + npm，`fcdesk-freecad` 依赖之 | 多产品复用壳层 | 版本对齐、CI 成本高 |
+| **B. 同仓分包**（**推荐过渡**） | `phoenix/shell/` + `phoenix/freecad/` + 未来 `phoenix/<app>/` | 可渐进抽 `phoenix_core`；插件注册表 | 需约定 API 面 |
+| **C. 独立仓库** | `phoenix-shell` PyPI + npm，`phoenix-freecad` 依赖之 | 多产品复用壳层 | 版本对齐、CI 成本高 |
 
 **建议路径**：先 **A → B**（本仓库内命名空间与表前缀落地），待第二个非 FreeCAD 应用原型验证后再评估 **C**。
 
@@ -63,7 +63,7 @@ flowchart TB
 ## 3. 推荐分层（逻辑包，不必立刻拆仓）
 
 ```
-fcdesk/
+phoenix/
   shell/              # 平台：启动器、native_dialog、web_launcher、Tab 协议
   freecad/            # 插件：phoenix_store CAD 表、BOM、改名、CAD 索引
   web/                # HTTP 聚合：按插件注册路由
@@ -178,7 +178,7 @@ flowchart TB
 
 ## 7. 与「独立项目」的边界
 
-| 留在 fcdesk-freecad-desktop | 可抽到 phoenix-shell（日后） |
+| 留在 phoenix-freecad-desktop | 可抽到 phoenix-shell（日后） |
 | --- | --- |
 | FreeCAD BOM / XLink / STEP 批量 | Tab 工作台、`ui_session` |
 | `phoenix_cad_*` 表与服务 | 配置 Modal、原生选目录 |
@@ -206,13 +206,13 @@ flowchart TB
 ### 中期（同仓模块化）
 
 - [ ] `web-ui/src/plugins/freecad/` 目录迁移 CAD 页面（机械移动，无行为变化）
-- [ ] Python：`fcdesk/web/app.py` 路由按 `register_freecad_routes(app)` 拆分
+- [ ] Python：`phoenix/web/app.py` 路由按 `register_freecad_routes(app)` 拆分
 - [ ] `phoenix_schema.py`：表名常量 + 域枚举 `CAD | AUDIT | SHELL`
 
 ### 远期（可选拆仓）
 
 - [ ] 新建 `phoenix-shell` 包：仅 shell + ui_session + 通用 API
-- [ ] `fcdesk-freecad` 依赖 `phoenix-shell`，注册插件
+- [ ] `phoenix-freecad` 依赖 `phoenix-shell`，注册插件
 - [ ] 文档站 / 示例「hello-plugin」
 
 ---

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fcdesk.part_dedup_scan import run_part_dedup_scan
+from phoenix.part_dedup_scan import run_part_dedup_scan
 
 
 def test_name_dup(tmp_path: Path) -> None:

@@ -1,4 +1,4 @@
-"""不依赖 FreeCAD：仅测试 ``fcdesk.batch_step`` 纯算法与报告。"""
+"""不依赖 FreeCAD：仅测试 ``phoenix.batch_step`` 纯算法与报告。"""
 
 from __future__ import annotations
 
@@ -6,21 +6,21 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from fcdesk.batch_step.job import StepBatchJob
-from fcdesk.batch_step.report import (
+from phoenix.batch_step.job import StepBatchJob
+from phoenix.batch_step.report import (
     parse_batch_step_report_summary,
     parse_batch_step_stderr_summary,
     render_batch_step_report_md,
     write_batch_step_report_md,
 )
-from fcdesk.batch_step.step_paths import (
+from phoenix.batch_step.step_paths import (
     iter_step_paths,
     iter_step_paths_recursive,
     list_step_paths_for_batch,
     sample_step_fcstd_dirs,
     step_tree_stats,
 )
-from fcdesk.batch_step.step_naming import decode_step_x2_utf16_string, internal_name_from_stem
+from phoenix.batch_step.step_naming import decode_step_x2_utf16_string, internal_name_from_stem
 
 
 class TestStepNaming(unittest.TestCase):
@@ -139,7 +139,7 @@ class TestReport(unittest.TestCase):
             self.assertEqual(summary["total"], 2)
 
     def test_parse_stderr_summary(self) -> None:
-        text = "批量结束\n[fcdesk] OK=3 skip=1 fail=0 total=4\n"
+        text = "批量结束\n[phoenix] OK=3 skip=1 fail=0 total=4\n"
         summary = parse_batch_step_stderr_summary(text)
         self.assertIsNotNone(summary)
         assert summary is not None

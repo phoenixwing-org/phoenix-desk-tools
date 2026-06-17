@@ -547,7 +547,7 @@ watch(
                 >
                   <button
                     type="button"
-                    class="fcdesk-expand-btn toggle"
+                    class="phoenix-expand-btn toggle"
                     :class="[`toggle-${toggleVisualState(node)}`, { leaf: !canExpand(node) }]"
                     :disabled="!canExpand(node) || loadingSubtree.has(node.id)"
                     :aria-expanded="
@@ -1032,7 +1032,7 @@ watch(
   color: #64748b;
 }
 
-.toggle-loading .fcdesk-expand-twistie {
+.toggle-loading .phoenix-expand-twistie {
   display: none;
 }
 

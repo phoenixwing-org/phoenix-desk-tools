@@ -10,19 +10,19 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from fcdesk.fcstd_mapping import FILE_STATUS_MISSING, FILE_STATUS_PRESENT
-from fcdesk.freecad.cad_index_types import (
+from phoenix.fcstd_mapping import FILE_STATUS_MISSING, FILE_STATUS_PRESENT
+from phoenix.freecad.cad_index_types import (
     ASSET_KIND_FCSTD,
     ASSET_KIND_MARKDOWN,
     ASSET_KIND_PDF,
 )
-from fcdesk.freecad.phoenix_store import (
+from phoenix.freecad.phoenix_store import (
     WORKSPACE_DATABASE_FILENAME,
     cad_database_path,
     get_part_key_detail,
     migrate_fcstd_map_json,
 )
-from fcdesk.services.fcstd_map_service import (
+from phoenix.services.fcstd_map_service import (
     load_fcstd_map_payload,
     purge_missing_fcstd_map_entries,
     run_fcstd_map_scan,

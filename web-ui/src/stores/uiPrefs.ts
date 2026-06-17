@@ -5,7 +5,7 @@ import {
   EXPAND_ICON_SIZE_DEFAULT,
 } from "../utils/expandIconTheme";
 
-const STORAGE_KEY = "fcdesk-ui-prefs-v1";
+const STORAGE_KEY = "phoenix-ui-prefs-v1";
 
 type UiPrefsPersisted = {
   expandControlSizePx?: number;

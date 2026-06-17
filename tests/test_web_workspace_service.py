@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from fcdesk.services.workspace_service import build_workspace_tree, scan_workspace_files
+from phoenix.services.workspace_service import build_workspace_tree, scan_workspace_files
 
 
 class TestWorkspaceTree(unittest.TestCase):

@@ -424,7 +424,7 @@ onMounted(async () => {
                   <button
                     v-if="canExpandRow(row)"
                     type="button"
-                    class="fcdesk-expand-btn expand-btn"
+                    class="phoenix-expand-btn expand-btn"
                     :aria-expanded="isExpanded(row)"
                     title="展开：按零件标识选择目标 FCStd"
                     @click.stop="toggleExpand(row)"
@@ -781,7 +781,7 @@ onMounted(async () => {
 }
 
 .col-expand {
-  width: calc(var(--fcdesk-expand-size) + 12px);
+  width: calc(var(--phoenix-expand-size) + 12px);
   padding: 4px 6px;
   vertical-align: middle;
 }

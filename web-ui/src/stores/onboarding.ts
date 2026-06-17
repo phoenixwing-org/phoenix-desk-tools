@@ -2,7 +2,7 @@ import { defineStore } from "pinia";
 import { fetchOnboardingStatus, type OnboardingStatus } from "../api";
 import { SHELL_TOUR_VERSION } from "../utils/onboardingConstants";
 
-const STORAGE_KEY = "fcdesk-onboarding-v1";
+const STORAGE_KEY = "phoenix-onboarding-v1";
 
 type Persisted = {
   tourVersionSeen?: number;

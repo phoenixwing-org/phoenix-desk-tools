@@ -48,8 +48,8 @@ def build_spec_content(app_name: str, console: bool) -> str:
     hidden = ", ".join(f"'{h}'" for h in get_imports_for_app())
 
     repo_root_str = str(REPO_ROOT).replace("\\", "\\\\")
-    main_py_path = str((REPO_ROOT / "fcdesk" / "__main__.py").resolve()).replace("\\", "\\\\")
-    config_json_path = str((REPO_ROOT / "fcdesk" / "config" / "app_config.json").resolve()).replace("\\", "\\\\")
+    main_py_path = str((REPO_ROOT / "phoenix" / "__main__.py").resolve()).replace("\\", "\\\\")
+    config_json_path = str((REPO_ROOT / "phoenix" / "config" / "app_config.json").resolve()).replace("\\", "\\\\")
 
     debug_str = "True" if console else "False"
 
@@ -62,7 +62,7 @@ a = Analysis(
     pathex=['{repo_root_str}'],
     binaries=[],
     datas=[
-        ('{config_json_path}', 'fcdesk/config'),
+        ('{config_json_path}', 'phoenix/config'),
     ],
     hiddenimports=[{hidden}],
     hookspath=[],

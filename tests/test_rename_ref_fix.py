@@ -7,18 +7,18 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from fcdesk.freecad.rename_analysis import (
+from phoenix.freecad.rename_analysis import (
     analyze_workspace_xlink_refs,
     apply_host_xlink_corrections,
     replace_basename_in_xlink_attr,
 )
-from fcdesk.services.rename_analysis_service import (
+from phoenix.services.rename_analysis_service import (
     analyze_rename_references,
     apply_rename_analysis_corrections,
     export_rename_analysis_report,
     list_rename_logs_payload,
 )
-from fcdesk.services.rename_ref_service import execute_file_rename
+from phoenix.services.rename_ref_service import execute_file_rename
 
 
 def _write_fcstd(path: Path, xml: str) -> None:
@@ -111,7 +111,7 @@ class TestRenameRefFix(unittest.TestCase):
             root = Path(tmp)
             _write_fcstd(root / "child.FCStd", _CHILD_XML)
             _write_fcstd(root / "asm.FCStd", _HOST_XML)
-            from fcdesk.services.fcstd_map_service import run_fcstd_map_scan
+            from phoenix.services.fcstd_map_service import run_fcstd_map_scan
 
             run_fcstd_map_scan(root)
 
@@ -144,7 +144,7 @@ class TestRenameRefFix(unittest.TestCase):
             root = Path(tmp)
             _write_fcstd(root / "child.FCStd", _CHILD_XML)
             _write_fcstd(root / "asm.FCStd", _HOST_XML)
-            from fcdesk.services.fcstd_map_service import run_fcstd_map_scan
+            from phoenix.services.fcstd_map_service import run_fcstd_map_scan
 
             run_fcstd_map_scan(root)
 
@@ -176,7 +176,7 @@ class TestRenameRefFix(unittest.TestCase):
                 baseline={"PartNumber": "1"},
                 current={"PartNumber": "1", "filename": "new.FCStd"},
             )
-            from fcdesk.services.fcstd_map_service import run_fcstd_map_scan
+            from phoenix.services.fcstd_map_service import run_fcstd_map_scan
 
             run_fcstd_map_scan(root)
             logs = list_rename_logs_payload(root)
@@ -324,8 +324,8 @@ class TestRenameRefFix(unittest.TestCase):
  </ObjectData>
 </Document>""",
             )
-            from fcdesk.services.fcstd_map_service import run_fcstd_map_scan
-            from fcdesk.services.rename_analysis_service import apply_reference_label_corrections
+            from phoenix.services.fcstd_map_service import run_fcstd_map_scan
+            from phoenix.services.rename_analysis_service import apply_reference_label_corrections
 
             run_fcstd_map_scan(root)
             scan = analyze_rename_references(
@@ -380,8 +380,8 @@ class TestRenameRefFix(unittest.TestCase):
  </ObjectData>
 </Document>""",
             )
-            from fcdesk.services.fcstd_map_service import run_fcstd_map_scan
-            from fcdesk.services.rename_analysis_service import apply_reference_label_corrections
+            from phoenix.services.fcstd_map_service import run_fcstd_map_scan
+            from phoenix.services.rename_analysis_service import apply_reference_label_corrections
 
             run_fcstd_map_scan(root)
             out = apply_reference_label_corrections(
@@ -401,8 +401,8 @@ class TestRenameRefFix(unittest.TestCase):
             root = Path(tmp)
             _write_fcstd(root / "child.FCStd", _CHILD_XML)
             _write_fcstd(root / "asm-single.FCStd", _HOST_XML)
-            from fcdesk.services.fcstd_map_service import run_fcstd_map_scan
-            from fcdesk.services.rename_analysis_service import apply_reference_label_corrections
+            from phoenix.services.fcstd_map_service import run_fcstd_map_scan
+            from phoenix.services.rename_analysis_service import apply_reference_label_corrections
 
             run_fcstd_map_scan(root)
             out = apply_reference_label_corrections(
@@ -435,9 +435,9 @@ class TestRenameRefFix(unittest.TestCase):
  </ObjectData>
 </Document>""",
             )
-            from fcdesk.freecad.phoenix_store import connect
-            from fcdesk.services.fcstd_map_service import run_fcstd_map_scan
-            from fcdesk.services.rename_analysis_service import apply_reference_label_corrections
+            from phoenix.freecad.phoenix_store import connect
+            from phoenix.services.fcstd_map_service import run_fcstd_map_scan
+            from phoenix.services.rename_analysis_service import apply_reference_label_corrections
 
             run_fcstd_map_scan(root)
             with connect(root) as conn:
@@ -483,7 +483,7 @@ class TestRenameRefFix(unittest.TestCase):
  </ObjectData>
 </Document>""",
             )
-            from fcdesk.services.bom_xref_service import apply_explicit_link_labels
+            from phoenix.services.bom_xref_service import apply_explicit_link_labels
 
             out = apply_explicit_link_labels(
                 root,

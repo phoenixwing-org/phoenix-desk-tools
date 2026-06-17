@@ -34,4 +34,4 @@ Web **CAD 索引 · 索引列表** 工具栏：**删除缺失（N）**。
 
 `POST /api/fcstd-map/purge-missing` — 返回与 `GET /api/fcstd-map` 相同结构，另含 `purge_deleted`（本次删除条数）。
 
-实现：`fcdesk/services/fcstd_map_service.purge_missing_fcstd_map_entries` · `fcdesk/freecad/phoenix_store.delete_missing_file_assets`。
+实现：`phoenix/services/fcstd_map_service.purge_missing_fcstd_map_entries` · `phoenix/freecad/phoenix_store.delete_missing_file_assets`。

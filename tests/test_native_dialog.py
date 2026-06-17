@@ -6,7 +6,7 @@ import unittest
 from subprocess import CompletedProcess
 from unittest import mock
 
-from fcdesk.shell import native_dialog
+from phoenix.shell import native_dialog
 
 
 class TestNativeDialogIsolated(unittest.TestCase):

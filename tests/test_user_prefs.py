@@ -8,22 +8,24 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from fcdesk.config import user_prefs as prefs
-from fcdesk.config.launcher_paths import platform_launcher_prefs_file
-from fcdesk.config.user_prefs import legacy_workspace_dotfile_path, workspace_dotfile_path
-from fcdesk.shell.state import AppState
+from phoenix.config import user_prefs as prefs
+from phoenix.config.launcher_paths import platform_launcher_prefs_file
+from phoenix.config.user_prefs import legacy_workspace_dotfile_path, workspace_dotfile_path
+from phoenix.shell.state import AppState
 
 
 def _patch_launcher_storage(platform: Path, *, web: Path | None = None, legacy: Path | None = None):
     platform.parent.mkdir(parents=True, exist_ok=True)
     web_path = web if web is not None else platform.parent / "_no_web_launcher.json"
     no_flat = platform.parent / "_no_flat_launcher.json"
+    no_vendor_fcdesk = platform.parent / "_no_vendor_fcdesk_launcher.json"
     legacy_path = legacy if legacy is not None else platform.parent / "_no_legacy.json"
     patches: dict[str, mock.Mock] = {
         "platform_launcher_prefs_file": mock.Mock(return_value=platform),
         "launcher_prefs_file": mock.Mock(return_value=platform),
         "web_launcher_prefs_file": mock.Mock(return_value=web_path),
         "legacy_flat_launcher_prefs_file": mock.Mock(return_value=no_flat),
+        "legacy_vendor_fcdesk_launcher_prefs_file": mock.Mock(return_value=no_vendor_fcdesk),
         "legacy_launcher_prefs_file": mock.Mock(return_value=legacy_path),
     }
     return mock.patch.multiple(prefs, **patches)
@@ -275,7 +277,7 @@ class TestLauncherPaths(unittest.TestCase):
     def test_platform_file_under_dir(self) -> None:
         p = platform_launcher_prefs_file()
         self.assertEqual(p.name, "launcher.json")
-        self.assertEqual(p.parent.name, "fcdesk")
+        self.assertEqual(p.parent.name, "phoenix")
         self.assertEqual(p.parent.parent.name, "phoenix-wing")
 
 

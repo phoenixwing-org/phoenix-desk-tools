@@ -1,4 +1,4 @@
-"""fcdesk.fcstd_mapping：结构化映射与遗留 JSON 兼容性。"""
+"""phoenix.fcstd_mapping：结构化映射与遗留 JSON 兼容性。"""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import json
 import unittest
 from pathlib import Path
 
-from fcdesk.fcstd_mapping import (
+from phoenix.fcstd_mapping import (
     FcstdMapDocument,
     FcstdMapEntry,
     compose_fcstd_body_label_display,
@@ -324,7 +324,7 @@ class TestRecommendedFilename(unittest.TestCase):
 
 class TestRenameWorkspaceFcstd(unittest.TestCase):
     def test_validate_basename(self) -> None:
-        from fcdesk.fcstd_mapping import validate_fcstd_basename
+        from phoenix.fcstd_mapping import validate_fcstd_basename
 
         self.assertEqual(validate_fcstd_basename("a.FCStd"), "a.FCStd")
         with self.assertRaises(ValueError):
@@ -334,7 +334,7 @@ class TestRenameWorkspaceFcstd(unittest.TestCase):
         import shutil
         import tempfile
 
-        from fcdesk.fcstd_mapping import (
+        from phoenix.fcstd_mapping import (
             FcstdMapDocument,
             FcstdMapEntry,
             rename_workspace_fcstd_file,
@@ -374,7 +374,7 @@ class TestRenameWorkspaceFcstd(unittest.TestCase):
                     new_rel=Path("new.FCStd"),
                 )
             )
-            from fcdesk.freecad.phoenix_store import find_fcstd_entry
+            from phoenix.freecad.phoenix_store import find_fcstd_entry
 
             entry = find_fcstd_entry(td, Path("new.FCStd"))
             self.assertIsNotNone(entry)

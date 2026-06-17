@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from fcdesk.services.xlink_fix_service import apply_xlink_fix_override, part_hints_from_xlink_old_path
+from phoenix.services.xlink_fix_service import apply_xlink_fix_override, part_hints_from_xlink_old_path
 
 
 def test_part_hints_from_xlink_old_path() -> None:

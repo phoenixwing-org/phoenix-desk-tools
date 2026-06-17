@@ -5,13 +5,13 @@
 所有经 `phoenix_store.connect()` 的 `execute` / `executemany` 自动输出**同一格式**：
 
 ```
-INFO [fcdesk.freecad.phoenix_store] SQL <模块.函数> | <单行 SQL>
+INFO [phoenix.freecad.phoenix_store] SQL <模块.函数> | <单行 SQL>
 ```
 
 - 调用方来自栈回溯（如 `bom_xref_service.search_incoming_refs`、`assembly_tree_cache._batch_enrich_file_roles`）
 - `PRAGMA` 与 schema 初始化不记录（在包装连接之前执行）
 - `executemany` 追加 `executemany×N`
-- 用法：重启 `python -m fcdesk.web --dev`，操作各页面，对照终端里**连续多条相同 SQL** 或 **同一函数名重复出现** 即可定位「哪页在递归查库」
+- 用法：重启 `python -m phoenix.web --dev`，操作各页面，对照终端里**连续多条相同 SQL** 或 **同一函数名重复出现** 即可定位「哪页在递归查库」
 
 ---
 

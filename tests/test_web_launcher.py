@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from fcdesk.shell import web_launcher
+from phoenix.shell import web_launcher
 
 
 class TestWebLauncher(unittest.TestCase):

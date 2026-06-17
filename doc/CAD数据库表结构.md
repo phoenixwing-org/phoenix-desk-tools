@@ -1,7 +1,7 @@
 # CAD 数据库表结构（schema v10）
 
 > [文档索引](文档索引.md) · 历史决策：[CAD数据库表结构-重命名规划.md](CAD数据库表结构-重命名规划.md)  
-> DDL 真源：`fcdesk/freecad/phoenix_schema.py` · 访问：`phoenix_store.connect`
+> DDL 真源：`phoenix/freecad/phoenix_schema.py` · 访问：`phoenix_store.connect`
 
 最后更新：2026-06
 
@@ -35,7 +35,7 @@
 | 审计 | `phoenix_audit_ref_hit` | `ref_hit` |
 | 审计 | `phoenix_audit_ref_patch_log` | `ref_patch_log` |
 
-常量：`fcdesk/freecad/phoenix_schema.py` 中 `T_*`。
+常量：`phoenix/freecad/phoenix_schema.py` 中 `T_*`。
 
 ---
 

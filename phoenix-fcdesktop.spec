@@ -3,11 +3,11 @@
 block_cipher = None
 
 a = Analysis(
-    ['F:\\HSJ\\phoenix-freecad-desktop\\fcdesk\\__main__.py'],
+    ['F:\\HSJ\\phoenix-freecad-desktop\\phoenix\\__main__.py'],
     pathex=['F:\\HSJ\\phoenix-freecad-desktop'],
     binaries=[],
     datas=[
-        ('F:\\HSJ\\phoenix-freecad-desktop\\fcdesk\\config\\app_config.json', 'fcdesk/config'),
+        ('F:\\HSJ\\phoenix-freecad-desktop\\phoenix\\config\\app_config.json', 'phoenix/config'),
     ],
     hiddenimports=['customtkinter', 'darkdetect', 'tkinter', 'tkinter.ttk', 'tkinter.filedialog', 'tkinter.messagebox', 'PIL', 'darkdetect._dummy', 'darkdetect._windows_detect'],
     hookspath=[],

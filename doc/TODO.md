@@ -1,4 +1,4 @@
-# Fcdesk Web / 后端 — 总待办
+# Phoenix Web / 后端 — 总待办
 
 > 汇总跨模块待办；细项研究稿见 [文档索引.md](文档索引.md)。  
 > 状态：`[ ]` 未做 · `[~]` 进行中 · `[x]` 已完成
@@ -34,6 +34,21 @@
 - [x] 配置：未扫描工作空间时提示并跳转 **CAD 索引**
 - [ ] 桌面 `fcstd_map_page` 分页，去掉 `load_fcstd_document` 全表
 - [ ] 统一运行日志：长任务进度条 / 取消（见 [统一运行日志窗口-规划讨论.md](统一运行日志窗口-规划讨论.md)）
+
+---
+
+## P2 — 包重命名（`fcdesk` → `phoenix`）
+
+> Python **import 包名**与目录 `phoenix/` 对齐；Gitee 仓库名仍为 `phoenix-freecad-desktop`。
+
+- [x] 目录 `phoenix/`、文档与 `python -m phoenix` 命令
+- [x] `pyproject.toml`：`include = ["phoenix*"]`，入口 `phoenix-desktop` + 旧名 `phoenix-fcdesktop`
+- [x] `launcher_paths.py`：`_APP_ID` → `phoenix`，迁移读取 `phoenix-wing/fcdesk/`
+- [x] 全仓 `from phoenix`（无残留 `from fcdesk`）
+- [~] 环境变量 `PHOENIX_*`（`FCDESK_*` 仍兼容）
+- [ ] Web localStorage 兼容读旧 `fcdesk.workbench.v1:`
+- [ ] 异常类 / 常量重命名（`FcdeskFcstdEmbeddedError` 等，可选）
+- [x] 删除重复目录 `fcdesk/`
 
 ---
 
@@ -84,7 +99,7 @@
 
 ## 运维备忘
 
-- 修改前端后：**硬刷新**或重启 `python -m fcdesk.web --dev`
+- 修改前端后：**硬刷新**或重启 `python -m phoenix.web --dev`
 - 索引字段变更后：工作空间内 **CAD 重扫** 或单文件 **重建引用索引**
 - 查询路径**不读 FCStd 补全**；缺 `link_label` / `rule_label` 需重建索引
 - **旧库 / 空索引**：若顶部出现旧库横幅，点 **确认重建数据库** 后 **CAD 索引 → 工程内搜索**；仍异常时可删除 `.phoenix/phoenix-workspace.sqlite` 再全量重扫

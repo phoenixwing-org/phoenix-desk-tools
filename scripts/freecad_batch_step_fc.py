@@ -1,7 +1,7 @@
 """
 STEP→FCStd（PartDesign Body + BaseFeature）。**仅**在 FreeCAD / FreeCADCmd 的解释器内执行。
 
-纯逻辑见包 ``fcdesk.batch_step``；本文件只保留对 FreeCADGui / Import 的依赖。
+纯逻辑见包 ``phoenix.batch_step``；本文件只保留对 FreeCADGui / Import 的依赖。
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from typing import Callable, List, Optional, Tuple
 import FreeCAD as App
 import Import
 
-from fcdesk.batch_step.step_naming import body_label_from_file_stem_and_step, internal_name_from_stem
+from phoenix.batch_step.step_naming import body_label_from_file_stem_and_step, internal_name_from_stem
 
 
 def ensure_part_design_nodes_visible(imported_feat, body) -> None:
@@ -144,7 +144,7 @@ def batch_save_steps_to_fcstd(
 ) -> List[Tuple[str, Optional[str], Optional[str]]]:
     """遍历 step_dir；若给定 ``sorted_paths`` 则不再扫描目录。"""
     from collections import Counter
-    from fcdesk.batch_step.step_paths import iter_step_paths
+    from phoenix.batch_step.step_paths import iter_step_paths
 
     step_dir = Path(step_dir).resolve()
     out_dir = Path(out_dir).resolve()
@@ -154,7 +154,7 @@ def batch_save_steps_to_fcstd(
     if dupes and log_duplicate_stems_to_stderr:
         preview = sorted(dupes)[:12]
         log_duplicate_stems_to_stderr(
-            f"[fcdesk] 警告：下列 STEP 文件名（不含后缀）重复，输出到同一 .FCStd 会互相覆盖：{preview}"
+            f"[phoenix] 警告：下列 STEP 文件名（不含后缀）重复，输出到同一 .FCStd 会互相覆盖：{preview}"
             + (" …" if len(dupes) > 12 else "")
             + "\n"
         )
@@ -217,8 +217,8 @@ def run_step_batch_from_environ() -> None:
         except Exception:
             pass
 
-    from fcdesk.batch_step.report import render_batch_step_report_md, write_batch_step_report_md
-    from fcdesk.batch_step.step_paths import list_step_paths_for_batch, step_tree_stats
+    from phoenix.batch_step.report import render_batch_step_report_md, write_batch_step_report_md
+    from phoenix.batch_step.step_paths import list_step_paths_for_batch, step_tree_stats
 
     step_dir_s = os.environ.get("FCD_BATCH_STEP_DIR", "").strip()
     out_dir = os.environ.get("FCD_BATCH_OUT_DIR", "").strip()
@@ -249,21 +249,21 @@ def run_step_batch_from_environ() -> None:
             ver_repr = repr(v_attr)
         else:
             ver_repr = "None"
-        fc_ver_line = f"[fcdesk] FreeCAD 版本：{ver_repr}\n"
+        fc_ver_line = f"[phoenix] FreeCAD 版本：{ver_repr}\n"
     except Exception as e:
-        fc_ver_line = f"[fcdesk] （无法读取 FreeCAD 版本: {e}）\n"
+        fc_ver_line = f"[phoenix] （无法读取 FreeCAD 版本: {e}）\n"
 
     _fcd_stderr(
         fc_ver_line
-        + f"[fcdesk] 递归扫描 STEP 子目录: {recursive}（设为 1 / true 则用 FCD_BATCH_STEP_RECURSIVE）\n"
-        + f"[fcdesk] skip_existing={skip_existing} view_fit_all={view_fit_all} view_fit_last={view_fit_last}\n",
+        + f"[phoenix] 递归扫描 STEP 子目录: {recursive}（设为 1 / true 则用 FCD_BATCH_STEP_RECURSIVE）\n"
+        + f"[phoenix] skip_existing={skip_existing} view_fit_all={view_fit_all} view_fit_last={view_fit_last}\n",
     )
 
     top_n = deep_n = -1
     try:
         top_n, deep_n = step_tree_stats(step_dir_s)
     except (OSError, NotADirectoryError) as e:
-        _fcd_stderr_err(f"[fcdesk] 无效 STEP 目录 {step_dir_s!r}: {e}\n")
+        _fcd_stderr_err(f"[phoenix] 无效 STEP 目录 {step_dir_s!r}: {e}\n")
         raise SystemExit(3) from e
 
     paths = list_step_paths_for_batch(step_dir_s, recursive=recursive)
@@ -271,21 +271,21 @@ def run_step_batch_from_environ() -> None:
     nested_only = deep_n - top_n if top_n >= 0 and deep_n >= 0 else 0
 
     _fcd_stderr(
-        f"[fcdesk] STEP 根目录：{step_dir_s}\n"
-        f"[fcdesk] 仅顶层 STEP 个数：{top_n} | 全盘（含子目录）STEP 个数：{deep_n}\n"
-        f"[fcdesk] 本次将处理的文件数量：{scan_n}"
+        f"[phoenix] STEP 根目录：{step_dir_s}\n"
+        f"[phoenix] 仅顶层 STEP 个数：{top_n} | 全盘（含子目录）STEP 个数：{deep_n}\n"
+        f"[phoenix] 本次将处理的文件数量：{scan_n}"
         + (" （递归列出）\n" if recursive else "\n")
-        + f"[fcdesk] 输出目录：{out_dir}\n",
+        + f"[phoenix] 输出目录：{out_dir}\n",
     )
     if nested_only > 0 and not recursive and top_n == 0:
         _fcd_stderr(
-            "[fcdesk] 提示：顶层没有 STEP，但在子目录下共发现 "
+            "[phoenix] 提示：顶层没有 STEP，但在子目录下共发现 "
             f"{deep_n} 个 STEP。默认只扫描「当前目录第一层」。\n"
-            "[fcdesk] 请导出环境变量后再运行： export FCD_BATCH_STEP_RECURSIVE=1\n"
+            "[phoenix] 请导出环境变量后再运行： export FCD_BATCH_STEP_RECURSIVE=1\n"
             "或在桌面「STEP 批量」勾选「包含子文件夹中的 STEP」。\n",
         )
     if scan_n == 0:
-        _fcd_stderr("[fcdesk] 未发现可转换的 STEP，仍会在运行日志中输出汇总（合计 0）。\n")
+        _fcd_stderr("[phoenix] 未发现可转换的 STEP，仍会在运行日志中输出汇总（合计 0）。\n")
 
     if verbose and paths:
         show = paths[:40]
@@ -358,5 +358,5 @@ def run_step_batch_from_environ() -> None:
     except Exception:
         pass
     _fcd_stderr(
-        summary + f"[fcdesk] OK={ok} skip={skip} fail={fail} total={len(results)}\n",
+        summary + f"[phoenix] OK={ok} skip={skip} fail={fail} total={len(results)}\n",
     )

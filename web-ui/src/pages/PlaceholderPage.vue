@@ -20,7 +20,7 @@ const pageId = computed(() => shell.currentPage.value);
     <p class="desc">{{ item?.description ?? "功能开发中" }}</p>
     <p class="hint">
       此页对应桌面壳中的同名功能，后续将通过 Python 服务层 API 接入（逻辑复用
-      <code>fcdesk/</code> 核心模块，不重写算法）。
+      <code>phoenix/</code> 核心模块，不重写算法）。
     </p>
   </div>
 </template>

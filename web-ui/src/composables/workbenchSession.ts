@@ -1,7 +1,7 @@
 import type { WorkbenchSessionSnapshot } from "../types/workbench";
 import { fetchWorkbenchSession, saveWorkbenchSession } from "../api";
 
-const STORAGE_PREFIX = "fcdesk.workbench.v1:";
+const STORAGE_PREFIX = "phoenix.workbench.v1:";
 
 function storageKey(workspacePath: string): string {
   return `${STORAGE_PREFIX}${workspacePath}`;

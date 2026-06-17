@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-在「已打开的 FreeCAD UI」内运行：**fcdesk ↔ FreeCAD GUI 收件箱桥接**
+在「已打开的 FreeCAD UI」内运行：**phoenix ↔ FreeCAD GUI 收件箱桥接**
 
 用法（每台机只需做一次路径配置）：
 
 1. 宏 → Macros… → 「文档」打开宏路径，或直接「添加宏路径」指向本仓库的 ``scripts/``。
 2. 在菜单 **宏 → executeMacro**（或快捷键）中选本文件 ``freecad_fcdesk_inbox_listener.py``，
    **执行一次**（或勾选「添加到启动宏」）。
-3. 桌面上 fcdesk「STEP 批量」勾选 **通过已打开的 FreeCAD**，再点运行。
+3. 桌面上 phoenix「STEP 批量」勾选 **通过已打开的 FreeCAD**，再点运行。
 
-收件箱：`~/.fcdesk/freecad_bridge/inbox/`；结果：`…/done/`。
+收件箱：`~/.phoenix/freecad_bridge/inbox/`；结果：`…/done/`。
 
 注意：监听使用 **Qt 定时器在主线程轮询**，与 FreeCAD Gui 在同一进程，避免线程问题。
 仅限本机、无口令；不要使用网络暴露。
@@ -25,7 +25,7 @@ from pathlib import Path
 
 
 def _bridge_paths() -> tuple[Path, Path]:
-    root = Path.home() / ".fcdesk" / "freecad_bridge"
+    root = Path.home() / ".phoenix" / "freecad_bridge"
     return root / "inbox", root / "done"
 
 
@@ -118,7 +118,7 @@ def _process_one(queue: Path, done_dir: Path) -> bool:
         try:
             import FreeCAD as App
 
-            App.Console.PrintError("[fcdesk 桥接] STEP 批量失败\n" + tb + "\n")
+            App.Console.PrintError("[phoenix 桥接] STEP 批量失败\n" + tb + "\n")
         except Exception:
             pass
     finally:
@@ -137,7 +137,7 @@ def start(interval_ms: int = 750) -> None:
     try:
         import FreeCADGui as Gui
     except ImportError:
-        print("fcdesk inbox: FreeCADGui 不可用")
+        print("phoenix inbox: FreeCADGui 不可用")
         return
 
     if getattr(Gui, "_fcdesk_listener_timer", None) is not None:
@@ -145,7 +145,7 @@ def start(interval_ms: int = 750) -> None:
         try:
             import FreeCAD as App
 
-            App.Console.PrintMessage("[fcdesk 桥接] 收件箱监听已就绪（重启定时器）。\n")
+            App.Console.PrintMessage("[phoenix 桥接] 收件箱监听已就绪（重启定时器）。\n")
         except Exception:
             pass
         return
@@ -159,7 +159,7 @@ def start(interval_ms: int = 750) -> None:
         try:
             from PySide6 import QtCore
         except ImportError:
-            print("fcdesk inbox: 无法导入 PySide2 / PySide6（请用带 Qt 绑定的 FreeCAD）")
+            print("phoenix inbox: 无法导入 PySide2 / PySide6（请用带 Qt 绑定的 FreeCAD）")
             return
 
     mw = Gui.getMainWindow()
@@ -167,9 +167,9 @@ def start(interval_ms: int = 750) -> None:
         try:
             import FreeCAD as App
 
-            App.Console.PrintWarning("[fcdesk 桥接] 主窗口尚未就绪：请稍后从「宏」再执行一次本脚本。\n")
+            App.Console.PrintWarning("[phoenix 桥接] 主窗口尚未就绪：请稍后从「宏」再执行一次本脚本。\n")
         except Exception:
-            print("fcdesk inbox: MainWindow not ready")
+            print("phoenix inbox: MainWindow not ready")
         return
 
     timer = QtCore.QTimer(mw)
@@ -190,9 +190,9 @@ def start(interval_ms: int = 750) -> None:
     try:
         import FreeCAD as App
 
-        App.Console.PrintMessage("[fcdesk 桥接] 已启动收件箱监听（fcdesk STEP 批量可用）。\n")
+        App.Console.PrintMessage("[phoenix 桥接] 已启动收件箱监听（phoenix STEP 批量可用）。\n")
     except Exception:
-        print("fcdesk inbox: timer started")
+        print("phoenix inbox: timer started")
 
 
 def stop() -> None:

@@ -8,9 +8,9 @@ import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
-from fcdesk.services.assembly_tree_cache import build_assembly_tree_payload, load_assembly_tree_cached
-from fcdesk.services.bom_tree_occurrence import query_target_usage_stats
-from fcdesk.services.bom_xref_service import (
+from phoenix.services.assembly_tree_cache import build_assembly_tree_payload, load_assembly_tree_cached
+from phoenix.services.bom_tree_occurrence import query_target_usage_stats
+from phoenix.services.bom_xref_service import (
     host_ref_groups_from_db,
     load_assembly_bom_catalog,
     load_assembly_tree,
@@ -19,15 +19,15 @@ from fcdesk.services.bom_xref_service import (
     search_incoming_refs,
     search_outgoing_refs,
 )
-from fcdesk.freecad.phoenix_store import connect, insert_bom_xref_edges
-from fcdesk.services.cad_index import (
+from phoenix.freecad.phoenix_store import connect, insert_bom_xref_edges
+from phoenix.services.cad_index import (
     rebuild_bom_xrefs,
     refresh_bom_xref_index_for_host,
     refresh_bom_xrefs_for_hosts,
 )
-from fcdesk.services.fcstd_map_service import run_fcstd_map_scan
-from fcdesk.services.rename_analysis_service import analyze_rename_references
-from fcdesk.services.rename_ref_service import execute_file_rename
+from phoenix.services.fcstd_map_service import run_fcstd_map_scan
+from phoenix.services.rename_analysis_service import analyze_rename_references
+from phoenix.services.rename_ref_service import execute_file_rename
 
 
 def _write_fcstd(path: Path, xml: str) -> None:
@@ -165,7 +165,7 @@ class TestBomXref(unittest.TestCase):
             _write_fcstd(root / "top-assy.FCStd", _TOP_ASM_XML)
             run_fcstd_map_scan(root)
 
-            from fcdesk.freecad.phoenix_store import connect
+            from phoenix.freecad.phoenix_store import connect
 
             with connect(root) as conn:
                 conn.execute("DELETE FROM phoenix_cad_bom_xref WHERE host_repo_rel_path = ?", ("./top-assy.FCStd",))
@@ -212,7 +212,7 @@ class TestBomXref(unittest.TestCase):
             self.assertEqual(full["direct_host_count"], 1)
 
     def test_apply_indirect_host_expands_to_direct(self) -> None:
-        from fcdesk.services.rename_analysis_service import apply_rename_analysis_corrections
+        from phoenix.services.rename_analysis_service import apply_rename_analysis_corrections
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -284,7 +284,7 @@ class TestBomXref(unittest.TestCase):
             self.assertEqual(props, {"new-child.FCStd"})
 
     def test_apply_then_reanalyze_pending_does_not_grow(self) -> None:
-        from fcdesk.services.rename_analysis_service import apply_rename_analysis_corrections
+        from phoenix.services.rename_analysis_service import apply_rename_analysis_corrections
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -319,8 +319,8 @@ class TestBomXref(unittest.TestCase):
             self.assertEqual(pending2, 0)
 
     def test_rename_log_reanalyze_after_apply_no_duplicate_hits(self) -> None:
-        from fcdesk.services.rename_analysis_service import apply_rename_analysis_corrections
-        from fcdesk.services.rename_ref_service import execute_file_rename
+        from phoenix.services.rename_analysis_service import apply_rename_analysis_corrections
+        from phoenix.services.rename_ref_service import execute_file_rename
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -436,7 +436,7 @@ class TestBomXref(unittest.TestCase):
             _write_fcstd(root / "asm.FCStd", _HOST_XML)
             run_fcstd_map_scan(root)
 
-            from fcdesk.freecad.phoenix_store import cad_database_path, connect
+            from phoenix.freecad.phoenix_store import cad_database_path, connect
 
             with connect(root) as conn:
                 conn.execute("DELETE FROM phoenix_cad_bom_xref")
@@ -459,7 +459,7 @@ class TestBomXref(unittest.TestCase):
             _write_fcstd(root / "asm.FCStd", _HOST_XML)
             run_fcstd_map_scan(root)
 
-            from fcdesk.freecad.phoenix_store import cad_database_path, connect
+            from phoenix.freecad.phoenix_store import cad_database_path, connect
 
             with connect(root) as conn:
                 conn.execute("DELETE FROM phoenix_cad_bom_xref")
@@ -496,7 +496,7 @@ class TestBomXref(unittest.TestCase):
             _write_fcstd(root / "asm.FCStd", dup_xml)
             run_fcstd_map_scan(root)
 
-            from fcdesk.freecad.phoenix_store import ensure_fcstd_scan_record, get_file_asset_id
+            from phoenix.freecad.phoenix_store import ensure_fcstd_scan_record, get_file_asset_id
 
             asset_id = get_file_asset_id(root, "./asm.FCStd")
             self.assertIsNotNone(asset_id)
@@ -644,7 +644,7 @@ class TestBomXref(unittest.TestCase):
             run_fcstd_map_scan(root)
 
             with patch(
-                "fcdesk.freecad.rename_analysis.xlink.read_host_reference_labels"
+                "phoenix.freecad.rename_analysis.xlink.read_host_reference_labels"
             ) as disk_read:
                 out = search_outgoing_refs(root, "./asm.FCStd")
                 disk_read.assert_not_called()
@@ -684,7 +684,7 @@ class TestBomXref(unittest.TestCase):
             _write_fcstd(root / "child.FCStd", "<Document/>")
             _write_fcstd(root / "asm.FCStd", host_xml)
             run_fcstd_map_scan(root)
-            from fcdesk.freecad.phoenix_store import connect
+            from phoenix.freecad.phoenix_store import connect
 
             with connect(root) as conn:
                 conn.execute(
@@ -693,9 +693,9 @@ class TestBomXref(unittest.TestCase):
                 conn.commit()
 
             with patch(
-                "fcdesk.freecad.rename_analysis.xlink.read_host_reference_labels"
+                "phoenix.freecad.rename_analysis.xlink.read_host_reference_labels"
             ) as disk_read, patch(
-                "fcdesk.freecad.fcstd_embedded_attrs.read_embedded_bom_attrs"
+                "phoenix.freecad.fcstd_embedded_attrs.read_embedded_bom_attrs"
             ) as embedded_read:
                 out = search_outgoing_refs(root, "./asm.FCStd")
                 disk_read.assert_not_called()

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from fcdesk.freecad.part_naming import PartNamingParser
+from phoenix.freecad.part_naming import PartNamingParser
 
 
 class TestPartNamingParser(unittest.TestCase):

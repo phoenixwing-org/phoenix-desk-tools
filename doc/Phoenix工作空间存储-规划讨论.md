@@ -11,18 +11,18 @@
 
 | 位置 | 内容 |
 | --- | --- |
-| `fcdesk/config/workspace.custom.json` | 启动器级：最近工作空间、`freecad_dir`、窗口几何 |
+| `phoenix/config/workspace.custom.json` | 启动器级：最近工作空间、`freecad_dir`、窗口几何 |
 | `<工作空间根>/.phoenix/phoenix-freecad-desktop.json` | 各功能页偏好（`fc_linkfix`、`step_batch`、`bom_apply` …） |
 | `<工作空间根>/.phoenix-freecad-desktop.json` | **遗留**；读取时迁入 `.phoenix/` |
 | `<工作空间根>/fcstd_map.json` | FCStd 索引（与 xlink 脚本共用） |
 
-属性回写「上次零件号 / 默认版本」等已写入 dotfile 的 `bom_apply` 小节（`fcdesk/bom_apply_prefs.py`）。
+属性回写「上次零件号 / 默认版本」等已写入 dotfile 的 `bom_apply` 小节（`phoenix/bom_apply_prefs.py`）。
 
 ### 1.2 目标（讨论方向）
 
 **默认不在工作空间根生成 `.phoenix-freecad-desktop.json`。**
 
-工作空间内与 fcdesk / Web 后端相关的**结构化数据、偏好、审计、统计**统一进入：
+工作空间内与 Phoenix / Web 后端相关的**结构化数据、偏好、审计、统计**统一进入：
 
 ```
 <工作空间根>/.phoenix/
@@ -78,7 +78,7 @@
 
 **仍放启动器目录（不进工作空间 `.phoenix`）**：
 
-- `fcdesk/config/workspace.custom.json` — 本机全局，与具体仓库无关。
+- `phoenix/config/workspace.custom.json` — 本机全局，与具体仓库无关。
 
 ---
 
@@ -100,7 +100,7 @@
 
 导出 `.phoenix-freecad-desktop.json` 时，结构与现 `workspace.dotfile.example` **兼容**，便于：
 
-- 给仍依赖 dotfile 的旧版 fcdesk 只读使用；
+- 给仍依赖 dotfile 的旧版 Phoenix 只读使用；
 - 人工编辑后再「从 JSON 导入」。
 
 ---
@@ -115,7 +115,7 @@ flowchart LR
     Vue[Vue3 + Vite]
   end
   subgraph server [后端]
-    API[Python HTTP / 现有 fcdesk 模块]
+    API[Python HTTP / 现有 Phoenix 模块]
     Store[phoenix_store]
   end
   subgraph ws [工作空间]

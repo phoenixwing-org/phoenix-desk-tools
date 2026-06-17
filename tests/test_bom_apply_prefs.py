@@ -1,4 +1,4 @@
-"""fcdesk.bom_apply_prefs"""
+"""phoenix.bom_apply_prefs"""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from fcdesk.bom_apply_prefs import (
+from phoenix.bom_apply_prefs import (
     DEFAULT_PART_VERSION,
     DEFAULT_TYPE_CODE,
     load_bom_apply_field_defaults,
@@ -16,7 +16,7 @@ from fcdesk.bom_apply_prefs import (
     recommend_field_fill_values,
     save_bom_apply_field_defaults,
 )
-from fcdesk.config.user_prefs import workspace_dotfile_path
+from phoenix.config.user_prefs import workspace_dotfile_path
 
 
 class TestBomApplyPrefs(unittest.TestCase):

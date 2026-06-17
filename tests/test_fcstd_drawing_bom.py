@@ -7,18 +7,18 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from fcdesk.freecad.fcstd_document_bom_props import (
+from phoenix.freecad.fcstd_document_bom_props import (
     _first_bom_target_object_name,
     is_drawing_primary_mount_context,
     read_body_bom_from_document,
 )
-from fcdesk.freecad.fcstd_drawing_bom import (
+from phoenix.freecad.fcstd_drawing_bom import (
     _iter_model_xlink_candidates,
     _linked_object_fcstd_attr,
     resolve_drawing_bom,
 )
-from fcdesk.freecad.fcstd_embedded_attrs import write_embedded_bom_attrs
-from fcdesk.services.bom_apply_service import load_bom_preview, save_bom_to_fcstd
+from phoenix.freecad.fcstd_embedded_attrs import write_embedded_bom_attrs
+from phoenix.services.bom_apply_service import load_bom_preview, save_bom_to_fcstd
 
 MODEL_DOC = """<?xml version='1.0' encoding='utf-8'?>
 <Document SchemaVersion="4" FileVersion="1">
@@ -173,7 +173,7 @@ class DrawingBomTest(unittest.TestCase):
         self.assertEqual(vals.get("PartNumber", ""), "")
 
     def test_recommend_filename_for_drawing_with_xlink(self) -> None:
-        from fcdesk.services.bom_apply_service import recommend_filename_for_values
+        from phoenix.services.bom_apply_service import recommend_filename_for_values
 
         model = self.root / "8003.001-H-PX-滑轨.FCStd"
         drawing = self.root / "8003.001-H-PX-滑轨.Drawing.FCStd"

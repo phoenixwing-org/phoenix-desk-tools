@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from fcdesk.freecad.phoenix_schema import (
+from phoenix.freecad.phoenix_schema import (
     LEGACY_DATABASE_FILENAMES,
     SCHEMA_VERSION,
     T_FILE_ASSET,
@@ -20,7 +20,7 @@ from fcdesk.freecad.phoenix_schema import (
     recreate_database,
     workspace_database_path,
 )
-from fcdesk.freecad.phoenix_store import connect
+from phoenix.freecad.phoenix_store import connect
 
 
 class TestPhoenixSchema(unittest.TestCase):

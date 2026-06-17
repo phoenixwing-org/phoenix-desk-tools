@@ -29,15 +29,16 @@ windows-solidworks = ["pywin32>=307"]
 Repository = "https://gitee.com/PhoenixWing321/phoenix-freecad-desktop"
 
 [project.scripts]
-phoenix-fcdesktop = "fcdesk.shell.app:run_app"
-phoenix-web = "fcdesk.web.__main__:main"
+phoenix-desktop = "phoenix.shell.app:run_app"
+phoenix-fcdesktop = "phoenix.shell.app:run_app"  # 兼容旧 CLI 名
+phoenix-web = "phoenix.web.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["fcdesk*"]
+include = ["phoenix*"]
 
 [tool.setuptools.package-data]
-fcdesk = [
+phoenix = [
     "config/app_config.json",
     "config/workspace.custom.json.example",
     "config/workspace.dotfile.example",

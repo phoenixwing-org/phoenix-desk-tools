@@ -4,8 +4,8 @@
 
 | 模式 | 命令 | 端口 | 适用 |
 | --- | --- | --- | --- |
-| **单服务（默认）** | `python -m fcdesk.web` | **5173**（API + `dist` 静态页） | 日常使用、验收 |
-| **开发热更新** | `python -m fcdesk.web --dev` | **5173** Vite + **8765** API | 改 Vue/TS，无需 build |
+| **单服务（默认）** | `python -m phoenix.web` | **5173**（API + `dist` 静态页） | 日常使用、验收 |
+| **开发热更新** | `python -m phoenix.web --dev` | **5173** Vite + **8765** API | 改 Vue/TS，无需 build |
 
 ## 首次
 
@@ -20,17 +20,17 @@ pnpm install    # 仓库根目录；依赖装在 web-ui
 
 ```bash
 # 构建前端（若 dist 不存在会自动尝试 build）+ 启动
-python -m fcdesk.web --build -w /path/to/CAD/workspace
+python -m phoenix.web --build -w /path/to/CAD/workspace
 
 # 已有 web-ui/dist 时
-python -m fcdesk.web -w /path/to/CAD/workspace
+python -m phoenix.web -w /path/to/CAD/workspace
 ```
 
 改 Vue 源码后需重新构建：
 
 ```bash
 pnpm build
-# 重启 python -m fcdesk.web
+# 重启 python -m phoenix.web
 ```
 
 ## 开发模式（Vite 热更新）
@@ -38,7 +38,7 @@ pnpm build
 **一条命令**（推荐）：
 
 ```bash
-python -m fcdesk.web --dev -w /path/to/CAD/workspace
+python -m phoenix.web --dev -w /path/to/CAD/workspace
 ```
 
 - 浏览器打开 **http://127.0.0.1:5173**（Vite）
@@ -49,13 +49,13 @@ python -m fcdesk.web --dev -w /path/to/CAD/workspace
 
 ```bash
 # 终端 1：仅 API
-python -m fcdesk.web --api-only --port 8765 -w /path/to/CAD/workspace
+python -m phoenix.web --api-only --port 8765 -w /path/to/CAD/workspace
 
 # 终端 2：Vite（需与 API 端口一致）
-FCDESK_API_PORT=8765 pnpm dev
+PHOENIX_API_PORT=8765 pnpm dev
 ```
 
-换 API 端口：`python -m fcdesk.web --dev --api-port 9000`（Vite 仍读 `FCDESK_API_PORT`）。
+换 API 端口：`python -m phoenix.web --dev --api-port 9000`（Vite 读 `PHOENIX_API_PORT` 或 `FCDESK_API_PORT`）。
 
 ## 浏览器
 
@@ -70,7 +70,7 @@ FCDESK_API_PORT=8765 pnpm dev
 ## 仅 API（调试）
 
 ```bash
-python -m fcdesk.web --api-only --port 8765
+python -m phoenix.web --api-only --port 8765
 ```
 
 ## 备忘：5173 端口被占用
@@ -82,7 +82,7 @@ kill <PID>
 
 开发模式下 5173 由 Vite 占用，8765 由 Python API 占用；单服务模式下 5173 由 Python 独占。
 
-换单服务端口：`python -m fcdesk.web --port 8765`
+换单服务端口：`python -m phoenix.web --port 8765`
 
 ## 新手指引
 

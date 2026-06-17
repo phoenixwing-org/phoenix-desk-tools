@@ -14,12 +14,12 @@ FreeCAD **没有** 一个统一的、所有工作台都一样的「BOM 对象」
 
 | 来源 | 含义 |
 |------|------|
-| **文件级 PartKey** | `PartNumber.PartVersion` 等产品身份（fcdesk 写在 Body/装配对象 Property 上） |
+| **文件级 PartKey** | `PartNumber.PartVersion` 等产品身份（Phoenix 写在 Body/装配对象 Property 上） |
 | **装配结构** | 谁引用谁：外部 **Link / XLink** 指向其它 `.FCStd` |
 | **图纸** | TechDraw 视图往往通过 **App::Link** 指向模型；图纸文件本身通常 **不** 作为可写 BOM 源 |
 | **树显示名** | 每个引用实例的 **Label**（与 XLink 并列，改名时要同步） |
 
-fcdesk 当前 **BOM 引用表**（`bom_xref`）只认一件事：宿主 FCStd 的 `Document.xml` 里出现的
+Phoenix 当前 **BOM 引用表**（`bom_xref`）只认一件事：宿主 FCStd 的 `Document.xml` 里出现的
 
 ```xml
 <XLink file="相对或绝对路径/某零件.FCStd" …/>
@@ -34,7 +34,7 @@ fcdesk 当前 **BOM 引用表**（`bom_xref`）只认一件事：宿主 FCStd �
 
 ### 2.1 总成里 Link：一级 vs 多级
 
-| 层级 | FreeCAD 表现 | fcdesk 怎么存 |
+| 层级 | FreeCAD 表现 | Phoenix 怎么存 |
 |------|--------------|---------------|
 | **一级（直接子件）** | 总成 `ASSY.FCStd` 的 `PropertyLinkList` / Group 里若干 `<XLink file="子件.FCStd"/>` | `bom_xref` 一行：`(host=总成, target=子件)`；API：`GET /api/bom-xrefs/outgoing` |
 | **多级** | 子件本身也是装配，再 Link 更下层零件 | `bom_xref` 仍只存 **直接边**；多级靠 **沿边遍历**：`load_assembly_tree`（内存展开）或 `bom_tree_occurrence`（物化压平） |
@@ -59,7 +59,7 @@ fcdesk 当前 **BOM 引用表**（`bom_xref`）只认一件事：宿主 FCStd �
 | **A. 独立图纸文件** | `*.Drawing.FCStd`，内含 `TechDraw::*` + 首个 **`App::Link`** | 通常 **1 个** Link 指向模型；Document 里还可能有 **多个 XLink**（其它视图/副本） |
 | **B. 同文件 Part + TechDraw** | 一个 FCStd 里既有 Body 又有工程图 | 模型 **在同文件**，不一定有外部 XLink；图纸视图引用本文件几何 |
 
-图纸-primary 时 fcdesk：
+图纸-primary 时 Phoenix：
 
 1. BOM **只读**，挂在首个 `App::Link`；  
 2. 读模型 BOM 的顺序：**Link.LinkedObject** → 其它 XLink → 文件名去 `.Drawing` 兜底；  
@@ -92,11 +92,11 @@ FreeCAD / PDM 语境下常见说法：
 
 - 在 **装配树 UI** 里能看到多个子节点；  
 - 在 **EBOM（按文件）** 里通常 **不算独立料号**，除非另存为独立 FCStd；  
-- **fcdesk 当前 `bom_xref` 完全扫不到**，因为没有 `<XLink file="…fcstd"/>`。
+- **Phoenix 当前 `bom_xref` 完全扫不到**，因为没有 `<XLink file="…fcstd"/>`。
 
 若业务上要进 BOM，需要额外规则：例如按 Body 导出为虚拟行、或要求「可进 BOM 的零件必须独立成文件 + Link」。这属于 **产品规则**，不是 FreeCAD 内置 BOM。
 
-### 2.5 其它常见情况（fcdesk 相关）
+### 2.5 其它常见情况（Phoenix 相关）
 
 | 情况 | 是否进 `bom_xref` | 备注 |
 |------|-------------------|------|
@@ -166,11 +166,11 @@ flowchart TB
 | 能力 | 状态 |
 |------|------|
 | FreeCAD 内置 BOM 导出（宏/Assembly BOM） | 本仓库 **未** 集成（[BOM工具说明.md](BOM工具说明.md)） |
-| fcdesk Web **BOM 列表** | 总成 **一层** 子件 + 全部引用边分页 |
-| fcdesk **装配结构** | **多级** JSON 树（`full` / `first`） |
+| Phoenix Web **BOM 列表** | 总成 **一层** 子件 + 全部引用边分页 |
+| Phoenix **装配结构** | **多级** JSON 树（`full` / `first`） |
 | 多级 EBOM 导出 CSV/Excel | 文档标为 **未实现** |
 
-fcdesk 的 BOM 本质是 **「按 FCStd 文件 + XLink 图」的 EBOM**，不是 FreeCAD 特征树里每一个 Body 的 MBOM。
+Phoenix 的 BOM 本质是 **「按 FCStd 文件 + XLink 图」的 EBOM**，不是 FreeCAD 特征树里每一个 Body 的 MBOM。
 
 ---
 
@@ -187,7 +187,7 @@ fcdesk 的 BOM 本质是 **「按 FCStd 文件 + XLink 图」的 EBOM**，不是
 
 ## 7. 小结表（快速对照）
 
-| 结构 | FreeCAD 典型叫法 | 进 fcdesk `bom_xref`？ | 多级怎么查？ |
+| 结构 | FreeCAD 典型叫法 | 进 Phoenix `bom_xref`？ | 多级怎么查？ |
 |------|------------------|------------------------|--------------|
 | 总成 → Link 子 FCStd | XLink / 外部引用 | ✅ | outgoing 一层；`assembly-tree` / 物化表 多级 |
 | 子装配再 Link | 多级装配 | ✅ 每层直接边各一行 | full 树 |

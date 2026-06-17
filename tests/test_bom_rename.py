@@ -7,7 +7,7 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from fcdesk.services.bom_apply_service import has_unsaved_document_attrs, rename_bom_fcstd_file
+from phoenix.services.bom_apply_service import has_unsaved_document_attrs, rename_bom_fcstd_file
 
 _MIN_DOC = """<?xml version='1.0' encoding='utf-8'?>
 <Document SchemaVersion="4" FileVersion="1">

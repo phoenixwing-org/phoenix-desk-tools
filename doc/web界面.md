@@ -7,7 +7,7 @@
 
 ## 1. 目标
 
-用 **Web 前端**（Vue 3 + Vite + pnpm + TypeScript）+ **Python 服务端**，逐步替代 CustomTkinter 桌面壳；**后台复用现有 `fcdesk/`、`scripts/` 逻辑**，不重写 BOM / XLink / 扫描算法。
+用 **Web 前端**（Vue 3 + Vite + pnpm + TypeScript）+ **Python 服务端**，逐步替代 CustomTkinter 桌面壳；**后台复用现有 `phoenix/`、`scripts/` 逻辑**，不重写 BOM / XLink / 扫描算法。
 
 ---
 
@@ -52,10 +52,10 @@ exports/*.json  （含 fcstd_map、偏好快照等）
 
 | 组件 | 路径 |
 | --- | --- |
-| 服务层 | `fcdesk/services/` — workspace、bom_apply、launcher、fcstd_map、xlink_fix、part_dedup、step_batch、sw_step_export |
-| API | `fcdesk/web/app.py` — `python -m fcdesk.web` |
+| 服务层 | `phoenix/services/` — workspace、bom_apply、launcher、fcstd_map、xlink_fix、part_dedup、step_batch、sw_step_export |
+| API | `phoenix/web/app.py` — `python -m phoenix.web` |
 | 前端 | `web-ui/` — Vue3 + Vite + TS（壳层 + 配置 + 属性回写 + FCStd 索引 + XLink + 查重 + STEP + SW→STEP） |
-| 启动器配置 | 本机 `…/phoenix-wing/fcdesk/launcher.json`（见 [启动器配置路径-规划讨论.md](启动器配置路径-规划讨论.md)） |
+| 启动器配置 | 本机 `…/phoenix-wing/phoenix/launcher.json`（见 [启动器配置路径-规划讨论.md](启动器配置路径-规划讨论.md)） |
 | CAD 索引库 | `<工作空间>/.phoenix/phoenix-workspace.sqlite`（扫描后按需导出 `fcstd_map.json`） |
 | 运行说明 | [web-ui/README.md](../web-ui/README.md) |
 | 新手指引 | [新手指引.md](新手指引.md)、[Web壳层-使用说明.md](Web壳层-使用说明.md) |
@@ -63,7 +63,7 @@ exports/*.json  （含 fcstd_map、偏好快照等）
 ```bash
 pip install -e ".[web]"
 cd web-ui && pnpm install
-python -m fcdesk.web --build -w /path/to/workspace
+python -m phoenix.web --build -w /path/to/workspace
 # 浏览器 http://127.0.0.1:5173 （单端口：API + 前端）
 ```
 

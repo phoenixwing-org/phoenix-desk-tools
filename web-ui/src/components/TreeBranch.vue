@@ -118,8 +118,8 @@ function treeKindTag(kind?: string) {
 }
 
 .tree-twistie-placeholder {
-  width: var(--fcdesk-expand-size);
-  height: var(--fcdesk-expand-size);
+  width: var(--phoenix-expand-size);
+  height: var(--phoenix-expand-size);
   flex-shrink: 0;
   visibility: hidden;
 }

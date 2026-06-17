@@ -8,8 +8,8 @@ defineProps<{
 
 <template>
   <span
-    class="fcdesk-expand-twistie"
-    :class="{ 'is-expanded': expanded, 'fcdesk-expand-twistie-inline': inline }"
+    class="phoenix-expand-twistie"
+    :class="{ 'is-expanded': expanded, 'phoenix-expand-twistie-inline': inline }"
     aria-hidden="true"
   />
 </template>

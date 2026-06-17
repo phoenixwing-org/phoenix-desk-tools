@@ -109,7 +109,7 @@ async function loadCatalog() {
     const msg = String(e);
     catalogError.value =
       msg === "Not Found"
-        ? "无法加载总成列表（API 未就绪）。请重启 python -m fcdesk.web --dev 后重试。"
+        ? "无法加载总成列表（API 未就绪）。请重启 python -m phoenix.web --dev 后重试。"
         : msg;
     catalogHosts.value = [];
     shell.appendLog(`[BOM列表] ${catalogError.value}`, { source: "bom_xref" });

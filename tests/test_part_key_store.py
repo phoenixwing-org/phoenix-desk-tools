@@ -6,13 +6,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from fcdesk.freecad.fcstd_mapping import (
+from phoenix.freecad.fcstd_mapping import (
     FILE_STATUS_MISSING,
     FILE_STATUS_PRESENT,
     FcstdMapDocument,
     FcstdMapEntry,
 )
-from fcdesk.freecad.phoenix_store import (
+from phoenix.freecad.phoenix_store import (
     connect,
     format_part_key,
     get_part_key_detail,

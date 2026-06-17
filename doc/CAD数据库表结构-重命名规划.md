@@ -41,9 +41,9 @@
 
 | 模块 | 职责 |
 | --- | --- |
-| `fcdesk/freecad/phoenix_schema.py` | 常量、`CREATE_SCHEMA_DDL`、`detect_legacy_database`、`recreate_database`、`database_status_payload` |
-| `fcdesk/freecad/phoenix_store.py` | `connect()` 前自动 `discard_legacy_database_files`、业务 SQL |
-| `fcdesk/services/phoenix_database_service.py` | 状态 / 重建封装 |
+| `phoenix/freecad/phoenix_schema.py` | 常量、`CREATE_SCHEMA_DDL`、`detect_legacy_database`、`recreate_database`、`database_status_payload` |
+| `phoenix/freecad/phoenix_store.py` | `connect()` 前自动 `discard_legacy_database_files`、业务 SQL |
+| `phoenix/services/phoenix_database_service.py` | 状态 / 重建封装 |
 | Web API | `GET /api/phoenix/database/status`、`POST /api/phoenix/database/recreate` |
 | Web UI | `AppShell` 旧库横幅 + 确认重建 |
 

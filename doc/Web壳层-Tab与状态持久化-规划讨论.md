@@ -157,7 +157,7 @@ type WorkbenchTab = {
 
 ### 4.4 每页 Tab 上限（后台配置）
 
-配置来源：`fcdesk/config/app_config.json` → `workbench.pages`（经 `/api/app-config` 下发 Web）。
+配置来源：`phoenix/config/app_config.json` → `workbench.pages`（经 `/api/app-config` 下发 Web）。
 
 | 字段 | 含义 |
 | --- | --- |

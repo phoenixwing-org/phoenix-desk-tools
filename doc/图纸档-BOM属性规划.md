@@ -21,9 +21,9 @@
 - **纯图纸文件**：不在 UI 中单独维护 BOM；从 **App::Link → 模型 FCStd** 读取；Document 上若存在镜像 Property，挂在 **首个 `App::Link`** 且 **`ro=1`（只读）**。  
 - **同文件内 Part + TechDraw**：仍按 Body / Part 挂载（现有逻辑）。
 
-## 3. FreeCAD 建模方式（fcdesk 不强制）
+## 3. FreeCAD 建模方式（Phoenix 不强制）
 
-| 方式 | 说明 | fcdesk |
+| 方式 | 说明 | Phoenix |
 | --- | --- | --- |
 | A. 模型文件 + Link 到新图纸文件 | 常见 | 模型可写；图纸只读跟 Link |
 | B. 同一 FCStd 内 Part 下建 TechDraw | 单文件 | 仍挂 Body/Part，可写 |
@@ -59,4 +59,4 @@ API 返回 `bom_readonly=true`、`bom_source_rel=模型相对路径`。
 
 ## 6. 改代码时请同步
 
-`fcdesk/freecad/fcstd_drawing_bom.py`、`fcstd_document_bom_props.py`、`fcstd_embedded_attrs.py`、`bom_apply_service.py`（`BomPreview.bom_readonly`）、`web-ui` 文件详情、`tests/test_fcstd_drawing_bom.py`。
+`phoenix/freecad/fcstd_drawing_bom.py`、`fcstd_document_bom_props.py`、`fcstd_embedded_attrs.py`、`bom_apply_service.py`（`BomPreview.bom_readonly`）、`web-ui` 文件详情、`tests/test_fcstd_drawing_bom.py`。

@@ -7,9 +7,9 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from fcdesk.freecad.fcstd_mapping import FcstdMapDocument, FcstdMapEntry
-from fcdesk.freecad.phoenix_store import save_fcstd_document
-from fcdesk.services.bom_apply_service import recommend_bom_field, recommend_bom_fields_all
+from phoenix.freecad.fcstd_mapping import FcstdMapDocument, FcstdMapEntry
+from phoenix.freecad.phoenix_store import save_fcstd_document
+from phoenix.services.bom_apply_service import recommend_bom_field, recommend_bom_fields_all
 
 _MIN_DOC = """<?xml version='1.0' encoding='utf-8'?>
 <Document SchemaVersion="4" FileVersion="1">
@@ -133,7 +133,7 @@ class TestRecommendBomField(unittest.TestCase):
             fcstd = root / rel
             _write_fcstd(fcstd, label="100001.001-本体")
 
-            from fcdesk.services.bom_apply_service import load_bom_preview
+            from phoenix.services.bom_apply_service import load_bom_preview
 
             preview = load_bom_preview(root, rel)
             self.assertTrue(preview.is_fcstd)

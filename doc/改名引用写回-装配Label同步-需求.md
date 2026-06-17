@@ -170,9 +170,9 @@ sequenceDiagram
 
 | 层 | 文件 |
 | --- | --- |
-| 核心 | `fcdesk/freecad/rename_analysis/xlink.py` — 扩展写回或新增 `link_label.py` |
-| 服务 | `fcdesk/services/rename_analysis_service.py` — apply 流程调用 |
-| 索引 | 读目标 Label：`fcdesk/fcstd_document_bom_props.py` 或 CAD 索引只读 API |
+| 核心 | `phoenix/freecad/rename_analysis/xlink.py` — 扩展写回或新增 `link_label.py` |
+| 服务 | `phoenix/services/rename_analysis_service.py` — apply 流程调用 |
+| 索引 | 读目标 Label：`phoenix/fcstd_document_bom_props.py` 或 CAD 索引只读 API |
 | 前端 | `RenameAnalysisPanel.vue` — 可选展示 `proposed_label` |
 | 测试 | `tests/test_rename_ref_fix.py`、`tests/test_bom_xref.py` |
 

@@ -70,4 +70,4 @@ flowchart LR
 ## 实现文件
 
 - 前端：`web-ui/src/pages/BomExportPage.vue`
-- 后端：`fcdesk/services/bom_xref_service.py`；`fcdesk/services/cad_index/`
+- 后端：`phoenix/services/bom_xref_service.py`；`phoenix/services/cad_index/`

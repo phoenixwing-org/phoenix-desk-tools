@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from fcdesk.freecad.cad_index_types import (
+from phoenix.freecad.cad_index_types import (
     ASSET_KIND_CAD_EXCHANGE,
     ASSET_KIND_FCSTD,
     ASSET_KIND_IMAGE,

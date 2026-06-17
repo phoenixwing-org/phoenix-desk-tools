@@ -6,8 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from fcdesk.freecad.part_naming import PartNamingParser
-from fcdesk.services.part_key_service import resolve_part_key_from_workspace_rel
+from phoenix.freecad.part_naming import PartNamingParser
+from phoenix.services.part_key_service import resolve_part_key_from_workspace_rel
 
 
 class TestPartKeyHints(unittest.TestCase):
