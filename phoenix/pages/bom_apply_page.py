@@ -345,7 +345,7 @@ class BomApplyPage(BasePage):
                 "**从ZIP内写入界面**：仅从当前包内 Document / 旧侧车读取可写字段，覆盖下方表单（不写盘）；无有效字段时会提示。\n"
                 "**从文件名写入界面**：按 ``fcstd_mapping`` 规则从文件名与仓库路径推断零件号「版本」「类型」「型号」等并填入（不写盘）；推断不出内容时会提示。\n"
                 "**推荐文件名**：按 ``PartNumber.PartVersion[-TypeCode][-ModelSeries]-名称`` 拼出推荐名；"
-                "空字段会先填入工作空间记忆：**上次零件号 +1**、版本默认 **001**、类型默认 **H**、**上次型号**（存于 ``.phoenix/phoenix-freecad-desktop.json`` 的 ``bom_apply``）。\n"
+                "空字段会先填入工作空间记忆：**上次零件号 +1**、版本默认 **001**、类型默认 **H**、**上次型号**（存于 ``.phoenix/phoenix-workspace-prefs.json`` 的 ``bom_apply``）。\n"
                 "后缀由 **Document.xml 识别类型** 决定（装配 ``.ASSY.FCStd``、图纸 ``.Drawing.FCStd``、零件 ``.FCStd``），"
                 "上方勾选用于过滤「从 ZIP 读取 / 推荐文件名」是否对该类型生效；选中文件时会自动识别类型（亦可点「识别类型」）。\n"
                 "「推荐文件名」仅填入文件名字段；**改名** 前有未写入属性时会询问是否**写入并改名**。\n"

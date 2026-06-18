@@ -8,7 +8,7 @@
 
 ```python
 import sys
-sys.path.append("/path/to/phoenix-freecad-desktop")  # 改成你的路径
+sys.path.append("/path/to/phoenix-desk-tools")  # 改成你的路径
 ```
 
 API 参阅：[Python scripting tutorial](https://wiki.freecad.org/Python_scripting_tutorial)。

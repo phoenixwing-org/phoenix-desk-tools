@@ -3,9 +3,9 @@ requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "phoenix-freecad-desktop"
+name = "phoenix-desk-tools"
 version = "0.1.0"
-description = "FreeCAD 辅助小工具：CustomTkinter 外壳与 FCStd/XLink 相关脚本。"
+description = "Phoenix 桌面工具集：FreeCAD 工作空间管理、BOM、Code 工具等。"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
@@ -26,7 +26,7 @@ web = [
 windows-solidworks = ["pywin32>=307"]
 
 [project.urls]
-Repository = "https://gitee.com/PhoenixWing321/phoenix-freecad-desktop"
+Repository = "https://gitee.com/PhoenixWing321/phoenix-desk-tools.git"
 
 [project.scripts]
 phoenix-desktop = "phoenix.shell.app:run_app"
@@ -41,4 +41,5 @@ phoenix = [
     "config/app_config.json",
     "config/workspace.custom.json.example",
     "config/workspace.dotfile.example",
+    "config/reorder-members.ignore.example",
 ]

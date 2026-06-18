@@ -1,7 +1,7 @@
 # Phoenix 工作空间存储 — 规划讨论
 
 > [文档索引](文档索引.md)  
-> 状态：**讨论稿 · 部分实现**（偏好 JSON 已迁入 **`.phoenix/phoenix-freecad-desktop.json`**；SQLite 主库仍为规划项，见 §1）
+> 状态：**讨论稿 · 部分实现**（偏好 JSON 已迁入 **`.phoenix/phoenix-workspace-prefs.json`**；SQLite 主库仍为规划项，见 §1）
 
 ---
 
@@ -12,8 +12,8 @@
 | 位置 | 内容 |
 | --- | --- |
 | `phoenix/config/workspace.custom.json` | 启动器级：最近工作空间、`freecad_dir`、窗口几何 |
-| `<工作空间根>/.phoenix/phoenix-freecad-desktop.json` | 各功能页偏好（`fc_linkfix`、`step_batch`、`bom_apply` …） |
-| `<工作空间根>/.phoenix-freecad-desktop.json` | **遗留**；读取时迁入 `.phoenix/` |
+| `<工作空间根>/.phoenix/phoenix-workspace-prefs.json` | 各功能页偏好（`fc_linkfix`、`step_batch`、`bom_apply` …） |
+| `<工作空间根>/.phoenix/phoenix-freecad-desktop.json` 或根目录 `.phoenix-freecad-desktop.json` | **遗留**；读取时自动复制为 `phoenix-workspace-prefs.json` |
 | `<工作空间根>/fcstd_map.json` | FCStd 索引（与 xlink 脚本共用） |
 
 属性回写「上次零件号 / 默认版本」等已写入 dotfile 的 `bom_apply` 小节（`phoenix/bom_apply_prefs.py`）。
@@ -33,7 +33,7 @@
 ```
 
 - **读写路径**：应用启动后通过 `phoenix_store` 访问 SQLite；各页偏好、改名事件、`file_asset`、属性回写记忆、Tab/`ui_session` 等均落表。
-- **JSON 导出**：仅当用户在界面或 API 中选择 **「导出 JSON」**（或等价命令）时，才从库中**序列化**出 `.phoenix-freecad-desktop.json` 形态、或 `fcstd_map.json` 片段、或自定义导出包——**不是日常写盘路径**。
+- **JSON 导出**：仅当用户在界面或 API 中选择 **「导出 JSON」**（或等价命令）时，才从库中**序列化**出 `phoenix-workspace-prefs.json` 形态、或 `fcstd_map.json` 片段、或自定义导出包——**不是日常写盘路径**。
 - **Markdown 报告**：改名分析、XLink 修正等**默认只写 DB**（结构化表 + API 展示）；`.phoenix/reports/*.md` **仅**在用户点击「导出报告」时生成（与 STEP 批量 `FCD_BATCH_WRITE_REPORT` 默认关一致）。
 - **导入 JSON**（可选对称能力）：一次性迁移旧 dotfile / 手工编辑的 JSON → 写入 SQLite，完成后仍以库为准。
 
@@ -98,7 +98,7 @@
 
 ### 4.3 导出 JSON 的形态
 
-导出 `.phoenix-freecad-desktop.json` 时，结构与现 `workspace.dotfile.example` **兼容**，便于：
+导出 `phoenix-workspace-prefs.json` 时，结构与现 `workspace.dotfile.example` **兼容**，便于：
 
 - 给仍依赖 dotfile 的旧版 Phoenix 只读使用；
 - 人工编辑后再「从 JSON 导入」。
@@ -138,7 +138,7 @@ flowchart LR
 
 | 阶段 | 行为 |
 | --- | --- |
-| **M0（当前）** | 偏好 JSON 在 **`.phoenix/phoenix-freecad-desktop.json`**；根目录 dotfile 仅迁移读取 |
+| **M0（当前）** | 偏好 JSON 在 **`.phoenix/phoenix-workspace-prefs.json`**；根目录 dotfile 仅迁移读取 |
 | **M1** | 双写：SQLite + dotfile（过渡，便于回滚） |
 | **M2** | 仅 SQLite；dotfile 仅 **导入 / 导出** |
 | **M3** | 默认不生成 dotfile；文档与示例移除根目录 JSON 依赖 |

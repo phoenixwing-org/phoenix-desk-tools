@@ -8,7 +8,7 @@
 
 ## 1. 问题从哪来
 
-当前仓库 **phoenix-freecad-desktop** 已同时具备：
+当前仓库 **phoenix-desk-tools** 已同时具备：
 
 - Web 壳层（Tab、侧栏、配置、运行日志、`ui_session`）
 - FreeCAD 专用能力（CAD 索引、BOM、改名、XLink）
@@ -28,7 +28,7 @@
 ```mermaid
 flowchart TB
   subgraph A [A. 现状 Monorepo]
-    FCD[phoenix-freecad-desktop]
+    FCD[phoenix-desk-tools]
     FCD --> WEB[web-ui]
     FCD --> PY[Phoenix Python]
     FCD --> DB[(phoenix-workspace.sqlite)]
@@ -45,7 +45,7 @@ flowchart TB
 
   subgraph C [C. 多仓库]
     REPO1[phoenix-shell 仓库]
-    REPO2[phoenix-freecad 仓库]
+    REPO2[phoenix-desk-tools CAD 插件]
     REPO1 -->|pip / npm 依赖| REPO2
   end
 ```
@@ -54,7 +54,7 @@ flowchart TB
 | --- | --- | --- | --- |
 | **A. 保持单仓** | 仅做表前缀 + 模块分包 | 改动最小、发布一条线 | 「平台」边界仍模糊 |
 | **B. 同仓分包**（**推荐过渡**） | `phoenix/shell/` + `phoenix/freecad/` + 未来 `phoenix/<app>/` | 可渐进抽 `phoenix_core`；插件注册表 | 需约定 API 面 |
-| **C. 独立仓库** | `phoenix-shell` PyPI + npm，`phoenix-freecad` 依赖之 | 多产品复用壳层 | 版本对齐、CI 成本高 |
+| **C. 独立仓库** | `phoenix-shell` PyPI + npm，`phoenix-desk-tools`（CAD 插件）依赖之 | 多产品复用壳层 | 版本对齐、CI 成本高 |
 
 **建议路径**：先 **A → B**（本仓库内命名空间与表前缀落地），待第二个非 FreeCAD 应用原型验证后再评估 **C**。
 
@@ -178,7 +178,7 @@ flowchart TB
 
 ## 7. 与「独立项目」的边界
 
-| 留在 phoenix-freecad-desktop | 可抽到 phoenix-shell（日后） |
+| 留在 phoenix-desk-tools | 可抽到 phoenix-shell（日后） |
 | --- | --- |
 | FreeCAD BOM / XLink / STEP 批量 | Tab 工作台、`ui_session` |
 | `phoenix_cad_*` 表与服务 | 配置 Modal、原生选目录 |
@@ -212,7 +212,7 @@ flowchart TB
 ### 远期（可选拆仓）
 
 - [ ] 新建 `phoenix-shell` 包：仅 shell + ui_session + 通用 API
-- [ ] `phoenix-freecad` 依赖 `phoenix-shell`，注册插件
+- [ ] `phoenix-desk-tools` 依赖 `phoenix-shell`，注册插件
 - [ ] 文档站 / 示例「hello-plugin」
 
 ---

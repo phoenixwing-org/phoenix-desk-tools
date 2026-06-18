@@ -1,5 +1,5 @@
 """
-PyInstaller 打包脚本 - 生成 phoenix-freecad-desktop 的单文件 exe
+PyInstaller 打包脚本 - 生成 phoenix-desk-tools 的单文件 exe
 
 用法:
   1. 安装 PyInstaller: pip install pyinstaller

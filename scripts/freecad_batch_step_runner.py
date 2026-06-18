@@ -54,7 +54,7 @@ def main() -> None:
             "  export FCD_BATCH_OUT_DIR=/path/out\n"
             "  export FCD_BATCH_SKIP_EXISTING=0\n"
             "  /Applications/FreeCAD.app/Contents/Resources/bin/freecadcmd \\\n"
-            "      /path/to/phoenix-freecad-desktop/scripts/freecad_batch_step_runner.py\n\n"
+            "      /path/to/phoenix-desk-tools/scripts/freecad_batch_step_runner.py\n\n"
             "phoenix 界面「运行 STEP 批量」会自动注入上述环境变量。\n"
         )
         _runner_stderr(msg)

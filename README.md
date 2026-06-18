@@ -1,8 +1,8 @@
-# phoenix-freecad-desktop
+# phoenix-desk-tools
 
-[Gitee](https://gitee.com/PhoenixWing321/phoenix-freecad-desktop) · MIT
+[Gitee](https://gitee.com/PhoenixWing321/phoenix-desk-tools.git) · MIT
 
-**FreeCAD 管理工具**（Web 为主）与 **`scripts/`** 命令行：**XLink 修正**、**FCStd 索引**、**STEP→FCStd** 等工作流。桌面 `python -m phoenix` 仅为**启动器**（配置工作空间 + 打开浏览器）。
+**Phoenix 桌面工具集**（Web 为主）：FreeCAD 工作空间管理、BOM、Code 工具等；**`scripts/`** 命令行含 **XLink 修正**、**FCStd 索引**、**STEP→FCStd** 等工作流。桌面 `python -m phoenix` 仅为**启动器**（配置工作空间 + 打开浏览器）。
 
 | 路径 | 内容 |
 | --- | --- |
@@ -15,7 +15,7 @@
 ## 快速启动（桌面启动器）
 
 ```bash
-cd /path/to/phoenix-freecad-desktop
+cd /path/to/phoenix-desk-tools
 python3 -m venv .venv-desktop && source .venv-desktop/bin/activate
 pip install -U pip && pip install -e ".[web]"
 python -m phoenix              # 配置工作空间，点「打开 Web 版」
@@ -72,10 +72,9 @@ python -m phoenix.web -w /path/to/CAD/workspace
 
 | 项 | 名称 |
 | --- | --- |
-| Gitee / 发行名 | `phoenix-freecad-desktop` |
-| Python import 包名 | `phoenix`（原 `phoenix`，迁移中） |
-| 桌面 CLI | `phoenix-desktop`（原 `phoenix-desktop`） |
+| Gitee / 发行名 | `phoenix-desk-tools`（旧名 `phoenix-freecad-desktop`） |
+| Python import 包名 | `phoenix` |
+| 桌面 CLI | `phoenix-desktop` |
 | Web CLI | `phoenix-web` |
 | 本机 launcher | `…/phoenix-wing/phoenix/launcher.json` |
-
-包重命名清单见 [doc/TODO.md](doc/TODO.md) § P2。
+| 工作空间偏好 | `.phoenix/phoenix-workspace-prefs.json` |

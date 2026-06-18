@@ -1,13 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
+# PyInstaller spec（Windows）。克隆目录名现为 phoenix-desk-tools；按本机路径修改下方绝对路径。
 
 block_cipher = None
 
 a = Analysis(
-    ['F:\\HSJ\\phoenix-freecad-desktop\\phoenix\\__main__.py'],
-    pathex=['F:\\HSJ\\phoenix-freecad-desktop'],
+    ['F:\\HSJ\\phoenix-desk-tools\\phoenix\\__main__.py'],
+    pathex=['F:\\HSJ\\phoenix-desk-tools'],
     binaries=[],
     datas=[
-        ('F:\\HSJ\\phoenix-freecad-desktop\\phoenix\\config\\app_config.json', 'phoenix/config'),
+        ('F:\\HSJ\\phoenix-desk-tools\\phoenix\\config\\app_config.json', 'phoenix/config'),
     ],
     hiddenimports=['customtkinter', 'darkdetect', 'tkinter', 'tkinter.ttk', 'tkinter.filedialog', 'tkinter.messagebox', 'PIL', 'darkdetect._dummy', 'darkdetect._windows_detect'],
     hookspath=[],

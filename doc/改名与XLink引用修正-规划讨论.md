@@ -218,7 +218,7 @@ CREATE TABLE xlink_patch_log (
 | `<工作空间根>/.phoenix/exports/*.json` | 用户触发的 JSON 导出（含 dotfile 兼容快照、`fcstd_map` 等） |
 | `<工作空间根>/.phoenix/schema/` | 可选：DDL / 迁移版本 |
 | `<工作空间根>/fcstd_map.json` | **非默认写盘**；由索引任务写库后 **按需导出**，供 xlink 脚本（或脚本日后读库） |
-| `<工作空间根>/.phoenix-freecad-desktop.json` | **遗留（当前代码仍会写）**；目标态仅 **导入 / 导出**，日常不生成 |
+| `<工作空间根>/.phoenix/phoenix-freecad-desktop.json` 或根目录 `.phoenix-freecad-desktop.json` | **遗留**；读取时自动复制为 `phoenix-workspace-prefs.json` |
 
 **.gitignore 建议**（实现时）：默认忽略整个 `.phoenix/`（或至少 `*.sqlite`）。
 

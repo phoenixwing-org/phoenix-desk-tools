@@ -1364,23 +1364,32 @@ export function exportPartDedupCsv(results?: PartDedupScanResult["results"]) {
 export type ReorderMembersPrefs = {
   workspace_path: string;
   workspace_path_display: string;
-  dry_run: boolean;
   cpp_only: boolean;
   header_only: boolean;
   sort_members: boolean;
   verbose: boolean;
   last_selected: string[];
+  ignore_file: string;
+  ignore_file_display: string;
+  ignore_file_exists: boolean;
+  ignore_patterns: string[];
 };
 
-export type ReorderMembersTopDir = {
+export type ReorderMembersEntry = {
   name: string;
+  kind: "dir" | "file";
   source_file_count: number;
 };
 
-export type ReorderMembersTopDirsResponse = {
+export type ReorderMembersTopLevelResponse = {
   workspace_path: string;
   workspace_path_display: string;
-  dirs: ReorderMembersTopDir[];
+  entries: ReorderMembersEntry[];
+  ignored: Array<{ name: string; kind: string; reason: string }>;
+  ignore_file: string;
+  ignore_file_display: string;
+  ignore_file_exists: boolean;
+  ignore_patterns: string[];
 };
 
 export type ReorderMembersRunResult = {
@@ -1392,8 +1401,9 @@ export type ReorderMembersRunResult = {
   cpp_changed?: number;
   hdr_changed?: number;
   files_scanned?: number;
-  dir_results?: Array<{
+  item_results?: Array<{
     name: string;
+    kind: string;
     cpp_changed: number;
     hdr_changed: number;
     files_scanned: number;
@@ -1412,11 +1422,13 @@ export function saveReorderMembersPrefs(prefs: Partial<ReorderMembersPrefs>) {
   });
 }
 
-export function fetchReorderMembersTopDirs() {
-  return jsonFetch<ReorderMembersTopDirsResponse>("/api/code/reorder-members/top-dirs");
+export function fetchReorderMembersTopLevel() {
+  return jsonFetch<ReorderMembersTopLevelResponse>("/api/code/reorder-members/top-level");
 }
 
-export function runReorderMembers(body: Partial<ReorderMembersPrefs> & { top_dirs: string[] }) {
+export function runReorderMembers(
+  body: Partial<ReorderMembersPrefs> & { targets: string[]; dry_run?: boolean },
+) {
   return jsonFetch<ReorderMembersRunResult>("/api/code/reorder-members/run", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

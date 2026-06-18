@@ -6,7 +6,7 @@ import os
 import sys
 from pathlib import Path
 
-# 与 Gitee 组织 PhoenixWing321 / 仓库 phoenix-freecad-desktop 一致
+# 与 Gitee 组织 PhoenixWing321 / 仓库 phoenix-desk-tools 一致
 _VENDOR_ID = "phoenix-wing"
 _APP_ID = "phoenix"
 _LAUNCHER_FILENAME = "launcher.json"

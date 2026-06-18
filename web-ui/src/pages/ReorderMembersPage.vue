@@ -2,39 +2,40 @@
 import { computed, onMounted, ref } from "vue";
 import {
   fetchReorderMembersPrefs,
-  fetchReorderMembersTopDirs,
+  fetchReorderMembersTopLevel,
   runReorderMembers,
   saveReorderMembersPrefs,
-  type ReorderMembersTopDir,
+  type ReorderMembersEntry,
 } from "../api";
 import PageHelpButton from "../components/PageHelpButton.vue";
 import { useAppShell } from "../composables/useAppShell";
 
 const shell = useAppShell();
 
-const dryRun = ref(true);
 const cppOnly = ref(false);
 const headerOnly = ref(false);
 const sortMembers = ref(false);
-const verbose = ref(true);
+const verbose = ref(false);
 
 const workspaceDisplay = ref("");
-const dirs = ref<ReorderMembersTopDir[]>([]);
+const ignoreFileDisplay = ref("");
+const ignoreFileExists = ref(false);
+const entries = ref<ReorderMembersEntry[]>([]);
+const ignoredCount = ref(0);
 const selected = ref<Set<string>>(new Set());
 
-const loadingDirs = ref(false);
+const loading = ref(false);
 const saving = ref(false);
 const running = ref(false);
 const loadError = ref("");
 
 const selectedCount = computed(() => selected.value.size);
 const allChecked = computed(
-  () => dirs.value.length > 0 && dirs.value.every((d) => selected.value.has(d.name)),
+  () => entries.value.length > 0 && entries.value.every((e) => selected.value.has(e.name)),
 );
 
 function prefsPayload() {
   return {
-    dry_run: dryRun.value,
     cpp_only: cppOnly.value,
     header_only: headerOnly.value,
     sort_members: sortMembers.value,
@@ -43,10 +44,15 @@ function prefsPayload() {
   };
 }
 
+function kindLabel(kind: string) {
+  return kind === "file" ? "文件" : "目录";
+}
+
 async function loadPrefs() {
   const prefs = await fetchReorderMembersPrefs();
   workspaceDisplay.value = prefs.workspace_path_display || shell.workspacePath.value;
-  dryRun.value = prefs.dry_run;
+  ignoreFileDisplay.value = prefs.ignore_file_display || prefs.ignore_file;
+  ignoreFileExists.value = prefs.ignore_file_exists;
   cppOnly.value = prefs.cpp_only;
   headerOnly.value = prefs.header_only;
   sortMembers.value = prefs.sort_members;
@@ -54,20 +60,23 @@ async function loadPrefs() {
   selected.value = new Set(prefs.last_selected || []);
 }
 
-async function refreshDirs() {
-  loadingDirs.value = true;
+async function refreshList() {
+  loading.value = true;
   loadError.value = "";
   try {
-    const data = await fetchReorderMembersTopDirs();
+    const data = await fetchReorderMembersTopLevel();
     workspaceDisplay.value = data.workspace_path_display || workspaceDisplay.value;
-    dirs.value = data.dirs;
-    const names = new Set(data.dirs.map((d) => d.name));
+    ignoreFileDisplay.value = data.ignore_file_display || data.ignore_file;
+    ignoreFileExists.value = data.ignore_file_exists;
+    entries.value = data.entries;
+    ignoredCount.value = data.ignored?.length ?? 0;
+    const names = new Set(data.entries.map((e) => e.name));
     selected.value = new Set([...selected.value].filter((n) => names.has(n)));
   } catch (e) {
     loadError.value = String(e);
-    dirs.value = [];
+    entries.value = [];
   } finally {
-    loadingDirs.value = false;
+    loading.value = false;
   }
 }
 
@@ -83,7 +92,7 @@ async function onSave() {
   }
 }
 
-function toggleDir(name: string, checked: boolean) {
+function toggleEntry(name: string, checked: boolean) {
   const next = new Set(selected.value);
   if (checked) next.add(name);
   else next.delete(name);
@@ -91,27 +100,35 @@ function toggleDir(name: string, checked: boolean) {
 }
 
 function toggleAll(checked: boolean) {
-  selected.value = checked ? new Set(dirs.value.map((d) => d.name)) : new Set();
+  selected.value = checked ? new Set(entries.value.map((e) => e.name)) : new Set();
 }
 
-async function onRun() {
+async function onRun(dryRun: boolean) {
   if (!selectedCount.value) {
-    shell.setStatus("请至少勾选一个一级子目录");
+    shell.setStatus("请至少勾选一项");
     return;
   }
+  if (!dryRun) {
+    const ok = window.confirm(
+      "将直接写回选中的 .h / .cpp 文件。\n建议先点「预检」确认变更范围。\n\n确定执行排序？",
+    );
+    if (!ok) return;
+  }
   running.value = true;
-  const mode = dryRun.value ? "预检（dry-run）" : "写盘排序";
-  shell.appendLog(`[C++ 成员排序] ${mode} · ${selectedCount.value} 个目录…`, {
+  const mode = dryRun ? "预检" : "写盘";
+  shell.appendLog(`[C++ 成员排序] ${mode} · ${selectedCount.value} 项…`, {
     source: "reorder_members",
     open: true,
   });
   try {
     const out = await runReorderMembers({
       ...prefsPayload(),
-      top_dirs: [...selected.value],
+      targets: [...selected.value],
+      dry_run: dryRun,
     });
-    shell.appendLog(out.log, { source: "reorder_members" });
-    shell.setStatus(out.summary || (out.ok ? "排序完成" : "排序失败"));
+    const logText = verbose.value ? out.log || out.summary : out.summary || out.log;
+    shell.appendLog(logText || "完成", { source: "reorder_members" });
+    shell.setStatus(out.summary || (out.ok ? "完成" : "失败"));
   } catch (e) {
     shell.appendLog(String(e), { source: "reorder_members" });
     shell.setStatus(String(e));
@@ -123,7 +140,7 @@ async function onRun() {
 onMounted(async () => {
   try {
     await loadPrefs();
-    await refreshDirs();
+    await refreshList();
   } catch (e) {
     shell.setStatus(String(e));
   }
@@ -136,7 +153,7 @@ onMounted(async () => {
       <div class="head-row">
         <h1 class="page-title">C++ 成员排序</h1>
         <p class="page-desc">
-          扫描<strong>当前工作空间</strong>下的一级子目录，勾选模块后按 cxx-code-style 重排 .h / .cpp（结果见运行日志）
+          列出<strong>工作空间一级</strong>目录与 .h/.cpp 文件，勾选后可直接执行或先预检（日志见底部运行窗口）
         </p>
         <div class="head-help">
           <PageHelpButton page-id="reorder_members" />
@@ -149,23 +166,33 @@ onMounted(async () => {
         <div class="form-row">
           <span class="section-label">工作空间</span>
           <span class="mono workspace-path">{{ workspaceDisplay || shell.workspacePath }}</span>
-          <button type="button" class="btn btn-sm" :disabled="loadingDirs" @click="refreshDirs">
-            {{ loadingDirs ? "刷新中…" : "刷新子目录" }}
+          <button type="button" class="btn btn-sm" :disabled="loading" @click="refreshList">
+            {{ loading ? "刷新中…" : "刷新列表" }}
           </button>
         </div>
+        <p class="ignore-hint muted small">
+          忽略规则：内置 + <span class="mono">{{ ignoreFileDisplay || ".phoenix/reorder-members.ignore" }}</span>
+          <span v-if="ignoreFileExists">（已加载）</span>
+          <span v-else>（未建文件则仅内置；可复制 reorder-members.ignore.example）</span>
+          <span v-if="ignoredCount"> · 已隐藏 {{ ignoredCount }} 项</span>
+        </p>
 
         <div class="form-row form-foot">
           <div class="option-chips">
             <label class="opt-chip">
-              <input v-model="dryRun" type="checkbox" />
-              <span>预检（不写盘）</span>
-            </label>
-            <label class="opt-chip">
-              <input v-model="cppOnly" type="checkbox" />
+              <input
+                v-model="cppOnly"
+                type="checkbox"
+                @change="cppOnly && (headerOnly = false)"
+              />
               <span>仅 .cpp</span>
             </label>
             <label class="opt-chip">
-              <input v-model="headerOnly" type="checkbox" />
+              <input
+                v-model="headerOnly"
+                type="checkbox"
+                @change="headerOnly && (cppOnly = false)"
+              />
               <span>仅头文件</span>
             </label>
             <label class="opt-chip">
@@ -183,11 +210,19 @@ onMounted(async () => {
             </button>
             <button
               type="button"
+              class="btn btn-sm"
+              :disabled="running || !selectedCount"
+              @click="onRun(true)"
+            >
+              {{ running ? "…" : "预检" }}
+            </button>
+            <button
+              type="button"
               class="btn primary btn-sm"
               :disabled="running || !selectedCount"
-              @click="onRun"
+              @click="onRun(false)"
             >
-              {{ running ? "处理中…" : dryRun ? "预检排序" : "执行排序" }}
+              {{ running ? "…" : "执行排序" }}
             </button>
           </div>
         </div>
@@ -197,19 +232,19 @@ onMounted(async () => {
     <section class="card results-card">
       <header class="results-head">
         <div class="results-head-row">
-          <span class="section-label">一级子目录</span>
-          <span v-if="dirs.length" class="muted small">
-            已选 {{ selectedCount }} / {{ dirs.length }}
+          <span class="section-label">一级条目</span>
+          <span v-if="entries.length" class="muted small">
+            已选 {{ selectedCount }} / {{ entries.length }}
           </span>
         </div>
       </header>
 
       <p v-if="loadError" class="err-msg">{{ loadError }}</p>
-      <p v-else-if="!loadingDirs && !dirs.length" class="muted hint">
-        工作空间下没有可处理的一级子文件夹（已跳过 .phoenix、web-ui 等）。
+      <p v-else-if="!loading && !entries.length" class="muted hint">
+        没有可列出的目录或源文件（其余项已被忽略规则隐藏）。
       </p>
 
-      <div v-if="dirs.length" class="dir-table-wrap">
+      <div v-if="entries.length" class="dir-table-wrap">
         <table class="dir-table">
           <thead>
             <tr>
@@ -221,21 +256,25 @@ onMounted(async () => {
                   @change="toggleAll(($event.target as HTMLInputElement).checked)"
                 />
               </th>
-              <th>目录名</th>
-              <th class="col-num">.h/.cpp 约</th>
+              <th>名称</th>
+              <th class="col-kind">类型</th>
+              <th class="col-num">源文件</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="d in dirs" :key="d.name">
+            <tr v-for="e in entries" :key="e.name">
               <td class="col-check">
                 <input
                   type="checkbox"
-                  :checked="selected.has(d.name)"
-                  @change="toggleDir(d.name, ($event.target as HTMLInputElement).checked)"
+                  :checked="selected.has(e.name)"
+                  @change="toggleEntry(e.name, ($event.target as HTMLInputElement).checked)"
                 />
               </td>
-              <td class="mono">{{ d.name }}</td>
-              <td class="col-num muted">{{ d.source_file_count }}</td>
+              <td class="mono">{{ e.name }}</td>
+              <td class="col-kind">
+                <span class="kind-badge" :data-kind="e.kind">{{ kindLabel(e.kind) }}</span>
+              </td>
+              <td class="col-num muted">{{ e.source_file_count }}</td>
             </tr>
           </tbody>
         </table>
@@ -257,6 +296,11 @@ onMounted(async () => {
   font-size: 0.875rem;
   opacity: 0.9;
   word-break: break-all;
+}
+
+.ignore-hint {
+  margin: 0.25rem 0 0.5rem;
+  line-height: 1.45;
 }
 
 .dir-table-wrap {
@@ -282,9 +326,24 @@ onMounted(async () => {
   text-align: center;
 }
 
+.col-kind {
+  width: 4.5rem;
+}
+
 .col-num {
-  width: 6rem;
+  width: 5rem;
   text-align: right;
+}
+
+.kind-badge {
+  font-size: 0.75rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: rgba(127, 127, 127, 0.15);
+}
+
+.kind-badge[data-kind="file"] {
+  background: rgba(80, 120, 200, 0.15);
 }
 
 .err-msg {

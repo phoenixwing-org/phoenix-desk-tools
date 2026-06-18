@@ -9,17 +9,19 @@
 ## 1. Web 用法
 
 1. 侧栏打开 **C++ 成员排序**（`reorder_members`）。
-2. 页面自动使用 **当前 Phoenix 工作空间根** 作为 C++ 源码树（无需另设路径；换工程请在 **配置** 里切换工作空间）。
-3. 打开页或点 **刷新子目录**：列出工作空间下 **一级子目录**（跳过 `.phoenix`、`web-ui`、`build` 等）。
-4. **勾选**要处理的模块（至少一个）。
-5. 选项：
-   - **预检（不写盘）**：默认开启，等同 CLI `--dry-run`。
-   - **仅 .cpp** / **仅头文件**：互斥可选。
-   - **成员变量字母序**：仅 `.h` 内成员变量（默认保持源码顺序）。
-   - **详细日志**：每个文件一行 `processing …`。
-6. **预检排序** 或 **执行排序** → 结果写入底部 **运行日志**。
+2. 页面自动使用 **当前 Phoenix 工作空间根** 作为 C++ 源码树（换工程请在 **配置** 里切换工作空间）。
+3. **刷新列表**：列出工作空间下 **一级目录** 与 **一级** `.h` / `.hpp` / `.cpp` 文件（带「目录 / 文件」类型）；其余项按忽略规则隐藏。
+4. **勾选**要处理的条目（至少一项）。
+5. 选项：仅 cpp/头文件、成员变量字母序、详细日志。
+6. **预检**（不写盘）或 **执行排序**（直接写盘，无需先预检）。
 
-偏好保存在工作空间 `.phoenix/…json` 的 `code_reorder` 段（选项与上次勾选，不含独立源码根）。
+偏好保存在工作空间 `.phoenix/phoenix-workspace-prefs.json` 的 `code_reorder` 段（选项与上次勾选）。
+
+### 忽略列表
+
+- **内置**：`.phoenix`、`web-ui`、`build`、`node_modules`、`dist` 等（见 `phoenix/code/reorder_ignore.py`）。
+- **可选文件**：`.phoenix/reorder-members.ignore`（每行一条名称或通配符，`#` 注释；示例见 `phoenix/config/reorder-members.ignore.example`）。
+- 以 `.` 开头的隐藏项始终忽略。
 
 ---
 
@@ -65,8 +67,8 @@ python -m phoenix.code.reorder_members /path/to/module [options]
 | --- | --- | --- |
 | GET | `/api/code/reorder-members/prefs` | 读偏好 |
 | PUT | `/api/code/reorder-members/prefs` | 写偏好 |
-| GET | `/api/code/reorder-members/top-dirs` | 工作空间下一级子目录 + 约略源文件数 |
-| POST | `/api/code/reorder-members/run` | body: `{ top_dirs: string[], …options }` → `{ log, summary, … }` |
+| GET | `/api/code/reorder-members/top-level` | 一级目录+文件；含 `entries[]`（`kind`: dir/file）、`ignored`、`ignore_patterns` |
+| POST | `/api/code/reorder-members/run` | `{ targets: string[], dry_run?: bool, …options }` |
 
 ---
 

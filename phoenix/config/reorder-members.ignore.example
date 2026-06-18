@@ -1,0 +1,11 @@
+# C++ 成员排序：工作空间一级目录/文件名忽略列表
+# 复制为 .phoenix/reorder-members.ignore 后编辑（每行一条，# 开头为注释）
+#
+# 匹配规则：
+#   - 精确名称：build
+#   - 通配符：*.md  test_*
+
+build
+dist
+third_party
+cmake-build-*

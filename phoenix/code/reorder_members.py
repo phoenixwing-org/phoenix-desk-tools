@@ -218,6 +218,62 @@ def _clean_block_text(text: str) -> str:
     return text
 
 
+def _is_cpp_code_position(body: str, index: int) -> bool:
+    """``index`` 不在 ``//``、块注释或字符串/字符字面量内时为真。"""
+    i = 0
+    n = len(body)
+    while i < n and i < index:
+        c = body[i]
+        if c == "/" and i + 1 < n:
+            if body[i + 1] == "/":
+                end = i + 2
+                while end < n and body[end] not in "\r\n":
+                    end += 1
+                if i <= index < end:
+                    return False
+                i = end
+                continue
+            if body[i + 1] == "*":
+                end = i + 2
+                while end + 1 < n and not (body[end] == "*" and body[end + 1] == "/"):
+                    end += 1
+                end = min(end + 2, n)
+                if i <= index < end:
+                    return False
+                i = end
+                continue
+        if c == '"':
+            end = i + 1
+            while end < n:
+                if body[end] == "\\":
+                    end += 2
+                    continue
+                if body[end] == '"':
+                    end += 1
+                    break
+                end += 1
+            if i <= index < end:
+                return False
+            i = end
+            continue
+        if c == "'":
+            end = i + 1
+            while end < n:
+                if body[end] == "\\":
+                    end += 2
+                    continue
+                if body[end] == "'":
+                    end += 1
+                    break
+                end += 1
+            if i <= index < end:
+                return False
+            i = end
+            continue
+        i += 1
+    return True
+
+
 def _advance_past_function_end(body: str, i: int, n: int) -> int:
     """Skip trailing same-line //--- and blank lines after closing brace/semicolon."""
     while i < n and body[i] in " \t":
@@ -433,6 +489,8 @@ def _scan_cpp_blocks(body: str, class_name: str) -> List[Tuple[str, str, str]]:
     prev_end = 0
 
     for m in pat.finditer(body):
+        if not _is_cpp_code_position(body, m.start()):
+            continue
         impl_name = m.group(1)
         func_line_start = body.rfind("\n", 0, m.start()) + 1
         block_start, sep = _walk_back_block_start(body, func_line_start, prev_end, class_name)
@@ -1367,11 +1425,19 @@ def reorder_header_file(
 # ---------------------------------------------------------------------------
 
 
+def normalize_reorder_file_filters(cpp_only: bool, header_only: bool) -> tuple[bool, bool]:
+    """``cpp_only`` 与 ``header_only`` 不可同时为真，否则扩展名集合为空。"""
+    if cpp_only and header_only:
+        return False, False
+    return cpp_only, header_only
+
+
 def iter_source_files(
     root: Path,
     cpp_only: bool,
     header_only: bool,
 ) -> Iterable[Path]:
+    cpp_only, header_only = normalize_reorder_file_filters(cpp_only, header_only)
     exts = set()
     if not header_only:
         exts.add(".cpp")
@@ -1396,6 +1462,7 @@ class ReorderMembersRunResult:
     hdr_changed: int = 0
     dry_run: bool = False
     files_scanned: int = 0
+    changed_files: list[str] = field(default_factory=list)
 
 
 def run_reorder_members(
@@ -1416,6 +1483,7 @@ def run_reorder_members(
 
     cpp_changed = hdr_changed = 0
     files_scanned = 0
+    changed_files: list[str] = []
     source_iter: Iterable[Path]
     if files is not None:
         source_iter = sorted(f for f in files if f.suffix in {".cpp", ".h", ".hpp"})
@@ -1434,21 +1502,27 @@ def run_reorder_members(
         if path.suffix == ".cpp":
             if reorder_cpp_file(path, dry_run):
                 cpp_changed += 1
-                prefix = "[dry-run] " if dry_run else ""
-                lines.append(f"{prefix}cpp  {rel_s}")
+                changed_files.append(rel_s)
+                if verbose:
+                    prefix = "[dry-run] " if dry_run else ""
+                    lines.append(f"{prefix}cpp  {rel_s}")
         else:
             changed, hints = reorder_header_file(path, dry_run, sort_members)
-            for hint in hints:
-                lines.append(f"hint  {rel_s}: {hint}")
+            if verbose:
+                for hint in hints:
+                    lines.append(f"hint  {rel_s}: {hint}")
             if changed:
                 hdr_changed += 1
-                prefix = "[dry-run] " if dry_run else ""
-                lines.append(f"{prefix}header  {rel_s}")
+                changed_files.append(rel_s)
+                if verbose:
+                    prefix = "[dry-run] " if dry_run else ""
+                    lines.append(f"{prefix}header  {rel_s}")
 
-    mode = "would update" if dry_run else "updated"
-    lines.append(
-        f"Done: {mode} {cpp_changed} .cpp, {hdr_changed} header(s) ({files_scanned} file(s) scanned)"
-    )
+    if verbose and (cpp_changed or hdr_changed or files_scanned):
+        mode = "would update" if dry_run else "updated"
+        lines.append(
+            f"Done: {mode} {cpp_changed} .cpp, {hdr_changed} header(s) ({files_scanned} file(s) scanned)"
+        )
     return ReorderMembersRunResult(
         ok=True,
         lines=lines,
@@ -1456,6 +1530,7 @@ def run_reorder_members(
         hdr_changed=hdr_changed,
         dry_run=dry_run,
         files_scanned=files_scanned,
+        changed_files=changed_files,
     )
 
 
@@ -1505,6 +1580,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     for line in result.lines:
         stream = sys.stderr if line.startswith("hint  ") else sys.stdout
         print(line, file=stream, flush=True)
+    if not args.verbose:
+        if result.changed_files:
+            mode = "would update" if args.dry_run else "updated"
+            print(
+                f"Done: {mode} {result.cpp_changed} .cpp, {result.hdr_changed} header(s)",
+                flush=True,
+            )
+            for rel in result.changed_files:
+                print(f"  · {rel}", flush=True)
+        elif result.files_scanned:
+            print(f"Done: no changes ({result.files_scanned} file(s) scanned)", flush=True)
     return 0 if result.ok else 1
 
 

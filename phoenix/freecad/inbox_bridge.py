@@ -11,7 +11,7 @@ from phoenix.freecad.bridge_paths import ensure_bridge_dirs, inbox_dir
 
 
 def enqueue_step_batch(phoenix_clone_root: Path | str, job: StepBatchJob) -> str:
-    """写成 ``{uuid}_queued.json``；``phoenix_clone_root`` 为 **phoenix-freecad-desktop** 克隆根（含 ``phoenix/``）。
+    """写成 ``{uuid}_queued.json``；``phoenix_clone_root`` 为 **phoenix-desk-tools** 克隆根（含 ``phoenix/``）。
 
     （与工具条所选「数据仓库」无关——FreeCAD 里要从该克隆根导入 ``phoenix`` 与 ``scripts``。）
     """

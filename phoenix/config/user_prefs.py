@@ -1,4 +1,4 @@
-"""用户偏好：启动器（本机 ``launcher.json``）+ 工作空间 ``.phoenix/phoenix-freecad-desktop.json``。"""
+"""用户偏好：启动器（本机 ``launcher.json``）+ 工作空间 ``.phoenix/phoenix-workspace-prefs.json``。"""
 
 from __future__ import annotations
 
@@ -13,7 +13,10 @@ from typing import Any
 from phoenix.config.launcher_paths import platform_launcher_prefs_file
 
 WORKSPACE_PHOENIX_DIR = ".phoenix"
-WORKSPACE_PREFS_BASENAME = "phoenix-freecad-desktop.json"
+WORKSPACE_PREFS_BASENAME = "phoenix-workspace-prefs.json"
+# 读取兼容；新写入仅用 ``WORKSPACE_PREFS_BASENAME``
+_LEGACY_WORKSPACE_PREFS_BASENAMES = ("phoenix-freecad-desktop.json",)
+_LEGACY_ROOT_DOTFILE_NAME = ".phoenix-freecad-desktop.json"
 WORKSPACE_DOTFILE_NAME = f"{WORKSPACE_PHOENIX_DIR}/{WORKSPACE_PREFS_BASENAME}"
 MAX_RECENT_WORKSPACES = 10
 
@@ -80,11 +83,10 @@ _WORKSPACE_DEFAULT: dict[str, Any] = {
         "last_model_series": "",
     },
     "code_reorder": {
-        "dry_run": True,
         "cpp_only": False,
         "header_only": False,
         "sort_members": False,
-        "verbose": True,
+        "verbose": False,
         "last_selected": [],
     },
 }
@@ -199,6 +201,32 @@ def workspace_phoenix_dir(repo_root: Path) -> Path:
 
 def workspace_dotfile_path(repo_root: Path) -> Path:
     return workspace_phoenix_dir(repo_root) / WORKSPACE_PREFS_BASENAME
+
+
+def _legacy_workspace_prefs_paths(repo_root: Path) -> list[Path]:
+    rr = repo_root.expanduser().resolve(strict=False)
+    ph = workspace_phoenix_dir(rr)
+    paths: list[Path] = []
+    for name in _LEGACY_WORKSPACE_PREFS_BASENAMES:
+        paths.append(ph / name)
+    paths.append(rr / _LEGACY_ROOT_DOTFILE_NAME)
+    return paths
+
+
+def _migrate_workspace_prefs_if_needed(repo_root: Path) -> None:
+    """旧 dotfile 存在且新文件缺失时，复制到新路径（不删旧文件）。"""
+    target = workspace_dotfile_path(repo_root)
+    if target.is_file():
+        return
+    for legacy in _legacy_workspace_prefs_paths(repo_root):
+        if not legacy.is_file() or legacy == target:
+            continue
+        raw = _read_json(legacy)
+        if not raw:
+            return
+        target.parent.mkdir(parents=True, exist_ok=True)
+        _write_json(target, raw)
+        return
 
 
 def store_path_under_repo(path: Path, repo_root: Path) -> str:
@@ -523,6 +551,7 @@ def save_launcher_freecad_dir(path: Path | None) -> None:
 
 
 def load_workspace_prefs(repo_root: Path) -> dict[str, Any]:
+    _migrate_workspace_prefs_if_needed(repo_root)
     data = deepcopy(_WORKSPACE_DEFAULT)
     raw = _read_json(workspace_dotfile_path(repo_root))
     if not raw:

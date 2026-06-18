@@ -35,14 +35,45 @@
 - [x] **配置**：居中 Modal 弹层；工作空间 **浏览…** 走 Python 原生选目录（macOS osascript）
 - [x] 配置：未扫描工作空间时提示并跳转 **CAD 索引**
 - [x] **Code · C++ 成员排序** Web 页：一级子目录勾选 + 后台排序 + 运行日志（见 [成员函数排序-reorder_members.md](成员函数排序-reorder_members.md)）
+- [ ] **主页 · 导航模块偏好**（见下方 §导航模块偏好）
 - [ ] 桌面 `fcstd_map_page` 分页，去掉 `load_fcstd_document` 全表
 - [ ] 统一运行日志：长任务进度条 / 取消（见 [统一运行日志窗口-规划讨论.md](统一运行日志窗口-规划讨论.md)）
+
+### 导航模块偏好（主页勾选 → 左侧只显示已选）
+
+> **存储建议**：放本机 **`launcher.json`**（与 `shell_layout` 同级），**不放**工作空间 JSON/SQLite——这是「本机要哪些工具栏入口」，与工作空间无关。  
+> 字段草案：`nav_modules.enabled: ["cad", "code"]` 或 `nav_pages.visible: ["fcstd_map", …]`（二选一，实现时定）。
+
+- [ ] `app_config.json`：`navigation[]` 每项加 `module`（如 `cad` / `code`）；`home`、`config` 始终显示
+- [ ] 主页「功能模块」区：CAD / Code 多选勾选（可全选）；保存到 `launcher.json`
+- [ ] API：`GET/PUT /api/config/nav-modules`（或并入现有 shell layout 接口）
+- [ ] `NavSidebar.vue` + `HomePage.vue`：按偏好过滤；未勾选的模块不在侧栏出现
+- [ ] 当前页被隐藏时自动跳主页；Workbench Tab 策略与隐藏页一致
+- [ ] 单测：`user_prefs` 读写、`nav_modules` 默认全选
+
+---
+
+## P2 — 产品 / 仓库重命名（`phoenix-desk-tools` · 已落地）
+
+> 对外品牌：**`phoenix-desk-tools`**；工作空间偏好：**`phoenix-workspace-prefs.json`**（与 `phoenix-workspace.sqlite` 成对）。
+
+| 对象 | 新名 | 状态 |
+| --- | --- | --- |
+| Git / Gitee 仓库 | **`phoenix-desk-tools`** | [x] 远程已改为 `https://gitee.com/PhoenixWing321/phoenix-desk-tools.git` |
+| 工作空间偏好 JSON | **`.phoenix/phoenix-workspace-prefs.json`** | [x] 已实现；读时兼容 `phoenix-freecad-desktop.json` |
+| PyPI / `pyproject.toml` / `package.json` | **`phoenix-desk-tools`** | [x] |
+| Python import 包 | `phoenix` | 不变 |
+
+- [x] 常量 `WORKSPACE_PREFS_BASENAME` → `phoenix-workspace-prefs.json`；读时兼容旧文件名
+- [x] 主要文档 / 注释 / README 替换
+- [x] Gitee 远程仓库改名 + 本地 `git remote`
+- [ ] 可选：`PHOENIX_WORKSPACE_PREFS` 环境变量覆盖 basename
 
 ---
 
 ## P2 — 包重命名（`fcdesk` → `phoenix`）
 
-> Python **import 包名**与目录 `phoenix/` 对齐；Gitee 仓库名仍为 `phoenix-freecad-desktop`。
+> Python **import 包名**与目录 `phoenix/` 对齐；Gitee 仓库名目标 **`phoenix-desk-tools`**（见上方 §产品/仓库重命名）。
 
 - [x] 目录 `phoenix/`、文档与 `python -m phoenix` 命令
 - [x] `pyproject.toml`：`include = ["phoenix*"]`，入口 `phoenix-desktop` + 旧名 `phoenix-desktop`
@@ -83,7 +114,8 @@
 - [ ] `web-ui/src/plugins/freecad/` 页面分包（无行为变化）
 - [ ] Python 路由 `register_freecad_routes` 拆分
 - [ ] 第二个插件原型（验证表前缀 `phoenix_<app>_`）
-- [ ] **`phoenix/code/` 模块**：`app_config.modules` 切换 CAD / Code 导航；Code 工具栏独立入口
+- [~] **`app_config` 模块字段 + 主页导航偏好**（见 P1 §导航模块偏好；与下方原项合并实现）
+- [ ] 工作空间偏好迁入 SQLite（`phoenix_ui_session` 或专用表）；JSON 仅导出——见 [Phoenix工作空间存储-规划讨论.md](Phoenix工作空间存储-规划讨论.md)
 
 ---
 

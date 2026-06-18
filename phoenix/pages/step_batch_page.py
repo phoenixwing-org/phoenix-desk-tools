@@ -287,7 +287,7 @@ class StepBatchPage(BasePage):
             self._log_line(
                 "错误：收件箱桥接需要 **桌面工具源码树** 里的 scripts/freecad_batch_step_fc.py。\n"
                 f"根据当前 phoenix 安装解析到目录：{clone}\n\n"
-                "请在 phoenix-freecad-desktop 克隆根执行 `pip install -e .`，或直接用 `python -m phoenix` 启动。\n"
+                "请在 phoenix-desk-tools 克隆根执行 `pip install -e .`，或直接用 `python -m phoenix` 启动。\n"
                 "若仅有不含 scripts 的包安装，请取消勾选改用 freecadcmd 子进程。"
             )
             return

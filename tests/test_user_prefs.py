@@ -113,10 +113,27 @@ class TestUserPrefs(unittest.TestCase):
                 )
             dot = workspace_dotfile_path(repo)
             self.assertTrue(dot.is_file())
+            self.assertEqual(dot.name, prefs.WORKSPACE_PREFS_BASENAME)
             self.assertEqual(dot.parent.name, prefs.WORKSPACE_PHOENIX_DIR)
             loaded = prefs.load_workspace_prefs(repo)
             self.assertEqual(loaded["step_batch"]["step_dir"], "step")
             self.assertEqual(loaded["step_batch"]["view_fit"], "last")
+
+    def test_migrate_legacy_workspace_dotfile(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td) / "proj"
+            ph = repo / prefs.WORKSPACE_PHOENIX_DIR
+            ph.mkdir(parents=True)
+            legacy = ph / "phoenix-freecad-desktop.json"
+            legacy.write_text(
+                json.dumps({"step_batch": {"step_dir": "legacy-step"}}),
+                encoding="utf-8",
+            )
+            loaded = prefs.load_workspace_prefs(repo)
+            self.assertEqual(loaded["step_batch"]["step_dir"], "legacy-step")
+            migrated = workspace_dotfile_path(repo)
+            self.assertTrue(migrated.is_file())
+            self.assertEqual(migrated.name, prefs.WORKSPACE_PREFS_BASENAME)
 
     def test_apply_launcher_sets_recent_repo(self) -> None:
         with tempfile.TemporaryDirectory() as td:

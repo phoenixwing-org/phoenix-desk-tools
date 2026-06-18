@@ -67,7 +67,7 @@ from phoenix.services.part_dedup_service import (
 )
 from phoenix.services.reorder_members_service import (
     get_reorder_members_prefs,
-    list_reorder_top_level_dirs,
+    list_reorder_top_level_entries,
     run_reorder_members_batch,
     save_reorder_members_prefs,
 )
@@ -352,7 +352,6 @@ class SwStepPrefsBody(BaseModel):
 
 
 class ReorderMembersPrefsBody(BaseModel):
-    dry_run: bool | None = None
     cpp_only: bool | None = None
     header_only: bool | None = None
     sort_members: bool | None = None
@@ -361,7 +360,9 @@ class ReorderMembersPrefsBody(BaseModel):
 
 
 class ReorderMembersRunBody(ReorderMembersPrefsBody):
-    top_dirs: list[str]
+    targets: list[str] | None = None
+    top_dirs: list[str] | None = None  # 兼容旧字段名
+    dry_run: bool = False
 
 
 def _ensure_phoenix_logging() -> None:
@@ -1324,21 +1325,24 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
+    @app.get("/api/code/reorder-members/top-level")
     @app.get("/api/code/reorder-members/top-dirs")
-    def api_reorder_members_top_dirs() -> dict:
+    def api_reorder_members_top_level() -> dict:
         try:
-            return list_reorder_top_level_dirs(get_workspace())
+            return list_reorder_top_level_entries(get_workspace())
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
     @app.post("/api/code/reorder-members/run")
     def api_reorder_members_run(body: ReorderMembersRunBody) -> dict:
         patch = body.model_dump(exclude_none=True)
-        top_dirs = patch.pop("top_dirs", [])
+        targets = patch.pop("targets", None) or patch.pop("top_dirs", None) or []
+        dry_run = bool(patch.pop("dry_run", False))
         try:
             return run_reorder_members_batch(
                 get_workspace(),
-                top_dirs=top_dirs,
+                targets=targets,
+                dry_run=dry_run,
                 patch=patch or None,
             )
         except ValueError as e:

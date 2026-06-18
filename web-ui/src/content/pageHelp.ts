@@ -156,8 +156,8 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
   reorder_members: {
     title: "C++ 成员排序",
     bullets: [
-      "使用当前工作空间根作为 C++ 源码树；刷新一级子目录 → 勾选模块 → 预检或写盘排序。",
-      "默认预检（dry-run）；详细输出在底部运行日志。",
+      "工作空间下一级目录与 .h/.cpp 文件；内置 + .phoenix/reorder-members.ignore 忽略规则。",
+      "可预检或直接执行排序；结果在运行日志。",
     ],
     docPath: "doc/成员函数排序-reorder_members.md",
   },
