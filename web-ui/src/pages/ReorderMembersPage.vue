@@ -12,12 +12,10 @@ import { useAppShell } from "../composables/useAppShell";
 
 const shell = useAppShell();
 
-const cppOnly = ref(false);
-const headerOnly = ref(false);
-const sortMembers = ref(false);
+const includeCpp = ref(true);
+const includeHeader = ref(true);
 const verbose = ref(false);
 
-const workspaceDisplay = ref("");
 const ignoreFileDisplay = ref("");
 const ignoreFileExists = ref(false);
 const entries = ref<ReorderMembersEntry[]>([]);
@@ -33,12 +31,14 @@ const selectedCount = computed(() => selected.value.size);
 const allChecked = computed(
   () => entries.value.length > 0 && entries.value.every((e) => selected.value.has(e.name)),
 );
+const dirCount = computed(() => entries.value.filter((e) => e.kind === "dir").length);
+const fileCount = computed(() => entries.value.filter((e) => e.kind === "file").length);
 
 function prefsPayload() {
   return {
-    cpp_only: cppOnly.value,
-    header_only: headerOnly.value,
-    sort_members: sortMembers.value,
+    include_cpp: includeCpp.value,
+    include_header: includeHeader.value,
+    sort_members: false,
     verbose: verbose.value,
     last_selected: [...selected.value],
   };
@@ -50,12 +50,10 @@ function kindLabel(kind: string) {
 
 async function loadPrefs() {
   const prefs = await fetchReorderMembersPrefs();
-  workspaceDisplay.value = prefs.workspace_path_display || shell.workspacePath.value;
   ignoreFileDisplay.value = prefs.ignore_file_display || prefs.ignore_file;
   ignoreFileExists.value = prefs.ignore_file_exists;
-  cppOnly.value = prefs.cpp_only;
-  headerOnly.value = prefs.header_only;
-  sortMembers.value = prefs.sort_members;
+  includeCpp.value = prefs.include_cpp ?? true;
+  includeHeader.value = prefs.include_header ?? true;
   verbose.value = prefs.verbose;
   selected.value = new Set(prefs.last_selected || []);
 }
@@ -65,7 +63,6 @@ async function refreshList() {
   loadError.value = "";
   try {
     const data = await fetchReorderMembersTopLevel();
-    workspaceDisplay.value = data.workspace_path_display || workspaceDisplay.value;
     ignoreFileDisplay.value = data.ignore_file_display || data.ignore_file;
     ignoreFileExists.value = data.ignore_file_exists;
     entries.value = data.entries;
@@ -78,6 +75,22 @@ async function refreshList() {
   } finally {
     loading.value = false;
   }
+}
+
+function setIncludeCpp(checked: boolean) {
+  if (!checked && !includeHeader.value) {
+    shell.setStatus("至少勾选一种源文件类型");
+    return;
+  }
+  includeCpp.value = checked;
+}
+
+function setIncludeHeader(checked: boolean) {
+  if (!checked && !includeCpp.value) {
+    shell.setStatus("至少勾选一种源文件类型");
+    return;
+  }
+  includeHeader.value = checked;
 }
 
 async function onSave() {
@@ -153,7 +166,7 @@ onMounted(async () => {
       <div class="head-row">
         <h1 class="page-title">C++ 成员排序</h1>
         <p class="page-desc">
-          列出<strong>工作空间一级</strong>目录与 .h/.cpp 文件，勾选后可直接执行或先预检（日志见底部运行窗口）
+          按 cxx-code-style 重排工作空间一级目录下的 .h / .cpp；可先预检，结果见底部运行日志
         </p>
         <div class="head-help">
           <PageHelpButton page-id="reorder_members" />
@@ -163,40 +176,29 @@ onMounted(async () => {
 
     <section class="card settings-card">
       <div class="settings-form">
-        <div class="form-row">
-          <span class="section-label">工作空间</span>
-          <span class="mono workspace-path">{{ workspaceDisplay || shell.workspacePath }}</span>
-          <button type="button" class="btn btn-sm" :disabled="loading" @click="refreshList">
-            {{ loading ? "刷新中…" : "刷新列表" }}
-          </button>
-        </div>
-        <p class="ignore-hint muted small">
-          忽略规则：内置 + <span class="mono">{{ ignoreFileDisplay || ".phoenix/reorder-members.ignore" }}</span>
-          <span v-if="ignoreFileExists">（已加载）</span>
-          <span v-else>（未建文件则仅内置；可复制 reorder-members.ignore.example）</span>
-          <span v-if="ignoredCount"> · 已隐藏 {{ ignoredCount }} 项</span>
-        </p>
-
         <div class="form-row form-foot">
           <div class="option-chips">
             <label class="opt-chip">
               <input
-                v-model="cppOnly"
                 type="checkbox"
-                @change="cppOnly && (headerOnly = false)"
+                :checked="includeCpp"
+                @change="setIncludeCpp(($event.target as HTMLInputElement).checked)"
               />
-              <span>仅 .cpp</span>
+              <span>.cpp</span>
             </label>
             <label class="opt-chip">
               <input
-                v-model="headerOnly"
                 type="checkbox"
-                @change="headerOnly && (cppOnly = false)"
+                :checked="includeHeader"
+                @change="setIncludeHeader(($event.target as HTMLInputElement).checked)"
               />
-              <span>仅头文件</span>
+              <span>头文件（含 .h .hpp）</span>
             </label>
-            <label class="opt-chip">
-              <input v-model="sortMembers" type="checkbox" />
+            <label
+              class="opt-chip disabled"
+              title="规划中：Doxygen 序号重编、.h/.cpp 构造析构序号一致等，见 doc/成员变量字母序-规则与待实现.md"
+            >
+              <input type="checkbox" disabled />
               <span>成员变量字母序</span>
             </label>
             <label class="opt-chip">
@@ -236,16 +238,23 @@ onMounted(async () => {
           <span v-if="entries.length" class="muted small">
             已选 {{ selectedCount }} / {{ entries.length }}
           </span>
+          <button type="button" class="btn btn-sm refresh-btn" :disabled="loading" @click="refreshList">
+            {{ loading ? "刷新中…" : "刷新列表" }}
+          </button>
         </div>
+        <p v-if="entries.length" class="list-summary">
+          <span>目录 <strong>{{ dirCount }}</strong></span>
+          <span class="sep">·</span>
+          <span>源文件 <strong>{{ fileCount }}</strong></span>
+          <span v-if="ignoredCount" class="sep">·</span>
+          <span v-if="ignoredCount" class="muted">已忽略 <strong>{{ ignoredCount }}</strong></span>
+        </p>
       </header>
 
       <p v-if="loadError" class="err-msg">{{ loadError }}</p>
-      <p v-else-if="!loading && !entries.length" class="muted hint">
-        没有可列出的目录或源文件（其余项已被忽略规则隐藏）。
-      </p>
 
-      <div v-if="entries.length" class="dir-table-wrap">
-        <table class="dir-table">
+      <div class="table-wrap">
+        <table v-if="entries.length" class="entry-table">
           <thead>
             <tr>
               <th class="col-check">
@@ -262,7 +271,7 @@ onMounted(async () => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="e in entries" :key="e.name">
+            <tr v-for="(e, i) in entries" :key="e.name" :class="{ 'row-alt': i % 2 === 1 }">
               <td class="col-check">
                 <input
                   type="checkbox"
@@ -270,88 +279,365 @@ onMounted(async () => {
                   @change="toggleEntry(e.name, ($event.target as HTMLInputElement).checked)"
                 />
               </td>
-              <td class="mono">{{ e.name }}</td>
+              <td class="mono entry-name">{{ e.name }}</td>
               <td class="col-kind">
                 <span class="kind-badge" :data-kind="e.kind">{{ kindLabel(e.kind) }}</span>
               </td>
-              <td class="col-num muted">{{ e.source_file_count }}</td>
+              <td class="col-num">
+                <span class="count-badge">{{ e.source_file_count }}</span>
+              </td>
             </tr>
           </tbody>
         </table>
+        <p v-else class="empty">
+          {{ loading ? "加载中…" : loadError ? "加载失败" : "没有可列出的目录或源文件" }}
+        </p>
       </div>
     </section>
+
+    <details class="help-panel">
+      <summary class="help-summary">忽略规则与排序说明</summary>
+      <div class="help-body">
+        <h3 class="help-sub">忽略列表</h3>
+        <ul class="help-list">
+          <li>
+            内置忽略：<code>.phoenix</code>、<code>web-ui</code>、<code>build</code>、<code>node_modules</code> 等；以
+            <code>.</code> 开头的隐藏项始终忽略。
+          </li>
+          <li>
+            可选文件
+            <span class="mono">{{ ignoreFileDisplay || ".phoenix/reorder-members.ignore" }}</span>
+            <span v-if="ignoreFileExists">（已加载）</span>
+            <span v-else>（未建则仅内置；可复制 reorder-members.ignore.example）</span>。
+          </li>
+          <li v-if="ignoredCount">当前列表已隐藏 {{ ignoredCount }} 项。</li>
+        </ul>
+
+        <h3 class="help-sub">排序规则（摘要）</h3>
+        <ul class="help-list">
+          <li>
+            <strong>.cpp</strong>：特殊成员（默认构造 → 其它构造 → 析构 → 拷贝/移动 → <code>operator=</code>）优先，其余按函数名字母序；补全
+            <code>//---</code> 分隔符；初始化列表用 <code>()</code> 而非 <code>{}</code>。
+          </li>
+          <li>
+            <strong>.h</strong>：各访问段内同样优先特殊成员，再按字母序；成员变量字母序 Web 暂未开放（见
+            <code>doc/成员变量字母序-规则与待实现.md</code>）。
+          </li>
+          <li>完整规则见页内 ? 帮助或 <code>doc/成员函数排序-reorder_members.md</code>。</li>
+        </ul>
+      </div>
+    </details>
   </div>
 </template>
 
 <style scoped>
-.reorder-page .form-row {
+@import "./page-shared.css";
+
+.reorder-page strong {
+  font-weight: 600;
+}
+
+.card {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  margin-bottom: 10px;
+}
+
+.section-label {
+  flex-shrink: 0;
+  margin: 0;
+  padding-right: 10px;
+  border-right: 2px solid var(--accent);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-row {
+  display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem 0.75rem;
   align-items: center;
+  gap: 8px 12px;
 }
 
-.workspace-path {
-  flex: 1;
-  min-width: 12rem;
-  font-size: 0.875rem;
-  opacity: 0.9;
-  word-break: break-all;
+.form-foot {
+  justify-content: space-between;
 }
 
-.ignore-hint {
-  margin: 0.25rem 0 0.5rem;
-  line-height: 1.45;
+.option-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
-.dir-table-wrap {
-  overflow: auto;
-  max-height: min(420px, 50vh);
+.opt-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #f8fafc;
+  font-size: 0.76rem;
+  cursor: pointer;
+  user-select: none;
 }
 
-.dir-table {
+.opt-chip:has(input:checked) {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+.opt-chip.disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+  background: #f1f5f9;
+  color: var(--muted);
+}
+
+.opt-chip.disabled:has(input:checked) {
+  background: #f1f5f9;
+  border-color: var(--border);
+  color: var(--muted);
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.btn-sm {
+  padding: 5px 11px;
+  font-size: 0.78rem;
+}
+
+.btn-quiet {
+  color: var(--muted);
+  border-color: transparent;
+  background: transparent;
+}
+
+.btn-quiet:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: var(--border);
+}
+
+.results-head {
+  margin-bottom: 8px;
+}
+
+.results-head-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.refresh-btn {
+  margin-left: auto;
+}
+
+.list-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 0;
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.list-summary .sep {
+  margin: 0 6px;
+  color: #cbd5e1;
+}
+
+.list-summary strong {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.reorder-page .table-wrap {
+  max-height: calc(100vh - 380px);
+  padding: 0;
+}
+
+.entry-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.875rem;
+  font-size: 0.82rem;
 }
 
-.dir-table th,
-.dir-table td {
-  padding: 0.35rem 0.5rem;
+.entry-table th,
+.entry-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
   text-align: left;
-  border-bottom: 1px solid var(--border-subtle, rgba(127, 127, 127, 0.25));
+  vertical-align: middle;
+}
+
+.entry-table th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  font-weight: 600;
+  font-size: 0.78rem;
+  color: var(--muted);
+  z-index: 1;
+  white-space: nowrap;
 }
 
 .col-check {
-  width: 2.5rem;
+  width: 40px;
   text-align: center;
 }
 
 .col-kind {
-  width: 4.5rem;
+  width: 72px;
 }
 
 .col-num {
-  width: 5rem;
-  text-align: right;
+  width: 72px;
+  text-align: center;
+}
+
+.entry-name {
+  font-weight: 600;
+  word-break: break-all;
+  line-height: 1.45;
 }
 
 .kind-badge {
-  font-size: 0.75rem;
-  padding: 0.1rem 0.4rem;
-  border-radius: 4px;
-  background: rgba(127, 127, 127, 0.15);
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: #f1f5f9;
+  border: 1px solid var(--border);
+  color: var(--muted);
 }
 
 .kind-badge[data-kind="file"] {
-  background: rgba(80, 120, 200, 0.15);
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+.count-badge {
+  display: inline-block;
+  min-width: 22px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.entry-table tbody tr:hover td {
+  background: #f8fafc;
+}
+
+.entry-table tbody tr.row-alt td {
+  background: #fafbfc;
+}
+
+.entry-table tbody tr.row-alt:hover td {
+  background: #f1f5f9;
 }
 
 .err-msg {
-  color: var(--danger, #c0392b);
-  margin: 0.5rem 0;
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  background: #fef2f2;
+  color: #b91c1c;
 }
 
-.hint {
-  margin: 0.5rem 0;
+.help-panel {
+  margin-top: 4px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.help-summary {
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--muted);
+  user-select: none;
+}
+
+.help-body {
+  margin-top: 10px;
+}
+
+.help-sub {
+  margin: 0 0 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.help-sub + .help-list {
+  margin-top: 0;
+}
+
+.help-list {
+  margin: 0 0 12px;
+  padding-left: 1.1rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.help-list:last-child {
+  margin-bottom: 0;
+}
+
+.help-list li + li {
+  margin-top: 4px;
+}
+
+.small {
+  font-size: 0.78rem;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+@media (max-width: 720px) {
+  .form-foot {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .settings-actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-end;
+  }
 }
 </style>

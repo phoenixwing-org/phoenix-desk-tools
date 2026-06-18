@@ -10,7 +10,9 @@ const onboarding = useOnboardingStore();
 
 const navItems = computed(() => shell.appConfig.value?.navigation ?? []);
 const mainNavItems = computed(() =>
-  navItems.value.filter((n) => n.page !== "home" && n.page !== "config"),
+  navItems.value
+    .filter((n) => n.page !== "home" && n.page !== "config")
+    .filter((n) => shell.isNavItemVisible(n)),
 );
 const homeNavItem = computed(() => navItems.value.find((n) => n.page === "home"));
 const configNavItem = computed(() => navItems.value.find((n) => n.page === "config"));

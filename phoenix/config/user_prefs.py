@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from phoenix.config.launcher_paths import platform_launcher_prefs_file
+from phoenix.config.nav_modules import DEFAULT_NAV_MODULES_ENABLED, normalized_nav_modules
 
 WORKSPACE_PHOENIX_DIR = ".phoenix"
 WORKSPACE_PREFS_BASENAME = "phoenix-workspace-prefs.json"
@@ -83,8 +84,8 @@ _WORKSPACE_DEFAULT: dict[str, Any] = {
         "last_model_series": "",
     },
     "code_reorder": {
-        "cpp_only": False,
-        "header_only": False,
+        "include_cpp": True,
+        "include_header": True,
         "sort_members": False,
         "verbose": False,
         "last_selected": [],
@@ -138,6 +139,7 @@ _LAUNCHER_DEFAULT: dict[str, Any] = {
     "freecad_dir": None,
     "window_geometry": None,
     "shell_layout": dict(_LAUNCHER_SHELL_LAYOUT_DEFAULT),
+    "nav_modules": {"enabled": list(DEFAULT_NAV_MODULES_ENABLED)},
 }
 
 
@@ -382,6 +384,7 @@ def load_launcher_prefs() -> dict[str, Any]:
     if isinstance(wg, str) and wg.strip():
         data["window_geometry"] = wg.strip()
     data["shell_layout"] = _normalized_shell_layout(raw.get("shell_layout"))
+    data["nav_modules"] = normalized_nav_modules(raw.get("nav_modules"))
     return data
 
 
@@ -421,6 +424,14 @@ def save_launcher_shell_layout(
         cur["log_auto_open_on_append"] = bool(log_auto_open_on_append)
     launcher["shell_layout"] = cur
     save_launcher_prefs(launcher)
+
+
+def save_launcher_nav_modules(enabled: list[str]) -> dict[str, Any]:
+    """写入侧栏模块勾选（``cad`` / ``code``）到 launcher JSON。"""
+    launcher = load_launcher_prefs()
+    launcher["nav_modules"] = normalized_nav_modules({"enabled": enabled})
+    save_launcher_prefs(launcher)
+    return dict(launcher["nav_modules"])
 
 
 def save_launcher_prefs(data: dict[str, Any]) -> None:

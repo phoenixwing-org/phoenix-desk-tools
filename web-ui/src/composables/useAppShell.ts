@@ -1,11 +1,12 @@
 import { computed, inject, provide, ref, shallowRef, watch, type InjectionKey, type Ref } from "vue";
-import type { AppConfig, LauncherPrefs, NavItem, ShellLayout } from "../types/config";
 import type { BomFields } from "../api";
+import type { AppConfig, LauncherPrefs, NavItem, ShellLayout } from "../types/config";
 import {
   fetchAppConfig,
   fetchLauncherPrefs,
   fetchShellLog,
   getWorkspace,
+  patchNavModules,
   patchShellLayout,
   setWorkspace,
 } from "../api";
@@ -97,6 +98,11 @@ export type AppShellContext = {
   openRenameAnalysis: (opts?: PendingRenameAnalysis) => void;
   switchWorkspace: (path: string) => Promise<void>;
   persistShellLayout: (patch: Partial<ShellLayout>) => Promise<void>;
+  enabledNavModules: Ref<string[]>;
+  isNavItemVisible: (item: NavItem) => boolean;
+  isPageModuleVisible: (pageId: string) => boolean;
+  persistNavModules: (enabled: string[]) => Promise<void>;
+  toggleNavModule: (id: string) => Promise<void>;
   reloadLauncher: () => Promise<void>;
   init: () => Promise<void>;
   treeSelectHandler: Ref<TreeSelectHandler | null>;
@@ -140,6 +146,17 @@ const DEFAULT_SHELL: ShellLayout = {
   log_auto_open_on_append: true,
 };
 
+const NAV_ALWAYS_VISIBLE = new Set(["home", "config"]);
+
+/** 不在 navigation 中、但属于某模块的 Tab 页 */
+const PAGE_MODULE_FALLBACK: Record<string, string> = {
+  file_detail: "cad",
+  bom_apply: "cad",
+  rename_analysis: "cad",
+};
+
+const DEFAULT_NAV_MODULES = ["cad", "code"];
+
 export function provideAppShell(): AppShellContext {
   const appConfig = shallowRef<AppConfig | null>(null);
   const launcher = shallowRef<LauncherPrefs | null>(null);
@@ -160,6 +177,46 @@ export function provideAppShell(): AppShellContext {
 
   function normalizePageId(pageId: string): string {
     return pageId === "rename_analysis" ? "file_rename" : pageId;
+  }
+
+  const enabledNavModules = computed(() => {
+    const raw = launcher.value?.nav_modules?.enabled;
+    if (Array.isArray(raw) && raw.length) return [...raw];
+    return [...DEFAULT_NAV_MODULES];
+  });
+
+  function pageModule(pageId: string): string | undefined {
+    const id = normalizePageId(pageId);
+    if (NAV_ALWAYS_VISIBLE.has(id)) return undefined;
+    const nav = appConfig.value?.navigation.find((n) => n.page === id);
+    if (nav?.module) return nav.module;
+    return PAGE_MODULE_FALLBACK[id];
+  }
+
+  function isPageModuleVisible(pageId: string): boolean {
+    const id = normalizePageId(pageId);
+    if (NAV_ALWAYS_VISIBLE.has(id)) return true;
+    const mod = pageModule(id);
+    if (!mod) return true;
+    return enabledNavModules.value.includes(mod);
+  }
+
+  function isNavItemVisible(item: NavItem): boolean {
+    if (NAV_ALWAYS_VISIBLE.has(item.page)) return true;
+    if (!item.module) return true;
+    return enabledNavModules.value.includes(item.module);
+  }
+
+  function purgeHiddenModuleTabs() {
+    const rest = wb.tabs.value.filter((t) => isPageModuleVisible(t.pageId));
+    if (rest.length === wb.tabs.value.length) return;
+    wb.tabs.value = rest;
+    const active = wb.activeTab();
+    if (!active || !isPageModuleVisible(active.pageId)) {
+      wb.ensureInitialTab("home");
+    }
+    syncDetailTabMaps();
+    pruneTreeHandlers();
   }
 
   function canNavigateToPage(pageId: string): boolean {
@@ -333,6 +390,12 @@ export function provideAppShell(): AppShellContext {
     const id = normalizePageId(pageId);
     if (id === "config") {
       openConfig();
+      return;
+    }
+    if (!isPageModuleVisible(id)) {
+      setStatus("该功能模块已在主页关闭");
+      wb.navigateToPage("home");
+      navHover.value = null;
       return;
     }
     if (!canNavigateToPage(id)) {
@@ -575,6 +638,33 @@ export function provideAppShell(): AppShellContext {
     shellLayout.value = { ...shellLayout.value, ...updated };
   }
 
+  async function persistNavModules(enabled: string[]) {
+    const updated = await patchNavModules(enabled);
+    if (launcher.value) {
+      launcher.value = { ...launcher.value, nav_modules: updated };
+    }
+    purgeHiddenModuleTabs();
+    const active = wb.activeTab()?.pageId;
+    if (active && !isPageModuleVisible(active)) {
+      wb.navigateToPage("home");
+    }
+  }
+
+  async function toggleNavModule(id: string) {
+    const cur = [...enabledNavModules.value];
+    const idx = cur.indexOf(id);
+    if (idx >= 0) {
+      if (cur.length <= 1) {
+        setStatus("至少保留一个功能模块");
+        return;
+      }
+      cur.splice(idx, 1);
+    } else {
+      cur.push(id);
+    }
+    await persistNavModules(cur);
+  }
+
   function registerTreeSelect(tabId: string | undefined, fn: TreeSelectHandler | null) {
     if (!tabId) return;
     if (fn) treeHandlersByTab.set(tabId, fn);
@@ -609,7 +699,7 @@ export function provideAppShell(): AppShellContext {
   function resolveInitialPage(): string | undefined {
     const nav = appConfig.value?.navigation ?? [];
     const fromUrl = new URLSearchParams(window.location.search).get("page")?.trim();
-    if (fromUrl && nav.some((n) => n.page === fromUrl)) {
+    if (fromUrl && nav.some((n) => n.page === fromUrl) && isPageModuleVisible(fromUrl)) {
       return fromUrl;
     }
     return "home";
@@ -659,6 +749,7 @@ export function provideAppShell(): AppShellContext {
       openConfig();
     }
     applyUrlDeepLink();
+    purgeHiddenModuleTabs();
     setupWorkbenchPersistence();
     setupShellLogPolling();
   }
@@ -693,6 +784,11 @@ export function provideAppShell(): AppShellContext {
     openRenameAnalysis,
     switchWorkspace,
     persistShellLayout,
+    enabledNavModules,
+    isNavItemVisible,
+    isPageModuleVisible,
+    persistNavModules,
+    toggleNavModule,
     reloadLauncher,
     init,
     treeSelectHandler,

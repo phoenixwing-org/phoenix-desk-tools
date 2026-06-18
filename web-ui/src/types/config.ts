@@ -1,9 +1,16 @@
+export const DEFAULT_APP_TITLE = "Phoenix 桌面辅助工具";
+
 export type NavItem = {
   id: string;
   label: string;
   page: string;
+  module?: "cad" | "code" | string;
   description?: string;
   icon?: string;
+};
+
+export type NavModules = {
+  enabled: string[];
 };
 
 export type WorkbenchPageTabPolicy = {
@@ -49,6 +56,7 @@ export type LauncherPrefs = {
   default_freecad_dir?: string;
   platform?: string;
   shell_layout: ShellLayout;
+  nav_modules?: NavModules;
   launcher_config_path?: string;
 };
 

@@ -1,4 +1,4 @@
-"""FastAPI：FreeCAD 管理工具 Web 服务（工作空间树、各功能页 API）。"""
+"""FastAPI：Phoenix 桌面辅助工具 Web 服务（工作空间树、各功能页 API）。"""
 
 from __future__ import annotations
 
@@ -8,8 +8,9 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from phoenix.config.loader import DEFAULT_APP_TITLE
 from phoenix.freecad.fcstd_embedded_attrs import PhoenixFcstdEmbeddedError
 from phoenix.services.bom_apply_service import (
     KindFiltersInput,
@@ -50,6 +51,7 @@ from phoenix.services.launcher_service import (
     prune_recent_workspace_entries,
     update_launcher_freecad,
     update_shell_layout,
+    update_nav_modules,
 )
 from phoenix.services.part_key_service import (
     resolve_part_key_from_workspace_rel,
@@ -204,6 +206,10 @@ class ShellLayoutBody(BaseModel):
     log_auto_open_on_append: bool | None = None
 
 
+class NavModulesBody(BaseModel):
+    enabled: list[str] = Field(default_factory=list)
+
+
 class ShellLogBody(BaseModel):
     text: str = ""
     source: str = "server"
@@ -352,7 +358,9 @@ class SwStepPrefsBody(BaseModel):
 
 
 class ReorderMembersPrefsBody(BaseModel):
-    cpp_only: bool | None = None
+    include_cpp: bool | None = None
+    include_header: bool | None = None
+    cpp_only: bool | None = None  # 兼容旧客户端
     header_only: bool | None = None
     sort_members: bool | None = None
     verbose: bool | None = None
@@ -378,7 +386,7 @@ def _ensure_phoenix_logging() -> None:
 
 
 def create_app(*, static_dir: Path | None = None) -> FastAPI:
-    app = FastAPI(title="FreeCAD 管理工具", version="0.1.0")
+    app = FastAPI(title=DEFAULT_APP_TITLE, version="0.1.0")
     _ensure_phoenix_logging()
 
     app.add_middleware(
@@ -444,6 +452,10 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
         if not patch:
             raise HTTPException(status_code=400, detail="无有效字段")
         return update_shell_layout(patch)
+
+    @app.patch("/api/config/launcher/nav-modules")
+    def api_config_nav_modules(body: NavModulesBody) -> dict:
+        return update_nav_modules(body.enabled)
 
     @app.get("/api/health")
     def health() -> dict[str, str]:

@@ -1,6 +1,6 @@
 # Web 壳层 — 使用说明
 
-浏览器中的 **FreeCAD 管理工具** 界面（Vue3 + Python API）。首次使用请先读 [新手指引.md](新手指引.md) 或 [快速开始.md](快速开始.md)。
+浏览器中的 **Phoenix 桌面辅助工具** 界面（Vue3 + Python API）。首次使用请先读 [新手指引.md](新手指引.md) 或 [快速开始.md](快速开始.md)。
 
 启动方式见 [web-ui/README.md](../web-ui/README.md)。
 

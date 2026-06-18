@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "FreeCAD 管理工具",
+    "title": "Phoenix 桌面辅助工具",
     "geometry": "440x320",
     "min_width": 400,
     "min_height": 280,
@@ -21,66 +21,77 @@
       "id": "fcstd_map",
       "label": "CAD 索引",
       "page": "fcstd_map",
+      "module": "cad",
       "description": "扫描 FCStd、MD、PDF、图片、DXF/DWG 等写入索引库"
     },
     {
       "id": "bom_export",
       "label": "BOM 列表",
       "page": "bom_export",
+      "module": "cad",
       "description": "按装配列出 XLink 子件 BOM 表（属性来自 CAD 索引）"
     },
     {
       "id": "part_catalog",
       "label": "零件目录",
       "page": "part_catalog",
+      "module": "cad",
       "description": "PartKey 零件库与关联文件"
     },
     {
       "id": "part_key_detail",
       "label": "零件详情",
       "page": "part_key_detail",
+      "module": "cad",
       "description": "PartKey 属性与关联文件（从零件目录或索引打开，可多 Tab）"
     },
     {
       "id": "bom_apply",
       "label": "文件详情",
       "page": "file_detail",
+      "module": "cad",
       "description": "FCStd 文件详情：属性回写、引用关系、改名与引用写回（页内子 Tab）"
     },
     {
       "id": "file_rename",
       "label": "改名分析",
       "page": "file_rename",
+      "module": "cad",
       "description": "改名历史的引用影响分析与写回（磁盘改名在文件详情 · 改名子 Tab）"
     },
     {
       "id": "xlink_fix",
       "label": "链接路径修正",
       "page": "xlink_fix",
+      "module": "cad",
       "description": "修正 Document.xml / FCStd 内 XLink"
     },
     {
       "id": "part_dedup",
       "label": "编号查重",
       "page": "part_dedup",
+      "module": "cad",
       "description": "文件名和编号+版本查重"
     },
     {
       "id": "step_batch",
       "label": "STEP 批量",
       "page": "step_batch",
+      "module": "cad",
       "description": "STEP → FCStd 批量转换（FreeCADCmd）"
     },
     {
       "id": "sw_step_export",
       "label": "SW→STEP",
       "page": "sw_step_export",
+      "module": "cad",
       "description": "SolidWorks 三维模型批量导出 STEP（COM，Windows）"
     },
     {
       "id": "reorder_members",
       "label": "C++ 成员排序",
       "page": "reorder_members",
+      "module": "code",
       "description": "按 cxx-code-style 重排选定模块下 .h/.cpp 类成员"
     },
     {

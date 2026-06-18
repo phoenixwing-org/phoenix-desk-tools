@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { removeRecentWorkspace } from "../api";
+import { NAV_MODULE_OPTIONS } from "../constants/navModules";
 import { useAppShell } from "../composables/useAppShell";
+import { DEFAULT_APP_TITLE } from "../types/config";
 
 const shell = useAppShell();
 const recentOpen = ref(false);
 
-const title = computed(() => shell.appConfig.value?.title ?? "FreeCAD 管理工具");
+const title = computed(() => shell.appConfig.value?.title ?? DEFAULT_APP_TITLE);
 const recent = computed(() => shell.launcher.value?.recent_workspaces ?? []);
 const workspacePath = computed(() => shell.workspacePath.value);
 const workspaceShort = computed(() => {
@@ -14,6 +16,19 @@ const workspaceShort = computed(() => {
   if (!p) return "—";
   return p.length > 48 ? "…" + p.slice(-45) : p;
 });
+
+function isModuleEnabled(id: string): boolean {
+  return shell.enabledNavModules.value.includes(id);
+}
+
+function moduleChipTitle(opt: (typeof NAV_MODULE_OPTIONS)[number]): string {
+  const on = isModuleEnabled(opt.id);
+  return `${opt.label}：${opt.hint}（${on ? "已启用，点击关闭" : "已关闭，点击启用"}）`;
+}
+
+async function toggleModule(id: string) {
+  await shell.toggleNavModule(id);
+}
 
 async function pickRecent(path: string) {
   recentOpen.value = false;
@@ -48,6 +63,19 @@ function openConfig() {
   <header class="toolbar">
     <div class="toolbar-left">
       <span class="app-title">{{ title }}</span>
+      <div class="module-chips" aria-label="功能模块">
+        <button
+          v-for="opt in NAV_MODULE_OPTIONS"
+          :key="opt.id"
+          type="button"
+          class="module-chip"
+          :class="{ on: isModuleEnabled(opt.id), off: !isModuleEnabled(opt.id) }"
+          :title="moduleChipTitle(opt)"
+          @click="toggleModule(opt.id)"
+        >
+          {{ opt.shortLabel }}
+        </button>
+      </div>
       <span class="workspace-chip" :title="workspacePath">{{ workspaceShort }}</span>
     </div>
     <div class="toolbar-actions">
@@ -108,13 +136,71 @@ function openConfig() {
   white-space: nowrap;
 }
 
+.module-chips {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 0 2px 0 4px;
+  border-left: 1px solid var(--border);
+}
+
+.module-chip {
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: #f1f5f9;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.module-chip.on {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+.module-chip.off {
+  opacity: 0.5;
+  background: transparent;
+}
+
+.module-chip:hover {
+  border-color: #93c5fd;
+}
+
+.module-chip.off:hover {
+  opacity: 0.75;
+}
+
 .workspace-chip {
   font-size: 0.78rem;
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: min(420px, 40vw);
+  max-width: min(360px, 32vw);
+}
+
+@media (max-width: 900px) {
+  .workspace-chip {
+    max-width: min(200px, 24vw);
+  }
+}
+
+@media (max-width: 720px) {
+  .module-chips {
+    display: none;
+  }
+
+  .workspace-chip {
+    max-width: min(420px, 40vw);
+  }
 }
 
 .toolbar-actions {

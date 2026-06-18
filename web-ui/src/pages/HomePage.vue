@@ -2,8 +2,10 @@
 import { computed, nextTick, onMounted, watch } from "vue";
 import PageHelpButton from "../components/PageHelpButton.vue";
 import OnboardingChecklist from "../components/OnboardingChecklist.vue";
+import { NAV_MODULE_OPTIONS } from "../constants/navModules";
 import { useAppShell } from "../composables/useAppShell";
 import { useOnboardingStore } from "../stores/onboarding";
+import { DEFAULT_APP_TITLE } from "../types/config";
 
 const shell = useAppShell();
 const onboarding = useOnboardingStore();
@@ -20,13 +22,21 @@ watch(
   },
 );
 
-const appTitle = computed(() => shell.appConfig.value?.title ?? "FreeCAD 管理工具");
+const appTitle = computed(() => shell.appConfig.value?.title ?? DEFAULT_APP_TITLE);
 const workspacePath = computed(() => shell.workspacePath.value);
 const featureNav = computed(() =>
   (shell.appConfig.value?.navigation ?? []).filter(
-    (n) => n.page !== "home" && n.page !== "config",
+    (n) => n.page !== "home" && n.page !== "config" && shell.isNavItemVisible(n),
   ),
 );
+
+function isModuleEnabled(id: string): boolean {
+  return shell.enabledNavModules.value.includes(id);
+}
+
+async function toggleModule(id: string) {
+  await shell.toggleNavModule(id);
+}
 
 function openFeature(page: string) {
   if (!shell.canNavigateToPage(page)) {
@@ -49,6 +59,29 @@ function openConfig() {
         <PageHelpButton page-id="home" />
       </div>
     </div>
+
+    <section class="module-section" data-tour-page-home-modules>
+      <div class="module-section-head">
+        <h2 class="module-section-title">功能模块</h2>
+        <p class="module-lead">
+          勾选后左侧导航与下方入口才显示对应模块；偏好保存在本机 launcher，与工作空间无关。
+        </p>
+      </div>
+      <ul class="module-grid">
+        <li v-for="opt in NAV_MODULE_OPTIONS" :key="opt.id">
+          <label class="module-card" :class="{ active: isModuleEnabled(opt.id) }">
+            <input
+              type="checkbox"
+              class="module-check"
+              :checked="isModuleEnabled(opt.id)"
+              @change="toggleModule(opt.id)"
+            />
+            <span class="module-label">{{ opt.label }}</span>
+            <span class="module-hint">{{ opt.hint }}</span>
+          </label>
+        </li>
+      </ul>
+    </section>
 
     <section class="intro">
       <p class="lead">
@@ -144,6 +177,93 @@ function openConfig() {
 
 .section {
   margin-bottom: 28px;
+}
+
+.module-section {
+  margin-bottom: 24px;
+  padding: 16px 18px 18px;
+  border: 1px solid #93c5fd;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #eff6ff 0%, #f8fafc 100%);
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.08);
+}
+
+.module-section-head {
+  margin-bottom: 14px;
+}
+
+.module-section-title {
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #1e40af;
+}
+
+.module-lead {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  color: #475569;
+}
+
+.module-grid {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.module-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 88px;
+  padding: 14px 40px 14px 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.module-card:hover {
+  border-color: #93c5fd;
+}
+
+.module-card.active {
+  border-color: var(--accent);
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.module-check {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.module-label {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.module-hint {
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+@media (max-width: 560px) {
+  .module-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .section-title {

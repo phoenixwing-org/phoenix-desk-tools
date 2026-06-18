@@ -36,6 +36,15 @@ from dataclasses import dataclass, field, field
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Tuple
 
+# 运行日志 / 摘要中标记「此文件有成员排序变更」（Web 侧栏、CLI 共用）
+CHANGED_LOG_MARK = "✎"
+
+
+def format_changed_file_log_line(rel_path: str, *, indent: str = "  ") -> str:
+    """单行变更文件列表项，如 ``  ✎ Mod/a.cpp``。"""
+    return f"{indent}{CHANGED_LOG_MARK} {rel_path}"
+
+
 SEP_LINE_RE = re.compile(r"^//-+\s*$", re.MULTILINE)
 ACCESS_RE = re.compile(
     r"^(\s*)((?:public|private|protected)(?:\s+slots)?|signals)\s*:\s*(?://.*)?$",
@@ -1426,10 +1435,67 @@ def reorder_header_file(
 
 
 def normalize_reorder_file_filters(cpp_only: bool, header_only: bool) -> tuple[bool, bool]:
-    """``cpp_only`` 与 ``header_only`` 不可同时为真，否则扩展名集合为空。"""
+    """``cpp_only`` 与 ``header_only`` 不可同时为真，否则扩展名集合为空（CLI 旧语义）。"""
     if cpp_only and header_only:
         return False, False
     return cpp_only, header_only
+
+
+def normalize_reorder_include_flags(include_cpp: bool, include_header: bool) -> tuple[bool, bool]:
+    """Web 勾选语义：至少保留一种源文件类型；默认二者皆勾选。"""
+    if not include_cpp and not include_header:
+        return True, True
+    return include_cpp, include_header
+
+
+def include_flags_to_legacy_filters(include_cpp: bool, include_header: bool) -> tuple[bool, bool]:
+    """将 ``include_cpp`` / ``include_header`` 转为 ``iter_source_files`` 的 cpp_only/header_only。"""
+    include_cpp, include_header = normalize_reorder_include_flags(include_cpp, include_header)
+    cpp_only = include_cpp and not include_header
+    header_only = include_header and not include_cpp
+    return cpp_only, header_only
+
+
+def legacy_filters_to_include_flags(cpp_only: bool, header_only: bool) -> tuple[bool, bool]:
+    """从旧偏好 ``cpp_only`` / ``header_only`` 迁移为 include 勾选。"""
+    cpp_only, header_only = normalize_reorder_file_filters(cpp_only, header_only)
+    if cpp_only and not header_only:
+        return True, False
+    if header_only and not cpp_only:
+        return False, True
+    return True, True
+
+
+def read_reorder_include_flags(prefs: dict) -> tuple[bool, bool]:
+    """读工作空间 ``code_reorder`` 段，兼容旧字段。"""
+    if "include_cpp" in prefs or "include_header" in prefs:
+        return normalize_reorder_include_flags(
+            bool(prefs.get("include_cpp", True)),
+            bool(prefs.get("include_header", True)),
+        )
+    return legacy_filters_to_include_flags(
+        bool(prefs.get("cpp_only", False)),
+        bool(prefs.get("header_only", False)),
+    )
+
+
+def resolve_reorder_include_for_run(patch: dict | None) -> tuple[bool, bool]:
+    """运行请求未带筛选字段时处理全部源文件（.cpp + .h/.hpp），不限制。"""
+    if not patch:
+        return True, True
+    if "include_cpp" in patch or "include_header" in patch:
+        return normalize_reorder_include_flags(
+            bool(patch.get("include_cpp", True)),
+            bool(patch.get("include_header", True)),
+        )
+    if "cpp_only" in patch or "header_only" in patch:
+        return read_reorder_include_flags(
+            {
+                "cpp_only": bool(patch.get("cpp_only", False)),
+                "header_only": bool(patch.get("header_only", False)),
+            }
+        )
+    return True, True
 
 
 def iter_source_files(
@@ -1505,7 +1571,7 @@ def run_reorder_members(
                 changed_files.append(rel_s)
                 if verbose:
                     prefix = "[dry-run] " if dry_run else ""
-                    lines.append(f"{prefix}cpp  {rel_s}")
+                    lines.append(f"{prefix}{CHANGED_LOG_MARK} cpp   {rel_s}")
         else:
             changed, hints = reorder_header_file(path, dry_run, sort_members)
             if verbose:
@@ -1516,7 +1582,7 @@ def run_reorder_members(
                 changed_files.append(rel_s)
                 if verbose:
                     prefix = "[dry-run] " if dry_run else ""
-                    lines.append(f"{prefix}header  {rel_s}")
+                    lines.append(f"{prefix}{CHANGED_LOG_MARK} header  {rel_s}")
 
     if verbose and (cpp_changed or hdr_changed or files_scanned):
         mode = "would update" if dry_run else "updated"
@@ -1588,7 +1654,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 flush=True,
             )
             for rel in result.changed_files:
-                print(f"  · {rel}", flush=True)
+                print(format_changed_file_log_line(rel), flush=True)
         elif result.files_scanned:
             print(f"Done: no changes ({result.files_scanned} file(s) scanned)", flush=True)
     return 0 if result.ok else 1

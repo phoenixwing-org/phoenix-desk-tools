@@ -12,8 +12,12 @@ from phoenix.code.reorder_ignore import (
 )
 from phoenix.code.reorder_members import (
     ReorderMembersRunResult,
+    format_changed_file_log_line,
+    include_flags_to_legacy_filters,
     iter_source_files,
-    normalize_reorder_file_filters,
+    normalize_reorder_include_flags,
+    read_reorder_include_flags,
+    resolve_reorder_include_for_run,
     run_reorder_members,
 )
 from phoenix.config.user_prefs import (
@@ -41,15 +45,12 @@ def get_reorder_members_prefs(repo_root: Path) -> dict[str, Any]:
         last_selected = []
     root = _workspace_source_root(rr)
     patterns, ignore_path, ignore_exists = load_ignore_patterns(rr)
-    cpp_only, header_only = normalize_reorder_file_filters(
-        bool(pv.get("cpp_only", False)),
-        bool(pv.get("header_only", False)),
-    )
+    include_cpp, include_header = read_reorder_include_flags(pv)
     return {
         "workspace_path": str(root),
         "workspace_path_display": format_resolved_under_workspace(root, rr),
-        "cpp_only": cpp_only,
-        "header_only": header_only,
+        "include_cpp": include_cpp,
+        "include_header": include_header,
         "sort_members": bool(pv.get("sort_members", False)),
         "verbose": bool(pv.get("verbose", False)),
         "last_selected": [str(x) for x in last_selected if str(x).strip()],
@@ -63,16 +64,30 @@ def get_reorder_members_prefs(repo_root: Path) -> dict[str, Any]:
 def save_reorder_members_prefs(repo_root: Path, patch: dict[str, Any]) -> dict[str, Any]:
     rr = repo_root.expanduser().resolve(strict=False)
     stored: dict[str, Any] = {}
-    cpp_only = bool(patch.get("cpp_only", False)) if "cpp_only" in patch else None
-    header_only = bool(patch.get("header_only", False)) if "header_only" in patch else None
-    if cpp_only is not None or header_only is not None:
+    include_cpp = patch.get("include_cpp") if "include_cpp" in patch else None
+    include_header = patch.get("include_header") if "include_header" in patch else None
+    if include_cpp is not None or include_header is not None:
         cur = load_workspace_prefs(rr).get(_SECTION) or {}
-        cpp_only, header_only = normalize_reorder_file_filters(
-            cpp_only if cpp_only is not None else bool(cur.get("cpp_only", False)),
-            header_only if header_only is not None else bool(cur.get("header_only", False)),
+        cur_inc = read_reorder_include_flags(cur)
+        include_cpp, include_header = normalize_reorder_include_flags(
+            bool(include_cpp if include_cpp is not None else cur_inc[0]),
+            bool(include_header if include_header is not None else cur_inc[1]),
         )
-        stored["cpp_only"] = cpp_only
-        stored["header_only"] = header_only
+        stored["include_cpp"] = include_cpp
+        stored["include_header"] = include_header
+    elif "cpp_only" in patch or "header_only" in patch:
+        cur = load_workspace_prefs(rr).get(_SECTION) or {}
+        cur_inc = read_reorder_include_flags(cur)
+        cpp_only = bool(patch.get("cpp_only", False)) if "cpp_only" in patch else None
+        header_only = bool(patch.get("header_only", False)) if "header_only" in patch else None
+        if cpp_only is not None or header_only is not None:
+            legacy_cpp = cpp_only if cpp_only is not None else include_flags_to_legacy_filters(*cur_inc)[0]
+            legacy_hdr = header_only if header_only is not None else include_flags_to_legacy_filters(*cur_inc)[1]
+            include_cpp, include_header = read_reorder_include_flags(
+                {"cpp_only": legacy_cpp, "header_only": legacy_hdr}
+            )
+            stored["include_cpp"] = include_cpp
+            stored["include_header"] = include_header
     for k in ("sort_members", "verbose"):
         if k in patch:
             stored[k] = bool(patch[k])
@@ -92,32 +107,34 @@ def _count_source_files(sub: Path) -> int:
 def _count_filtered_source_files(
     sub: Path,
     *,
-    cpp_only: bool,
-    header_only: bool,
+    include_cpp: bool,
+    include_header: bool,
 ) -> int:
+    cpp_only, header_only = include_flags_to_legacy_filters(include_cpp, include_header)
     return sum(1 for _ in iter_source_files(sub, cpp_only, header_only))
 
 
-def _file_filter_label(cpp_only: bool, header_only: bool) -> str:
-    if cpp_only:
-        return "仅 .cpp"
-    if header_only:
-        return "仅头文件 (.h/.hpp)"
-    return "全部 (.cpp + 头文件)"
+def _file_filter_label(include_cpp: bool, include_header: bool) -> str:
+    include_cpp, include_header = normalize_reorder_include_flags(include_cpp, include_header)
+    if include_cpp and include_header:
+        return ".cpp + 头文件 (.h/.hpp)"
+    if include_cpp:
+        return ".cpp"
+    return "头文件 (.h/.hpp)"
 
 
 def _zero_scan_hints(
     root: Path,
     *,
     names: list[str],
-    cpp_only: bool,
-    header_only: bool,
+    include_cpp: bool,
+    include_header: bool,
     item_results: list[dict[str, Any]],
 ) -> list[str]:
     hints = [
         "提示: 未扫描到任何源文件。",
         f"工作空间: {root}",
-        f"当前过滤: {_file_filter_label(cpp_only, header_only)}",
+        f"当前过滤: {_file_filter_label(include_cpp, include_header)}",
     ]
     for ir in item_results:
         name = str(ir["name"])
@@ -129,7 +146,7 @@ def _zero_scan_hints(
             continue
         total = _count_source_files(target) if target.is_dir() else 0
         filtered = (
-            _count_filtered_source_files(target, cpp_only=cpp_only, header_only=header_only)
+            _count_filtered_source_files(target, include_cpp=include_cpp, include_header=include_header)
             if target.is_dir()
             else 0
         )
@@ -137,7 +154,7 @@ def _zero_scan_hints(
             hints.append(f"  · {name}: 目录下无 .cpp/.h/.hpp")
         elif filtered == 0:
             hints.append(
-                f"  · {name}: 有 {total} 个源文件，但当前过滤下为 0（请调整「仅 .cpp / 仅头文件」）"
+                f"  · {name}: 有 {total} 个源文件，但当前勾选类型下为 0（请调整「.cpp / 头文件」勾选）"
             )
         else:
             hints.append(f"  · {name}: 扫描 0（预期 {filtered}，请检查路径或权限）")
@@ -231,7 +248,7 @@ def _format_batch_summary(
         )
     if not changed_paths:
         return head
-    listed = "\n".join(f"  · {p}" for p in changed_paths)
+    listed = "\n".join(format_changed_file_log_line(p) for p in changed_paths)
     return f"{head}\n{listed}"
 
 
@@ -287,12 +304,15 @@ def run_reorder_members_batch(
     if not names:
         raise ValueError("请至少勾选一项（目录或源文件）")
 
-    cpp_only, header_only = normalize_reorder_file_filters(
-        bool(save_patch.get("cpp_only", prefs.get("cpp_only"))),
-        bool(save_patch.get("header_only", prefs.get("header_only"))),
+    cpp_only, header_only = include_flags_to_legacy_filters(
+        *resolve_reorder_include_for_run(save_patch)
     )
-    sort_members = bool(save_patch.get("sort_members", prefs.get("sort_members")))
-    verbose = bool(save_patch.get("verbose", prefs.get("verbose", False)))
+    sort_members = bool(
+        save_patch["sort_members"] if "sort_members" in save_patch else prefs.get("sort_members")
+    )
+    verbose = bool(
+        save_patch["verbose"] if "verbose" in save_patch else prefs.get("verbose", False)
+    )
 
     all_lines: list[str] = []
     total_cpp = total_hdr = total_files = 0
@@ -327,15 +347,16 @@ def run_reorder_members_batch(
                 "dry_run": dry_run,
                 "item_results": item_results,
             }
+        entry_changed = _batch_entry_changed_paths(name, kind, result.changed_files)
         if verbose:
             all_lines.extend(result.lines)
         elif len(names) > 1:
             n_changed = result.cpp_changed + result.hdr_changed
-            all_lines.append(
-                f"{name}: {'无变更' if n_changed == 0 else f'变更 {n_changed} 个'} · "
-                f"扫描 {result.files_scanned}"
-            )
-        entry_changed = _batch_entry_changed_paths(name, kind, result.changed_files)
+            change_part = "无变更" if n_changed == 0 else f"变更 {n_changed} 个"
+            all_lines.append(f"{name}: {change_part} · 扫描 {result.files_scanned}")
+            if n_changed:
+                for p in entry_changed:
+                    all_lines.append(format_changed_file_log_line(p))
         all_changed.extend(entry_changed)
         total_cpp += result.cpp_changed
         total_hdr += result.hdr_changed

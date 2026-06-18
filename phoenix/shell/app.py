@@ -10,7 +10,7 @@ import customtkinter as ctk
 import tkinter as tk
 from tkinter import messagebox
 
-from phoenix.config.loader import load_app_config
+from phoenix.config.loader import DEFAULT_APP_TITLE, load_app_config
 from phoenix.config.user_prefs import (
     apply_launcher_prefs_to_state,
     save_launcher_window_geometry,
@@ -34,7 +34,7 @@ class AppShell(ctk.CTk):
         self.app_state = AppState()
         apply_launcher_prefs_to_state(self.app_state)
 
-        self._app_title_base = str(app_cfg.get("title") or "FreeCAD 管理工具")
+        self._app_title_base = str(app_cfg.get("title") or DEFAULT_APP_TITLE)
 
         ctk.set_appearance_mode(app_cfg.get("appearance_mode", "system"))
         ctk.set_default_color_theme(app_cfg.get("color_theme", "blue"))
@@ -122,7 +122,7 @@ class AppShell(ctk.CTk):
     def _reload_config(self) -> None:
         self.config = load_app_config(self._config_path)
         app_cfg = self.config.get("app", {})
-        self._app_title_base = str(app_cfg.get("title") or "FreeCAD 管理工具")
+        self._app_title_base = str(app_cfg.get("title") or DEFAULT_APP_TITLE)
         try:
             ctk.set_appearance_mode(app_cfg.get("appearance_mode", "system"))
             ctk.set_default_color_theme(app_cfg.get("color_theme", "blue"))

@@ -2,7 +2,7 @@
 
 [Gitee](https://gitee.com/PhoenixWing321/phoenix-desk-tools.git) · MIT
 
-**Phoenix 桌面工具集**（Web 为主）：FreeCAD 工作空间管理、BOM、Code 工具等；**`scripts/`** 命令行含 **XLink 修正**、**FCStd 索引**、**STEP→FCStd** 等工作流。桌面 `python -m phoenix` 仅为**启动器**（配置工作空间 + 打开浏览器）。
+**Phoenix 桌面辅助工具**（Web 为主）：FreeCAD 工作空间管理、BOM、Code 工具等；**`scripts/`** 命令行含 **XLink 修正**、**FCStd 索引**、**STEP→FCStd** 等工作流。桌面 `python -m phoenix` 仅为**启动器**（配置工作空间 + 打开浏览器）。
 
 | 路径 | 内容 |
 | --- | --- |

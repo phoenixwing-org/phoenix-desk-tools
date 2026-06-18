@@ -12,7 +12,7 @@
 2. 页面自动使用 **当前 Phoenix 工作空间根** 作为 C++ 源码树（换工程请在 **配置** 里切换工作空间）。
 3. **刷新列表**：列出工作空间下 **一级目录** 与 **一级** `.h` / `.hpp` / `.cpp` 文件（带「目录 / 文件」类型）；其余项按忽略规则隐藏。
 4. **勾选**要处理的条目（至少一项）。
-5. 选项：仅 cpp/头文件、成员变量字母序、详细日志。
+5. 选项：`.cpp` / 头文件勾选、详细日志；**成员变量字母序** Web 暂禁用（见 [成员变量字母序-规则与待实现.md](成员变量字母序-规则与待实现.md)）。
 6. **预检**（不写盘）或 **执行排序**（直接写盘，无需先预检）。
 
 偏好保存在工作空间 `.phoenix/phoenix-workspace-prefs.json` 的 `code_reorder` 段（选项与上次勾选）。
@@ -36,7 +36,7 @@ python -m phoenix.code.reorder_members /path/to/module [options]
 | `--dry-run` | 只报告将变更的文件 |
 | `--cpp-only` | 只处理 `.cpp` |
 | `--header-only` | 只处理 `.h` / `.hpp` |
-| `--sort-members` | `.h` 成员变量按字母序 |
+| `--sort-members` | `.h` 成员变量按字母序（**实验性**，见 [成员变量字母序-规则与待实现.md](成员变量字母序-规则与待实现.md)） |
 | `--verbose` | 每文件打印 processing |
 
 ---
@@ -54,7 +54,7 @@ python -m phoenix.code.reorder_members /path/to/module [options]
 ### `.h`
 
 - 每个 `public:` / `protected:` / `private:`（及 `slots`）段内：特殊成员同上，再按字母序；
-- 成员变量默认 **保持源码顺序与位置**（`--sort-members` 时仅变量字母序）；
+- 成员变量默认 **保持源码顺序与位置**；完整字母序 + 编号联动见 [成员变量字母序-规则与待实现.md](成员变量字母序-规则与待实现.md)（Web 未开放）。
 - 支持 `class ExportedByModule ClassName` 等导出宏。
 
 完整规则见脚本顶部 docstring 与 cxx-code-style skill。
@@ -75,6 +75,7 @@ python -m phoenix.code.reorder_members /path/to/module [options]
 ## 5. 后续可扩展
 
 - [ ] 单文件 / 单类预览 diff（Web）
+- [ ] **成员变量字母序（完整）**：编号重编、`.h`/`.cpp` 构造析构序号一致等 — 见 [成员变量字母序-规则与待实现.md](成员变量字母序-规则与待实现.md)
 - [ ] 与 Git 状态联动（仅排序已修改文件）
 - [ ] `code/` 模块配置：`app_config.modules` 切换 CAD / Code 导航集
 - [ ] 批量任务队列 + 取消（统一运行日志）

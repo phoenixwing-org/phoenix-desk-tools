@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from phoenix.config.loader import load_app_config
+from phoenix.config.loader import DEFAULT_APP_TITLE, load_app_config
 from phoenix.config.launcher_paths import platform_launcher_prefs_file
 from phoenix.config.user_prefs import (
     WORKSPACE_DOTFILE_NAME,
@@ -18,6 +18,7 @@ from phoenix.config.user_prefs import (
     record_recent_workspace,
     remove_recent_workspace,
     save_launcher_freecad_dir,
+    save_launcher_nav_modules,
     save_launcher_shell_layout,
 )
 from phoenix.freecad.default_install import default_freecad_install_dir
@@ -27,7 +28,7 @@ def app_config_payload() -> dict[str, Any]:
     cfg = load_app_config()
     app = cfg.get("app") or {}
     return {
-        "title": str(app.get("title") or "FreeCAD 管理工具"),
+        "title": str(app.get("title") or DEFAULT_APP_TITLE),
         "navigation": cfg.get("navigation") or [],
         "toolbar": cfg.get("toolbar") or {"items": []},
         "workbench": cfg.get("workbench") or {},
@@ -61,6 +62,7 @@ def launcher_prefs_payload() -> dict[str, Any]:
         "default_freecad_dir": default_fc or "",
         "platform": sys.platform,
         "shell_layout": sl,
+        "nav_modules": launcher.get("nav_modules") or {"enabled": ["cad", "code"]},
         "launcher_config_path": format_absolute_config_path(platform_launcher_prefs_file()),
     }
 
@@ -88,6 +90,10 @@ def update_shell_layout(patch: dict[str, Any]) -> dict[str, Any]:
     )
     launcher = load_launcher_prefs()
     return launcher.get("shell_layout") or {}
+
+
+def update_nav_modules(enabled: list[str]) -> dict[str, Any]:
+    return save_launcher_nav_modules(enabled)
 
 
 def activate_workspace(path: Path) -> dict[str, str]:

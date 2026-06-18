@@ -35,7 +35,8 @@
 - [x] **配置**：居中 Modal 弹层；工作空间 **浏览…** 走 Python 原生选目录（macOS osascript）
 - [x] 配置：未扫描工作空间时提示并跳转 **CAD 索引**
 - [x] **Code · C++ 成员排序** Web 页：一级子目录勾选 + 后台排序 + 运行日志（见 [成员函数排序-reorder_members.md](成员函数排序-reorder_members.md)）
-- [ ] **主页 · 导航模块偏好**（见下方 §导航模块偏好）
+- [x] **主页 · 导航模块偏好**（见下方 §导航模块偏好）
+- [ ] **工作空间树**：Code 模块偏好下默认筛选 `.h/.cpp` 等（见 §导航模块偏好）
 - [ ] 桌面 `fcstd_map_page` 分页，去掉 `load_fcstd_document` 全表
 - [ ] 统一运行日志：长任务进度条 / 取消（见 [统一运行日志窗口-规划讨论.md](统一运行日志窗口-规划讨论.md)）
 
@@ -44,12 +45,13 @@
 > **存储建议**：放本机 **`launcher.json`**（与 `shell_layout` 同级），**不放**工作空间 JSON/SQLite——这是「本机要哪些工具栏入口」，与工作空间无关。  
 > 字段草案：`nav_modules.enabled: ["cad", "code"]` 或 `nav_pages.visible: ["fcstd_map", …]`（二选一，实现时定）。
 
-- [ ] `app_config.json`：`navigation[]` 每项加 `module`（如 `cad` / `code`）；`home`、`config` 始终显示
-- [ ] 主页「功能模块」区：CAD / Code 多选勾选（可全选）；保存到 `launcher.json`
-- [ ] API：`GET/PUT /api/config/nav-modules`（或并入现有 shell layout 接口）
-- [ ] `NavSidebar.vue` + `HomePage.vue`：按偏好过滤；未勾选的模块不在侧栏出现
-- [ ] 当前页被隐藏时自动跳主页；Workbench Tab 策略与隐藏页一致
-- [ ] 单测：`user_prefs` 读写、`nav_modules` 默认全选
+- [x] `app_config.json`：`navigation[]` 每项加 `module`（如 `cad` / `code`）；`home`、`config` 始终显示
+- [x] 主页「功能模块」区：CAD / Code 多选勾选（可全选）；保存到 `launcher.json`
+- [x] API：`PATCH /api/config/launcher/nav-modules`（并入 launcher 偏好）
+- [x] `NavSidebar.vue` + `HomePage.vue`：按偏好过滤；未勾选的模块不在侧栏出现
+- [x] 当前页被隐藏时自动跳主页；Workbench Tab 策略与隐藏页一致
+- [x] 单测：`user_prefs` 读写、`nav_modules` 默认全选
+- [ ] **工作空间树 · 按模块切换筛选**：仅启用 **Code**（或 Code 为主）时，右侧树标题行 checkbox 改为程序文件（`.h` / `.hpp` / `.cpp` 等），替代当前 **FCStd / .sldprt**；双模块并存时可并列或按当前页默认；`WorkspaceTreeSidebar.vue` + `fetchTree` API 扩展
 
 ---
 
@@ -122,6 +124,8 @@
 ## P3 — Code 工具（已起步）
 
 - [x] `phoenix/code/reorder_members.py` + Web 页 + API
+- [ ] **成员排序 · 可选目录层级**：勾选列表默认 **1 级**（现「一级条目」）；偏好可选 **2–4 级** 展开子目录为可选项（仍受 ignore 规则约束）；`list_reorder_top_level_entries` / `GET top-level` + `ReorderMembersPage` 结果区标题与汇总
+- [ ] **成员变量字母序（完整规则）**：Doxygen 序号重编、`.h`/`.cpp` 构造/析构等序号一致 — 见 [成员变量字母序-规则与待实现.md](成员变量字母序-规则与待实现.md)；Web 勾选暂禁用
 - [ ] 成员排序：单文件 diff 预览、Git 脏文件过滤
 - [ ] 其它 Code 工具迁入 `phoenix/code/`（按 skill 拆分）
 

@@ -202,6 +202,14 @@ export function patchShellLayout(patch: Partial<ShellLayout>) {
   });
 }
 
+export function patchNavModules(enabled: string[]) {
+  return jsonFetch<{ enabled: string[] }>("/api/config/launcher/nav-modules", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+}
+
 export type ShellLogLine = { text: string; source: string };
 
 export function fetchShellLog(after = 0) {
@@ -1364,8 +1372,8 @@ export function exportPartDedupCsv(results?: PartDedupScanResult["results"]) {
 export type ReorderMembersPrefs = {
   workspace_path: string;
   workspace_path_display: string;
-  cpp_only: boolean;
-  header_only: boolean;
+  include_cpp: boolean;
+  include_header: boolean;
   sort_members: boolean;
   verbose: boolean;
   last_selected: string[];
