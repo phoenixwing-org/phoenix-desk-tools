@@ -28,6 +28,27 @@ class TestWorkspaceTree(unittest.TestCase):
 
             shutil.rmtree(td, ignore_errors=True)
 
+    def test_scan_code_extensions(self) -> None:
+        td = Path(tempfile.mkdtemp(prefix="ws_code_"))
+        try:
+            (td / "src").mkdir()
+            (td / "src" / "a.cpp").write_text("void a(){}", encoding="utf-8")
+            (td / "src" / "a.h").write_text("class A {};", encoding="utf-8")
+            (td / "src" / "b.hpp").write_text("class B {};", encoding="utf-8")
+            (td / "src" / "readme.md").write_text("x", encoding="utf-8")
+            all_code = scan_workspace_files(td, want_cpp=True, want_header=True)
+            self.assertEqual(len(all_code), 3)
+            cpp_only = scan_workspace_files(td, want_cpp=True, want_header=False)
+            self.assertEqual(len(cpp_only), 1)
+            self.assertEqual(cpp_only[0].name, "a.cpp")
+            data = build_workspace_tree(td, all_code)
+            leaf = data["tree"]["children"][0]["children"][0]
+            self.assertEqual(leaf["kind"], "cpp")
+        finally:
+            import shutil
+
+            shutil.rmtree(td, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()

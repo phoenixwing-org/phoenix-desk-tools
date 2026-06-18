@@ -5,7 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from phoenix.workspace_scan import FCSTD_SUFFIX, SW_PART_SUFFIX, iter_filtered_files
+from phoenix.workspace_scan import (
+    CODE_CPP_SUFFIX,
+    CODE_HEADER_SUFFIXES,
+    FCSTD_SUFFIX,
+    SW_PART_SUFFIX,
+    iter_filtered_files,
+)
 
 
 def scan_workspace_files(
@@ -13,9 +19,17 @@ def scan_workspace_files(
     *,
     want_fcstd: bool = True,
     want_sw_part: bool = False,
+    want_cpp: bool = False,
+    want_header: bool = False,
 ) -> list[Path]:
     """返回相对工作空间根的路径列表（已排序）。"""
-    return iter_filtered_files(repo_root, want_fcstd=want_fcstd, want_sw_part=want_sw_part)
+    return iter_filtered_files(
+        repo_root,
+        want_fcstd=want_fcstd,
+        want_sw_part=want_sw_part,
+        want_cpp=want_cpp,
+        want_header=want_header,
+    )
 
 
 def _file_kind(suffix: str) -> str:
@@ -24,6 +38,10 @@ def _file_kind(suffix: str) -> str:
         return "FC"
     if s == SW_PART_SUFFIX:
         return "SW"
+    if s == CODE_CPP_SUFFIX:
+        return "cpp"
+    if s in CODE_HEADER_SUFFIXES:
+        return "hpp" if s == ".hpp" else "h"
     return s.lstrip(".") or "file"
 
 

@@ -161,6 +161,18 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
     ],
     docPath: "doc/成员函数排序-reorder_members.md",
   },
+  code_index: {
+    title: "Code 索引",
+    bullets: [
+      "「工程内搜索」递归扫描源文件、配置、文档与资源，写入 phoenix_code_* 表（与 CAD 索引同库）。",
+      "跳过 build、node_modules、.git 等目录；再次扫描会将磁盘上已删除的文件标为「缺失」。",
+    ],
+    docPath: "doc/Code模块-工作空间索引.md",
+    tourSteps: [
+      tour("[data-tour-page-code-scan]", "工程内搜索", "首次使用 Code 工具前建议先建立索引。"),
+      tour("[data-tour-page-code-table]", "索引表", "按类型与路径筛选浏览。"),
+    ],
+  },
 };
 
 /** 未单独配置的 pageId 使用通用说明 */

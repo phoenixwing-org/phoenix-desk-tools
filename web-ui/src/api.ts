@@ -275,10 +275,17 @@ export function saveWorkbenchSession(body: {
   });
 }
 
-export function fetchTree(fcstd = true, sw = false) {
+export function fetchTree(opts: {
+  fcstd?: boolean;
+  sw?: boolean;
+  cpp?: boolean;
+  header?: boolean;
+} = {}) {
   const q = new URLSearchParams({
-    fcstd: fcstd ? "true" : "false",
-    sw: sw ? "true" : "false",
+    fcstd: (opts.fcstd ?? true) ? "true" : "false",
+    sw: (opts.sw ?? false) ? "true" : "false",
+    cpp: (opts.cpp ?? false) ? "true" : "false",
+    header: (opts.header ?? false) ? "true" : "false",
   });
   return jsonFetch<TreeResponse>(`/api/tree?${q}`);
 }
@@ -1367,6 +1374,75 @@ export function exportPartDedupCsv(results?: PartDedupScanResult["results"]) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(results ? { results } : {}),
   });
+}
+
+export type CodeIndexStats = {
+  source?: number;
+  config?: number;
+  doc?: number;
+  resource?: number;
+  total?: number;
+};
+
+export type CodeIndexEntry = {
+  repo_rel_path: string;
+  filename: string;
+  asset_kind: string;
+  file_ext: string;
+  file_status: "present" | "missing" | string;
+  size_bytes: number;
+  last_seen_at?: string | null;
+};
+
+export type CodeIndexPayload = {
+  workspace_path: string;
+  workspace_path_display: string;
+  last_scan_at?: string | null;
+  stats?: CodeIndexStats | null;
+  file_count: number;
+  present_count: number;
+  kind_labels: Record<string, string>;
+  kinds: string[];
+  summary?: string;
+  scan_id?: number;
+};
+
+export type CodeIndexEntriesPayload = {
+  entries: CodeIndexEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export function fetchCodeIndex() {
+  return jsonFetch<CodeIndexPayload>("/api/code/index");
+}
+
+export type CodeIndexSearchMode = "contains" | "filename";
+
+export function fetchCodeIndexEntries(opts?: {
+  offset?: number;
+  limit?: number;
+  status?: "all" | "present" | "missing";
+  kind?: string;
+  q?: string;
+  searchMode?: CodeIndexSearchMode;
+}) {
+  const params = new URLSearchParams();
+  if (opts?.offset != null) params.set("offset", String(opts.offset));
+  if (opts?.limit != null) params.set("limit", String(opts.limit));
+  if (opts?.status && opts.status !== "all") params.set("status", opts.status);
+  if (opts?.kind && opts.kind !== "all") params.set("kind", opts.kind);
+  if (opts?.q?.trim()) params.set("q", opts.q.trim());
+  if (opts?.searchMode && opts.searchMode !== "contains") {
+    params.set("search_mode", opts.searchMode);
+  }
+  const qs = params.toString();
+  return jsonFetch<CodeIndexEntriesPayload>(`/api/code/index/entries${qs ? `?${qs}` : ""}`);
+}
+
+export function scanCodeIndex() {
+  return jsonFetch<CodeIndexPayload>("/api/code/index/scan", { method: "POST" });
 }
 
 export type ReorderMembersPrefs = {

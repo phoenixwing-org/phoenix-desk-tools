@@ -29,6 +29,8 @@ _SKIP_DIR_NAMES_CI = frozenset(
 
 FCSTD_SUFFIX = ".fcstd"
 SW_PART_SUFFIX = ".sldprt"
+CODE_CPP_SUFFIX = ".cpp"
+CODE_HEADER_SUFFIXES = frozenset({".h", ".hpp"})
 
 
 def should_skip_scan_dir(dirname: str) -> bool:
@@ -40,13 +42,24 @@ def should_skip_scan_dir(dirname: str) -> bool:
     return False
 
 
-def iter_filtered_files(workspace: Path, *, want_fcstd: bool, want_sw_part: bool) -> list[Path]:
+def iter_filtered_files(
+    workspace: Path,
+    *,
+    want_fcstd: bool = False,
+    want_sw_part: bool = False,
+    want_cpp: bool = False,
+    want_header: bool = False,
+) -> list[Path]:
     """递归列出工作空间内匹配扩展名的文件（相对路径）。"""
     exts: set[str] = set()
     if want_fcstd:
         exts.add(FCSTD_SUFFIX)
     if want_sw_part:
         exts.add(SW_PART_SUFFIX)
+    if want_cpp:
+        exts.add(CODE_CPP_SUFFIX)
+    if want_header:
+        exts.update(CODE_HEADER_SUFFIXES)
     if not exts:
         return []
 

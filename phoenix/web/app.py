@@ -67,6 +67,11 @@ from phoenix.services.part_dedup_service import (
     save_part_dedup_prefs,
     scan_part_dedup,
 )
+from phoenix.services.code_index_service import (
+    load_code_index_payload,
+    run_code_index_scan,
+    search_code_index_entries,
+)
 from phoenix.services.reorder_members_service import (
     get_reorder_members_prefs,
     list_reorder_top_level_entries,
@@ -528,11 +533,19 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
     def api_tree(
         fcstd: bool = Query(True, alias="fcstd"),
         sw: bool = Query(False, alias="sw"),
+        cpp: bool = Query(False, alias="cpp"),
+        header: bool = Query(False, alias="header"),
     ) -> dict:
         ws = get_workspace()
         if not ws.is_dir():
             raise HTTPException(status_code=400, detail=f"工作空间不是目录: {ws}")
-        files = scan_workspace_files(ws, want_fcstd=fcstd, want_sw_part=sw)
+        files = scan_workspace_files(
+            ws,
+            want_fcstd=fcstd,
+            want_sw_part=sw,
+            want_cpp=cpp,
+            want_header=header,
+        )
         return build_workspace_tree(ws, files)
 
     @app.get("/api/bom/prefs")
@@ -1324,6 +1337,37 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
             return run_sw_step_export(ws, patch or None)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.get("/api/code/index")
+    def api_code_index_get() -> dict:
+        return load_code_index_payload(get_workspace())
+
+    @app.get("/api/code/index/entries")
+    def api_code_index_entries(
+        offset: int = Query(0, ge=0),
+        limit: int = Query(50, ge=1, le=500),
+        status: str | None = Query(None),
+        kind: str | None = Query(None),
+        q: str | None = Query(None),
+        search_mode: str | None = Query(None),
+    ) -> dict:
+        return search_code_index_entries(
+            get_workspace(),
+            offset=offset,
+            limit=limit,
+            status=status,
+            kind=kind,
+            q=q,
+            search_mode=search_mode,
+        )
+
+    @app.post("/api/code/index/scan")
+    def api_code_index_scan() -> dict:
+        ws = get_workspace()
+        try:
+            return run_code_index_scan(ws)
+        except OSError as e:
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
     @app.get("/api/code/reorder-members/prefs")
     def api_reorder_members_prefs_get() -> dict:

@@ -12,6 +12,8 @@ WORKSPACE_DATABASE_FILENAME = "phoenix-workspace.sqlite"
 CAD_DATABASE_FILENAME = WORKSPACE_DATABASE_FILENAME
 SCHEMA_VERSION = 10
 
+from phoenix.code.schema import CODE_CREATE_SCHEMA_DDL
+
 T_META = "phoenix_meta"
 T_CAD_SCAN = "phoenix_cad_scan"
 T_FILE_ASSET = "phoenix_cad_file_asset"
@@ -222,7 +224,7 @@ CREATE INDEX IF NOT EXISTS idx_phoenix_cad_bom_occ_root
     ON {T_BOM_TREE_OCCURRENCE}(root_host_repo_rel_path);
 CREATE INDEX IF NOT EXISTS idx_phoenix_cad_bom_occ_host_target
     ON {T_BOM_TREE_OCCURRENCE}(host_repo_rel_path, target_repo_rel_path);
-"""
+""" + CODE_CREATE_SCHEMA_DDL
 
 
 class PhoenixDatabaseError(RuntimeError):

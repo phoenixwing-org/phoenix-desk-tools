@@ -22,14 +22,14 @@ export function applyExpandIconCssVars(boxPx: number): void {
   const box = clampExpandIconSize(boxPx);
   const glyph = expandGlyphSizePx(box);
   const root = document.documentElement;
-  root.style.setProperty("--phoenix.-expand-size", `${box}px`);
-  root.style.setProperty("--phoenix.-expand-glyph", `${glyph}px`);
+  root.style.setProperty("--phoenix-expand-size", `${box}px`);
+  root.style.setProperty("--phoenix-expand-glyph", `${glyph}px`);
   root.style.setProperty(
-    "--phoenix.-expand-icon-collapsed",
+    "--phoenix-expand-icon-collapsed",
     `url("data:image/svg+xml,${TWISTIE_COLLAPSED}")`,
   );
   root.style.setProperty(
-    "--phoenix.-expand-icon-expanded",
+    "--phoenix-expand-icon-expanded",
     `url("data:image/svg+xml,${TWISTIE_EXPANDED}")`,
   );
 }

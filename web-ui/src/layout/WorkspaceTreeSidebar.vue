@@ -1,10 +1,17 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onUnmounted, ref, watch } from "vue";
 import TreeBranch from "../components/TreeBranch.vue";
 import ShellLogPanel from "./ShellLogPanel.vue";
 import { fetchTree, type TreeNode } from "../api";
 import { useAppShell } from "../composables/useAppShell";
 import { countTreeFiles, filterTreeNode } from "../utils/workspaceTreeFilter";
+import {
+  applyProfileDefaults,
+  ensureTreeFilterSelection,
+  resolveWorkspaceTreeFilterProfile,
+  treeFetchOptions,
+  type WorkspaceTreeFilterState,
+} from "../utils/workspaceTreeFilters";
 
 const LOG_MIN_H = 80;
 const LOG_MAX_RATIO = 0.7;
@@ -13,13 +20,29 @@ const shell = useAppShell();
 const sidebarRef = ref<HTMLElement | null>(null);
 const sidebarHeight = ref(0);
 
-const wantFcstd = ref(true);
-const wantSw = ref(false);
+const filters = ref<WorkspaceTreeFilterState>({
+  wantFcstd: true,
+  wantSw: false,
+  wantCpp: false,
+  wantHeader: false,
+});
+
 const tree = ref<TreeNode | null>(null);
 const fileCount = ref(0);
 const selectedRel = ref<string | null>(null);
 const treeFilterQuery = ref("");
 const loading = ref(false);
+
+const filterProfile = computed(() =>
+  resolveWorkspaceTreeFilterProfile(
+    shell.enabledNavModules.value,
+    shell.currentPage.value,
+    shell.appConfig.value?.navigation,
+  ),
+);
+
+const showCadFilters = computed(() => filterProfile.value === "cad");
+const showCodeFilters = computed(() => filterProfile.value === "code");
 
 const displayTree = computed((): TreeNode | null => {
   if (!tree.value) return null;
@@ -75,9 +98,15 @@ function bindSidebarObserver(el: HTMLElement | null) {
 }
 
 async function scan() {
+  if (!ensureTreeFilterSelection(filters.value, filterProfile.value)) {
+    tree.value = null;
+    fileCount.value = 0;
+    shell.setStatus("请至少勾选一种文件类型");
+    return;
+  }
   loading.value = true;
   try {
-    const data = await fetchTree(wantFcstd.value, wantSw.value);
+    const data = await fetchTree(treeFetchOptions(filters.value));
     tree.value = data.tree;
     fileCount.value = data.file_count;
   } catch (e) {
@@ -85,6 +114,10 @@ async function scan() {
   } finally {
     loading.value = false;
   }
+}
+
+function onFilterChange() {
+  void scan();
 }
 
 async function onSelect(rel: string) {
@@ -121,10 +154,19 @@ function onLogResizeStart(e: MouseEvent) {
 
 watch(sidebarRef, (el) => bindSidebarObserver(el), { flush: "post" });
 
+watch(
+  filterProfile,
+  (profile) => {
+    applyProfileDefaults(filters, profile);
+    void scan();
+  },
+  { immediate: true },
+);
+
 watch(workspacePath, () => {
   selectedRel.value = null;
   treeFilterQuery.value = "";
-  scan();
+  void scan();
 });
 
 watch(
@@ -139,8 +181,6 @@ watch(
     }
   },
 );
-
-onMounted(() => scan());
 
 onUnmounted(() => {
   resizeObserver?.disconnect();
@@ -161,8 +201,26 @@ onUnmounted(() => {
         <div class="ws-title-row">
           <span class="ws-title" :title="treeTitle">{{ treeTitle }}</span>
           <div class="ws-filters">
-            <label class="chk"><input v-model="wantFcstd" type="checkbox" @change="scan" /> FCStd</label>
-            <label class="chk"><input v-model="wantSw" type="checkbox" @change="scan" /> .sldprt</label>
+            <template v-if="showCadFilters">
+              <label class="chk">
+                <input v-model="filters.wantFcstd" type="checkbox" @change="onFilterChange" />
+                FCStd
+              </label>
+              <label class="chk">
+                <input v-model="filters.wantSw" type="checkbox" @change="onFilterChange" />
+                .sldprt
+              </label>
+            </template>
+            <template v-else-if="showCodeFilters">
+              <label class="chk">
+                <input v-model="filters.wantCpp" type="checkbox" @change="onFilterChange" />
+                .cpp
+              </label>
+              <label class="chk">
+                <input v-model="filters.wantHeader" type="checkbox" @change="onFilterChange" />
+                .h/.hpp
+              </label>
+            </template>
           </div>
         </div>
         <div class="ws-search-row">
@@ -290,6 +348,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 3px;
+  white-space: nowrap;
 }
 
 .mini {
