@@ -95,11 +95,32 @@
       "description": "扫描源文件、配置、文档与资源写入 phoenix_code_* 索引表"
     },
     {
+      "id": "code_ignore",
+      "label": "Code 忽略设定",
+      "page": "code_ignore",
+      "module": "code",
+      "description": "Code 模块共用忽略：code.ignore 文件 + 工作空间自定义（CAA 等）"
+    },
+    {
       "id": "reorder_members",
       "label": "C++ 成员排序",
       "page": "reorder_members",
       "module": "code",
       "description": "按 cxx-code-style 重排选定模块下 .h/.cpp 类成员"
+    },
+    {
+      "id": "code_rename",
+      "label": "Code 批量改名",
+      "page": "code_rename",
+      "module": "code",
+      "description": "工作空间内文件夹 / 文件 / 文本精确匹配改名"
+    },
+    {
+      "id": "code_uuid",
+      "label": "Code UUID 替换",
+      "page": "code_uuid",
+      "module": "code",
+      "description": "扫描并勾选替换 UUID 形态字符串"
     },
     {
       "id": "config",
@@ -124,6 +145,9 @@
       "sw_step_export": { "max_tabs": 1 },
       "reorder_members": { "max_tabs": 1 },
       "code_index": { "max_tabs": 1 },
+      "code_ignore": { "max_tabs": 1 },
+      "code_rename": { "max_tabs": 1 },
+      "code_uuid": { "max_tabs": 1 },
       "bom_export": { "max_tabs": 1 },
       "home": { "max_tabs": 1 },
       "config": { "max_tabs": 1 }

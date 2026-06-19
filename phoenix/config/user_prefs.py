@@ -45,6 +45,8 @@ _WORKSPACE_SECTIONS = (
     "part_dedup",
     "bom_apply",
     "code_reorder",
+    "code_rename",
+    "code_ignore",
 )
 
 _WORKSPACE_DEFAULT: dict[str, Any] = {
@@ -89,6 +91,19 @@ _WORKSPACE_DEFAULT: dict[str, Any] = {
         "sort_members": False,
         "verbose": False,
         "last_selected": [],
+    },
+    "code_rename": {
+        "old": "",
+        "new": "",
+        "levels": ["text"],
+        "scope": "",
+        "target_encoding": "utf-8",
+        "include_ignored": False,
+        "rescan_index": False,
+    },
+    "code_ignore": {
+        "custom_ignore": [],
+        "ignore_preset": "",
     },
 }
 

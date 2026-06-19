@@ -49,7 +49,7 @@ class TestReorderMembersService(unittest.TestCase):
             (ws / "CustomSkip").mkdir()
             (ws / "KeepMe").mkdir()
             patterns, _, exists = load_ignore_patterns(ws)
-            self.assertTrue(exists)
+            self.assertFalse(exists)  # 无 code.ignore；legacy 仍合并进 patterns
             self.assertIn("CustomSkip", patterns)
             self.assertTrue(is_ignored_name("CustomSkip", patterns))
             self.assertFalse(is_ignored_name("KeepMe", patterns))

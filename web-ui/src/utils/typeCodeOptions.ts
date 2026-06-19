@@ -1,6 +1,6 @@
 /**
  * 类型码 TypeCode：常用 H/S/R，也允许手输其它值。
- * 约定见仓库 doc/Phoenix嵌入式BOM属性约定.md §2.1
+ * 约定见仓库 doc/cad/Phoenix嵌入式BOM属性约定.md §2.1
  */
 
 export type ComboOption = { value: string; label: string };

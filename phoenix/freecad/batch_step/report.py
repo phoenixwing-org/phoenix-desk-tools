@@ -92,7 +92,7 @@ def render_batch_step_report_md(
     lines.extend(
         [
             "",
-            "说明见仓库 `doc/STEP批量转FCStd.md`；由桌面「STEP 批量」或 FreeCADCmd 运行。",
+            "说明见仓库 `doc/cad/STEP批量转FCStd.md`；由桌面「STEP 批量」或 FreeCADCmd 运行。",
         ]
     )
     return "\n".join(lines) + "\n"

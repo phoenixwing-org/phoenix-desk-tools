@@ -5,25 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from phoenix.code.ignore import load_ignore_config, should_skip_code_dir
 from phoenix.code.kinds import code_asset_kind, is_code_index_filename
-from phoenix.workspace_scan import should_skip_scan_dir
+from phoenix.code.text_encoding import detect_text_encoding_label
 
 _SKIP_EXTRA = frozenset(
     {
-        "build",
-        "dist",
-        "node_modules",
-        "web-ui",
-        ".phoenix",
-        ".git",
-        "__pycache__",
-        ".venv",
-        "venv",
-        ".idea",
-        ".vs",
         ".cursor",
-        "cmake-build-debug",
-        "cmake-build-release",
     }
 )
 
@@ -35,13 +23,14 @@ class CodeFileRecord:
     asset_kind: str
     file_ext: str
     size_bytes: int
+    text_encoding: str
 
 
-def _should_skip_dir(name: str) -> bool:
+def _should_skip_dir(name: str, patterns: list[str]) -> bool:
     cf = name.casefold()
     if cf in _SKIP_EXTRA:
         return True
-    return should_skip_scan_dir(name)
+    return should_skip_code_dir(name, patterns)
 
 
 def scan_code_workspace(repo_root: Path) -> list[CodeFileRecord]:
@@ -50,6 +39,7 @@ def scan_code_workspace(repo_root: Path) -> list[CodeFileRecord]:
     if not root.is_dir():
         return []
 
+    patterns = load_ignore_config(root)["ignore_patterns"]
     out: list[CodeFileRecord] = []
 
     def walk(cur: Path) -> None:
@@ -62,7 +52,7 @@ def scan_code_workspace(repo_root: Path) -> list[CodeFileRecord]:
                 if ent.is_symlink():
                     continue
                 if ent.is_dir():
-                    if _should_skip_dir(ent.name):
+                    if _should_skip_dir(ent.name, patterns):
                         continue
                     walk(ent)
                     continue
@@ -83,6 +73,7 @@ def scan_code_workspace(repo_root: Path) -> list[CodeFileRecord]:
                         asset_kind=kind,
                         file_ext=ent.suffix.casefold(),
                         size_bytes=int(size),
+                        text_encoding=detect_text_encoding_label(ent),
                     )
                 )
             except OSError:

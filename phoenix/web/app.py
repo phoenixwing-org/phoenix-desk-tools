@@ -72,6 +72,14 @@ from phoenix.services.code_index_service import (
     run_code_index_scan,
     search_code_index_entries,
 )
+from phoenix.services.code_ignore_service import get_code_ignore_prefs, save_code_ignore_prefs
+from phoenix.services.code_rename_service import (
+    apply_code_rename,
+    get_code_rename_prefs,
+    preview_code_rename,
+    save_code_rename_prefs,
+)
+from phoenix.services.code_uuid_service import apply_code_uuids, scan_code_uuids
 from phoenix.services.reorder_members_service import (
     get_reorder_members_prefs,
     list_reorder_top_level_entries,
@@ -375,6 +383,36 @@ class ReorderMembersPrefsBody(BaseModel):
 class ReorderMembersRunBody(ReorderMembersPrefsBody):
     targets: list[str] | None = None
     top_dirs: list[str] | None = None  # 兼容旧字段名
+    dry_run: bool = False
+
+
+class CodeRenamePrefsBody(BaseModel):
+    old: str | None = None
+    new: str | None = None
+    levels: list[str] | None = None
+    scope: str | None = None
+    target_encoding: str | None = None
+    include_ignored: bool | None = None
+    rescan_index: bool | None = None
+
+
+class CodeIgnorePrefsBody(BaseModel):
+    custom_ignore: list[str] | str | None = None
+    ignore_preset: str | None = None
+
+
+class CodeRenameRunBody(CodeRenamePrefsBody):
+    confirm_token: str | None = None
+
+
+class CodeUuidScanBody(BaseModel):
+    scope: str | None = None
+    kinds: list[str] | None = None
+
+
+class CodeUuidApplyBody(BaseModel):
+    hit_ids: list[str]
+    strategy: str | None = "map_per_value"
     dry_run: bool = False
 
 
@@ -1401,6 +1439,58 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
                 dry_run=dry_run,
                 patch=patch or None,
             )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.get("/api/code/ignore/prefs")
+    def api_code_ignore_prefs_get() -> dict:
+        return get_code_ignore_prefs(get_workspace())
+
+    @app.put("/api/code/ignore/prefs")
+    def api_code_ignore_prefs_put(body: CodeIgnorePrefsBody) -> dict:
+        patch = body.model_dump(exclude_none=True)
+        try:
+            return save_code_ignore_prefs(get_workspace(), patch)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.get("/api/code/rename/prefs")
+    def api_code_rename_prefs_get() -> dict:
+        return get_code_rename_prefs(get_workspace())
+
+    @app.put("/api/code/rename/prefs")
+    def api_code_rename_prefs_put(body: CodeRenamePrefsBody) -> dict:
+        patch = body.model_dump(exclude_none=True)
+        try:
+            return save_code_rename_prefs(get_workspace(), patch)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post("/api/code/rename/preview")
+    def api_code_rename_preview(body: CodeRenameRunBody) -> dict:
+        try:
+            return preview_code_rename(get_workspace(), body.model_dump(exclude_none=True))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post("/api/code/rename/apply")
+    def api_code_rename_apply(body: CodeRenameRunBody) -> dict:
+        try:
+            return apply_code_rename(get_workspace(), body.model_dump(exclude_none=True))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post("/api/code/uuid/scan")
+    def api_code_uuid_scan(body: CodeUuidScanBody) -> dict:
+        try:
+            return scan_code_uuids(get_workspace(), body.model_dump(exclude_none=True))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post("/api/code/uuid/apply")
+    def api_code_uuid_apply(body: CodeUuidApplyBody) -> dict:
+        try:
+            return apply_code_uuids(get_workspace(), body.model_dump(exclude_none=True))
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 

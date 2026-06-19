@@ -10,9 +10,9 @@ from typing import Any
 PHOENIX_DIR_NAME = ".phoenix"
 WORKSPACE_DATABASE_FILENAME = "phoenix-workspace.sqlite"
 CAD_DATABASE_FILENAME = WORKSPACE_DATABASE_FILENAME
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
-from phoenix.code.schema import CODE_CREATE_SCHEMA_DDL
+from phoenix.code.schema import CODE_CREATE_SCHEMA_DDL, migrate_code_schema
 
 T_META = "phoenix_meta"
 T_CAD_SCAN = "phoenix_cad_scan"

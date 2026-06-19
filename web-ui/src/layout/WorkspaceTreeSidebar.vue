@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue";
 import TreeBranch from "../components/TreeBranch.vue";
+import CodeIgnorePanel from "../components/CodeIgnorePanel.vue";
 import ShellLogPanel from "./ShellLogPanel.vue";
 import { fetchTree, type TreeNode } from "../api";
 import { useAppShell } from "../composables/useAppShell";
@@ -43,6 +44,12 @@ const filterProfile = computed(() =>
 
 const showCadFilters = computed(() => filterProfile.value === "cad");
 const showCodeFilters = computed(() => filterProfile.value === "code");
+const codeRightTab = computed({
+  get: () => shell.codeRightSidebarTab.value,
+  set: (v: "tree" | "ignore") => {
+    shell.codeRightSidebarTab.value = v;
+  },
+});
 
 const displayTree = computed((): TreeNode | null => {
   if (!tree.value) return null;
@@ -76,10 +83,9 @@ const displayLogHeightPx = computed(() => {
   return Math.min(maxH, Math.max(LOG_MIN_H, stored));
 });
 
-const gridTemplateRows = computed(() => {
-  if (!logOpen.value) return "minmax(0, 1fr)";
-  return `minmax(0, 1fr) 5px ${displayLogHeightPx.value}px`;
-});
+const logPanelStyle = computed(() =>
+  logOpen.value ? { height: `${displayLogHeightPx.value}px`, flexShrink: "0" } : undefined,
+);
 
 let resizeObserver: ResizeObserver | null = null;
 
@@ -194,9 +200,33 @@ onUnmounted(() => {
     ref="sidebarRef"
     class="ws-sidebar"
     data-tour="workspace-tree"
-    :style="{ width: panelWidth, gridTemplateRows }"
+    :style="{ width: panelWidth }"
   >
-    <div class="ws-tree-section">
+    <div class="ws-body">
+      <div v-if="showCodeFilters" class="ws-tab-bar" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          class="ws-tab"
+          :class="{ active: codeRightTab === 'tree' }"
+          :aria-selected="codeRightTab === 'tree'"
+          @click="codeRightTab = 'tree'"
+        >
+          工作空间树
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="ws-tab"
+          :class="{ active: codeRightTab === 'ignore' }"
+          :aria-selected="codeRightTab === 'ignore'"
+          @click="codeRightTab = 'ignore'"
+        >
+          忽略设定
+        </button>
+      </div>
+
+      <div v-show="!showCodeFilters || codeRightTab === 'tree'" class="ws-tree-section">
       <div class="ws-head">
         <div class="ws-title-row">
           <span class="ws-title" :title="treeTitle">{{ treeTitle }}</span>
@@ -258,13 +288,20 @@ onUnmounted(() => {
       </div>
     </div>
 
+    <div v-show="showCodeFilters && codeRightTab === 'ignore'" class="ws-ignore-section">
+      <CodeIgnorePanel layout="sidebar" />
+    </div>
+    </div>
+
     <template v-if="logOpen">
       <div
         class="log-resizer"
         title="拖拽调节日志区高度"
         @mousedown="onLogResizeStart"
       />
-      <ShellLogPanel />
+      <div class="ws-log-wrap" :style="logPanelStyle">
+        <ShellLogPanel />
+      </div>
     </template>
   </aside>
 </template>
@@ -275,14 +312,66 @@ onUnmounted(() => {
   top: 0;
   right: 0;
   bottom: 0;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   background: var(--sidebar-bg);
   border-left: 1px solid var(--border);
   overflow: hidden;
 }
 
+.ws-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ws-log-wrap {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.ws-tab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-head-bg);
+  flex-shrink: 0;
+}
+
+.ws-tab {
+  flex: 1;
+  padding: 7px 6px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  font-size: 0.72rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.ws-tab.active {
+  color: var(--text);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+  background: var(--sidebar-bg);
+}
+
+.ws-ignore-section {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .ws-tree-section {
+  flex: 1;
   min-height: 0;
   min-width: 0;
   display: flex;

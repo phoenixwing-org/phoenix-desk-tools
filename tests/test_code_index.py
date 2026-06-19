@@ -44,13 +44,18 @@ class TestCodeIndexService(unittest.TestCase):
             (td / "README.md").write_text("# hi", encoding="utf-8")
             sub = td / "src"
             sub.mkdir()
-            (sub / "util.h").write_text("// h", encoding="utf-8")
+            (sub / "util.h").write_bytes(b"\xef\xbb\xbf// h\n")
 
             first = run_code_index_scan(td)
             self.assertGreaterEqual(first["stats"]["total"], 3)
             self.assertEqual(first["stats"]["source"], 2)
             self.assertEqual(first["stats"]["doc"], 1)
             self.assertTrue(cad_database_path(td).is_file())
+
+            entries, _ = query_code_files(td)
+            by_name = {e["filename"]: e for e in entries}
+            self.assertEqual(by_name["main.cpp"]["text_encoding"], "ascii")
+            self.assertEqual(by_name["util.h"]["text_encoding"], "utf-8-bom")
 
             (sub / "util.h").unlink()
             second = run_code_index_scan(td)

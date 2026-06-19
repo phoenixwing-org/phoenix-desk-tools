@@ -1391,6 +1391,7 @@ export type CodeIndexEntry = {
   file_ext: string;
   file_status: "present" | "missing" | string;
   size_bytes: number;
+  text_encoding: string;
   last_seen_at?: string | null;
 };
 
@@ -1619,5 +1620,185 @@ export function runSwStepExport(opts: Partial<SwStepPrefs> = {}) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(opts),
+  });
+}
+
+export type CodeIgnorePrefs = {
+  workspace_path: string;
+  workspace_path_display: string;
+  ignore_preset: string;
+  ignore_presets: Array<{ id: string; label: string; patterns: string[] }>;
+  custom_ignore: string[];
+  ignore_file: string;
+  ignore_file_display: string;
+  ignore_file_exists: boolean;
+  legacy_ignore_sources: Array<{ filename: string; patterns: string[] }>;
+  ignore_builtin: string[];
+  ignore_file_patterns: string[];
+  ignore_custom_patterns: string[];
+  ignore_patterns: string[];
+  consumers: string[];
+};
+
+export function fetchCodeIgnorePrefs() {
+  return jsonFetch<CodeIgnorePrefs>("/api/code/ignore/prefs");
+}
+
+export function saveCodeIgnorePrefs(prefs: Partial<CodeIgnorePrefs>) {
+  return jsonFetch<CodeIgnorePrefs>("/api/code/ignore/prefs", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(prefs),
+  });
+}
+
+export type RenameLevel = "dir" | "file" | "text";
+
+export type CodeRenamePrefs = {
+  workspace_path: string;
+  workspace_path_display: string;
+  old: string;
+  new: string;
+  levels: RenameLevel[];
+  scope: string;
+  target_encoding: "utf-8" | "gbk";
+  include_ignored: boolean;
+  rescan_index: boolean;
+  implemented: boolean;
+};
+
+export type CodeRenameHit = {
+  hit_id: string;
+  repo_rel_path: string;
+  level: RenameLevel;
+  hits: number;
+  lines?: number[];
+  encoding_in?: string;
+  encoding_out?: string;
+  status?: string;
+  detail?: string;
+};
+
+export type CodeRenameSummary = {
+  dirs: number;
+  files: number;
+  text_files: number;
+  total_hits: number;
+  skipped: number;
+};
+
+export type CodeRenameResult = {
+  ok: boolean;
+  implemented: boolean;
+  dry_run: boolean;
+  message?: string;
+  old: string;
+  new: string;
+  levels: RenameLevel[];
+  scope: string;
+  target_encoding: string;
+  include_ignored: boolean;
+  rescan_index: boolean;
+  hits: CodeRenameHit[];
+  summary: CodeRenameSummary;
+  log?: string;
+  lines?: string[];
+};
+
+export function fetchCodeRenamePrefs() {
+  return jsonFetch<CodeRenamePrefs>("/api/code/rename/prefs");
+}
+
+export function saveCodeRenamePrefs(prefs: Partial<CodeRenamePrefs>) {
+  return jsonFetch<CodeRenamePrefs>("/api/code/rename/prefs", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(prefs),
+  });
+}
+
+export function previewCodeRename(body: Partial<CodeRenamePrefs>) {
+  return jsonFetch<CodeRenameResult>("/api/code/rename/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function applyCodeRename(body: Partial<CodeRenamePrefs> & { confirm_token?: string }) {
+  return jsonFetch<CodeRenameResult>("/api/code/rename/apply", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export type UuidKind = "uuid" | "guid32" | "suspicious";
+export type UuidApplyStrategy = "map_per_value" | "fresh_per_hit";
+
+export type CodeUuidHit = {
+  hit_id: string;
+  repo_rel_path: string;
+  line: number;
+  col: number;
+  matched_text: string;
+  uuid_normalized: string;
+  kind: UuidKind;
+  file_hits: number;
+};
+
+export type CodeUuidScanResult = {
+  ok: boolean;
+  implemented: boolean;
+  message?: string;
+  scan_id: string | null;
+  scope: string;
+  kinds: UuidKind[];
+  hits: CodeUuidHit[];
+  ignore_file_display?: string;
+  ignore_file_exists?: boolean;
+  ignore_file_patterns?: string[];
+  ignore_custom_patterns?: string[];
+  summary: {
+    files_scanned: number;
+    total_hits: number;
+    unique_uuids: number;
+  };
+};
+
+export type CodeUuidApplyResult = {
+  ok: boolean;
+  implemented: boolean;
+  dry_run: boolean;
+  message?: string;
+  hit_ids: string[];
+  strategy: UuidApplyStrategy;
+  mappings: Array<{ old: string; new: string; hit_id: string }>;
+  summary: {
+    files_scanned: number;
+    total_hits: number;
+    unique_uuids: number;
+  };
+  log?: string;
+  lines?: string[];
+};
+
+export function scanCodeUuids(body: { scope?: string; kinds?: UuidKind[] } = {}) {
+  return jsonFetch<CodeUuidScanResult>("/api/code/uuid/scan", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function applyCodeUuids(body: {
+  hit_ids: string[];
+  strategy?: UuidApplyStrategy;
+  dry_run?: boolean;
+}) {
+  return jsonFetch<CodeUuidApplyResult>("/api/code/uuid/apply", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
 }

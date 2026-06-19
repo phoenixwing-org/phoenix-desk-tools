@@ -196,7 +196,7 @@ onMounted(async () => {
             </label>
             <label
               class="opt-chip disabled"
-              title="规划中：Doxygen 序号重编、.h/.cpp 构造析构序号一致等，见 doc/成员变量字母序-规则与待实现.md"
+              title="规划中：Doxygen 序号重编、.h/.cpp 构造析构序号一致等，见 doc/code/成员变量字母序-规则与待实现.md"
             >
               <input type="checkbox" disabled />
               <span>成员变量字母序</span>
@@ -306,9 +306,14 @@ onMounted(async () => {
           </li>
           <li>
             可选文件
-            <span class="mono">{{ ignoreFileDisplay || ".phoenix/reorder-members.ignore" }}</span>
+            <span class="mono">{{ ignoreFileDisplay || ".phoenix/code.ignore" }}</span>
             <span v-if="ignoreFileExists">（已加载）</span>
-            <span v-else>（未建则仅内置；可复制 reorder-members.ignore.example）</span>。
+            <span v-else>（未建则仅内置；可复制 code.ignore.example）</span>。
+          </li>
+          <li>
+            CAA 等工程差异在
+            <button type="button" class="link-btn" @click="shell.openCodeIgnoreSidebar()">右侧栏 · 忽略</button>
+            自定义区配置。
           </li>
           <li v-if="ignoredCount">当前列表已隐藏 {{ ignoredCount }} 项。</li>
         </ul>
@@ -321,9 +326,9 @@ onMounted(async () => {
           </li>
           <li>
             <strong>.h</strong>：各访问段内同样优先特殊成员，再按字母序；成员变量字母序 Web 暂未开放（见
-            <code>doc/成员变量字母序-规则与待实现.md</code>）。
+            <code>doc/code/成员变量字母序-规则与待实现.md</code>）。
           </li>
-          <li>完整规则见页内 ? 帮助或 <code>doc/成员函数排序-reorder_members.md</code>。</li>
+          <li>完整规则见页内 ? 帮助或 <code>doc/code/成员函数排序-reorder_members.md</code>。</li>
         </ul>
       </div>
     </details>
@@ -626,6 +631,16 @@ onMounted(async () => {
 
 .muted {
   color: var(--muted);
+}
+
+.help-list .link-btn {
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
 }
 
 @media (max-width: 720px) {

@@ -3,7 +3,7 @@
 """
 Reorder C++ class member declarations (.h) and definitions (.cpp) per cxx-code-style skill.
 
-Full rules (zh): doc/成员函数排序-reorder_members.md
+Full rules (zh): doc/code/成员函数排序-reorder_members.md
 
 Usage:
     python -m phoenix.code.reorder_members <directory|file> [options]

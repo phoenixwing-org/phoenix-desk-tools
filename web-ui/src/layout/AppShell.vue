@@ -15,6 +15,9 @@ import StepBatchPage from "../pages/StepBatchPage.vue";
 import SwStepExportPage from "../pages/SwStepExportPage.vue";
 import ReorderMembersPage from "../pages/ReorderMembersPage.vue";
 import CodeIndexPage from "../pages/CodeIndexPage.vue";
+import CodeIgnorePage from "../pages/CodeIgnorePage.vue";
+import CodeRenamePage from "../pages/CodeRenamePage.vue";
+import CodeUuidReplacePage from "../pages/CodeUuidReplacePage.vue";
 import PartCatalogPage from "../pages/PartCatalogPage.vue";
 import PartKeyDetailPage from "../pages/PartKeyDetailPage.vue";
 import FileRenamePage from "../pages/FileRenamePage.vue";
@@ -56,6 +59,9 @@ const PAGE_COMPONENTS: Record<string, Component> = {
   sw_step_export: SwStepExportPage,
   reorder_members: ReorderMembersPage,
   code_index: CodeIndexPage,
+  code_ignore: CodeIgnorePage,
+  code_rename: CodeRenamePage,
+  code_uuid: CodeUuidReplacePage,
   bom_export: BomExportPage,
 };
 

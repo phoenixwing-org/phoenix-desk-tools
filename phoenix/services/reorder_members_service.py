@@ -20,6 +20,7 @@ from phoenix.code.reorder_members import (
     resolve_reorder_include_for_run,
     run_reorder_members,
 )
+from phoenix.services.code_ignore_service import get_code_ignore_prefs
 from phoenix.config.user_prefs import (
     format_resolved_under_workspace,
     load_workspace_prefs,
@@ -28,6 +29,19 @@ from phoenix.config.user_prefs import (
 )
 
 _SECTION = "code_reorder"
+
+
+def _ignore_fields(repo_root: Path) -> dict[str, Any]:
+    ig = get_code_ignore_prefs(repo_root)
+    return {
+        "ignore_file": ig["ignore_file"],
+        "ignore_file_display": ig["ignore_file_display"],
+        "ignore_file_exists": ig["ignore_file_exists"],
+        "ignore_patterns": ig["ignore_patterns"],
+        "ignore_file_patterns": ig["ignore_file_patterns"],
+        "ignore_custom_patterns": ig["ignore_custom_patterns"],
+        "legacy_ignore_sources": ig["legacy_ignore_sources"],
+    }
 
 
 def _workspace_source_root(repo_root: Path) -> Path:
@@ -44,7 +58,7 @@ def get_reorder_members_prefs(repo_root: Path) -> dict[str, Any]:
     if not isinstance(last_selected, list):
         last_selected = []
     root = _workspace_source_root(rr)
-    patterns, ignore_path, ignore_exists = load_ignore_patterns(rr)
+    patterns, _, _ = load_ignore_patterns(rr)
     include_cpp, include_header = read_reorder_include_flags(pv)
     return {
         "workspace_path": str(root),
@@ -54,10 +68,7 @@ def get_reorder_members_prefs(repo_root: Path) -> dict[str, Any]:
         "sort_members": bool(pv.get("sort_members", False)),
         "verbose": bool(pv.get("verbose", False)),
         "last_selected": [str(x) for x in last_selected if str(x).strip()],
-        "ignore_file": str(ignore_path),
-        "ignore_file_display": format_resolved_under_workspace(ignore_path, rr),
-        "ignore_file_exists": ignore_exists,
-        "ignore_patterns": patterns,
+        **_ignore_fields(rr),
     }
 
 
@@ -210,10 +221,7 @@ def list_reorder_top_level_entries(repo_root: Path) -> dict[str, Any]:
         "workspace_path_display": format_resolved_under_workspace(root, rr),
         "entries": entries,
         "ignored": ignored,
-        "ignore_file": str(ignore_path),
-        "ignore_file_display": format_resolved_under_workspace(ignore_path, rr),
-        "ignore_file_exists": ignore_exists,
-        "ignore_patterns": patterns,
+        **_ignore_fields(rr),
     }
 
 

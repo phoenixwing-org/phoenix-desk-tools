@@ -86,14 +86,15 @@ def save_code_index(
                 f"""
                 INSERT INTO {T_CODE_FILE} (
                     repo_rel_path, filename, asset_kind, file_ext,
-                    file_status, size_bytes, last_seen_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    file_status, size_bytes, text_encoding, last_seen_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(repo_rel_path) DO UPDATE SET
                     filename = excluded.filename,
                     asset_kind = excluded.asset_kind,
                     file_ext = excluded.file_ext,
                     file_status = excluded.file_status,
                     size_bytes = excluded.size_bytes,
+                    text_encoding = excluded.text_encoding,
                     last_seen_at = excluded.last_seen_at,
                     updated_at = excluded.updated_at
                 """,
@@ -104,6 +105,7 @@ def save_code_index(
                     rec.file_ext,
                     FILE_STATUS_PRESENT,
                     rec.size_bytes,
+                    rec.text_encoding,
                     now,
                     now,
                 ),
@@ -212,7 +214,8 @@ def query_code_files(
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     sql_count = f"SELECT COUNT(*) FROM {T_CODE_FILE} {where}"
     sql_rows = f"""
-        SELECT repo_rel_path, filename, asset_kind, file_ext, file_status, size_bytes, last_seen_at
+        SELECT repo_rel_path, filename, asset_kind, file_ext, file_status, size_bytes,
+               text_encoding, last_seen_at
         FROM {T_CODE_FILE}
         {where}
         ORDER BY repo_rel_path COLLATE NOCASE
@@ -231,7 +234,8 @@ def query_code_files(
             "file_ext": str(r[3]),
             "file_status": str(r[4]),
             "size_bytes": int(r[5] or 0),
-            "last_seen_at": r[6],
+            "text_encoding": str(r[6] or ""),
+            "last_seen_at": r[7],
         }
         for r in rows
     ]

@@ -1,75 +1,32 @@
-"""工作空间一级条目忽略规则（内置 + ``.phoenix/reorder-members.ignore``）。"""
+"""兼容旧 import 路径；逻辑见 ``phoenix.code.ignore``。"""
 
 from __future__ import annotations
 
-import fnmatch
 from pathlib import Path
 
-from phoenix.config.user_prefs import workspace_phoenix_dir
-
-IGNORE_FILENAME = "reorder-members.ignore"
-
-# 内置：工作空间根下一级目录/文件名（始终生效）
-DEFAULT_IGNORE_PATTERNS: tuple[str, ...] = (
-    ".phoenix",
-    ".git",
-    ".vs",
-    "build",
-    "Build",
-    "Debug",
-    "Release",
-    "dist",
-    "node_modules",
-    "web-ui",
-    "__pycache__",
-    ".venv",
-    ".venv-desktop",
-    "phoenix_freecad_desktop.egg-info",
+from phoenix.code.ignore import (
+    DEFAULT_BUILTIN_PATTERNS as DEFAULT_IGNORE_PATTERNS,
+    IGNORE_FILENAME,
+    is_ignored_name,
+    load_ignore_config,
+    merge_ignore_patterns,
+    parse_custom_ignore_lines,
 )
 
 _SOURCE_SUFFIXES = frozenset({".cpp", ".h", ".hpp"})
 
 
 def ignore_file_path(repo_root: Path) -> Path:
-    return workspace_phoenix_dir(repo_root) / IGNORE_FILENAME
+    from phoenix.code.ignore import ignore_file_path as _path
+
+    return _path(repo_root)
 
 
 def load_ignore_patterns(repo_root: Path) -> tuple[list[str], Path, bool]:
-    """返回 ``(patterns, ignore_file_path, file_exists)``。"""
-    patterns: list[str] = list(DEFAULT_IGNORE_PATTERNS)
-    path = ignore_file_path(repo_root)
-    if path.is_file():
-        for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
-            line = raw.strip()
-            if not line or line.startswith("#"):
-                continue
-            patterns.append(line)
-    # 去重保序
-    seen: set[str] = set()
-    unique: list[str] = []
-    for p in patterns:
-        key = p.casefold()
-        if key in seen:
-            continue
-        seen.add(key)
-        unique.append(p)
-    return unique, path, path.is_file()
-
-
-def is_ignored_name(name: str, patterns: list[str]) -> bool:
-    if name.startswith("."):
-        return True
-    cf = name.casefold()
-    for pat in patterns:
-        p = pat.strip()
-        if not p:
-            continue
-        if any(ch in p for ch in "*?[]"):
-            if fnmatch.fnmatch(name, p) or fnmatch.fnmatch(cf, p.casefold()):
-                return True
-        elif cf == p.casefold():
-            return True
-    return False
+    """返回 ``(effective_patterns, primary_file_path, primary_exists)``。"""
+    cfg = load_ignore_config(repo_root)
+    path = Path(cfg["ignore_file"])
+    return cfg["ignore_patterns"], path, bool(cfg["ignore_file_exists"])
 
 
 def is_listable_source_file(path: Path) -> bool:

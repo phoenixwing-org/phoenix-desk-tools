@@ -27,6 +27,7 @@ from phoenix.freecad.phoenix_schema import (
     phoenix_dir as _schema_phoenix_dir,
     workspace_database_path,
 )
+from phoenix.code.schema import migrate_code_schema
 
 # 兼容导出
 CAD_DATABASE_FILENAME = WORKSPACE_DATABASE_FILENAME
@@ -165,14 +166,12 @@ def connect(repo_root: Path) -> Iterator[sqlite3.Connection]:
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(CREATE_SCHEMA_DDL)
-    row = conn.execute(
-        f"SELECT value FROM {T_META} WHERE key = 'schema_version'"
-    ).fetchone()
-    if row is None:
-        conn.execute(
-            f"INSERT INTO {T_META}(key, value) VALUES ('schema_version', ?)",
-            (str(SCHEMA_VERSION),),
-        )
+    migrate_code_schema(conn)
+    conn.execute(
+        f"INSERT INTO {T_META}(key, value) VALUES ('schema_version', ?) "
+        f"ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (str(SCHEMA_VERSION),),
+    )
 
 
 

@@ -54,7 +54,7 @@ class SwStepExportPage(BasePage):
                 "【Mac／Linux · 仅为界面与设计】控件与偏好与 Windows 版一致；"
                 "批量导出 STEP 仅在 Windows + SolidWorks + pywin32 下可用。"
                 "此处可填写路径、「保存偏好」、用「预览」统计 `.sldprt`/`.sldasm`。"
-                "\n详情请读 `doc/SolidWorks批量STEP导出.md`。当前系统：" + sys.platform
+                "\n详情请读 `doc/cad/SolidWorks批量STEP导出.md`。当前系统：" + sys.platform
             )
             hint = ctk.CTkLabel(
                 self,

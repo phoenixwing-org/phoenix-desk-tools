@@ -10,7 +10,7 @@
 | `scripts/` | `fcstd_map.py`、`fix_fcstd_xlink_paths.py`、FreeCAD 批量 runner |
 | `doc/` | [文档索引](doc/文档索引.md) · [总待办](doc/TODO.md) |
 
-**安装与用法**：[桌面工具-安装说明.md](doc/桌面工具-安装说明.md) · [桌面工具-使用说明.md](doc/桌面工具-使用说明.md) · Web 见下文与 [web-ui/README.md](web-ui/README.md)
+**安装与用法**：[桌面工具-安装说明.md](doc/user/桌面工具-安装说明.md) · [桌面工具-使用说明.md](doc/user/桌面工具-使用说明.md) · Web 见下文与 [web-ui/README.md](web-ui/README.md)
 
 ## 快速启动（桌面启动器）
 
@@ -52,7 +52,7 @@ python -m phoenix.web -w /path/to/CAD/workspace
 
 结论：**平时用 `python -m phoenix.web`**；**改界面用 `python -m phoenix.web --dev`**。详见 [web-ui/README.md](web-ui/README.md)。
 
-**首次使用 Web**： [doc/新手指引.md](doc/新手指引.md) · [doc/快速开始.md](doc/快速开始.md)
+**首次使用 Web**： [doc/user/新手指引.md](doc/user/新手指引.md) · [doc/user/快速开始.md](doc/user/快速开始.md)
 
 ## 待办与规划
 
@@ -61,10 +61,10 @@ python -m phoenix.web -w /path/to/CAD/workspace
 | 文档 | 说明 |
 | --- | --- |
 | [TODO.md](doc/TODO.md) | 跨模块总待办（性能、Web 壳层、平台化） |
-| [Web与桌面迁移-待办.md](doc/Web与桌面迁移-待办.md) | 页面对照、桌面 Tk → Web 迁移点检 |
-| [文件变更历史与引用证据-待办讨论.md](doc/文件变更历史与引用证据-待办讨论.md) | 改名历史入库、引用证据、与 XLink 修正统一 |
-| [SQL查询与递归点检-todo.md](doc/SQL查询与递归点检-todo.md) | SQL 日志格式、递归查询点检清单 |
-| [Phoenix平台-多应用壳层-规划讨论.md](doc/Phoenix平台-多应用壳层-规划讨论.md) | 多模块壳层（CAD / Code 等）、插件分包与拆仓 |
+| [Web与桌面迁移-待办.md](doc/platform/Web与桌面迁移-待办.md) | 页面对照、桌面 Tk → Web 迁移点检 |
+| [文件变更历史与引用证据-待办讨论.md](doc/cad/文件变更历史与引用证据-待办讨论.md) | 改名历史入库、引用证据、与 XLink 修正统一 |
+| [SQL查询与递归点检-todo.md](doc/platform/SQL查询与递归点检-todo.md) | SQL 日志格式、递归查询点检清单 |
+| [Phoenix平台-多应用壳层-规划讨论.md](doc/platform/Phoenix平台-多应用壳层-规划讨论.md) | 多模块壳层（CAD / Code 等）、插件分包与拆仓 |
 
 更多功能说明与架构文档见 [doc/文档索引.md](doc/文档索引.md)。
 

@@ -11,7 +11,7 @@ export const NAV_MODULE_OPTIONS = [
     id: "code",
     label: "Code 工具",
     shortLabel: "Code",
-    hint: "C++ 成员排序等",
+    hint: "C++ 成员排序、批量改名、UUID 替换等",
   },
 ] as const;
 

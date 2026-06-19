@@ -76,4 +76,7 @@ export const DEFAULT_PAGE_ICONS: Record<string, string> = {
   part_dedup: "≡",
   reorder_members: "{ }",
   code_index: "⌗",
+  code_ignore: "⊘",
+  code_rename: "↦",
+  code_uuid: "⧉",
 };

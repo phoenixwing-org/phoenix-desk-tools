@@ -51,6 +51,7 @@ const columns: TableColumnDef[] = [
   { key: "kind", label: "类型", width: 80, minWidth: 64 },
   { key: "file", label: "文件名", width: 220, minWidth: 120 },
   { key: "ext", label: "扩展名", width: 72, minWidth: 56 },
+  { key: "encoding", label: "编码", width: 88, minWidth: 72 },
   { key: "size", label: "大小", width: 80, minWidth: 64 },
   { key: "dir", label: "相对目录", width: 200, minWidth: 100 },
 ];
@@ -121,6 +122,21 @@ function relDir(row: CodeIndexEntry): string {
   if (i < 0) return ".";
   const dir = p.slice(0, i);
   return dir || ".";
+}
+
+const ENCODING_DISPLAY: Record<string, string> = {
+  "utf-8": "UTF-8",
+  "utf-8-bom": "UTF-8 BOM",
+  ascii: "ASCII",
+  gbk: "GBK",
+  binary: "二进制",
+  unknown: "未知",
+};
+
+function encodingLabel(row: CodeIndexEntry): string {
+  const enc = (row.text_encoding || "").trim();
+  if (!enc) return "—";
+  return ENCODING_DISPLAY[enc] ?? enc;
 }
 
 function formatSize(n: number) {
@@ -425,6 +441,7 @@ onMounted(() => applyInitialTabState());
               </td>
               <td class="mono file-cell" :title="row.repo_rel_path">{{ row.filename }}</td>
               <td class="mono">{{ row.file_ext || "—" }}</td>
+              <td class="mono encoding-cell" :title="row.text_encoding || ''">{{ encodingLabel(row) }}</td>
               <td class="mono">{{ formatSize(row.size_bytes) }}</td>
               <td class="mono dir-cell">{{ relDir(row) }}</td>
             </tr>

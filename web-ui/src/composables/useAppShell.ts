@@ -130,6 +130,9 @@ export type AppShellContext = {
   consumeTabPageState: (tabId: string) => Record<string, unknown> | undefined;
   canOpenNewTab: (pageId: string) => boolean;
   scheduleWorkbenchSave: () => void;
+  /** Code 模块右侧栏：工作空间树 / 忽略设定 Tab */
+  codeRightSidebarTab: Ref<"tree" | "ignore">;
+  openCodeIgnoreSidebar: () => Promise<void>;
 };
 
 const APP_SHELL_KEY: InjectionKey<AppShellContext> = Symbol("appShell");
@@ -157,6 +160,17 @@ const PAGE_MODULE_FALLBACK: Record<string, string> = {
 
 const DEFAULT_NAV_MODULES = ["cad", "code"];
 
+const CODE_RIGHT_TAB_KEY = "phoenix-code-right-tab";
+
+function readCodeRightSidebarTab(): "tree" | "ignore" {
+  try {
+    const v = sessionStorage.getItem(CODE_RIGHT_TAB_KEY);
+    return v === "ignore" ? "ignore" : "tree";
+  } catch {
+    return "tree";
+  }
+}
+
 export function provideAppShell(): AppShellContext {
   const appConfig = shallowRef<AppConfig | null>(null);
   const launcher = shallowRef<LauncherPrefs | null>(null);
@@ -173,6 +187,7 @@ export function provideAppShell(): AppShellContext {
   const treeSelectAfterRescan = ref<string | null>(null);
   const scrollToGuideToken = ref(0);
   const configOverlayOpen = ref(false);
+  const codeRightSidebarTab = ref<"tree" | "ignore">(readCodeRightSidebarTab());
   const onboarding = useOnboardingStore();
 
   function normalizePageId(pageId: string): string {
@@ -735,6 +750,24 @@ export function provideAppShell(): AppShellContext {
     goToPage(page);
   }
 
+  async function openCodeIgnoreSidebar() {
+    codeRightSidebarTab.value = "ignore";
+    try {
+      sessionStorage.setItem(CODE_RIGHT_TAB_KEY, "ignore");
+    } catch {
+      /* ignore */
+    }
+    await persistShellLayout({ right_panel_open: true });
+  }
+
+  watch(codeRightSidebarTab, (tab) => {
+    try {
+      sessionStorage.setItem(CODE_RIGHT_TAB_KEY, tab);
+    } catch {
+      /* ignore */
+    }
+  });
+
   async function init() {
     appConfig.value = await fetchAppConfig();
     const ws = await getWorkspace();
@@ -814,6 +847,8 @@ export function provideAppShell(): AppShellContext {
     consumeTabPageState: wb.consumeTabPageState,
     canOpenNewTab: wb.canOpenNewTab,
     scheduleWorkbenchSave,
+    codeRightSidebarTab,
+    openCodeIgnoreSidebar,
   };
 
   provide(APP_SHELL_KEY, ctx);
