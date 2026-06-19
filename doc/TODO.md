@@ -9,13 +9,13 @@
 
 ## P0 — 性能 / 正确性（引用与索引）
 
-- [x] 出向引用：`JOIN file_asset`，去掉 `get_file_asset_bom_fields` N+1（见 [出向引用-N+1查库-研究.md](出向引用-N+1查库-研究.md)）
+- [x] 出向引用：`JOIN file_asset`，去掉 `get_file_asset_bom_fields` N+1（见 [出向引用-N+1查库-研究.md](cad/出向引用-N+1查库-研究.md)）
 - [x] `bom_xref` 冗余 `rule_label` + 子件 BOM 快照；查询单表、不读盘补 Label
 - [x] 文件详情：引用 Tab 懒加载、分 scope 请求、角标单条 SQL
 - [ ] `rebuild_bom_tree_occurrences`：邻接表只查一次，消除 per-host 重复全表 SQL
 - [x] `query_bom_xrefs_incoming`：合并 `get_file_asset_id` 为单条 SQL
-- [ ] 改名 XLink 修正 + **同步引用 Label**：`apply_host_xlink_corrections(sync_reference_labels=True)` 在目标文件尚未改名、且无 CAD 索引时应仍从磁盘 FCStd 读 rule Label（现会退化为 basename）；补单测：单引用、同 Group 双 XLink 的 `.002` 后缀、跨路径同目标不重复编号（见 [改名引用写回-装配Label同步-需求.md](改名引用写回-装配Label同步-需求.md)）
-- [ ] 内部装配 **结构感知 BOM 挂载**：优先入度 0 的顶 `App::Part`（样例 `PCB` 非 `_6222656233`），见 [samples/内部装配示例-挂载分析.md](samples/内部装配示例-挂载分析.md) + `tests/fixtures/workspaces/minimal/document-xml/`
+- [ ] 改名 XLink 修正 + **同步引用 Label**：`apply_host_xlink_corrections(sync_reference_labels=True)` 在目标文件尚未改名、且无 CAD 索引时应仍从磁盘 FCStd 读 rule Label（现会退化为 basename）；补单测：单引用、同 Group 双 XLink 的 `.002` 后缀、跨路径同目标不重复编号（见 [改名引用写回-装配Label同步-需求.md](cad/改名引用写回-装配Label同步-需求.md)）
+- [ ] 内部装配 **结构感知 BOM 挂载**：优先入度 0 的顶 `App::Part`（样例 `PCB` 非 `_6222656233`），见 [samples/内部装配示例-挂载分析.md](cad/samples/内部装配示例-挂载分析.md) + `tests/fixtures/workspaces/minimal/document-xml/`
 
 ---
 
@@ -34,11 +34,11 @@
 
 - [x] **配置**：居中 Modal 弹层；工作空间 **浏览…** 走 Python 原生选目录（macOS osascript）
 - [x] 配置：未扫描工作空间时提示并跳转 **CAD 索引**
-- [x] **Code · C++ 成员排序** Web 页：一级子目录勾选 + 后台排序 + 运行日志（见 [成员函数排序-reorder_members.md](成员函数排序-reorder_members.md)）
+- [x] **Code · C++ 成员排序** Web 页：一级子目录勾选 + 后台排序 + 运行日志（见 [成员函数排序-reorder_members.md](code/成员函数排序-reorder_members.md)）
 - [x] **主页 · 导航模块偏好**（见下方 §导航模块偏好）
 - [x] **工作空间树**：Code 模块偏好下默认筛选 `.h/.cpp` 等（见 §导航模块偏好）
 - [ ] 桌面 `fcstd_map_page` 分页，去掉 `load_fcstd_document` 全表
-- [ ] 统一运行日志：长任务进度条 / 取消（见 [统一运行日志窗口-规划讨论.md](统一运行日志窗口-规划讨论.md)）
+- [ ] 统一运行日志：长任务进度条 / 取消（见 [统一运行日志窗口-规划讨论.md](platform/统一运行日志窗口-规划讨论.md)）
 
 ### 导航模块偏好（主页勾选 → 左侧只显示已选）
 
@@ -99,7 +99,7 @@
 
 ## P2 — 数据库命名（schema v10 · 已落地）
 
-> 现网：[CAD数据库表结构.md](CAD数据库表结构.md) · 库文件：`.phoenix/phoenix-workspace.sqlite`
+> 现网：[CAD数据库表结构.md](cad/CAD数据库表结构.md) · 库文件：`.phoenix/phoenix-workspace.sqlite`
 
 - [x] `phoenix_schema.py` + v10 DDL（`phoenix_cad_*` / `phoenix_audit_*` / `phoenix_meta` / `phoenix_ui_session`）
 - [x] 不迁移旧库：`connect()` / `GET …/database/status` 自动删除 `cad-database.sqlite`、`phoenix-cad.sqlite`；`phoenix-workspace.sqlite` 含旧表名时一并删除；Web 仍可 **确认重建** 空库
@@ -110,24 +110,34 @@
 
 ## P3 — 平台化（讨论稿 · 未立项）
 
-> [Phoenix平台-多应用壳层-规划讨论.md](Phoenix平台-多应用壳层-规划讨论.md)
+> [Phoenix平台-多应用壳层-规划讨论.md](platform/Phoenix平台-多应用壳层-规划讨论.md)
 
 - [ ] 确认：同仓分包 vs 独立 `phoenix-shell` 仓库
 - [ ] `web-ui/src/plugins/freecad/` 页面分包（无行为变化）
 - [ ] Python 路由 `register_freecad_routes` 拆分
 - [ ] 第二个插件原型（验证表前缀 `phoenix_<app>_`）
 - [~] **`app_config` 模块字段 + 主页导航偏好**（见 P1 §导航模块偏好；与下方原项合并实现）
-- [ ] 工作空间偏好迁入 SQLite（`phoenix_ui_session` 或专用表）；JSON 仅导出——见 [Phoenix工作空间存储-规划讨论.md](Phoenix工作空间存储-规划讨论.md)
+- [ ] 工作空间偏好迁入 SQLite（`phoenix_ui_session` 或专用表）；JSON 仅导出——见 [Phoenix工作空间存储-规划讨论.md](platform/Phoenix工作空间存储-规划讨论.md)
 
 ---
 
 ## P3 — Code 工具（已起步）
 
 - [x] `phoenix/code/reorder_members.py` + Web 页 + API
-- [x] **Code 工作空间索引**：`phoenix_code_*` 表 + 扫描源/配置/文档/资源 + Web「Code 索引」页 — 见 [Code模块-工作空间索引.md](Code模块-工作空间索引.md)
+- [x] **Code 工作空间索引**：`phoenix_code_*` 表 + 扫描源/配置/文档/资源 + Web「Code 索引」页 — 见 [Code模块-工作空间索引.md](code/Code模块-工作空间索引.md)
+- [x] **Code 忽略设定**：`.phoenix/code.ignore` + 工作空间自定义；右侧栏 Tab + 独立页 — 见 [Code模块-批量改名-规划.md](code/Code模块-批量改名-规划.md) §5
 - [ ] Code 索引：删除缺失条目、导出 JSON
+- [~] **Code 批量改名**（文件夹 / 文件 / 文本三级）— 见 [Code模块-批量改名-规划.md](code/Code模块-批量改名-规划.md) §1–10  
+  - [x] P0 **文本级** preview + apply、编码检测、忽略列表、单测  
+  - [ ] P1 文件夹 / 文件 basename 重命名  
+- [~] **Code UUID 替换** — 同上 §11  
+  - [x] 扫描 + 勾选 apply（`map_per_value` / `fresh_per_hit`）  
+  - [ ] 与 Code 索引范围联动、导出报告 JSON
+- [ ] **成员排序 · 保护区（clang-format / CAA Wizard）**：排序时冻结 `// clang-format off/on` 与 `//START … WIZARD SECTION` / `//CAA2 WIZARD` 块；见 [成员排序-保护区与回归用例.md](code/成员排序-保护区与回归用例.md)（用例：`KtAlarmClockParam.h` 等）
+- [ ] **成员排序 · 回归单测**：`tests/test_reorder_protected_regions.py`，用例 ID 与规则矩阵；改规则须全套件通过
+- [ ] **成员排序 · Web 回归自检（可选）**：`POST /api/code/reorder-members/self-test` 或 dev 页按钮，仅跑 fixture 子集
 - [ ] **成员排序 · 可选目录层级**：勾选列表默认 **1 级**（现「一级条目」）；偏好可选 **2–4 级** 展开子目录为可选项（仍受 ignore 规则约束）；`list_reorder_top_level_entries` / `GET top-level` + `ReorderMembersPage` 结果区标题与汇总
-- [ ] **成员变量字母序（完整规则）**：Doxygen 序号重编、`.h`/`.cpp` 构造/析构等序号一致 — 见 [成员变量字母序-规则与待实现.md](成员变量字母序-规则与待实现.md)；Web 勾选暂禁用
+- [ ] **成员变量字母序（完整规则）**：Doxygen 序号重编、`.h`/`.cpp` 构造/析构等序号一致 — 见 [成员变量字母序-规则与待实现.md](code/成员变量字母序-规则与待实现.md)；Web 勾选暂禁用
 - [ ] 成员排序：单文件 diff 预览、Git 脏文件过滤
 - [ ] 其它 Code 工具迁入 `phoenix/code/`（按 skill 拆分）
 
@@ -137,13 +147,13 @@
 
 | 文档 | 主题 |
 | --- | --- |
-| [CAD数据库表结构.md](CAD数据库表结构.md) | 现网 13 表、ER（schema v10） |
-| [CAD数据库表结构-重命名规划.md](CAD数据库表结构-重命名规划.md) | v10 重命名决策（删库重建） |
-| [Phoenix平台-多应用壳层-规划讨论.md](Phoenix平台-多应用壳层-规划讨论.md) | 多应用壳层、子插件、是否拆仓 |
-| [文件变更历史与引用证据-待办讨论.md](文件变更历史与引用证据-待办讨论.md) | 改名历史、引用证据、统一修正算法 |
-| [Phoenix工作空间存储-规划讨论.md](Phoenix工作空间存储-规划讨论.md) | SQLite 默认、按需导出 JSON |
-| [Web与桌面迁移-待办.md](Web与桌面迁移-待办.md) | 页面对照、桌面功能迁移 |
-| [SQL查询与递归点检-todo.md](SQL查询与递归点检-todo.md) | SQL 日志格式、递归点检清单 |
+| [CAD数据库表结构.md](cad/CAD数据库表结构.md) | 现网 13 表、ER（schema v10） |
+| [CAD数据库表结构-重命名规划.md](cad/CAD数据库表结构-重命名规划.md) | v10 重命名决策（删库重建） |
+| [Phoenix平台-多应用壳层-规划讨论.md](platform/Phoenix平台-多应用壳层-规划讨论.md) | 多应用壳层、子插件、是否拆仓 |
+| [文件变更历史与引用证据-待办讨论.md](cad/文件变更历史与引用证据-待办讨论.md) | 改名历史、引用证据、统一修正算法 |
+| [Phoenix工作空间存储-规划讨论.md](platform/Phoenix工作空间存储-规划讨论.md) | SQLite 默认、按需导出 JSON |
+| [Web与桌面迁移-待办.md](platform/Web与桌面迁移-待办.md) | 页面对照、桌面功能迁移 |
+| [SQL查询与递归点检-todo.md](platform/SQL查询与递归点检-todo.md) | SQL 日志格式、递归点检清单 |
 
 ---
 
