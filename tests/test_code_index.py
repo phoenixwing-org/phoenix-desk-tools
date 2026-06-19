@@ -20,7 +20,9 @@ from phoenix.code.store import (
 )
 from phoenix.freecad.phoenix_store import cad_database_path
 from phoenix.services.code_index_service import (
+    export_code_index_to_json,
     load_code_index_payload,
+    purge_missing_code_index_entries,
     run_code_index_scan,
     search_code_index_entries,
 )
@@ -146,6 +148,35 @@ class TestCodeIndexService(unittest.TestCase):
             self.assertEqual(meta["present_count"], 0)
             entries, _ = query_code_files(td, status=FILE_STATUS_PRESENT)
             self.assertEqual(len(entries), 0)
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
+    def test_purge_missing_and_export_json(self) -> None:
+        td = Path(tempfile.mkdtemp(prefix="code_index_purge_"))
+        try:
+            (td / "keep.cpp").write_text("", encoding="utf-8")
+            sub = td / "src"
+            sub.mkdir()
+            (sub / "drop.h").write_text("", encoding="utf-8")
+            run_code_index_scan(td)
+            (sub / "drop.h").unlink()
+            run_code_index_scan(td)
+
+            missing, n = query_code_files(td, status=FILE_STATUS_MISSING)
+            self.assertEqual(n, 1)
+            self.assertEqual(missing[0]["filename"], "drop.h")
+
+            out = purge_missing_code_index_entries(td)
+            self.assertEqual(out["purge_deleted"], 1)
+            self.assertEqual(out["present_count"], 1)
+
+            _, total = query_code_files(td)
+            self.assertEqual(total, 1)
+
+            exported = export_code_index_to_json(td)
+            path = Path(exported["path"])
+            self.assertTrue(path.is_file())
+            self.assertIn("code_index.json", exported["path_display"])
         finally:
             shutil.rmtree(td, ignore_errors=True)
 

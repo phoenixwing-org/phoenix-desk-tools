@@ -15,4 +15,4 @@ build/
 web-ui/node_modules/
 node_modules/
 web-ui/dist
-# .phoenix/
+.phoenix

@@ -39,6 +39,7 @@
 - [x] **工作空间树**：Code 模块偏好下默认筛选 `.h/.cpp` 等（见 §导航模块偏好）
 - [ ] 桌面 `fcstd_map_page` 分页，去掉 `load_fcstd_document` 全表
 - [ ] 统一运行日志：长任务进度条 / 取消（见 [统一运行日志窗口-规划讨论.md](platform/统一运行日志窗口-规划讨论.md)）
+- [x] **单元测试 Web 页**：套件勾选运行、NDJSON 流式进度、终止；失败关注 Tab（排序 / 勾选复测 / 简介列）；Pinia 持久化选项与勾选
 
 ### 导航模块偏好（主页勾选 → 左侧只显示已选）
 
@@ -82,7 +83,7 @@
 - [x] `launcher_paths.py`：`_APP_ID` → `phoenix`，迁移读取 `phoenix-wing/fcdesk/`
 - [x] 全仓 `from phoenix`（无残留 `from fcdesk`）
 - [~] 环境变量 `PHOENIX_*`（`FCDESK_*` 仍兼容）
-- [ ] Web localStorage 兼容读旧 `fcdesk.workbench.v1:`
+- [x] Web localStorage 兼容读旧 `fcdesk.workbench.v1:`
 - [ ] 异常类 / 常量重命名（`PhoenixFcstdEmbeddedError` 等，可选）
 - [x] 删除重复目录 `fcdesk/`
 
@@ -126,16 +127,16 @@
 - [x] `phoenix/code/reorder_members.py` + Web 页 + API
 - [x] **Code 工作空间索引**：`phoenix_code_*` 表 + 扫描源/配置/文档/资源 + Web「Code 索引」页 — 见 [Code模块-工作空间索引.md](code/Code模块-工作空间索引.md)
 - [x] **Code 忽略设定**：`.phoenix/code.ignore` + 工作空间自定义；右侧栏 Tab + 独立页 — 见 [Code模块-批量改名-规划.md](code/Code模块-批量改名-规划.md) §5
-- [ ] Code 索引：删除缺失条目、导出 JSON
+- [x] Code 索引：删除缺失条目、导出 JSON
 - [~] **Code 批量改名**（文件夹 / 文件 / 文本三级）— 见 [Code模块-批量改名-规划.md](code/Code模块-批量改名-规划.md) §1–10  
   - [x] P0 **文本级** preview + apply、编码检测、忽略列表、单测  
   - [ ] P1 文件夹 / 文件 basename 重命名  
 - [~] **Code UUID 替换** — 同上 §11  
   - [x] 扫描 + 勾选 apply（`map_per_value` / `fresh_per_hit`）  
   - [ ] 与 Code 索引范围联动、导出报告 JSON
-- [ ] **成员排序 · 保护区（clang-format / CAA Wizard）**：排序时冻结 `// clang-format off/on` 与 `//START … WIZARD SECTION` / `//CAA2 WIZARD` 块；见 [成员排序-保护区与回归用例.md](code/成员排序-保护区与回归用例.md)（用例：`KtAlarmClockParam.h` 等）
-- [ ] **成员排序 · 回归单测**：`tests/test_reorder_protected_regions.py`，用例 ID 与规则矩阵；改规则须全套件通过
-- [ ] **成员排序 · Web 回归自检（可选）**：`POST /api/code/reorder-members/self-test` 或 dev 页按钮，仅跑 fixture 子集
+- [x] **成员排序 · 锁定段（P0）**：`reorder_avoidance.py` + `test_reorder_avoidance_rules.py`；可选 Web 自检 API
+- [x] **成员排序 · 锁定段回归单测**：`tests/test_reorder_avoidance_rules.py`；改规则须全套件通过
+- [x] **成员排序 · Web 回归自检（可选）**：`POST /api/code/reorder-members/self-test` 或 dev 页按钮，仅跑 fixture 子集
 - [ ] **成员排序 · 可选目录层级**：勾选列表默认 **1 级**（现「一级条目」）；偏好可选 **2–4 级** 展开子目录为可选项（仍受 ignore 规则约束）；`list_reorder_top_level_entries` / `GET top-level` + `ReorderMembersPage` 结果区标题与汇总
 - [ ] **成员变量字母序（完整规则）**：Doxygen 序号重编、`.h`/`.cpp` 构造/析构等序号一致 — 见 [成员变量字母序-规则与待实现.md](code/成员变量字母序-规则与待实现.md)；Web 勾选暂禁用
 - [ ] 成员排序：单文件 diff 预览、Git 脏文件过滤

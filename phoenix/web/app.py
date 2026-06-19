@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -67,8 +69,11 @@ from phoenix.services.part_dedup_service import (
     save_part_dedup_prefs,
     scan_part_dedup,
 )
+from phoenix.code.reorder_self_test import run_reorder_avoidance_self_test
 from phoenix.services.code_index_service import (
+    export_code_index_to_json,
     load_code_index_payload,
+    purge_missing_code_index_entries,
     run_code_index_scan,
     search_code_index_entries,
 )
@@ -131,6 +136,13 @@ from phoenix.services.bom_xref_service import (
     search_incoming_refs,
     search_outgoing_refs,
 )
+from phoenix.services.runtime_catalog_service import (
+    get_runtime_catalog_status,
+    get_test_case_catalog,
+    get_test_module_catalog,
+    sync_runtime_catalog_now,
+)
+from phoenix.services.unit_test_service import iter_run_unit_tests_events, list_unit_test_suites, run_unit_tests
 from phoenix.services.workbench_service import get_workbench_session_payload, save_workbench_session
 
 # 运行时工作空间根（``POST /api/workspace`` 或启动参数设置）
@@ -416,6 +428,12 @@ class CodeUuidApplyBody(BaseModel):
     dry_run: bool = False
 
 
+class UnitTestRunBody(BaseModel):
+    suite: str | None = None
+    suites: list[str] | None = None
+    exclude_cases: list[str] | None = None
+    include_cases: list[str] | None = None
+
 def _ensure_phoenix_logging() -> None:
     """保证 ``phoenix.*`` 的 INFO 日志输出到终端（与 uvicorn 并列可见）。"""
     root = logging.getLogger("phoenix")
@@ -439,6 +457,19 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.on_event("startup")
+    def _startup_sync_runtime_catalog() -> None:
+        try:
+            sync_runtime_catalog_now()
+        except Exception as exc:
+            logging.getLogger("phoenix.runtime").warning("runtime catalog sync failed: %s", exc)
+        try:
+            from phoenix.testing.fixture_links import ensure_fixture_links_logged
+
+            ensure_fixture_links_logged()
+        except Exception as exc:
+            logging.getLogger("phoenix.testing").warning("fixture link setup failed: %s", exc)
 
     @app.get("/api/config/app")
     def api_config_app() -> dict:
@@ -1407,6 +1438,24 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
         except OSError as e:
             raise HTTPException(status_code=500, detail=str(e)) from e
 
+    @app.post("/api/code/index/purge-missing")
+    def api_code_index_purge_missing() -> dict:
+        ws = get_workspace()
+        try:
+            return purge_missing_code_index_entries(ws)
+        except OSError as e:
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
+    @app.post("/api/code/index/export-json")
+    def api_code_index_export_json() -> dict:
+        ws = get_workspace()
+        try:
+            return export_code_index_to_json(ws)
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
+        except OSError as e:
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
     @app.get("/api/code/reorder-members/prefs")
     def api_reorder_members_prefs_get() -> dict:
         return get_reorder_members_prefs(get_workspace())
@@ -1441,6 +1490,13 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post("/api/code/reorder-members/self-test")
+    def api_reorder_members_self_test() -> dict:
+        try:
+            return run_reorder_avoidance_self_test()
+        except OSError as e:
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
     @app.get("/api/code/ignore/prefs")
     def api_code_ignore_prefs_get() -> dict:
@@ -1493,6 +1549,72 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
             return apply_code_uuids(get_workspace(), body.model_dump(exclude_none=True))
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.get("/api/unit-tests/suites")
+    def api_unit_tests_suites() -> dict:
+        return list_unit_test_suites()
+
+    @app.post("/api/unit-tests/run")
+    def api_unit_tests_run(body: UnitTestRunBody = ...) -> dict:
+        try:
+            if body.suites is not None:
+                return run_unit_tests(
+                    suites=body.suites,
+                    exclude_case_ids=body.exclude_cases,
+                    include_case_ids=body.include_cases,
+                )
+            return run_unit_tests(
+                suite=body.suite or "all",
+                exclude_case_ids=body.exclude_cases,
+                include_case_ids=body.include_cases,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post("/api/unit-tests/run/stream")
+    def api_unit_tests_run_stream(request: Request, body: UnitTestRunBody = ...) -> StreamingResponse:
+        def _cancel_check() -> bool:
+            try:
+                return bool(request.is_disconnected())
+            except Exception:
+                return False
+
+        def _lines():
+            try:
+                for event in iter_run_unit_tests_events(
+                    suite=body.suite,
+                    suites=body.suites,
+                    exclude_case_ids=body.exclude_cases,
+                    include_case_ids=body.include_cases,
+                    cancel_check=_cancel_check,
+                ):
+                    yield json.dumps(event, ensure_ascii=False) + "\n"
+            except ValueError as e:
+                yield json.dumps({"type": "error", "message": str(e)}, ensure_ascii=False) + "\n"
+
+        return StreamingResponse(_lines(), media_type="application/x-ndjson")
+
+    @app.get("/api/runtime-catalog/status")
+    def api_runtime_catalog_status() -> dict:
+        return get_runtime_catalog_status()
+
+    @app.post("/api/runtime-catalog/sync")
+    def api_runtime_catalog_sync(force: bool = Query(False)) -> dict:
+        return sync_runtime_catalog_now(force=force)
+
+    @app.get("/api/runtime-catalog/test-modules")
+    def api_runtime_catalog_test_modules(
+        modules: list[str] = Query(default=[]),
+    ) -> dict:
+        names = [m.strip() for m in modules if m and m.strip()]
+        return get_test_module_catalog(names or None)
+
+    @app.get("/api/runtime-catalog/test-cases")
+    def api_runtime_catalog_test_cases(
+        ids: list[str] = Query(default=[]),
+    ) -> dict:
+        full_ids = [i.strip() for i in ids if i and i.strip()]
+        return get_test_case_catalog(full_ids or None)
 
     if static_dir is not None and static_dir.is_dir():
         app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")

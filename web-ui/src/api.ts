@@ -1446,6 +1446,41 @@ export function scanCodeIndex() {
   return jsonFetch<CodeIndexPayload>("/api/code/index/scan", { method: "POST" });
 }
 
+export function purgeMissingCodeIndex() {
+  return jsonFetch<CodeIndexPayload & { purge_deleted?: number }>("/api/code/index/purge-missing", {
+    method: "POST",
+  });
+}
+
+export function exportCodeIndexJson() {
+  return jsonFetch<{ path: string; path_display: string }>("/api/code/index/export-json", {
+    method: "POST",
+  });
+}
+
+export type ReorderMembersSelfTestCase = {
+  id: string;
+  pass: boolean;
+  message: string;
+  skipped?: boolean;
+};
+
+export type ReorderMembersSelfTestPayload = {
+  ok: boolean;
+  ran: number;
+  passed: number;
+  failed: number;
+  skipped: number;
+  summary: string;
+  cases: ReorderMembersSelfTestCase[];
+};
+
+export function runReorderMembersSelfTest() {
+  return jsonFetch<ReorderMembersSelfTestPayload>("/api/code/reorder-members/self-test", {
+    method: "POST",
+  });
+}
+
 export type ReorderMembersPrefs = {
   workspace_path: string;
   workspace_path_display: string;
@@ -1486,12 +1521,14 @@ export type ReorderMembersRunResult = {
   cpp_changed?: number;
   hdr_changed?: number;
   files_scanned?: number;
+  changed_files?: string[];
   item_results?: Array<{
     name: string;
     kind: string;
     cpp_changed: number;
     hdr_changed: number;
     files_scanned: number;
+    changed_files?: string[];
   }>;
 };
 
@@ -1801,4 +1838,238 @@ export function applyCodeUuids(body: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+export type UnitTestSuiteInfo = {
+  id: string;
+  label: string;
+  description: string;
+  module_count: number;
+  modules: string[];
+};
+
+export type UnitTestCaseResult = {
+  id: string;
+  module: string;
+  suite_id: string;
+  class_name: string;
+  method: string;
+  status: "passed" | "failed" | "error" | "skipped";
+  duration_ms: number;
+  message: string;
+  traceback: string;
+};
+
+export type UnitTestModuleSummary = {
+  module: string;
+  tests_run: number;
+  passed: number;
+  failed: number;
+  errors: number;
+  skipped: number;
+};
+
+export type UnitTestRunResult = {
+  ok: boolean;
+  suite_id: string;
+  suite_label: string;
+  duration_ms: number;
+  summary: {
+    tests_run: number;
+    passed: number;
+    failed: number;
+    errors: number;
+    skipped: number;
+    modules: number;
+    load_errors?: number;
+    ignored?: number;
+    cancelled?: number;
+  };
+  modules: UnitTestModuleSummary[];
+  cases: UnitTestCaseResult[];
+  failures: UnitTestCaseResult[];
+};
+
+export function fetchUnitTestSuites() {
+  return jsonFetch<{ suites: UnitTestSuiteInfo[] }>("/api/unit-tests/suites");
+}
+
+export type UnitTestRunOptions = {
+  exclude_cases?: string[];
+  include_cases?: string[];
+};
+
+export function runUnitTests(suites: string[], options?: UnitTestRunOptions) {
+  return jsonFetch<UnitTestRunResult>("/api/unit-tests/run", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ suites, ...options }),
+  });
+}
+
+export type TestModuleCatalogEntry = {
+  module_name: string;
+  file_stem: string;
+  suite_id: string;
+  title: string;
+  description_zh: string;
+  doc_path: string | null;
+  case_count: number;
+};
+
+export type TestCaseCatalogEntry = {
+  full_id: string;
+  case_key: string | null;
+  module_name: string;
+  class_name: string;
+  method_name: string;
+  suite_id: string;
+  title: string;
+  description_zh: string;
+  docstring: string;
+};
+
+export function fetchTestModuleCatalog(modules?: string[]) {
+  const params = new URLSearchParams();
+  if (modules?.length) {
+    for (const m of modules) params.append("modules", m);
+  }
+  const qs = params.toString();
+  return jsonFetch<{ modules: Record<string, TestModuleCatalogEntry> }>(
+    `/api/runtime-catalog/test-modules${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export function fetchTestCaseCatalog(caseIds?: string[]) {
+  const params = new URLSearchParams();
+  if (caseIds?.length) {
+    for (const id of caseIds) params.append("ids", id);
+  }
+  const qs = params.toString();
+  return jsonFetch<{ cases: Record<string, TestCaseCatalogEntry> }>(
+    `/api/runtime-catalog/test-cases${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export type UnitTestStreamEvent =
+  | {
+      type: "start";
+      suite_id: string;
+      suite_label: string;
+      total_modules: number;
+      total_cases: number;
+      modules: string[];
+      load_errors: string[];
+      ignored_cases?: number;
+      ignored?: Array<{ id: string; method: string; module: string; reason?: string }>;
+    }
+  | {
+      type: "module_start";
+      module: string;
+      module_index: number;
+      module_total: number;
+      suite_id: string;
+    }
+  | {
+      type: "case_start";
+      id: string;
+      module: string;
+      suite_id: string;
+      class_name: string;
+      method: string;
+    }
+  | {
+      type: "case_done";
+      case: UnitTestCaseResult;
+      completed: number;
+      total: number;
+    }
+  | { type: "module_done"; module: string; summary: UnitTestModuleSummary }
+  | { type: "done"; result: UnitTestRunResult }
+  | { type: "cancelled"; result: UnitTestRunResult; completed: number; total: number }
+  | { type: "error"; message: string };
+
+export type UnitTestRunStreamOptions = UnitTestRunOptions & {
+  signal?: AbortSignal;
+};
+
+export async function runUnitTestsStream(
+  suites: string[],
+  onEvent: (event: UnitTestStreamEvent) => void,
+  options?: UnitTestRunStreamOptions,
+): Promise<UnitTestRunResult> {
+  const signal = options?.signal;
+  const body = {
+    suites,
+    exclude_cases: options?.exclude_cases,
+    include_cases: options?.include_cases,
+  };
+  const res = await fetch("/api/unit-tests/run/stream", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    let detail = text;
+    try {
+      const data = JSON.parse(text) as { detail?: unknown };
+      if (data.detail != null) detail = String(data.detail);
+    } catch {
+      /* keep raw text */
+    }
+    throw new Error(detail || `HTTP ${res.status}`);
+  }
+  if (!res.body) {
+    throw new Error("流式响应不可用");
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finalResult: UnitTestRunResult | null = null;
+
+  const consumeEvent = (event: UnitTestStreamEvent) => {
+    if (event.type === "error") {
+      throw new Error(event.message);
+    }
+    onEvent(event);
+    if (event.type === "done" || event.type === "cancelled") {
+      finalResult = event.result;
+    }
+  };
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let newline = buffer.indexOf("\n");
+      while (newline >= 0) {
+        const line = buffer.slice(0, newline).trim();
+        buffer = buffer.slice(newline + 1);
+        if (line) {
+          consumeEvent(JSON.parse(line) as UnitTestStreamEvent);
+        }
+        newline = buffer.indexOf("\n");
+      }
+    }
+
+    const tail = buffer.trim();
+    if (tail) {
+      consumeEvent(JSON.parse(tail) as UnitTestStreamEvent);
+    }
+  } catch (e) {
+    if (signal?.aborted) {
+      if (finalResult) return finalResult;
+      throw new Error("运行已终止");
+    }
+    throw e;
+  }
+
+  if (!finalResult) {
+    throw new Error("测试运行未返回结果");
+  }
+  return finalResult;
 }

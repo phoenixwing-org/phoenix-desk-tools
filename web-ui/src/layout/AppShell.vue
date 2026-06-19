@@ -22,6 +22,7 @@ import PartCatalogPage from "../pages/PartCatalogPage.vue";
 import PartKeyDetailPage from "../pages/PartKeyDetailPage.vue";
 import FileRenamePage from "../pages/FileRenamePage.vue";
 import BomExportPage from "../pages/BomExportPage.vue";
+import UnitTestsPage from "../pages/UnitTestsPage.vue";
 import PlaceholderPage from "../pages/PlaceholderPage.vue";
 import { fetchPhoenixDatabaseStatus, recreatePhoenixDatabase } from "../api";
 import { provideAppShell } from "../composables/useAppShell";
@@ -63,6 +64,7 @@ const PAGE_COMPONENTS: Record<string, Component> = {
   code_rename: CodeRenamePage,
   code_uuid: CodeUuidReplacePage,
   bom_export: BomExportPage,
+  unit_tests: UnitTestsPage,
 };
 
 function pageComponent(pageId: string): Component {

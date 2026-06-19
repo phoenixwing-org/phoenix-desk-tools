@@ -199,6 +199,18 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
     ],
     docPath: "doc/code/Code模块-批量改名-规划.md",
   },
+  unit_tests: {
+    title: "单元测试",
+    bullets: [
+      "在本机 Python 进程内运行仓库 tests/ 下 unittest，不依赖工作空间。",
+      "运行范围：勾选 Code / CAD / 平台 套件后点运行（可多选组合）。",
+      "有结果后，用「结果 · 套件 / 状态」勾选筛选明细，与运行范围分开。",
+    ],
+    tourSteps: [
+      tour("[data-tour-page-unit-tests-suites]", "运行范围", "勾选要跑的套件，再点运行测试。"),
+      tour("[data-tour-page-unit-tests-run]", "运行", "执行后查看统计；下方勾选仅筛选结果展示。"),
+    ],
+  },
 };
 
 /** 未单独配置的 pageId 使用通用说明 */

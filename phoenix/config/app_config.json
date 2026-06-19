@@ -127,6 +127,12 @@
       "label": "配置",
       "page": "config",
       "description": "工作空间、FreeCAD 目录与偏好"
+    },
+    {
+      "id": "unit_tests",
+      "label": "单元测试",
+      "page": "unit_tests",
+      "description": "在本机运行 tests/ 下 unittest（Code / CAD / 平台套件）"
     }
   ],
   "workbench": {
@@ -150,7 +156,8 @@
       "code_uuid": { "max_tabs": 1 },
       "bom_export": { "max_tabs": 1 },
       "home": { "max_tabs": 1 },
-      "config": { "max_tabs": 1 }
+      "config": { "max_tabs": 1 },
+      "unit_tests": { "max_tabs": 1 }
     }
   }
 }

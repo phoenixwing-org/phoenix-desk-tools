@@ -16,6 +16,8 @@ Options:
     --verbose       Print per-file details
 
 Rules (summary):
+    P0    locked regions: clang-format / CAA Wizard / #pragma region … — whole blocks
+          frozen first (see reorder_avoidance.py); never sorted with other members
     .cpp  special members: default ctor -> other ctors -> dtor -> copy/move ctor -> operator=;
           then rest alphabetically (case-insensitive name); same-name overloads keep source order;
           remove blank lines between functions; add //--- separator if missing;
@@ -36,6 +38,8 @@ from dataclasses import dataclass, field, field
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Tuple
 
+from phoenix.code.reorder_avoidance import split_by_avoidance_rules
+
 # 运行日志 / 摘要中标记「此文件有成员排序变更」（Web 侧栏、CLI 共用）
 CHANGED_LOG_MARK = "✎"
 
@@ -47,7 +51,7 @@ def format_changed_file_log_line(rel_path: str, *, indent: str = "  ") -> str:
 
 SEP_LINE_RE = re.compile(r"^//-+\s*$", re.MULTILINE)
 ACCESS_RE = re.compile(
-    r"^(\s*)((?:public|private|protected)(?:\s+slots)?|signals)\s*:\s*(?://.*)?$",
+    r"^(\s*)((?:public|private|protected)(?:\s+slots)?|signals)[ \t]*:[ \t]*(?://[^\n]*)?$",
     re.MULTILINE,
 )
 # Optional export / attribute tokens before class name: ExportedByModule ClassName
@@ -1151,15 +1155,19 @@ def _split_declaration_run(chunk: str, class_name: str) -> List[DeclItem]:
 
 
 def _split_declarations(chunk: str, class_name: str) -> List[DeclItem]:
-    """Split section body; Doxygen ///@{...///@} groups remain atomic items."""
-    segments = _split_by_doxygen_groups(chunk)
+    """Split section body; P0 locked regions, then Doxygen groups, then declarations."""
     items: List[DeclItem] = []
-    for segment in segments:
-        if _is_doxygen_group_block(segment):
-            kind, name = _extract_decl_name(segment, class_name)
-            items.append(DeclItem(text=segment, name=name, kind=kind))
+    for segment, is_avoidance in split_by_avoidance_rules(chunk):
+        if is_avoidance:
+            if segment.strip():
+                items.append(DeclItem(text=segment, name="avoidance", kind="avoidance"))
             continue
-        items.extend(_split_declaration_run(segment, class_name))
+        for sub in _split_by_doxygen_groups(segment):
+            if _is_doxygen_group_block(sub):
+                kind, name = _extract_decl_name(sub, class_name)
+                items.append(DeclItem(text=sub, name=name, kind=kind))
+                continue
+            items.extend(_split_declaration_run(sub, class_name))
     return items
 
 
@@ -1214,9 +1222,9 @@ def _sort_section_items(
     if section_type in ("public", "private", "protected"):
         items = section.items
         fixed_indices = [
-            i for i, it in enumerate(items) if it.kind in ("member", "nested")
+            i for i, it in enumerate(items) if it.kind in ("member", "nested", "avoidance")
         ]
-        sortable = [it for it in items if it.kind not in ("member", "nested")]
+        sortable = [it for it in items if it.kind not in ("member", "nested", "avoidance")]
 
         specials = [d for d in sortable if d.kind == "special"]
         rest = [d for d in sortable if d.kind != "special"]

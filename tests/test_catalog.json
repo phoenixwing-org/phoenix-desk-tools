@@ -1,0 +1,19 @@
+{
+  "modules": {
+    "test_code_ignore": {
+      "description_zh": "Code 共用忽略：读取/合并 .phoenix/code.ignore 与遗留 ignore 文件。"
+    },
+    "test_reorder_avoidance_rules": {
+      "description_zh": "成员排序锁定段 / locked region（clang-format、Wizard 等标记内整段不变）回归。"
+    },
+    "test_fcstd_map_service": {
+      "description_zh": "CAD 索引扫描、SQLite 持久化、缺失标记与分页查询。"
+    },
+    "test_solidworks_models_pure": {
+      "description_zh": "SolidWorks 模型扫描（纯函数，不依赖 COM）。"
+    },
+    "test_batch_step_pure": {
+      "description_zh": "STEP 批量导出算法与报告（纯函数，不依赖 FreeCAD）。"
+    }
+  }
+}

@@ -74,7 +74,7 @@ python -m phoenix.code.reorder_members /path/to/module [options]
 
 ## 5. 后续可扩展
 
-- [ ] **保护区**：clang-format off/on、CAA Wizard 段 — 见 [成员排序-保护区与回归用例.md](成员排序-保护区与回归用例.md)
+- [x] **锁定段（P0）**：clang-format off/on、CAA Wizard 段 — 见 [成员排序-锁定段与回归用例.md](成员排序-锁定段与回归用例.md)
 - [ ] 单文件 / 单类预览 diff（Web）
 - [ ] **成员变量字母序（完整）**：编号重编、`.h`/`.cpp` 构造析构序号一致等 — 见 [成员变量字母序-规则与待实现.md](成员变量字母序-规则与待实现.md)
 - [ ] 与 Git 状态联动（仅排序已修改文件）

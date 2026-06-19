@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import {
+  exportCodeIndexJson,
   fetchCodeIndex,
   fetchCodeIndexEntries,
+  purgeMissingCodeIndex,
   scanCodeIndex,
   type CodeIndexEntry,
   type CodeIndexPayload,
   type CodeIndexSearchMode,
 } from "../api";
+import { promptChoice } from "../composables/choiceDialog";
 import PageHelpButton from "../components/PageHelpButton.vue";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
 import type { TableColumnDef } from "../composables/useResizableTable";
@@ -58,6 +61,8 @@ const columns: TableColumnDef[] = [
 
 const loading = ref(false);
 const scanning = ref(false);
+const purging = ref(false);
+const exporting = ref(false);
 const data = ref<CodeIndexPayload | null>(null);
 const statusFilter = ref<StatusFilter>("all");
 const kindFilter = ref<KindFilter>("all");
@@ -198,6 +203,64 @@ async function onScan() {
   }
 }
 
+async function onPurgeMissing() {
+  const n = missingCount.value;
+  if (n <= 0) {
+    setStatus("当前没有缺失条目");
+    return;
+  }
+  const choice = await promptChoice({
+    title: "删除缺失记录",
+    defaultChoiceId: "cancel",
+    message:
+      `将从 Code 索引库永久删除 ${n} 条「缺失」记录（磁盘上已不存在的文件）。\n\n此操作不可撤销。`,
+    choices: [
+      { id: "cancel", label: "取消", variant: "default" },
+      { id: "confirm", label: `删除 ${n} 条`, variant: "danger" },
+    ],
+  });
+  if (choice !== "confirm") return;
+  purging.value = true;
+  shell.appendLog(`[Code 索引] 删除缺失记录 ${n} 条…`, { source: "code_index", open: true });
+  try {
+    const out = await purgeMissingCodeIndex();
+    data.value = out;
+    const deleted = out.purge_deleted ?? 0;
+    const msg = deleted ? `已删除 ${deleted} 条缺失记录` : "没有缺失记录可删除";
+    shell.appendLog(`[Code 索引] ${msg}`, { source: "code_index" });
+    setStatus(msg);
+    if (deleted && statusFilter.value === "missing") {
+      statusFilter.value = "all";
+    }
+    pageOffset.value = 0;
+    await loadEntries();
+  } catch (e) {
+    shell.appendLog(String(e), { source: "code_index" });
+    setStatus(String(e));
+  } finally {
+    purging.value = false;
+  }
+}
+
+async function onExportJson() {
+  if (!hasScan.value) {
+    setStatus("请先执行工程内搜索");
+    return;
+  }
+  exporting.value = true;
+  shell.appendLog("[Code 索引] 导出 code_index.json…", { source: "code_index", open: true });
+  try {
+    const out = await exportCodeIndexJson();
+    shell.appendLog(`已导出 → ${out.path_display}`, { source: "code_index" });
+    setStatus(`已导出 code_index.json → ${out.path_display}`);
+  } catch (e) {
+    shell.appendLog(String(e), { source: "code_index" });
+    setStatus(String(e));
+  } finally {
+    exporting.value = false;
+  }
+}
+
 let searchDebounce: ReturnType<typeof setTimeout> | undefined;
 
 async function loadEntries() {
@@ -330,6 +393,17 @@ onMounted(() => applyInitialTabState());
           <div class="head-actions" data-tour-page-code-scan>
             <button type="button" class="btn primary" :disabled="scanning" @click="onScan">
               {{ scanning ? "扫描中…" : "工程内搜索" }}
+            </button>
+            <button
+              type="button"
+              class="btn"
+              :disabled="purging || !missingCount"
+              @click="onPurgeMissing"
+            >
+              {{ purging ? "删除中…" : `删除缺失${missingCount ? `（${missingCount}）` : ""}` }}
+            </button>
+            <button type="button" class="btn" :disabled="exporting || !hasScan" @click="onExportJson">
+              {{ exporting ? "导出中…" : "导出 JSON" }}
             </button>
             <button type="button" class="btn" :disabled="loading" @click="refresh()">刷新</button>
           </div>

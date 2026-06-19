@@ -7,7 +7,13 @@ from typing import Any
 
 from phoenix.code.kinds import CODE_ASSET_KINDS, KIND_LABELS
 from phoenix.code.scan_index import scan_code_workspace
-from phoenix.code.store import load_code_index_meta, query_code_files, save_code_index
+from phoenix.code.store import (
+    delete_missing_code_files,
+    export_code_index_json,
+    load_code_index_meta,
+    query_code_files,
+    save_code_index,
+)
 from phoenix.config.user_prefs import format_resolved_under_workspace
 
 
@@ -63,3 +69,20 @@ def search_code_index_entries(
         offset=offset,
     )
     return {"entries": entries, "total": total, "limit": limit, "offset": offset}
+
+
+def purge_missing_code_index_entries(repo_root: Path) -> dict[str, Any]:
+    rr = repo_root.expanduser().resolve(strict=False)
+    deleted = delete_missing_code_files(rr)
+    payload = load_code_index_payload(rr)
+    payload["purge_deleted"] = deleted
+    return payload
+
+
+def export_code_index_to_json(repo_root: Path) -> dict[str, str]:
+    rr = repo_root.expanduser().resolve(strict=False)
+    out = export_code_index_json(rr)
+    return {
+        "path": str(out),
+        "path_display": format_resolved_under_workspace(out, rr),
+    }

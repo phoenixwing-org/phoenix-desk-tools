@@ -42,6 +42,8 @@ DDL 在 `phoenix/code/schema.py`，`connect()` 时与 CAD 表一并 `CREATE IF N
 | GET | `/api/code/index` | 摘要（上次扫描、统计、类型标签） |
 | POST | `/api/code/index/scan` | 全量扫描并写库 |
 | GET | `/api/code/index/entries` | 分页列表；`kind` / `status` / `q` |
+| POST | `/api/code/index/purge-missing` | 删除缺失条目 |
+| POST | `/api/code/index/export-json` | 导出 `.phoenix/exports/code_index.json` |
 
 ## 前端
 
@@ -60,9 +62,8 @@ phoenix/services/code_index_service.py
 
 ## 待办（未实现）
 
-- 删除缺失条目（对标 CAD 索引「删除缺失」）
 - 与成员排序联动：仅处理索引库中的文件
-- 导出 JSON、Git 脏文件过滤
+- Git 脏文件过滤
 - **批量改名**（文件夹 / 文件 / 文本）、**UUID 扫描勾选替换** — 见 [Code模块-批量改名-规划.md](Code模块-批量改名-规划.md)
 
 见 [TODO.md](../TODO.md) §P3 Code 工具。

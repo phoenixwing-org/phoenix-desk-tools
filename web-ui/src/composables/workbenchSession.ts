@@ -2,19 +2,37 @@ import type { WorkbenchSessionSnapshot } from "../types/workbench";
 import { fetchWorkbenchSession, saveWorkbenchSession } from "../api";
 
 const STORAGE_PREFIX = "phoenix.workbench.v1:";
+const LEGACY_STORAGE_PREFIX = "fcdesk.workbench.v1:";
 
-function storageKey(workspacePath: string): string {
-  return `${STORAGE_PREFIX}${workspacePath}`;
+function storageKey(workspacePath: string, prefix = STORAGE_PREFIX): string {
+  return `${prefix}${workspacePath}`;
+}
+
+function parseWorkbenchSnapshot(raw: string): WorkbenchSessionSnapshot | null {
+  try {
+    const data = JSON.parse(raw) as WorkbenchSessionSnapshot;
+    if (data?.version !== 1 || !Array.isArray(data.tabs) || !data.tabs.length) return null;
+    return data;
+  } catch {
+    return null;
+  }
 }
 
 export function readLocalWorkbenchSession(workspacePath: string): WorkbenchSessionSnapshot | null {
   if (!workspacePath) return null;
   try {
     const raw = sessionStorage.getItem(storageKey(workspacePath));
-    if (!raw) return null;
-    const data = JSON.parse(raw) as WorkbenchSessionSnapshot;
-    if (data?.version !== 1 || !Array.isArray(data.tabs) || !data.tabs.length) return null;
-    return data;
+    if (raw) {
+      const data = parseWorkbenchSnapshot(raw);
+      if (data) return data;
+    }
+    const legacyRaw = sessionStorage.getItem(storageKey(workspacePath, LEGACY_STORAGE_PREFIX));
+    if (!legacyRaw) return null;
+    const legacy = parseWorkbenchSnapshot(legacyRaw);
+    if (!legacy) return null;
+    writeLocalWorkbenchSession(workspacePath, legacy);
+    sessionStorage.removeItem(storageKey(workspacePath, LEGACY_STORAGE_PREFIX));
+    return legacy;
   } catch {
     return null;
   }

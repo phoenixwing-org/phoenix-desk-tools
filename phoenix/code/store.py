@@ -10,8 +10,11 @@ from typing import Any
 
 from phoenix.code.scan_index import CodeFileRecord
 from phoenix.code.schema import T_CODE_FILE, T_CODE_SCAN
+from phoenix.config.user_prefs import workspace_phoenix_dir
 from phoenix.freecad.phoenix_store import connect
 from phoenix.freecad.phoenix_schema import T_META
+
+CODE_INDEX_JSON_NAME = "code_index.json"
 
 FILE_STATUS_PRESENT = "present"
 FILE_STATUS_MISSING = "missing"
@@ -158,6 +161,50 @@ def save_code_index(
 def _meta_get(conn: sqlite3.Connection, key: str) -> str | None:
     row = conn.execute(f"SELECT value FROM {T_META} WHERE key = ?", (key,)).fetchone()
     return str(row[0]) if row else None
+
+
+def code_index_json_path(repo_root: Path) -> Path:
+    return workspace_phoenix_dir(repo_root) / "exports" / CODE_INDEX_JSON_NAME
+
+
+def delete_missing_code_files(repo_root: Path) -> int:
+    """永久删除 ``file_status=missing`` 的 Code 索引行。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    with connect(rr) as conn:
+        row = conn.execute(
+            f"SELECT COUNT(*) FROM {T_CODE_FILE} WHERE file_status = ?",
+            (FILE_STATUS_MISSING,),
+        ).fetchone()
+        n = int(row[0]) if row else 0
+        if n == 0:
+            return 0
+        conn.execute(
+            f"DELETE FROM {T_CODE_FILE} WHERE file_status = ?",
+            (FILE_STATUS_MISSING,),
+        )
+    return n
+
+
+def export_code_index_json(repo_root: Path, dest: Path | None = None) -> Path:
+    """从 SQLite 导出 Code 索引快照 JSON。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    meta = load_code_index_meta(rr)
+    if not meta.get("file_count"):
+        raise FileNotFoundError("Code 索引为空，请先执行工程内搜索")
+    entries, total = query_code_files(rr, limit=1_000_000, offset=0)
+    out = dest or code_index_json_path(rr)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema_version": 1,
+        "exported_at": _utc_now_iso(),
+        "last_scan_at": meta.get("last_scan_at"),
+        "stats": meta.get("stats"),
+        "file_count": total,
+        "present_count": meta.get("present_count", 0),
+        "entries": entries,
+    }
+    out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return out
 
 
 def load_code_index_meta(repo_root: Path) -> dict[str, Any]:

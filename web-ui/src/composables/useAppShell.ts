@@ -149,7 +149,7 @@ const DEFAULT_SHELL: ShellLayout = {
   log_auto_open_on_append: true,
 };
 
-const NAV_ALWAYS_VISIBLE = new Set(["home", "config"]);
+const NAV_ALWAYS_VISIBLE = new Set(["home", "config", "unit_tests"]);
 
 /** 不在 navigation 中、但属于某模块的 Tab 页 */
 const PAGE_MODULE_FALLBACK: Record<string, string> = {

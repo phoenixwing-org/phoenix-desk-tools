@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import {
   applyCodeRename,
   fetchCodeIgnorePrefs,
@@ -7,27 +7,47 @@ import {
   previewCodeRename,
   saveCodeRenamePrefs,
   type CodeRenameHit,
-  type CodeRenamePrefs,
   type RenameLevel,
 } from "../api";
 import PageHelpButton from "../components/PageHelpButton.vue";
 import { useAppShell } from "../composables/useAppShell";
+import {
+  CODE_RENAME_LEVEL_OPTIONS,
+  useCodeRenamePageStore,
+} from "../stores/codeRenamePage";
 
 const shell = useAppShell();
+const pageStore = useCodeRenamePageStore();
 
-const LEVEL_OPTIONS: { id: RenameLevel; label: string }[] = [
-  { id: "dir", label: "文件夹" },
-  { id: "file", label: "文件" },
-  { id: "text", label: "文本内容" },
-];
+const LEVEL_OPTIONS = CODE_RENAME_LEVEL_OPTIONS;
 
-const oldName = ref("");
-const newName = ref("");
-const levels = ref<Set<RenameLevel>>(new Set(["text"]));
-const scope = ref("");
-const targetEncoding = ref<"utf-8" | "gbk">("utf-8");
-const includeIgnored = ref(false);
-const rescanIndex = ref(false);
+const oldName = computed({
+  get: () => pageStore.old,
+  set: (value: string) => pageStore.setOld(value),
+});
+const newName = computed({
+  get: () => pageStore.new,
+  set: (value: string) => pageStore.setNew(value),
+});
+const scope = computed({
+  get: () => pageStore.scope,
+  set: (value: string) => pageStore.setScope(value),
+});
+const targetEncoding = computed({
+  get: () => pageStore.targetEncoding,
+  set: (value: "utf-8" | "gbk") => pageStore.setTargetEncoding(value),
+});
+const includeIgnored = computed({
+  get: () => pageStore.includeIgnored,
+  set: (value: boolean) => pageStore.setIncludeIgnored(value),
+});
+const rescanIndex = computed({
+  get: () => pageStore.rescanIndex,
+  set: (value: boolean) => pageStore.setRescanIndex(value),
+});
+const levels = computed(() => pageStore.levelSet);
+const canRun = computed(() => pageStore.canRun);
+
 const ignoreSummary = ref("");
 
 const hits = ref<CodeRenameHit[]>([]);
@@ -38,30 +58,6 @@ const loading = ref(false);
 const saving = ref(false);
 const previewing = ref(false);
 const applying = ref(false);
-
-const canRun = computed(() => oldName.value.trim() && newName.value.trim() && levels.value.size > 0);
-
-function prefsPayload(): Partial<CodeRenamePrefs> {
-  return {
-    old: oldName.value.trim(),
-    new: newName.value.trim(),
-    levels: [...levels.value],
-    scope: scope.value.trim(),
-    target_encoding: targetEncoding.value,
-    include_ignored: includeIgnored.value,
-    rescan_index: rescanIndex.value,
-  };
-}
-
-function applyPrefs(prefs: CodeRenamePrefs) {
-  oldName.value = prefs.old || "";
-  newName.value = prefs.new || "";
-  levels.value = new Set(prefs.levels?.length ? prefs.levels : (["text"] as RenameLevel[]));
-  scope.value = prefs.scope || "";
-  targetEncoding.value = prefs.target_encoding || "utf-8";
-  includeIgnored.value = prefs.include_ignored ?? false;
-  rescanIndex.value = prefs.rescan_index ?? false;
-}
 
 async function loadIgnoreSummary() {
   try {
@@ -77,10 +73,7 @@ function openIgnorePanel() {
 }
 
 function toggleLevel(id: RenameLevel, checked: boolean) {
-  const next = new Set(levels.value);
-  if (checked) next.add(id);
-  else next.delete(id);
-  levels.value = next;
+  pageStore.toggleLevel(id, checked);
 }
 
 function levelLabel(id: RenameLevel) {
@@ -94,7 +87,7 @@ function hitLevelLabel(level: string) {
 async function loadPrefs() {
   loading.value = true;
   try {
-    applyPrefs(await fetchCodeRenamePrefs());
+    pageStore.applyFromApi(await fetchCodeRenamePrefs());
   } catch (e) {
     shell.setStatus(String(e));
   } finally {
@@ -109,7 +102,7 @@ async function onSavePrefs() {
   }
   saving.value = true;
   try {
-    applyPrefs(await saveCodeRenamePrefs(prefsPayload()));
+    pageStore.syncFromServer(await saveCodeRenamePrefs(pageStore.prefsPayload));
     shell.setStatus("已保存批量改名偏好");
   } catch (e) {
     shell.setStatus(String(e));
@@ -127,7 +120,7 @@ async function onPreview() {
   engineMessage.value = "";
   shell.appendLog("[Code 批量改名] 预览扫描…", { source: "code_rename", open: true });
   try {
-    const out = await previewCodeRename(prefsPayload());
+    const out = await previewCodeRename(pageStore.prefsPayload);
     hits.value = out.hits || [];
     previewSummary.value = out.summary;
     engineMessage.value = out.message || "";
@@ -158,7 +151,7 @@ async function onApply() {
   applying.value = true;
   shell.appendLog("[Code 批量改名] 执行写盘…", { source: "code_rename", open: true });
   try {
-    const out = await applyCodeRename(prefsPayload());
+    const out = await applyCodeRename(pageStore.prefsPayload);
     engineMessage.value = out.message || "";
     const logText = out.lines?.join("\n") || out.log || out.message || "完成";
     shell.appendLog(logText, { source: "code_rename" });
@@ -171,7 +164,17 @@ async function onApply() {
   }
 }
 
+watch(
+  () => shell.workspacePath.value,
+  (ws) => {
+    pageStore.hydrate(ws);
+    void loadPrefs();
+    void loadIgnoreSummary();
+  },
+);
+
 onMounted(async () => {
+  pageStore.hydrate(shell.workspacePath.value);
   await loadPrefs();
   await loadIgnoreSummary();
 });

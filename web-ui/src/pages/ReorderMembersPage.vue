@@ -1,61 +1,90 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import {
   fetchReorderMembersPrefs,
   fetchReorderMembersTopLevel,
   runReorderMembers,
+  runReorderMembersSelfTest,
   saveReorderMembersPrefs,
   type ReorderMembersEntry,
 } from "../api";
 import PageHelpButton from "../components/PageHelpButton.vue";
+import AppModalOverlay from "../components/AppModalOverlay.vue";
 import { useAppShell } from "../composables/useAppShell";
+import { useReorderMembersPageStore } from "../stores/reorderMembersPage";
 
 const shell = useAppShell();
+const pageStore = useReorderMembersPageStore();
 
-const includeCpp = ref(true);
-const includeHeader = ref(true);
-const verbose = ref(false);
+const CHANGED_PAGE_SIZE = 20;
+
+const includeCpp = computed(() => pageStore.includeCpp);
+const includeHeader = computed(() => pageStore.includeHeader);
+const verbose = computed({
+  get: () => pageStore.verbose,
+  set: (value: boolean) => pageStore.setVerbose(value),
+});
+const selected = computed(() => pageStore.selectedSet);
+const entriesExpanded = computed({
+  get: () => pageStore.entriesExpanded,
+  set: (value: boolean) => pageStore.setEntriesExpanded(value),
+});
 
 const ignoreFileDisplay = ref("");
 const ignoreFileExists = ref(false);
+const ignoredEntries = ref<Array<{ name: string; kind: string; reason: string }>>([]);
 const entries = ref<ReorderMembersEntry[]>([]);
 const ignoredCount = ref(0);
-const selected = ref<Set<string>>(new Set());
+
+const changedFiles = ref<string[]>([]);
+const lastRunDryRun = ref(false);
+const lastRunSummary = ref("");
+const changedPage = ref(0);
+const rulesModalOpen = ref(false);
 
 const loading = ref(false);
 const saving = ref(false);
 const running = ref(false);
+const selfTesting = ref(false);
 const loadError = ref("");
 
-const selectedCount = computed(() => selected.value.size);
+const selectedCount = computed(() => pageStore.selectedCount);
 const allChecked = computed(
   () => entries.value.length > 0 && entries.value.every((e) => selected.value.has(e.name)),
 );
 const dirCount = computed(() => entries.value.filter((e) => e.kind === "dir").length);
 const fileCount = computed(() => entries.value.filter((e) => e.kind === "file").length);
+const changedTotal = computed(() => changedFiles.value.length);
+const changedPageCount = computed(() => Math.max(1, Math.ceil(changedTotal.value / CHANGED_PAGE_SIZE)));
+const changedPageSafe = computed(() =>
+  Math.min(changedPage.value, Math.max(0, changedPageCount.value - 1)),
+);
+const pagedChangedFiles = computed(() => {
+  const start = changedPageSafe.value * CHANGED_PAGE_SIZE;
+  return changedFiles.value.slice(start, start + CHANGED_PAGE_SIZE);
+});
+
+function fileKindLabel(path: string): string {
+  const lower = path.toLowerCase();
+  if (lower.endsWith(".cpp") || lower.endsWith(".cc") || lower.endsWith(".cxx")) return ".cpp";
+  if (lower.endsWith(".hpp") || lower.endsWith(".hh")) return ".hpp";
+  if (lower.endsWith(".h")) return ".h";
+  return "源文件";
+}
 
 function prefsPayload() {
-  return {
-    include_cpp: includeCpp.value,
-    include_header: includeHeader.value,
-    sort_members: false,
-    verbose: verbose.value,
-    last_selected: [...selected.value],
-  };
+  return pageStore.prefsPayload;
 }
 
 function kindLabel(kind: string) {
   return kind === "file" ? "文件" : "目录";
 }
 
-async function loadPrefs() {
+async function loadPrefsFromApi() {
   const prefs = await fetchReorderMembersPrefs();
   ignoreFileDisplay.value = prefs.ignore_file_display || prefs.ignore_file;
   ignoreFileExists.value = prefs.ignore_file_exists;
-  includeCpp.value = prefs.include_cpp ?? true;
-  includeHeader.value = prefs.include_header ?? true;
-  verbose.value = prefs.verbose;
-  selected.value = new Set(prefs.last_selected || []);
+  pageStore.applyFromApi(prefs);
 }
 
 async function refreshList() {
@@ -66,9 +95,9 @@ async function refreshList() {
     ignoreFileDisplay.value = data.ignore_file_display || data.ignore_file;
     ignoreFileExists.value = data.ignore_file_exists;
     entries.value = data.entries;
+    ignoredEntries.value = data.ignored ?? [];
     ignoredCount.value = data.ignored?.length ?? 0;
-    const names = new Set(data.entries.map((e) => e.name));
-    selected.value = new Set([...selected.value].filter((n) => names.has(n)));
+    pageStore.filterSelected(new Set(data.entries.map((e) => e.name)));
   } catch (e) {
     loadError.value = String(e);
     entries.value = [];
@@ -78,25 +107,21 @@ async function refreshList() {
 }
 
 function setIncludeCpp(checked: boolean) {
-  if (!checked && !includeHeader.value) {
+  if (!pageStore.setIncludeCpp(checked)) {
     shell.setStatus("至少勾选一种源文件类型");
-    return;
   }
-  includeCpp.value = checked;
 }
 
 function setIncludeHeader(checked: boolean) {
-  if (!checked && !includeCpp.value) {
+  if (!pageStore.setIncludeHeader(checked)) {
     shell.setStatus("至少勾选一种源文件类型");
-    return;
   }
-  includeHeader.value = checked;
 }
 
 async function onSave() {
   saving.value = true;
   try {
-    await saveReorderMembersPrefs(prefsPayload());
+    pageStore.syncFromServer(await saveReorderMembersPrefs(prefsPayload()));
     shell.setStatus("已保存成员排序偏好");
   } catch (e) {
     shell.setStatus(String(e));
@@ -105,15 +130,37 @@ async function onSave() {
   }
 }
 
+async function onSelfTest() {
+  selfTesting.value = true;
+  shell.appendLog("[C++ 成员排序] 锁定段回归自检…", { source: "reorder_members", open: true });
+  try {
+    const out = await runReorderMembersSelfTest();
+    shell.appendLog(out.summary, { source: "reorder_members" });
+    for (const c of out.cases) {
+      if (!c.pass) {
+        shell.appendLog(`  ✗ ${c.id}: ${c.message}`, { source: "reorder_members" });
+      } else if (c.skipped) {
+        shell.appendLog(`  ○ ${c.id}: ${c.message}`, { source: "reorder_members" });
+      }
+    }
+    shell.setStatus(out.summary);
+  } catch (e) {
+    shell.appendLog(String(e), { source: "reorder_members" });
+    shell.setStatus(String(e));
+  } finally {
+    selfTesting.value = false;
+  }
+}
+
 function toggleEntry(name: string, checked: boolean) {
-  const next = new Set(selected.value);
-  if (checked) next.add(name);
-  else next.delete(name);
-  selected.value = next;
+  pageStore.toggleSelected(name, checked);
 }
 
 function toggleAll(checked: boolean) {
-  selected.value = checked ? new Set(entries.value.map((e) => e.name)) : new Set();
+  pageStore.toggleAll(
+    entries.value.map((e) => e.name),
+    checked,
+  );
 }
 
 async function onRun(dryRun: boolean) {
@@ -139,6 +186,10 @@ async function onRun(dryRun: boolean) {
       targets: [...selected.value],
       dry_run: dryRun,
     });
+    changedFiles.value = out.changed_files ?? [];
+    changedPage.value = 0;
+    lastRunDryRun.value = dryRun;
+    lastRunSummary.value = out.summary || "";
     const logText = verbose.value ? out.log || out.summary : out.summary || out.log;
     shell.appendLog(logText || "完成", { source: "reorder_members" });
     shell.setStatus(out.summary || (out.ok ? "完成" : "失败"));
@@ -151,13 +202,27 @@ async function onRun(dryRun: boolean) {
 }
 
 onMounted(async () => {
+  pageStore.hydrate(shell.workspacePath.value);
   try {
-    await loadPrefs();
+    await loadPrefsFromApi();
     await refreshList();
   } catch (e) {
     shell.setStatus(String(e));
   }
 });
+
+watch(
+  () => shell.workspacePath.value,
+  async (ws) => {
+    pageStore.hydrate(ws);
+    try {
+      await loadPrefsFromApi();
+      await refreshList();
+    } catch (e) {
+      shell.setStatus(String(e));
+    }
+  },
+);
 </script>
 
 <template>
@@ -166,7 +231,7 @@ onMounted(async () => {
       <div class="head-row">
         <h1 class="page-title">C++ 成员排序</h1>
         <p class="page-desc">
-          按 cxx-code-style 重排工作空间一级目录下的 .h / .cpp；可先预检，结果见底部运行日志
+          按 cxx-code-style 重排工作空间一级目录下的 .h / .cpp；可先预检，变更文件列在下方表格
         </p>
         <div class="head-help">
           <PageHelpButton page-id="reorder_members" />
@@ -207,6 +272,15 @@ onMounted(async () => {
             </label>
           </div>
           <div class="settings-actions">
+            <button
+              type="button"
+              class="btn btn-quiet btn-sm"
+              :disabled="selfTesting"
+              title="跑内置 fixture 锁定段用例，不扫描工作空间"
+              @click="onSelfTest"
+            >
+              {{ selfTesting ? "…" : "回归自检" }}
+            </button>
             <button type="button" class="btn btn-quiet btn-sm" :disabled="saving" @click="onSave">
               {{ saving ? "…" : "保存偏好" }}
             </button>
@@ -231,29 +305,43 @@ onMounted(async () => {
       </div>
     </section>
 
-    <section class="card results-card">
-      <header class="results-head">
-        <div class="results-head-row">
+    <section class="card results-card" :class="{ collapsed: !entriesExpanded }">
+      <div class="results-head-row">
+        <button
+          type="button"
+          class="collapse-trigger"
+          :aria-expanded="entriesExpanded"
+          @click="entriesExpanded = !entriesExpanded"
+        >
+          <span class="collapse-chevron" :class="{ open: entriesExpanded }" aria-hidden="true">▶</span>
           <span class="section-label">一级条目</span>
-          <span v-if="entries.length" class="muted small">
-            已选 {{ selectedCount }} / {{ entries.length }}
-          </span>
-          <button type="button" class="btn btn-sm refresh-btn" :disabled="loading" @click="refreshList">
-            {{ loading ? "刷新中…" : "刷新列表" }}
+        </button>
+        <span v-if="entries.length" class="head-meta muted small">
+          已选 {{ selectedCount }}/{{ entries.length }}
+          · 目录 {{ dirCount }}
+          · 源文件 {{ fileCount }}
+          <template v-if="ignoredCount"> · 已忽略 {{ ignoredCount }}</template>
+        </span>
+        <span v-else-if="loading" class="head-meta muted small">加载中…</span>
+        <div class="results-head-actions">
+          <button
+            type="button"
+            class="btn btn-sm"
+            :disabled="loading"
+            @click="refreshList"
+          >
+            {{ loading ? "…" : "刷新列表" }}
+          </button>
+          <button type="button" class="btn btn-sm" @click="rulesModalOpen = true">
+            忽略与规则
           </button>
         </div>
-        <p v-if="entries.length" class="list-summary">
-          <span>目录 <strong>{{ dirCount }}</strong></span>
-          <span class="sep">·</span>
-          <span>源文件 <strong>{{ fileCount }}</strong></span>
-          <span v-if="ignoredCount" class="sep">·</span>
-          <span v-if="ignoredCount" class="muted">已忽略 <strong>{{ ignoredCount }}</strong></span>
-        </p>
-      </header>
+      </div>
 
-      <p v-if="loadError" class="err-msg">{{ loadError }}</p>
+      <div v-show="entriesExpanded" class="results-body">
+        <p v-if="loadError" class="err-msg">{{ loadError }}</p>
 
-      <div class="table-wrap">
+        <div class="table-wrap">
         <table v-if="entries.length" class="entry-table">
           <thead>
             <tr>
@@ -292,12 +380,84 @@ onMounted(async () => {
         <p v-else class="empty">
           {{ loading ? "加载中…" : loadError ? "加载失败" : "没有可列出的目录或源文件" }}
         </p>
+        </div>
       </div>
     </section>
 
-    <details class="help-panel">
-      <summary class="help-summary">忽略规则与排序说明</summary>
-      <div class="help-body">
+    <section v-if="changedFiles.length || lastRunSummary" class="card changed-card">
+      <header class="results-head">
+        <div class="results-head-row">
+          <span class="section-label">变更文件</span>
+          <span v-if="changedFiles.length" class="muted small">
+            {{ lastRunDryRun ? "预检" : "已写盘" }} · 共 {{ changedTotal }} 个
+          </span>
+          <span v-else-if="lastRunSummary" class="muted small">本次无变更</span>
+        </div>
+        <p v-if="lastRunSummary && !changedFiles.length" class="run-summary muted">{{ lastRunSummary.split("\n")[0] }}</p>
+      </header>
+
+      <div v-if="changedFiles.length" class="table-wrap changed-table-wrap">
+        <table class="entry-table">
+          <thead>
+            <tr>
+              <th class="col-num">#</th>
+              <th>路径</th>
+              <th class="col-kind">类型</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="(path, i) in pagedChangedFiles"
+              :key="path"
+              :class="{ 'row-alt': i % 2 === 1 }"
+            >
+              <td class="col-num">{{ changedPageSafe * CHANGED_PAGE_SIZE + i + 1 }}</td>
+              <td class="mono entry-name">{{ path }}</td>
+              <td class="col-kind">
+                <span class="kind-badge" :data-kind="fileKindLabel(path) === '.cpp' ? 'file' : 'dir'">
+                  {{ fileKindLabel(path) }}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div v-if="changedPageCount > 1" class="pager">
+        <button
+          type="button"
+          class="btn btn-sm"
+          :disabled="changedPageSafe <= 0"
+          @click="changedPage = Math.max(0, changedPageSafe - 1)"
+        >
+          上一页
+        </button>
+        <span class="pager-meta">
+          第 {{ changedPageSafe + 1 }} / {{ changedPageCount }} 页
+        </span>
+        <button
+          type="button"
+          class="btn btn-sm"
+          :disabled="changedPageSafe >= changedPageCount - 1"
+          @click="changedPage = Math.min(changedPageCount - 1, changedPageSafe + 1)"
+        >
+          下一页
+        </button>
+      </div>
+    </section>
+
+    <AppModalOverlay
+      :open="rulesModalOpen"
+      aria-label="忽略规则与排序说明"
+      panel-class="reorder-rules-modal"
+      @close="rulesModalOpen = false"
+    >
+      <div class="rules-modal-inner">
+        <header class="rules-modal-head">
+          <h2 class="rules-modal-title">忽略规则与排序说明</h2>
+          <button type="button" class="btn btn-sm" @click="rulesModalOpen = false">关闭</button>
+        </header>
+
         <h3 class="help-sub">忽略列表</h3>
         <ul class="help-list">
           <li>
@@ -312,26 +472,53 @@ onMounted(async () => {
           </li>
           <li>
             CAA 等工程差异在
-            <button type="button" class="link-btn" @click="shell.openCodeIgnoreSidebar()">右侧栏 · 忽略</button>
+            <button type="button" class="link-btn" @click="shell.openCodeIgnoreSidebar(); rulesModalOpen = false">
+              右侧栏 · 忽略
+            </button>
             自定义区配置。
           </li>
-          <li v-if="ignoredCount">当前列表已隐藏 {{ ignoredCount }} 项。</li>
+        </ul>
+
+        <div v-if="ignoredEntries.length" class="ignored-table-wrap">
+          <p class="help-sub">当前已忽略（{{ ignoredEntries.length }}）</p>
+          <table class="entry-table compact">
+            <thead>
+              <tr>
+                <th>名称</th>
+                <th class="col-kind">类型</th>
+                <th>原因</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in ignoredEntries" :key="row.name">
+                <td class="mono">{{ row.name }}</td>
+                <td class="col-kind">{{ kindLabel(row.kind) }}</td>
+                <td>{{ row.reason === "内置" ? "内置" : "ignore 规则" }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 class="help-sub">锁定段（P0）</h3>
+        <ul class="help-list">
+          <li>带成对标记的 <strong>locked region</strong>：排序时整段锁定，成员、空行、相对位置均不变。</li>
+          <li>例如 <code>// clang-format off/on</code>、Kevin/CAA2 Wizard 段、<code>#pragma region</code>。</li>
+          <li>详见 <code>doc/code/成员排序-锁定段与回归用例.md</code>。</li>
         </ul>
 
         <h3 class="help-sub">排序规则（摘要）</h3>
         <ul class="help-list">
           <li>
             <strong>.cpp</strong>：特殊成员（默认构造 → 其它构造 → 析构 → 拷贝/移动 → <code>operator=</code>）优先，其余按函数名字母序；补全
-            <code>//---</code> 分隔符；初始化列表用 <code>()</code> 而非 <code>{}</code>。
+            <code>//---</code> 分隔符。
           </li>
           <li>
-            <strong>.h</strong>：各访问段内同样优先特殊成员，再按字母序；成员变量字母序 Web 暂未开放（见
-            <code>doc/code/成员变量字母序-规则与待实现.md</code>）。
+            <strong>.h</strong>：各访问段内同样优先特殊成员，再按字母序；成员变量字母序 Web 暂未开放。
           </li>
-          <li>完整规则见页内 ? 帮助或 <code>doc/code/成员函数排序-reorder_members.md</code>。</li>
+          <li>完整规则见 <code>doc/code/成员函数排序-reorder_members.md</code>。</li>
         </ul>
       </div>
-    </details>
+    </AppModalOverlay>
   </div>
 </template>
 
@@ -441,45 +628,140 @@ onMounted(async () => {
   border-color: var(--border);
 }
 
-.results-head {
-  margin-bottom: 8px;
-}
-
 .results-head-row {
   display: flex;
   flex-wrap: wrap;
   gap: 8px 10px;
   align-items: center;
-  justify-content: space-between;
 }
 
-.refresh-btn {
-  margin-left: auto;
+.results-card.collapsed {
+  padding: 6px 12px;
 }
 
-.list-summary {
+.results-card.collapsed .results-head-row {
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+.collapse-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+
+.collapse-trigger:hover .section-label {
+  color: var(--text);
+}
+
+.collapse-chevron {
+  display: inline-block;
+  font-size: 0.62rem;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+
+.collapse-chevron.open {
+  transform: rotate(90deg);
+}
+
+.head-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.results-card:not(.collapsed) .head-meta {
+  white-space: normal;
+}
+
+.results-head-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 0;
-  margin: 8px 0 0;
-  font-size: 0.78rem;
-  color: var(--muted);
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
-.list-summary .sep {
-  margin: 0 6px;
-  color: #cbd5e1;
-}
-
-.list-summary strong {
-  font-weight: 600;
-  color: var(--text);
+.results-body {
+  margin-top: 8px;
 }
 
 .reorder-page .table-wrap {
   max-height: calc(100vh - 380px);
   padding: 0;
+}
+
+.changed-table-wrap {
+  max-height: min(360px, calc(100vh - 420px));
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.pager-meta {
+  font-size: 0.76rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.run-summary {
+  margin: 6px 0 0;
+  font-size: 0.78rem;
+}
+
+.rules-modal-inner {
+  padding: 14px 16px 16px;
+}
+
+.rules-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.rules-modal-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.ignored-table-wrap {
+  margin-bottom: 12px;
+  max-height: 200px;
+  overflow: auto;
+}
+
+.entry-table.compact th,
+.entry-table.compact td {
+  padding: 5px 8px;
+  font-size: 0.76rem;
+}
+
+:global(.reorder-rules-modal) {
+  width: min(640px, 100%);
 }
 
 .entry-table {
@@ -576,26 +858,6 @@ onMounted(async () => {
   font-size: 0.82rem;
   background: #fef2f2;
   color: #b91c1c;
-}
-
-.help-panel {
-  margin-top: 4px;
-  padding: 10px 14px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #fafafa;
-}
-
-.help-summary {
-  font-size: 0.82rem;
-  font-weight: 600;
-  cursor: pointer;
-  color: var(--muted);
-  user-select: none;
-}
-
-.help-body {
-  margin-top: 10px;
 }
 
 .help-sub {

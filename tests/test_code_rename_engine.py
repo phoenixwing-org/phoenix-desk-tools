@@ -11,6 +11,9 @@ from phoenix.code.rename.scan import RenameScanOptions, preview_text_rename
 from phoenix.code.rename.uuid_apply import apply_uuid_hits
 from phoenix.code.rename.uuid_scan import UuidScanOptions, make_hit_id, scan_uuid_hits
 
+UUID_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "uuid"
+PNX_CAA_STUDY = Path(__file__).resolve().parent / "fixtures" / "PNXCaaStudy"
+
 
 class TestCodeRenameEngine(unittest.TestCase):
     def test_text_preview_and_apply(self) -> None:
@@ -92,6 +95,26 @@ class TestCodeUuidEngine(unittest.TestCase):
         parsed = parse_hit_id(hid)
         self.assertEqual(parsed["repo_rel_path"], "src/x.cpp")
         self.assertEqual(parsed["line"], 3)
+
+    def test_uuid_fixture_bundle(self) -> None:
+        """case_id=uuid-fixture-bundle — 仓库内 uuid/ 小样本"""
+        scanned = scan_uuid_hits(UUID_FIXTURES, UuidScanOptions())
+        self.assertTrue(scanned["implemented"])
+        self.assertGreaterEqual(scanned["summary"]["total_hits"], 2)
+        self.assertGreaterEqual(scanned["summary"]["unique_uuids"], 1)
+        paths = {h["repo_rel_path"] for h in scanned["hits"]}
+        self.assertIn("sample_feature.json", paths)
+        self.assertIn("sample_ref.json", paths)
+
+    @unittest.skipUnless(PNX_CAA_STUDY.is_dir(), "tests/fixtures/PNXCaaStudy 未链接")
+    def test_uuid_scan_pnx_caa_study_sample(self) -> None:
+        """case_id=uuid-pnx-tree — 外链 PNXCaaStudy 应能扫到 GUID 字面量"""
+        scanned = scan_uuid_hits(
+            PNX_CAA_STUDY,
+            UuidScanOptions(scope="PNXCombinedCurveWsp/PNXCombinedCurve.edu"),
+        )
+        self.assertTrue(scanned["implemented"])
+        self.assertGreater(scanned["summary"]["total_hits"], 0)
 
 
 if __name__ == "__main__":
