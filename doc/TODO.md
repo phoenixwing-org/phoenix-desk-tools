@@ -130,10 +130,10 @@
 - [x] Code 索引：删除缺失条目、导出 JSON
 - [~] **Code 批量改名**（文件夹 / 文件 / 文本三级）— 见 [Code模块-批量改名-规划.md](code/Code模块-批量改名-规划.md) §1–10  
   - [x] P0 **文本级** preview + apply、编码检测、忽略列表、单测  
-  - [ ] P1 文件夹 / 文件 basename 重命名  
+  - [x] P1 文件夹 / 文件 basename 重命名（执行顺序：文件夹 → 文件 → 文本）  
 - [~] **Code UUID 替换** — 同上 §11  
   - [x] 扫描 + 勾选 apply（`map_per_value` / `fresh_per_hit`）  
-  - [ ] 与 Code 索引范围联动、导出报告 JSON
+  - [x] 与 Code 索引范围联动（`use_index_scope`）；报告 JSON 落 `.phoenix/reports/`
 - [x] **成员排序 · 锁定段（P0）**：`reorder_avoidance.py` + `test_reorder_avoidance_rules.py`；可选 Web 自检 API
 - [x] **成员排序 · 锁定段回归单测**：`tests/test_reorder_avoidance_rules.py`；改规则须全套件通过
 - [x] **成员排序 · Web 回归自检（可选）**：`POST /api/code/reorder-members/self-test` 或 dev 页按钮，仅跑 fixture 子集

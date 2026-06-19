@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import {
   applyCodeUuids,
   fetchCodeIgnorePrefs,
@@ -9,13 +9,42 @@ import {
 } from "../api";
 import PageHelpButton from "../components/PageHelpButton.vue";
 import { useAppShell } from "../composables/useAppShell";
+import { useResizableTable, type TableColumnDef } from "../composables/useResizableTable";
+import { basenameFromRel, repoDirFromRel } from "../utils/workspaceFileQuery";
+
+const hitColumns: TableColumnDef[] = [
+  { key: "check", label: "", width: 40, minWidth: 40 },
+  { key: "filename", label: "文件名", width: 200, minWidth: 120 },
+  { key: "line", label: "行", width: 52, minWidth: 44 },
+  { key: "new_text", label: "替换后", width: 240, minWidth: 120 },
+  { key: "text", label: "原文", width: 240, minWidth: 120 },
+  { key: "dir", label: "目录", width: 320, minWidth: 160 },
+  { key: "actions", label: "操作", width: 80, minWidth: 72 },
+];
+
+const showReplacementColumn = ref(false);
+
+const visibleHitColumns = computed(() =>
+  showReplacementColumn.value ? hitColumns : hitColumns.filter((c) => c.key !== "new_text"),
+);
+
+const { widths, onResizeStart } = useResizableTable(() => visibleHitColumns.value);
+
+const visibleTableWidth = computed(() =>
+  visibleHitColumns.value.reduce(
+    (sum, col) => sum + (widths.value[col.key] ?? col.width ?? 120),
+    0,
+  ),
+);
 
 const shell = useAppShell();
 
 const scope = ref("");
+const useIndexScope = ref(false);
 const strategy = ref<UuidApplyStrategy>("map_per_value");
 const hits = ref<CodeUuidHit[]>([]);
 const selected = ref<Set<string>>(new Set());
+const replacementByHitId = ref<Record<string, string>>({});
 const engineMessage = ref("");
 const ignoreSummary = ref("");
 
@@ -27,6 +56,67 @@ const allChecked = computed(
   () => hits.value.length > 0 && hits.value.every((h) => selected.value.has(h.hit_id)),
 );
 const uniqueUuidCount = computed(() => new Set(hits.value.map((h) => h.uuid_normalized)).size);
+
+type UuidHitGroup = {
+  uuid_normalized: string;
+  hits: CodeUuidHit[];
+};
+
+const hitGroups = computed<UuidHitGroup[]>(() => {
+  const map = new Map<string, CodeUuidHit[]>();
+  for (const h of hits.value) {
+    const key = h.uuid_normalized || h.matched_text;
+    const list = map.get(key) ?? [];
+    list.push(h);
+    map.set(key, list);
+  }
+  return [...map.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([uuid_normalized, groupHits]) => ({
+      uuid_normalized,
+      hits: groupHits.sort((a, b) =>
+        a.repo_rel_path.localeCompare(b.repo_rel_path) || a.line - b.line,
+      ),
+    }));
+});
+
+const selectedNormCount = computed(() => {
+  const norms = new Set<string>();
+  for (const id of selected.value) {
+    const h = hits.value.find((x) => x.hit_id === id);
+    if (h) norms.add(h.uuid_normalized);
+  }
+  return norms.size;
+});
+
+function formatNormDisplay(norm: string): string {
+  const s = norm.replace(/[^0-9a-fA-F]/g, "").toLowerCase();
+  if (s.length !== 32) return norm;
+  return `${s.slice(0, 8)}-${s.slice(8, 12)}-${s.slice(12, 16)}-${s.slice(16, 20)}-${s.slice(20)}`;
+}
+
+function groupAllChecked(group: UuidHitGroup): boolean {
+  return group.hits.length > 0 && group.hits.every((h) => selected.value.has(h.hit_id));
+}
+
+function groupSomeChecked(group: UuidHitGroup): boolean {
+  return group.hits.some((h) => selected.value.has(h.hit_id));
+}
+
+function toggleGroup(group: UuidHitGroup, checked: boolean) {
+  const next = new Set(selected.value);
+  for (const h of group.hits) {
+    if (checked) next.add(h.hit_id);
+    else next.delete(h.hit_id);
+  }
+  selected.value = next;
+}
+
+const hitsTableStyle = computed(() => ({
+  width: `${visibleTableWidth.value}px`,
+  minWidth: "100%",
+  "--sticky-check-w": `${widths.value.check ?? 40}px`,
+}));
 
 function toggleHit(id: string, checked: boolean) {
   const next = new Set(selected.value);
@@ -55,14 +145,28 @@ async function loadIgnoreSummary() {
   }
 }
 
+function replacementText(hitId: string): string {
+  return replacementByHitId.value[hitId] ?? "";
+}
+
+watch(strategy, () => {
+  replacementByHitId.value = {};
+  showReplacementColumn.value = false;
+});
+
 async function onScan() {
   scanning.value = true;
   engineMessage.value = "";
   hits.value = [];
   selected.value = new Set();
+  replacementByHitId.value = {};
+  showReplacementColumn.value = false;
   shell.appendLog("[Code UUID] 扫描…", { source: "code_uuid", open: true });
   try {
-    const out = await scanCodeUuids({ scope: scope.value.trim() || undefined });
+    const out = await scanCodeUuids({
+      scope: scope.value.trim() || undefined,
+      use_index_scope: useIndexScope.value,
+    });
     hits.value = out.hits || [];
     engineMessage.value = out.message || "";
     await loadIgnoreSummary();
@@ -95,6 +199,14 @@ async function onApply(dryRun: boolean) {
       dry_run: dryRun,
     });
     engineMessage.value = out.message || "";
+    const next: Record<string, string> = {};
+    for (const m of out.mappings || []) {
+      if (m.hit_id && m.new) next[m.hit_id] = m.new;
+    }
+    replacementByHitId.value = next;
+    if (Object.keys(next).length > 0) {
+      showReplacementColumn.value = true;
+    }
     const logText = out.lines?.join("\n") || out.log || out.message || "完成";
     shell.appendLog(logText, { source: "code_uuid" });
     shell.setStatus(out.implemented ? "完成" : out.message || "引擎尚未接入");
@@ -108,6 +220,21 @@ async function onApply(dryRun: boolean) {
 
 function openIgnorePanel() {
   void shell.openCodeIgnoreSidebar();
+}
+
+function hitFilename(rel: string) {
+  return basenameFromRel(rel);
+}
+
+function hitDir(rel: string) {
+  return repoDirFromRel(rel);
+}
+
+function thClass(key: string) {
+  if (key === "check") return "col-check sticky-col-left sticky-col-check";
+  if (key === "filename") return "sticky-col-left sticky-col-filename filename-cell";
+  if (key === "actions") return "col-actions sticky-col-right";
+  return "";
 }
 
 onMounted(() => {
@@ -133,10 +260,14 @@ onMounted(() => {
           <span class="field-label">范围（可选）</span>
           <input v-model="scope" class="input mono" type="text" spellcheck="false" placeholder="相对子目录" />
         </label>
+        <label class="field opt-inline">
+          <input v-model="useIndexScope" type="checkbox" />
+          <span>仅 Code 索引 present 文件</span>
+        </label>
         <label class="field">
           <span class="field-label">替换策略</span>
           <select v-model="strategy" class="input">
-            <option value="map_per_value">同一旧 UUID → 一个新 UUID</option>
+            <option value="map_per_value">同值一组 → 共用一个新 UUID（按写法分别格式化）</option>
             <option value="fresh_per_hit">每条命中独立新 UUID</option>
           </select>
         </label>
@@ -164,46 +295,97 @@ onMounted(() => {
         <div class="results-head-row">
           <span class="section-label">扫描结果</span>
           <span v-if="hits.length" class="muted small">
-            已选 {{ selectedCount }} / {{ hits.length }} · 去重 UUID {{ uniqueUuidCount }}
+            已选 {{ selectedCount }} / {{ hits.length }} 条 ·
+            {{ selectedNormCount }} / {{ uniqueUuidCount }} 组 UUID
           </span>
         </div>
         <p v-if="engineMessage" class="engine-msg">{{ engineMessage }}</p>
       </header>
 
-      <div class="table-wrap">
-        <table v-if="hits.length" class="entry-table">
+      <div class="hits-table-wrap">
+        <table
+          v-if="hits.length"
+          class="entry-table resizable-hits-table"
+          :style="hitsTableStyle"
+        >
+          <colgroup>
+            <col
+              v-for="col in visibleHitColumns"
+              :key="col.key"
+              :style="{ width: `${widths[col.key]}px` }"
+            />
+          </colgroup>
           <thead>
             <tr>
-              <th class="col-check">
+              <th v-for="col in visibleHitColumns" :key="col.key" :class="thClass(col.key)">
                 <input
+                  v-if="col.key === 'check'"
                   type="checkbox"
                   :checked="allChecked"
                   aria-label="全选"
                   @change="toggleAll(($event.target as HTMLInputElement).checked)"
                 />
+                <span v-else class="th-label">{{ col.label }}</span>
+                <span
+                  class="col-resizer"
+                  title="拖拽调节列宽"
+                  @mousedown="onResizeStart(col.key, $event)"
+                />
               </th>
-              <th>文件</th>
-              <th class="col-line">行</th>
-              <th>原文</th>
-              <th class="col-actions">操作</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(h, i) in hits" :key="h.hit_id" :class="{ 'row-alt': i % 2 === 1 }">
-              <td class="col-check">
-                <input
-                  type="checkbox"
-                  :checked="selected.has(h.hit_id)"
-                  @change="toggleHit(h.hit_id, ($event.target as HTMLInputElement).checked)"
-                />
-              </td>
-              <td class="mono path-cell">{{ h.repo_rel_path }}</td>
-              <td class="col-line mono">{{ h.line }}</td>
-              <td class="mono uuid-cell">{{ h.matched_text }}</td>
-              <td class="col-actions">
-                <button type="button" class="link-btn" @click="selectSameUuid(h)">同值全选</button>
-              </td>
-            </tr>
+            <template v-for="(group, gi) in hitGroups" :key="group.uuid_normalized">
+              <tr class="uuid-group-head">
+                <td class="col-check sticky-col-left sticky-col-check">
+                  <input
+                    type="checkbox"
+                    :checked="groupAllChecked(group)"
+                    :indeterminate="groupSomeChecked(group) && !groupAllChecked(group)"
+                    :aria-label="`全选 ${formatNormDisplay(group.uuid_normalized)}`"
+                    @change="toggleGroup(group, ($event.target as HTMLInputElement).checked)"
+                  />
+                </td>
+                <td :colspan="visibleHitColumns.length - 1" class="uuid-group-label">
+                  <span class="uuid-group-title">同值组 {{ gi + 1 }}</span>
+                  <code class="uuid-group-norm">{{ formatNormDisplay(group.uuid_normalized) }}</code>
+                  <span class="muted small">{{ group.hits.length }} 处</span>
+                </td>
+              </tr>
+              <tr
+                v-for="(h, hi) in group.hits"
+                :key="h.hit_id"
+                class="uuid-group-row"
+                :class="{ 'row-alt': hi % 2 === 1 }"
+              >
+                <td class="col-check sticky-col-left sticky-col-check">
+                  <input
+                    type="checkbox"
+                    :checked="selected.has(h.hit_id)"
+                    @change="toggleHit(h.hit_id, ($event.target as HTMLInputElement).checked)"
+                  />
+                </td>
+                <td class="mono filename-cell sticky-col-left sticky-col-filename" :title="h.repo_rel_path">
+                  {{ hitFilename(h.repo_rel_path) }}
+                </td>
+                <td class="col-line mono">{{ h.line }}</td>
+                <td
+                  v-if="showReplacementColumn"
+                  class="mono uuid-cell uuid-new-cell"
+                  :class="{ 'uuid-new-filled': replacementText(h.hit_id) }"
+                  :title="replacementText(h.hit_id)"
+                >
+                  {{ replacementText(h.hit_id) || "—" }}
+                </td>
+                <td class="mono uuid-cell" :title="h.matched_text">{{ h.matched_text }}</td>
+                <td class="mono dir-cell" :title="h.repo_rel_path">
+                  {{ hitDir(h.repo_rel_path) }}
+                </td>
+                <td class="col-actions sticky-col-right">
+                  <button type="button" class="link-btn" @click="selectSameUuid(h)">同值全选</button>
+                </td>
+              </tr>
+            </template>
           </tbody>
         </table>
         <p v-else class="empty">点击「扫描 UUID」；引擎接入前表格为空</p>
@@ -244,6 +426,13 @@ onMounted(() => {
   flex-direction: column;
   gap: 4px;
   min-width: 160px;
+}
+
+.opt-inline {
+  flex-direction: row;
+  align-items: center;
+  min-width: auto;
+  padding-bottom: 6px;
 }
 
 .field-label {
@@ -291,14 +480,18 @@ onMounted(() => {
   color: #b45309;
 }
 
-.table-wrap {
+.hits-table-wrap {
   max-height: calc(100vh - 420px);
   overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
 }
 
-.entry-table {
-  width: 100%;
-  border-collapse: collapse;
+.resizable-hits-table {
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 0.82rem;
 }
 
@@ -307,6 +500,7 @@ onMounted(() => {
   padding: 8px 10px;
   border-bottom: 1px solid var(--border);
   text-align: left;
+  vertical-align: middle;
 }
 
 .entry-table th {
@@ -315,7 +509,44 @@ onMounted(() => {
   background: #f8fafc;
   font-size: 0.78rem;
   color: var(--muted);
-  z-index: 1;
+  z-index: 2;
+  height: 34px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.entry-table td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: #fff;
+}
+
+.row-alt td {
+  background: #fafbfc;
+}
+
+.th-label {
+  display: block;
+  padding: 0 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.col-resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 7px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 3;
+  transform: translateX(50%);
+}
+
+.col-resizer:hover,
+.col-resizer:active {
+  background: rgba(37, 99, 235, 0.22);
 }
 
 .col-check {
@@ -325,20 +556,103 @@ onMounted(() => {
 
 .col-line {
   width: 48px;
+  text-align: right;
 }
 
 .col-actions {
   width: 72px;
+  overflow: visible;
+  white-space: normal;
 }
 
-.path-cell {
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.sticky-col-left {
+  position: sticky;
+  z-index: 4;
+}
+
+.sticky-col-check {
+  left: 0;
+  z-index: 5;
+  box-shadow: 1px 0 0 #e2e8f0;
+}
+
+.sticky-col-filename {
+  left: var(--sticky-check-w, 40px);
+  box-shadow: 1px 0 0 #e2e8f0;
+}
+
+.sticky-col-right {
+  position: sticky;
+  right: 0;
+  z-index: 4;
+  box-shadow: -1px 0 0 #e2e8f0;
+}
+
+.entry-table thead .sticky-col-check {
+  z-index: 8;
+}
+
+.entry-table thead .sticky-col-filename {
+  z-index: 7;
+}
+
+.entry-table thead .sticky-col-right {
+  z-index: 6;
+}
+
+.row-alt .sticky-col-check,
+.row-alt .sticky-col-filename {
+  background: #fafbfc;
+}
+
+.uuid-group-head td {
+  background: #eef2ff;
+  border-bottom: 1px solid #c7d2fe;
+  padding: 6px 10px;
+}
+
+.uuid-group-label {
+  font-size: 0.78rem;
+}
+
+.uuid-group-title {
+  font-weight: 600;
+  margin-right: 8px;
+  color: #4338ca;
+}
+
+.uuid-group-norm {
+  margin-right: 8px;
+  font-size: 0.76rem;
+}
+
+.uuid-group-row td {
+  background: #fff;
+}
+
+.uuid-group-row.row-alt td {
+  background: #fafbfc;
+}
+
+.filename-cell {
+  font-weight: 500;
+}
+
+.dir-cell {
+  color: var(--muted);
+  font-size: 0.78rem;
 }
 
 .uuid-cell {
   font-size: 0.76rem;
+}
+
+.uuid-new-cell {
+  color: var(--muted);
+}
+
+.uuid-new-cell.uuid-new-filled {
+  color: #047857;
 }
 
 .link-btn {

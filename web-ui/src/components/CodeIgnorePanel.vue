@@ -41,6 +41,23 @@ const customIgnoreText = ref("");
 const ignorePreset = ref("");
 const ignorePresets = ref<Array<{ id: string; label: string; patterns: string[] }>>([]);
 const consumers = ref<string[]>([]);
+const processDirSuggestions = ref<
+  Array<{
+    name: string;
+    kind: string;
+    reason: string;
+    repo_rel_path: string;
+    suggested_pattern: string;
+  }>
+>([]);
+const processDirsAutoSeeded = ref<string[]>([]);
+
+const hasProcessSuggestions = computed(() => processDirSuggestions.value.length > 0);
+const autoSeedNotice = computed(() => {
+  const seeded = processDirsAutoSeeded.value;
+  if (!seeded.length) return "";
+  return `首次打开已自动加入忽略：${seeded.join("、")}`;
+});
 
 const customLineCount = computed(() =>
   customIgnoreText.value
@@ -69,6 +86,11 @@ function applyPrefs(data: CodeIgnorePrefs) {
   ignorePreset.value = data.ignore_preset || "";
   ignorePresets.value = data.ignore_presets || [];
   consumers.value = data.consumers || [];
+  processDirSuggestions.value = data.process_dir_suggestions || [];
+  processDirsAutoSeeded.value = data.process_dirs_auto_seeded || [];
+  if (processDirsAutoSeeded.value.length) {
+    shell.setStatus(autoSeedNotice.value);
+  }
 }
 
 async function loadPrefs() {
@@ -80,6 +102,25 @@ async function loadPrefs() {
   } finally {
     loading.value = false;
   }
+}
+
+function onApplySuggestions() {
+  const lines = parseCustomLines(customIgnoreText.value);
+  const seen = new Set(lines.map((l) => l.toLowerCase()));
+  let added = 0;
+  for (const item of processDirSuggestions.value) {
+    const pat = item.suggested_pattern || item.name;
+    if (!pat || seen.has(pat.toLowerCase())) continue;
+    lines.push(pat);
+    seen.add(pat.toLowerCase());
+    added += 1;
+  }
+  if (!added) {
+    shell.setStatus("推荐项已在自定义列表中");
+    return;
+  }
+  customIgnoreText.value = lines.join("\n");
+  shell.setStatus(`已填入 ${added} 条过程目录推荐，保存后生效`);
 }
 
 async function onSave() {
@@ -178,6 +219,30 @@ defineExpose({ reload: loadPrefs });
             </div>
           </div>
           <p class="muted small">磁盘编辑后点「刷新」。</p>
+        </div>
+      </details>
+
+      <details v-if="hasProcessSuggestions" class="ignore-section" open>
+        <summary class="ignore-summary">
+          <span class="ignore-title">过程目录推荐</span>
+          <span class="muted small">{{ processDirSuggestions.length }} 项</span>
+        </summary>
+        <div class="ignore-body">
+          <p class="ignore-lead">
+            工作空间一级目录中疑似构建/生成目录，尚未被当前规则覆盖。内置已含
+            <span class="mono">build-*</span> 等通配（如 build-ui）。
+          </p>
+          <ul class="pattern-list mono">
+            <li v-for="item in processDirSuggestions" :key="item.name">
+              {{ item.name }}
+              <span class="muted">→ {{ item.suggested_pattern }}</span>
+            </li>
+          </ul>
+          <div class="panel-actions">
+            <button type="button" class="btn btn-quiet btn-sm" @click="onApplySuggestions">
+              填入自定义
+            </button>
+          </div>
         </div>
       </details>
 

@@ -17,6 +17,8 @@ type Persisted = {
   activeTab?: UnitTestsPageTab;
   watchlistPrefs?: UnitTestWatchlistPrefs;
   watchlistCheckedIds?: string[];
+  showRunScopeList?: boolean;
+  showRunScopeCases?: boolean;
 };
 
 function readPersisted(): Persisted {
@@ -65,6 +67,8 @@ export const useUnitTestsPageStore = defineStore("unitTestsPage", {
       activeTab: normalizeActiveTab(persisted.activeTab),
       watchlistPrefs: initialWatchlistPrefs(persisted),
       watchlistCheckedIds: normalizeWatchlistCheckedIds(persisted.watchlistCheckedIds),
+      showRunScopeList: persisted.showRunScopeList ?? false,
+      showRunScopeCases: persisted.showRunScopeCases ?? false,
     };
   },
   getters: {
@@ -86,6 +90,8 @@ export const useUnitTestsPageStore = defineStore("unitTestsPage", {
       this.activeTab = normalizeActiveTab(persisted.activeTab);
       this.watchlistPrefs = initialWatchlistPrefs(persisted);
       this.watchlistCheckedIds = normalizeWatchlistCheckedIds(persisted.watchlistCheckedIds);
+      this.showRunScopeList = persisted.showRunScopeList ?? false;
+      this.showRunScopeCases = persisted.showRunScopeCases ?? false;
       this.hydrated = true;
     },
     persist() {
@@ -94,6 +100,8 @@ export const useUnitTestsPageStore = defineStore("unitTestsPage", {
         activeTab: this.activeTab,
         watchlistPrefs: this.watchlistPrefs,
         watchlistCheckedIds: this.watchlistCheckedIds,
+        showRunScopeList: this.showRunScopeList,
+        showRunScopeCases: this.showRunScopeCases,
       });
       saveWatchlistPrefs(this.watchlistPrefs);
     },
@@ -142,6 +150,16 @@ export const useUnitTestsPageStore = defineStore("unitTestsPage", {
       const next = this.watchlistCheckedIds.filter((id) => validIds.has(id));
       if (next.length === this.watchlistCheckedIds.length) return;
       this.watchlistCheckedIds = next;
+      this.persist();
+    },
+    setShowRunScopeList(checked: boolean) {
+      if (this.showRunScopeList === checked) return;
+      this.showRunScopeList = checked;
+      this.persist();
+    },
+    setShowRunScopeCases(checked: boolean) {
+      if (this.showRunScopeCases === checked) return;
+      this.showRunScopeCases = checked;
       this.persist();
     },
   },

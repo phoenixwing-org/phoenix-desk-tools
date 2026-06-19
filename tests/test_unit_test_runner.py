@@ -71,6 +71,22 @@ class TestUnitTestRunner(unittest.TestCase):
         self.assertGreater(partial_cases, 0)
         self.assertLess(partial_cases, full_cases)
 
+    def test_stream_does_not_cancel_before_first_case(self) -> None:
+        events = list(iter_unit_test_run_events(["code"], cancel_check=lambda: True))
+        self.assertEqual(events[0]["type"], "start")
+        self.assertIn(events[1]["type"], ("module_start", "case_start"))
+        self.assertGreater(events[-1]["result"]["summary"]["tests_run"], 0)
+
+    def test_plan_multi_suite(self) -> None:
+        from phoenix.testing.runner import plan_unit_test_run
+
+        plan = plan_unit_test_run(["code", "platform"])
+        self.assertIn("Code 模块", plan["suite_label"])
+        self.assertGreater(plan["total_cases"], 0)
+        self.assertGreater(plan["total_modules"], 0)
+        self.assertTrue(any(m["suite_id"] == "code" for m in plan["modules"]))
+        self.assertTrue(any(m["suite_id"] == "platform" for m in plan["modules"]))
+
     def test_exclude_case_ids_skips_and_counts_ignored(self) -> None:
         from phoenix.testing.runner import UnitTestRunOptions, run_unit_test_suites
 

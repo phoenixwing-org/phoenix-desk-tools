@@ -111,18 +111,27 @@ def save_reorder_members_prefs(repo_root: Path, patch: dict[str, Any]) -> dict[s
     return get_reorder_members_prefs(rr)
 
 
-def _count_source_files(sub: Path) -> int:
-    return sum(1 for _ in iter_source_files(sub, cpp_only=False, header_only=False))
+def _count_source_files(sub: Path, *, repo_root: Path) -> int:
+    return sum(
+        1
+        for _ in iter_source_files(
+            sub, cpp_only=False, header_only=False, repo_root=repo_root
+        )
+    )
 
 
 def _count_filtered_source_files(
     sub: Path,
     *,
+    repo_root: Path,
     include_cpp: bool,
     include_header: bool,
 ) -> int:
     cpp_only, header_only = include_flags_to_legacy_filters(include_cpp, include_header)
-    return sum(1 for _ in iter_source_files(sub, cpp_only, header_only))
+    return sum(
+        1
+        for _ in iter_source_files(sub, cpp_only, header_only, repo_root=repo_root)
+    )
 
 
 def _file_filter_label(include_cpp: bool, include_header: bool) -> str:
@@ -155,9 +164,14 @@ def _zero_scan_hints(
         if target.is_file():
             hints.append(f"  · {name}: 不是 .cpp/.h/.hpp，或已被过滤")
             continue
-        total = _count_source_files(target) if target.is_dir() else 0
+        total = _count_source_files(target, repo_root=root) if target.is_dir() else 0
         filtered = (
-            _count_filtered_source_files(target, include_cpp=include_cpp, include_header=include_header)
+            _count_filtered_source_files(
+                target,
+                repo_root=root,
+                include_cpp=include_cpp,
+                include_header=include_header,
+            )
             if target.is_dir()
             else 0
         )
@@ -204,7 +218,7 @@ def list_reorder_top_level_entries(repo_root: Path) -> dict[str, Any]:
                 {
                     "name": name,
                     "kind": "dir",
-                    "source_file_count": _count_source_files(p),
+                    "source_file_count": _count_source_files(p, repo_root=rr),
                 }
             )
         elif is_listable_source_file(p):
@@ -290,6 +304,7 @@ def _run_on_target(
             header_only=header_only,
             sort_members=sort_members,
             verbose=verbose,
+            repo_root=root,
         )
     raise ValueError(f"路径不存在: {target.name}")
 

@@ -43,6 +43,18 @@ DEFAULT_BUILTIN_PATTERNS: tuple[str, ...] = (
     "phoenix_freecad_desktop.egg-info",
     "cmake-build-debug",
     "cmake-build-release",
+    "build-*",
+    "cmake-build-*",
+    "out",
+    "bin",
+    "obj",
+    "x64",
+    "x86",
+    "Win32",
+    "Intermediate",
+    "DerivedData",
+    ".cache",
+    "_build",
 )
 
 IGNORE_PRESETS: dict[str, tuple[str, ...]] = {

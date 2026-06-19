@@ -9,10 +9,29 @@ UuidApplyStrategy = Literal["map_per_value", "fresh_per_hit"]
 
 RENAME_LEVELS: tuple[RenameLevel, ...] = ("dir", "file", "text")
 DEFAULT_RENAME_LEVELS: tuple[RenameLevel, ...] = ("text",)
+LEVEL_ORDER: tuple[RenameLevel, ...] = ("dir", "file", "text")
 DEFAULT_TARGET_ENCODING = "utf-8"
 TARGET_ENCODINGS: tuple[str, ...] = ("utf-8", "gbk")
 
 NOT_IMPLEMENTED_MESSAGE = "引擎尚未接入，当前仅提供界面与 API 契约；实现方式（自研 / 旧 CLI）待定。"
+
+
+class RenameScanOptions:
+    __slots__ = ("old", "new", "levels", "scope", "include_ignored")
+
+    def __init__(
+        self,
+        old: str,
+        new: str,
+        levels: list[RenameLevel],
+        scope: str = "",
+        include_ignored: bool = False,
+    ) -> None:
+        self.old = old
+        self.new = new
+        self.levels = levels
+        self.scope = scope
+        self.include_ignored = include_ignored
 
 
 def empty_rename_summary() -> dict[str, int]:

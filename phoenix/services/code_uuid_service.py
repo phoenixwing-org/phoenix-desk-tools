@@ -40,8 +40,14 @@ def scan_code_uuids(repo_root: Path, body: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(f"工作空间不是有效目录: {rr}")
     scope = str(body.get("scope") or "").strip()
     kinds = _normalize_kinds(body.get("kinds"))
+    use_index = bool(body.get("use_index_scope", False))
     ignore = get_code_ignore_prefs(rr)
-    out = scan_uuids(rr, {"scope": scope, "kinds": kinds})
+    out = scan_uuids(rr, {
+        "scope": scope,
+        "kinds": kinds,
+        "use_index_scope": use_index,
+        "include_ignored": bool(body.get("include_ignored", False)),
+    })
     out["ignore_file_display"] = ignore.get("ignore_file_display")
     out["ignore_file_exists"] = ignore.get("ignore_file_exists")
     out["ignore_file_patterns"] = ignore.get("ignore_file_patterns")

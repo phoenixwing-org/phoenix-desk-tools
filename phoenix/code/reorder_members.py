@@ -39,6 +39,8 @@ from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Tuple
 
 from phoenix.code.reorder_avoidance import split_by_avoidance_rules
+from phoenix.code.reorder_ignore import load_ignore_patterns
+from phoenix.code.ignore import is_ignored_name
 
 # 运行日志 / 摘要中标记「此文件有成员排序变更」（Web 侧栏、CLI 共用）
 CHANGED_LOG_MARK = "✎"
@@ -61,15 +63,6 @@ CLASS_RE = re.compile(
 CPP_IMPL_RE = re.compile(
     r"\b(\w+)::((?:~\w+)|~?\w+|operator\s*[^\(\s]+)\s*[\(<]",
 )
-
-SKIP_DIR_NAMES = {
-    ".git",
-    "build",
-    "Debug",
-    "Release",
-    ".vs",
-    "node_modules",
-}
 
 # Class-body macro invocations: Q_OBJECT, AB_DECLARE_Foo(...), AB_BASE_IMPLEMENT_*(...)
 _CLASS_BODY_MACRO_RE = re.compile(
@@ -1510,6 +1503,8 @@ def iter_source_files(
     root: Path,
     cpp_only: bool,
     header_only: bool,
+    *,
+    repo_root: Path | None = None,
 ) -> Iterable[Path]:
     cpp_only, header_only = normalize_reorder_file_filters(cpp_only, header_only)
     exts = set()
@@ -1518,12 +1513,20 @@ def iter_source_files(
     if not cpp_only:
         exts.update({".h", ".hpp"})
 
-    for path in root.rglob("*"):
+    scan_root = root.expanduser().resolve(strict=False)
+    ws = (repo_root or root).expanduser().resolve(strict=False)
+    patterns, _, _ = load_ignore_patterns(ws)
+
+    for path in scan_root.rglob("*"):
         if not path.is_file():
             continue
         if path.suffix not in exts:
             continue
-        if any(part in SKIP_DIR_NAMES for part in path.parts):
+        try:
+            rel = path.relative_to(ws)
+        except ValueError:
+            rel = path.relative_to(scan_root)
+        if any(is_ignored_name(part, patterns) for part in rel.parts[:-1]):
             continue
         yield path
 
@@ -1548,6 +1551,7 @@ def run_reorder_members(
     header_only: bool = False,
     sort_members: bool = False,
     verbose: bool = False,
+    repo_root: Path | None = None,
 ) -> ReorderMembersRunResult:
     """对目录或文件列表执行成员排序，返回结构化日志（供 Web / CLI 共用）。"""
     root = root.expanduser().resolve(strict=False)
@@ -1562,7 +1566,9 @@ def run_reorder_members(
     if files is not None:
         source_iter = sorted(f for f in files if f.suffix in {".cpp", ".h", ".hpp"})
     else:
-        source_iter = iter_source_files(root, cpp_only, header_only)
+        source_iter = iter_source_files(
+            root, cpp_only, header_only, repo_root=repo_root or root
+        )
 
     for path in sorted(source_iter):
         files_scanned += 1

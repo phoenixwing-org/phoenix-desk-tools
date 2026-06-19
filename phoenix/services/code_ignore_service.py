@@ -11,6 +11,10 @@ from phoenix.code.ignore import (
     load_ignore_config,
     parse_custom_ignore_lines,
 )
+from phoenix.code.process_dirs import (
+    patterns_to_seed_from_suggestions,
+    suggest_process_dir_ignores,
+)
 from phoenix.config.user_prefs import (
     format_resolved_under_workspace,
     load_workspace_prefs,
@@ -18,6 +22,28 @@ from phoenix.config.user_prefs import (
 )
 
 _SECTION = "code_ignore"
+_SEED_FLAG = "process_dirs_seeded"
+
+
+def _maybe_seed_process_dir_ignores(repo_root: Path) -> list[str]:
+    """首次打开忽略设定时，将检测到的一级过程目录写入 custom_ignore（仅一次）。"""
+    pv = load_workspace_prefs(repo_root).get(_SECTION) or {}
+    if pv.get(_SEED_FLAG):
+        return []
+    suggestions = suggest_process_dir_ignores(repo_root)
+    to_add = patterns_to_seed_from_suggestions(suggestions)
+    stored: dict[str, Any] = {_SEED_FLAG: True}
+    if to_add:
+        custom, _ = load_custom_ignore_from_prefs(repo_root)
+        merged = list(custom)
+        seen = {p.casefold() for p in merged}
+        for pat in to_add:
+            if pat.casefold() not in seen:
+                merged.append(pat)
+                seen.add(pat.casefold())
+        stored["custom_ignore"] = merged
+    merge_workspace_section(_SECTION, stored, repo_root)
+    return to_add
 
 
 def _workspace_root(repo_root: Path) -> Path:
@@ -27,13 +53,17 @@ def _workspace_root(repo_root: Path) -> Path:
     return rr
 
 
-def get_code_ignore_prefs(repo_root: Path) -> dict[str, Any]:
+def get_code_ignore_prefs(repo_root: Path, *, auto_seed: bool = True) -> dict[str, Any]:
     rr = repo_root.expanduser().resolve(strict=False)
     root = _workspace_root(rr)
+    seeded: list[str] = []
+    if auto_seed:
+        seeded = _maybe_seed_process_dir_ignores(rr)
     pv = load_workspace_prefs(rr).get(_SECTION) or {}
     custom, preset = load_custom_ignore_from_prefs(rr)
     ignore_cfg = load_ignore_config(rr, custom)
     preset = str(pv.get("ignore_preset") or preset or "").strip().lower()
+    suggestions = suggest_process_dir_ignores(rr)
     return {
         "workspace_path": str(root),
         "workspace_path_display": format_resolved_under_workspace(root, rr),
@@ -56,6 +86,18 @@ def get_code_ignore_prefs(repo_root: Path) -> dict[str, Any]:
             "code_rename",
             "code_uuid",
         ],
+        "process_dir_suggestions": suggestions,
+        "process_dirs_auto_seeded": seeded,
+        "process_dirs_seeded": bool(pv.get(_SEED_FLAG)),
+    }
+
+
+def list_process_dir_suggestions(repo_root: Path) -> dict[str, Any]:
+    rr = repo_root.expanduser().resolve(strict=False)
+    suggestions = suggest_process_dir_ignores(rr)
+    return {
+        "suggestions": suggestions,
+        "suggested_patterns": patterns_to_seed_from_suggestions(suggestions),
     }
 
 

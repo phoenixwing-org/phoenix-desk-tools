@@ -11,14 +11,14 @@
 | `KtAlarmClock/` | **symlink** · Qt 闹钟完整工程（成员排序 Kevin Wizard 回归） |
 | `PNXCaaStudy/` | **symlink** · CAA 学习工程（CAA2 Wizard、GUID 等） |
 | `reorder_members/` | 最小 `.h` 片段（锁定段用例），供 `test_reorder_avoidance_rules.py` |
-| `uuid/` | UUID / GUID 形态小样本（摘自 PNXCaaStudy），供 UUID 引擎单测 |
+| `uuid/` | UUID / GUID / CAA IID 形态小样本（摘自 PNXCaaStudy），供 UUID 引擎单测 |
 | `workspaces/<名>/document-xml/*.xml` | 从真实 FCStd 导出的 `Document.xml` 片段，供挂载/BOM/解析单测读取 |
 | `workspaces/<名>/.phoenix/*.sqlite` | （可选）最小工作空间库；schema 须与现网 v10 一致 |
 
 ## 当前样例
 
 - **`reorder_members/`** — 锁定段最小片段；单测见 `tests/test_reorder_avoidance_rules.py`。
-- **`uuid/`** — `caa_guid_snippet.cpp`、`sample_feature.json` / `sample_ref.json`（同一 GUID 跨文件引用）。
+- **`uuid/`** — `caa_guid_snippet.cpp`（多行 nested）、`caa_iid_factory_snippet.cpp`（nested IID 块）、`caa_guid_flat_brace.cpp` / `caa_guid_flat_run.cpp`（扁平 `{0x…}` / 连续 0x）、`caa_dictionary.iid`、`sample_feature.json` / `sample_ref.json`。
 - **`KtAlarmClock/`** · **`PNXCaaStudy/`** — 需本机 clone + 链接；见 [测试工程外链-fixture.md](../../doc/code/测试工程外链-fixture.md)。
 - **`workspaces/minimal/document-xml/`**
   - `内部装配示例-Document.xml` — 内部多层 `App::Part` 挂载问题，见 [doc/cad/samples/内部装配示例-挂载分析.md](../../doc/cad/samples/内部装配示例-挂载分析.md)

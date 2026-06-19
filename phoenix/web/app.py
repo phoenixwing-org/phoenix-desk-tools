@@ -77,7 +77,11 @@ from phoenix.services.code_index_service import (
     run_code_index_scan,
     search_code_index_entries,
 )
-from phoenix.services.code_ignore_service import get_code_ignore_prefs, save_code_ignore_prefs
+from phoenix.services.code_ignore_service import (
+    get_code_ignore_prefs,
+    list_process_dir_suggestions,
+    save_code_ignore_prefs,
+)
 from phoenix.services.code_rename_service import (
     apply_code_rename,
     get_code_rename_prefs,
@@ -142,7 +146,13 @@ from phoenix.services.runtime_catalog_service import (
     get_test_module_catalog,
     sync_runtime_catalog_now,
 )
-from phoenix.services.unit_test_service import iter_run_unit_tests_events, list_unit_test_suites, run_unit_tests
+from phoenix.services.unit_test_service import (
+    cancel_unit_test_run,
+    iter_run_unit_tests_events,
+    list_unit_test_suites,
+    plan_unit_tests,
+    run_unit_tests,
+)
 from phoenix.services.workbench_service import get_workbench_session_payload, save_workbench_session
 
 # 运行时工作空间根（``POST /api/workspace`` 或启动参数设置）
@@ -433,6 +443,17 @@ class UnitTestRunBody(BaseModel):
     suites: list[str] | None = None
     exclude_cases: list[str] | None = None
     include_cases: list[str] | None = None
+
+
+class UnitTestPlanBody(BaseModel):
+    suites: list[str] | None = None
+    exclude_cases: list[str] | None = None
+    include_cases: list[str] | None = None
+    include_case_details: bool = False
+
+
+class UnitTestCancelBody(BaseModel):
+    run_id: str
 
 def _ensure_phoenix_logging() -> None:
     """保证 ``phoenix.*`` 的 INFO 日志输出到终端（与 uvicorn 并列可见）。"""
@@ -1510,6 +1531,10 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
+    @app.get("/api/code/ignore/suggestions")
+    def api_code_ignore_suggestions() -> dict:
+        return list_process_dir_suggestions(get_workspace())
+
     @app.get("/api/code/rename/prefs")
     def api_code_rename_prefs_get() -> dict:
         return get_code_rename_prefs(get_workspace())
@@ -1554,6 +1579,18 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
     def api_unit_tests_suites() -> dict:
         return list_unit_test_suites()
 
+    @app.post("/api/unit-tests/plan")
+    def api_unit_tests_plan(body: UnitTestPlanBody = ...) -> dict:
+        try:
+            return plan_unit_tests(
+                body.suites,
+                exclude_case_ids=body.exclude_cases,
+                include_case_ids=body.include_cases,
+                include_cases=body.include_case_details,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
     @app.post("/api/unit-tests/run")
     def api_unit_tests_run(body: UnitTestRunBody = ...) -> dict:
         try:
@@ -1572,12 +1609,11 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
     @app.post("/api/unit-tests/run/stream")
-    def api_unit_tests_run_stream(request: Request, body: UnitTestRunBody = ...) -> StreamingResponse:
-        def _cancel_check() -> bool:
-            try:
-                return bool(request.is_disconnected())
-            except Exception:
-                return False
+    def api_unit_tests_run_stream(body: UnitTestRunBody = ...) -> StreamingResponse:
+        from phoenix.testing.run_cancel import begin_run, end_run, is_cancelled, new_run_id
+
+        run_id = new_run_id()
+        begin_run(run_id)
 
         def _lines():
             try:
@@ -1586,13 +1622,24 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
                     suites=body.suites,
                     exclude_case_ids=body.exclude_cases,
                     include_case_ids=body.include_cases,
-                    cancel_check=_cancel_check,
+                    cancel_check=lambda: is_cancelled(run_id),
                 ):
+                    if event.get("type") == "start":
+                        event = {**event, "run_id": run_id}
                     yield json.dumps(event, ensure_ascii=False) + "\n"
             except ValueError as e:
                 yield json.dumps({"type": "error", "message": str(e)}, ensure_ascii=False) + "\n"
+            finally:
+                end_run(run_id)
 
         return StreamingResponse(_lines(), media_type="application/x-ndjson")
+
+    @app.post("/api/unit-tests/cancel")
+    def api_unit_tests_cancel(body: UnitTestCancelBody) -> dict:
+        ok = cancel_unit_test_run(body.run_id.strip())
+        if not ok:
+            raise HTTPException(status_code=404, detail="run not found or already finished")
+        return {"ok": True}
 
     @app.get("/api/runtime-catalog/status")
     def api_runtime_catalog_status() -> dict:

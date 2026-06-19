@@ -1,24 +1,15 @@
-"""批量改名：预览扫描。"""
+"""批量改名：预览扫描（文件夹 / 文件 / 文本）。"""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from phoenix.code.ignore import load_ignore_config
 from phoenix.code.rename.encoding import detect_and_read
-from phoenix.code.rename.types import RenameLevel, empty_rename_summary
+from phoenix.code.rename.path_rename import preview_path_rename
+from phoenix.code.rename.types import LEVEL_ORDER, RenameScanOptions, empty_rename_summary
 from phoenix.code.rename.walk import iter_scannable_files
-
-
-@dataclass
-class RenameScanOptions:
-    old: str
-    new: str
-    levels: list[RenameLevel]
-    scope: str = ""
-    include_ignored: bool = False
 
 
 def _count_line_hits(text: str, needle: str) -> tuple[int, list[int]]:
@@ -41,23 +32,6 @@ def preview_text_rename(repo_root: Path, opts: RenameScanOptions) -> dict[str, A
     skipped = 0
     text_files = 0
     total_hits = 0
-    pending_levels = [lv for lv in opts.levels if lv in ("dir", "file")]
-
-    if "text" not in opts.levels:
-        summary = empty_rename_summary()
-        summary["skipped"] = 0
-        lines = []
-        if pending_levels:
-            lines.append("文件夹 / 文件级改名尚未实现（P1）；请勾选「文本内容」。")
-        return {
-            "ok": True,
-            "implemented": True,
-            "hits": [],
-            "summary": summary,
-            "lines": lines or ["未勾选文本级，无扫描结果"],
-            "log": "\n".join(lines),
-            "pending_levels": pending_levels,
-        }
 
     for path, rel in iter_scannable_files(
         root,
@@ -92,15 +66,12 @@ def preview_text_rename(repo_root: Path, opts: RenameScanOptions) -> dict[str, A
     summary["skipped"] = skipped
 
     lines = [
-        f"预览：旧名「{opts.old}」→ 新名「{opts.new}」",
+        f"文本预览：旧名「{opts.old}」→ 新名「{opts.new}」",
         f"文本文件 {text_files} 个，命中 {total_hits} 处，跳过 {skipped} 个",
     ]
-    if pending_levels:
-        lines.append("注：文件夹 / 文件级将在 P1 实现，本次仅扫描文本。")
     for h in hits[:40]:
-        if h.get("status") == "ok":
-            ln = ",".join(str(x) for x in (h.get("lines") or [])[:8])
-            lines.append(f"  · {h['repo_rel_path']} ×{h['hits']} 行 {ln}")
+        ln = ",".join(str(x) for x in (h.get("lines") or [])[:8])
+        lines.append(f"  · {h['repo_rel_path']} ×{h['hits']} 行 {ln}")
     if len(hits) > 40:
         lines.append(f"  … 另有 {len(hits) - 40} 条")
 
@@ -111,5 +82,42 @@ def preview_text_rename(repo_root: Path, opts: RenameScanOptions) -> dict[str, A
         "summary": summary,
         "lines": lines,
         "log": "\n".join(lines),
-        "pending_levels": pending_levels,
+    }
+
+
+def _merge_summary(into: dict[str, int], part: dict[str, int]) -> None:
+    for key in ("dirs", "files", "text_files", "total_hits", "skipped"):
+        into[key] = into.get(key, 0) + int(part.get(key, 0))
+
+
+def preview_rename_all(repo_root: Path, opts: RenameScanOptions) -> dict[str, Any]:
+    hits: list[dict[str, Any]] = []
+    lines: list[str] = [
+        f"预览：旧名「{opts.old}」→ 新名「{opts.new}」",
+        f"级别：{', '.join(opts.levels)}",
+    ]
+    summary = empty_rename_summary()
+
+    for level in LEVEL_ORDER:
+        if level not in opts.levels:
+            continue
+        if level == "text":
+            part = preview_text_rename(repo_root, opts)
+        else:
+            part = preview_path_rename(repo_root, opts, kind=level)
+        hits.extend(part.get("hits") or [])
+        _merge_summary(summary, part.get("summary") or {})
+        lines.extend(part.get("lines") or [])
+
+    if not hits:
+        lines.append("无命中")
+
+    return {
+        "ok": True,
+        "implemented": True,
+        "hits": hits,
+        "summary": summary,
+        "lines": lines,
+        "log": "\n".join(lines),
+        "levels": opts.levels,
     }

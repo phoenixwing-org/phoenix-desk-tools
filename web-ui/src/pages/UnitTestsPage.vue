@@ -3,10 +3,13 @@ import { computed, onMounted, ref, watch } from "vue";
 import {
   fetchTestModuleCatalog,
   fetchTestCaseCatalog,
+  fetchUnitTestPlan,
   fetchUnitTestSuites,
+  cancelUnitTestRun,
   runUnitTestsStream,
   type TestModuleCatalogEntry,
   type TestCaseCatalogEntry,
+  type UnitTestPlan,
   type UnitTestCaseResult,
   type UnitTestRunOptions,
   type UnitTestRunResult,
@@ -79,6 +82,7 @@ const filterWatchlistOnly = ref(false);
 const lastIgnoredCount = ref(0);
 const runProgressIgnored = ref(0);
 const rerunningWatchlistId = ref<string | null>(null);
+const currentRunId = ref<string | null>(null);
 let runAbortController: AbortController | null = null;
 
 const runChecked = computed(() => pageStore.runCheckedSuiteIds);
@@ -88,6 +92,18 @@ const activeTab = computed({
   set: (tab: PageTab) => pageStore.setActiveTab(tab),
 });
 const watchlistPrefs = computed(() => pageStore.watchlistPrefs);
+const showRunScopeList = computed({
+  get: () => pageStore.showRunScopeList,
+  set: (value: boolean) => pageStore.setShowRunScopeList(value),
+});
+const showRunScopeCases = computed({
+  get: () => pageStore.showRunScopeCases,
+  set: (value: boolean) => pageStore.setShowRunScopeCases(value),
+});
+
+const runPlan = ref<UnitTestPlan | null>(null);
+const runPlanLoading = ref(false);
+const runPlanError = ref("");
 
 const runnableSuites = computed(() =>
   suites.value.filter((s) => RUNNABLE_SUITE_IDS.includes(s.id as (typeof RUNNABLE_SUITE_IDS)[number])),
@@ -326,10 +342,12 @@ function formatRunSummary(r: UnitTestRunResult): string {
 }
 
 function cancelRun() {
-  if (!running.value || !runAbortController) return;
+  if (!running.value || !currentRunId.value) return;
   shell.appendLog("[单元测试] 请求终止…（当前用例结束后停止）", { source: "unit_tests" });
   shell.setStatus("正在终止…");
-  runAbortController.abort();
+  void cancelUnitTestRun(currentRunId.value).catch((e) => {
+    shell.setStatus(String(e));
+  });
 }
 
 function onWatchlistRunOnFullChange(entry: UnitTestWatchlistEntry, checked: boolean) {
@@ -409,14 +427,53 @@ async function loadSuites() {
   try {
     const data = await fetchUnitTestSuites();
     suites.value = data.suites;
+    void loadRunPlan();
   } catch (e) {
     loadError.value = String(e);
     suites.value = [];
   }
 }
 
+function runPlanOptions(): UnitTestRunOptions | undefined {
+  const exclude = excludeCaseIdsForFullRun(watchlist.value);
+  return exclude.length ? { exclude_cases: exclude } : undefined;
+}
+
+async function loadRunPlan() {
+  if (!showRunScopeList.value) {
+    runPlan.value = null;
+    runPlanError.value = "";
+    return;
+  }
+  const ids = [...runChecked.value];
+  if (!ids.length) {
+    runPlan.value = null;
+    runPlanError.value = "";
+    return;
+  }
+  runPlanLoading.value = true;
+  runPlanError.value = "";
+  try {
+    runPlan.value = await fetchUnitTestPlan(ids, {
+      ...runPlanOptions(),
+      include_case_details: showRunScopeCases.value,
+    });
+    void loadModuleCatalog(runPlan.value.modules.map((m) => m.module));
+    if (showRunScopeCases.value) {
+      const caseIds = runPlan.value.modules.flatMap((m) => (m.cases ?? []).map((c) => c.id));
+      void loadCaseCatalog(caseIds.slice(0, 200));
+    }
+  } catch (e) {
+    runPlanError.value = String(e);
+    runPlan.value = null;
+  } finally {
+    runPlanLoading.value = false;
+  }
+}
+
 function handleRunStreamEvent(event: UnitTestStreamEvent) {
   if (event.type === "start") {
+    currentRunId.value = event.run_id ?? null;
     runProgressIgnored.value = event.ignored_cases ?? 0;
     runProgress.value = {
       suiteLabel: event.suite_label,
@@ -500,6 +557,7 @@ async function executeRun(args: {
   result.value = null;
   runProgress.value = null;
   expandedCase.value = null;
+  currentRunId.value = null;
   activeTab.value = "results";
   shell.appendLog(`[单元测试] 运行 ${args.logLabel}…`, { source: "unit_tests", open: true });
   runAbortController = new AbortController();
@@ -542,6 +600,7 @@ async function executeRun(args: {
   } finally {
     window.clearInterval(tickTimer);
     runAbortController = null;
+    currentRunId.value = null;
     running.value = false;
     runProgress.value = null;
   }
@@ -619,6 +678,19 @@ watch(result, (r) => {
     resultSuiteChecked.value = new Set(lastRunSuites.value);
   }
 });
+
+watch(
+  () => [
+    [...runChecked.value].sort().join(","),
+    showRunScopeList.value,
+    showRunScopeCases.value,
+    watchlist.value.length,
+    watchlistSkipCount.value,
+  ],
+  () => {
+    void loadRunPlan();
+  },
+);
 
 onMounted(() => {
   pageStore.hydrate();
@@ -699,6 +771,58 @@ onMounted(() => {
             运行（{{ runCheckedCount }}）
           </button>
         </div>
+      </div>
+      <div class="run-scope-controls">
+        <label class="opt-chip scope-toggle">
+          <input v-model="showRunScopeList" type="checkbox" :disabled="running" />
+          <span>列出运行范围</span>
+        </label>
+        <label v-if="showRunScopeList" class="opt-chip scope-toggle">
+          <input v-model="showRunScopeCases" type="checkbox" :disabled="running || runPlanLoading" />
+          <span>展开用例</span>
+        </label>
+        <span v-if="showRunScopeList && runPlan && !runPlanLoading" class="run-scope-summary muted small">
+          {{ runPlan.suite_label }} · {{ runPlan.total_modules }} 模块 · {{ runPlan.total_cases }} 用例
+          <template v-if="runPlan.ignored_cases"> · 将忽略 {{ runPlan.ignored_cases }}</template>
+        </span>
+        <span v-if="runPlanLoading" class="muted small">加载计划…</span>
+        <span v-if="runPlanError" class="error-text small">{{ runPlanError }}</span>
+      </div>
+      <div v-if="showRunScopeList && runPlan?.modules.length" class="run-scope-list">
+        <table class="data-table compact run-scope-table">
+          <thead>
+            <tr>
+              <th>模块</th>
+              <th>简介</th>
+              <th>套件</th>
+              <th class="col-num">用例</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-for="mod in runPlan.modules" :key="mod.module">
+              <tr>
+                <td class="mono">{{ shortModule(mod.module) }}</td>
+                <td class="module-desc" :title="moduleDescription(mod.module)">
+                  {{ moduleDescriptionBrief(mod.module) }}
+                </td>
+                <td>{{ suiteLabelById.get(mod.suite_id) ?? mod.suite_id }}</td>
+                <td class="col-num">{{ mod.case_count }}</td>
+              </tr>
+              <tr v-if="showRunScopeCases && mod.cases?.length" class="run-scope-cases-row">
+                <td colspan="4">
+                  <ul class="run-scope-cases">
+                    <li v-for="c in mod.cases" :key="c.id" class="mono">
+                      {{ c.class_name }}.{{ c.method }}
+                      <span v-if="caseCatalog[c.id]?.summary" class="case-brief muted">
+                        — {{ caseCatalog[c.id]?.summary }}
+                      </span>
+                    </li>
+                  </ul>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
       </div>
       <div v-if="running && runProgress" class="run-progress">
         <div class="run-progress-head">
@@ -1144,6 +1268,49 @@ onMounted(() => {
 .suite-chip-inline:has(input:checked) .suite-count,
 .suite-chip-inline.checked .suite-count {
   color: #64748b;
+}
+
+.run-scope-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.scope-toggle {
+  cursor: pointer;
+}
+
+.run-scope-list {
+  margin-top: 8px;
+  max-height: min(40vh, 320px);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.run-scope-table {
+  margin: 0;
+}
+
+.run-scope-cases-row td {
+  background: #f8fafc;
+  padding-top: 0;
+  padding-bottom: 8px;
+}
+
+.run-scope-cases {
+  margin: 0;
+  padding: 0 0 0 1.2em;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.run-scope-cases .case-brief {
+  font-family: inherit;
 }
 
 .run-foot {

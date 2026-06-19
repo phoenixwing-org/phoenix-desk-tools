@@ -51,7 +51,7 @@ const canRun = computed(() => pageStore.canRun);
 const ignoreSummary = ref("");
 
 const hits = ref<CodeRenameHit[]>([]);
-const previewSummary = ref<{ total_hits: number; text_files: number; skipped: number } | null>(null);
+const previewSummary = ref<{ total_hits: number; text_files: number; dirs?: number; files?: number; skipped: number } | null>(null);
 const engineMessage = ref("");
 
 const loading = ref(false);
@@ -262,7 +262,7 @@ onMounted(async () => {
         <div class="results-head-row">
           <span class="section-label">预览命中</span>
           <span v-if="previewSummary" class="muted small">
-            共 {{ previewSummary.total_hits }} 处 · 文本文件 {{ previewSummary.text_files }} · 跳过 {{ previewSummary.skipped }}
+            共 {{ previewSummary.total_hits }} 处 · 文件夹 {{ previewSummary.dirs ?? 0 }} · 文件 {{ previewSummary.files ?? 0 }} · 文本 {{ previewSummary.text_files }} · 跳过 {{ previewSummary.skipped }}
           </span>
         </div>
         <p v-if="engineMessage" class="engine-msg">{{ engineMessage }}</p>
@@ -275,7 +275,7 @@ onMounted(async () => {
               <th>路径</th>
               <th class="col-level">级别</th>
               <th class="col-num">次数</th>
-              <th>行号</th>
+              <th>目标 / 行号</th>
             </tr>
           </thead>
           <tbody>
@@ -283,11 +283,11 @@ onMounted(async () => {
               <td class="mono">{{ h.repo_rel_path }}</td>
               <td class="col-level">{{ hitLevelLabel(h.level) }}</td>
               <td class="col-num">{{ h.hits }}</td>
-              <td class="mono muted">{{ h.lines?.join(", ") || "—" }}</td>
+              <td class="mono muted">{{ h.new_path || h.lines?.join(", ") || "—" }}</td>
             </tr>
           </tbody>
         </table>
-        <p v-else class="empty">{{ loading ? "加载中…" : "点击「预览」列出命中；引擎接入前表格为空" }}</p>
+        <p v-else class="empty">{{ loading ? "加载中…" : "点击「预览」列出命中" }}</p>
       </div>
     </section>
   </div>

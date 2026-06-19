@@ -1660,6 +1660,14 @@ export function runSwStepExport(opts: Partial<SwStepPrefs> = {}) {
   });
 }
 
+export type ProcessDirSuggestion = {
+  name: string;
+  kind: string;
+  reason: string;
+  repo_rel_path: string;
+  suggested_pattern: string;
+};
+
 export type CodeIgnorePrefs = {
   workspace_path: string;
   workspace_path_display: string;
@@ -1675,10 +1683,20 @@ export type CodeIgnorePrefs = {
   ignore_custom_patterns: string[];
   ignore_patterns: string[];
   consumers: string[];
+  process_dir_suggestions?: ProcessDirSuggestion[];
+  process_dirs_auto_seeded?: string[];
+  process_dirs_seeded?: boolean;
 };
 
 export function fetchCodeIgnorePrefs() {
   return jsonFetch<CodeIgnorePrefs>("/api/code/ignore/prefs");
+}
+
+export function fetchCodeIgnoreSuggestions() {
+  return jsonFetch<{
+    suggestions: ProcessDirSuggestion[];
+    suggested_patterns: string[];
+  }>("/api/code/ignore/suggestions");
 }
 
 export function saveCodeIgnorePrefs(prefs: Partial<CodeIgnorePrefs>) {
@@ -1714,6 +1732,7 @@ export type CodeRenameHit = {
   encoding_out?: string;
   status?: string;
   detail?: string;
+  new_path?: string;
 };
 
 export type CodeRenameSummary = {
@@ -1820,7 +1839,7 @@ export type CodeUuidApplyResult = {
   lines?: string[];
 };
 
-export function scanCodeUuids(body: { scope?: string; kinds?: UuidKind[] } = {}) {
+export function scanCodeUuids(body: { scope?: string; kinds?: UuidKind[]; use_index_scope?: boolean } = {}) {
   return jsonFetch<CodeUuidScanResult>("/api/code/uuid/scan", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1894,6 +1913,45 @@ export function fetchUnitTestSuites() {
   return jsonFetch<{ suites: UnitTestSuiteInfo[] }>("/api/unit-tests/suites");
 }
 
+export type UnitTestPlanCase = {
+  id: string;
+  class_name: string;
+  method: string;
+};
+
+export type UnitTestPlanModule = {
+  module: string;
+  suite_id: string;
+  case_count: number;
+  cases?: UnitTestPlanCase[];
+};
+
+export type UnitTestPlan = {
+  suite_id: string;
+  suite_label: string;
+  total_modules: number;
+  total_cases: number;
+  ignored_cases: number;
+  load_errors: string[];
+  modules: UnitTestPlanModule[];
+};
+
+export function fetchUnitTestPlan(
+  suites: string[],
+  options?: UnitTestRunOptions & { include_case_details?: boolean },
+) {
+  return jsonFetch<UnitTestPlan>("/api/unit-tests/plan", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      suites,
+      exclude_cases: options?.exclude_cases,
+      include_cases: options?.include_cases,
+      include_case_details: options?.include_case_details ?? false,
+    }),
+  });
+}
+
 export type UnitTestRunOptions = {
   exclude_cases?: string[];
   include_cases?: string[];
@@ -1954,6 +2012,7 @@ export function fetchTestCaseCatalog(caseIds?: string[]) {
 export type UnitTestStreamEvent =
   | {
       type: "start";
+      run_id?: string;
       suite_id: string;
       suite_label: string;
       total_modules: number;
@@ -1992,6 +2051,14 @@ export type UnitTestStreamEvent =
 export type UnitTestRunStreamOptions = UnitTestRunOptions & {
   signal?: AbortSignal;
 };
+
+export function cancelUnitTestRun(runId: string) {
+  return jsonFetch<{ ok: boolean }>("/api/unit-tests/cancel", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ run_id: runId }),
+  });
+}
 
 export async function runUnitTestsStream(
   suites: string[],

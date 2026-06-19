@@ -7,8 +7,8 @@ from typing import Any
 
 from phoenix.code.ignore import load_ignore_config
 from phoenix.code.rename.encoding import choose_write_encoding, detect_and_read, write_text
-from phoenix.code.rename.scan import RenameScanOptions, _count_line_hits, preview_text_rename
-from phoenix.code.rename.types import empty_rename_summary
+from phoenix.code.rename.scan import preview_rename_all, preview_text_rename, _count_line_hits
+from phoenix.code.rename.types import RenameScanOptions, empty_rename_summary
 from phoenix.code.rename.walk import iter_scannable_files
 
 
@@ -79,5 +79,4 @@ def apply_text_rename(
         "summary": summary,
         "lines": lines,
         "log": "\n".join(lines),
-        "pending_levels": preview.get("pending_levels") or [],
     }

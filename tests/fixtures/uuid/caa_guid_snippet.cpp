@@ -1,4 +1,4 @@
-// 摘自 PNXCaaStudy · PNXCombinedCurveCmd.cpp（CAA GUID 初始化形态）
+// 摘自 PNXCaaStudy · PNXCombinedCurveCmd.cpp / PNXICombinedCurveFactory.cpp（CAA GUID/IID 形态）
 void sample_caa_guid() {
     GUID guid = {/* c17e43d3-2b56-4753-bfe5-bb5f289e2091 */
                  0xc17e43d3,

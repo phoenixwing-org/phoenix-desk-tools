@@ -374,9 +374,6 @@ def iter_unit_test_run_events(
         }
 
     for mod, test in planned:
-        if cancel_check and cancel_check():
-            yield _emit_cancelled()
-            return
         if mod != current_mod:
             current_mod = mod
             if mod not in seen_modules:
@@ -442,6 +439,47 @@ def run_unit_test_suites(
         duration_ms=duration_ms,
         ignored_cases=ignored,
     )
+
+
+def plan_unit_test_run(
+    suite_ids: List[str],
+    *,
+    options: UnitTestRunOptions | None = None,
+    include_cases: bool = False,
+) -> dict[str, Any]:
+    """Preview which modules / cases would run (no execution)."""
+    opts = options or UnitTestRunOptions()
+    _, load_errors, modules, suite_id, label, planned, ignored = _resolve_run_context(suite_ids, opts)
+    by_mod: Dict[str, List[Dict[str, Any]]] = {}
+    for mod, test in planned:
+        method = getattr(test, "_testMethodName", test.id().rsplit(".", 1)[-1])
+        by_mod.setdefault(mod, []).append(
+            {
+                "id": test.id(),
+                "class_name": test.__class__.__name__,
+                "method": method,
+            }
+        )
+    module_rows = []
+    for mod in sorted(by_mod.keys()):
+        cases = by_mod[mod]
+        row: Dict[str, Any] = {
+            "module": mod,
+            "suite_id": classify_module(mod),
+            "case_count": len(cases),
+        }
+        if include_cases:
+            row["cases"] = cases
+        module_rows.append(row)
+    return {
+        "suite_id": suite_id,
+        "suite_label": label,
+        "total_modules": len(module_rows),
+        "total_cases": len(planned),
+        "ignored_cases": len(ignored),
+        "load_errors": list(load_errors),
+        "modules": module_rows,
+    }
 
 
 def run_unit_test_suite(suite_id: str) -> UnitTestRunResult:
