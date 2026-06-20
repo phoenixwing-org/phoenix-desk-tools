@@ -114,6 +114,8 @@ def _run_dev_mode(
     env["PHOENIX_API_PORT"] = str(api_port)  # 兼容 Vite 旧环境变量名
     try:
         run_pnpm(["dev"], cwd=pnpm_cwd, env=env)
+    except KeyboardInterrupt:
+        print("\n开发模式已停止。")
     except FileNotFoundError:
         print(
             "未找到 pnpm（未在 PATH 中）。请先安装 Node.js / pnpm，并在仓库根目录执行: pnpm install",

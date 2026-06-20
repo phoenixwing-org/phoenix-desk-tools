@@ -109,6 +109,7 @@ _WORKSPACE_DEFAULT: dict[str, Any] = {
 
 _LAUNCHER_SHELL_LAYOUT_DEFAULT: dict[str, Any] = {
     "nav_rail_mode": 0,  # 0 窄仅图标 · 1 宽图标+文字
+    "ribbon_mode": 0,  # 0 左侧 Nav · 1 顶栏 Ribbon 工具台
     "right_panel_open": True,
     "mid_right_sash_px": None,  # Panedwindow 首根 sash 距左侧像素；None 表示由窗口宽度推导默认
     "right_panel_width_px": 300,  # Web 右侧工作空间树宽度
@@ -145,6 +146,9 @@ def _normalized_shell_layout(raw: Any) -> dict[str, Any]:
     lao = raw.get("log_auto_open_on_append")
     if isinstance(lao, bool):
         merged["log_auto_open_on_append"] = lao
+    rm = raw.get("ribbon_mode")
+    if rm in (0, 1):
+        merged["ribbon_mode"] = int(rm)
     return merged
 
 
@@ -413,6 +417,7 @@ def save_launcher_window_geometry(geom: str) -> None:
 def save_launcher_shell_layout(
     *,
     nav_rail_mode: int | None = None,
+    ribbon_mode: int | None = None,
     right_panel_open: bool | None = None,
     mid_right_sash_px: int | None = None,
     right_panel_width_px: int | None = None,
@@ -425,6 +430,8 @@ def save_launcher_shell_layout(
     cur = _normalized_shell_layout(launcher.get("shell_layout"))
     if nav_rail_mode is not None and int(nav_rail_mode) in (0, 1):
         cur["nav_rail_mode"] = int(nav_rail_mode)
+    if ribbon_mode is not None and int(ribbon_mode) in (0, 1):
+        cur["ribbon_mode"] = int(ribbon_mode)
     if right_panel_open is not None:
         cur["right_panel_open"] = bool(right_panel_open)
     if mid_right_sash_px is not None:

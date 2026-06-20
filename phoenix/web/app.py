@@ -233,6 +233,7 @@ class LauncherRecentAddBody(BaseModel):
 
 class ShellLayoutBody(BaseModel):
     nav_rail_mode: int | None = None
+    ribbon_mode: int | None = None
     right_panel_open: bool | None = None
     mid_right_sash_px: int | None = None
     right_panel_width_px: int | None = None

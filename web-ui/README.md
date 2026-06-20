@@ -93,3 +93,23 @@ kill <PID>
 3. 可选 **界面巡游**（driver.js，熟悉导航 / Tab / 工作区树 / 日志）。
 
 状态 API：`GET /api/onboarding/status`。实现说明：[doc/user/新手指引-实现备忘.md](../doc/user/新手指引-实现备忘.md)。
+
+## 前端栈（2026-06 起）
+
+| 项 | 选型 |
+| --- | --- |
+| 框架 | Vue 3 + TypeScript + Vite |
+| UI 库 | **Element Plus**（`unplugin-vue-components` 按需） |
+| 状态 | Pinia |
+| 与后端 | 仅 `/api/*`；开发时 Vite 代理到 8765 |
+
+壳层 **Ribbon 改型**（Chili3D 式 Tab + 分组工具按钮）已接入壳层，默认仍用左侧 NavSidebar。
+
+**启用 Ribbon：**
+
+1. 顶栏点 **Ribbon**（写入 `launcher.json` → `shell_layout.ribbon_mode`）
+2. 或开发预览：`http://127.0.0.1:5173/?ribbon=1`（不写偏好）
+
+规划见 [doc/platform/Web壳层-Ribbon改型-规划.md](../doc/platform/Web壳层-Ribbon改型-规划.md)。
+
+改壳层相关 Vue 后：`python -m phoenix.web --dev` 下保存即热更新；若白屏查浏览器 Console，必要时 `Cmd+Shift+R` 硬刷新。

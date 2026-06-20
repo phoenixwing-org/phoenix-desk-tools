@@ -5,6 +5,11 @@ import { useOnboardingStore } from "../stores/onboarding";
 import { WORKSPACE_GATE_MSG } from "../utils/onboardingConstants";
 import { DEFAULT_PAGE_ICONS } from "../types/config";
 
+const { hideToolNav = false } = defineProps<{
+  /** Ribbon 模式下隐藏功能入口，仅保留指引/配置/侧栏开关 */
+  hideToolNav?: boolean;
+}>();
+
 const shell = useAppShell();
 const onboarding = useOnboardingStore();
 
@@ -55,6 +60,7 @@ function hover(tip: string | null) {
 <template>
   <nav class="nav" :class="{ wide }" data-tour="nav-rail">
     <button
+      v-if="!hideToolNav"
       type="button"
       class="nav-mode"
       :title="wide ? '切换为窄栏（仅图标）' : '切换为宽栏（图标+文字）'"
@@ -66,7 +72,7 @@ function hover(tip: string | null) {
     </button>
 
     <button
-      v-if="homeNavItem"
+      v-if="!hideToolNav && homeNavItem"
       type="button"
       class="nav-item nav-home"
       :class="{ active: currentPage === homeNavItem.page }"
@@ -82,6 +88,7 @@ function hover(tip: string | null) {
     </button>
 
     <button
+      v-if="!hideToolNav"
       v-for="item in mainNavItems"
       :key="item.page"
       type="button"

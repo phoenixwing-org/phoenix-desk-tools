@@ -141,6 +141,7 @@ const MAX_LOG_CHARS = 500_000;
 
 const DEFAULT_SHELL: ShellLayout = {
   nav_rail_mode: 1,
+  ribbon_mode: 0,
   right_panel_open: true,
   mid_right_sash_px: null,
   right_panel_width_px: 300,

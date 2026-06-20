@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted } from "vue";
+import zhCn from "element-plus/dist/locale/zh-cn.mjs";
 import AppShell from "./layout/AppShell.vue";
 import { useUiPrefsStore } from "./stores/uiPrefs";
 
@@ -11,5 +12,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <AppShell />
+  <el-config-provider :locale="zhCn">
+    <AppShell />
+  </el-config-provider>
 </template>

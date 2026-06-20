@@ -23,6 +23,19 @@
   --nav-hover: rgba(0, 0, 0, 0.06);
   --nav-mode-bg: #c5cdd8;
   --nav-mode-fg: #1e293b;
+
+  /* Element Plus · CAD 硬朗圆角 */
+  --el-border-radius-base: 2px;
+  --el-border-radius-small: 2px;
+  --el-border-radius-round: 2px;
+
+  /* Ribbon 工具台 */
+  --ribbon-bg: #f3f4f6;
+  --ribbon-group-divider: #c5cdd8;
+  --ribbon-btn-hover: #e8eef5;
+  --ribbon-btn-radius: 2px;
+  --ribbon-panel-height: 58px;
+  --ribbon-group-body-height: 40px;
 }
 
 * {

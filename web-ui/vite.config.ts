@@ -1,11 +1,24 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
+import AutoImport from "unplugin-auto-import/vite";
+import Components from "unplugin-vue-components/vite";
+import { ElementPlusResolver } from "unplugin-vue-components/resolvers";
 
 /** 双进程开发：Vite 5173，API 由 ``python -m phoenix.web --dev`` 监听此端口。 */
-const apiPort = Number(process.env.PHOENIX_API_PORT || process.env.PHOENIX_API_PORT || 8765);
+const apiPort = Number(process.env.PHOENIX_API_PORT || 8765);
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [
+    vue(),
+    AutoImport({
+      resolvers: [ElementPlusResolver()],
+      dts: "auto-imports.d.ts",
+    }),
+    Components({
+      resolvers: [ElementPlusResolver({ importStyle: "sass" })],
+      dts: "components.d.ts",
+    }),
+  ],
   server: {
     port: 5173,
     strictPort: true,

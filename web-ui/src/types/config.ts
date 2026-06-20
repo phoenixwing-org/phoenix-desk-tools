@@ -35,6 +35,7 @@ export type AppConfig = {
 
 export type ShellLayout = {
   nav_rail_mode: 0 | 1;
+  ribbon_mode: 0 | 1;
   right_panel_open: boolean;
   mid_right_sash_px: number | null;
   right_panel_width_px: number;

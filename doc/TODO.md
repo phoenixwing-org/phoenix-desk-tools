@@ -41,6 +41,43 @@
 - [ ] 统一运行日志：长任务进度条 / 取消（见 [统一运行日志窗口-规划讨论.md](platform/统一运行日志窗口-规划讨论.md)）
 - [x] **单元测试 Web 页**：套件勾选运行、NDJSON 流式进度、终止；失败关注 Tab（排序 / 勾选复测 / 简介列）；Pinia 持久化选项与勾选
 
+### Web 壳层 · Ribbon 改型（Element Plus · 循序渐进）
+
+> 规划：[Web壳层-Ribbon改型-规划.md](platform/Web壳层-Ribbon改型-规划.md)  
+> 决策：Monorepo · Vue3 + TS + Vite · **Element Plus** · 开发仍 `python -m phoenix.web --dev` · Ribbon 手搓不用 npm 插件
+
+**R0 · 前端栈定型**
+
+- [x] 安装 `element-plus`、`unplugin-auto-import`、`unplugin-vue-components`
+- [x] `web-ui/vite.config.ts` 按需解析 `ElementPlusResolver`
+- [x] `App.vue`：`el-config-provider` + 中文 locale
+- [x] `style.css`：`--el-border-radius-*` 与 Ribbon CSS 变量
+- [x] 确认 `pnpm build`（`sass-embedded` + `@element-plus/icons-vue`）
+- [x] `web-ui/README.md` 前端栈说明
+
+**R1 · Ribbon 静态原型（不接 AppShell）**
+
+- [x] `web-ui/src/layout/ribbon/*`（Shell / Group / ToolButton / config）
+- [x] 调试入口：`?ribbon=1` 或顶栏 **Ribbon** 按钮
+- [x] 四 Tab：开始 / CAD / Code / 系统；分组 + 竖线 + 方块按钮
+
+**R2 · 接入壳层（与 NavSidebar 并行）**
+
+- [x] `launcher.json` → `shell_layout.ribbon_mode: 0|1`（默认 0）
+- [x] `AppShell` 插入 `RibbonShell`；按钮 → `goToPage`
+- [x] `ribbon_mode=1` 时隐藏侧栏功能列表；保留树/日志开关
+- [x] 顶栏 **Ribbon** 切换 + `?ribbon=1` 预览
+
+**R3 · 体验**
+
+- [x] Ribbon 折叠/展开（▲/▼）；当前页按钮高亮
+- [ ] 更新新手指引 / `pageHelp` / `data-tour` 锚点
+- [ ] [Web壳层-使用说明.md](user/Web壳层-使用说明.md) 补充 Ribbon 说明
+
+**R4 · 业务页渐进（按需）**
+
+- [ ] 新改版页优先 Element 组件；旧页不强制迁移
+
 ### 导航模块偏好（主页勾选 → 左侧只显示已选）
 
 > **存储建议**：放本机 **`launcher.json`**（与 `shell_layout` 同级），**不放**工作空间 JSON/SQLite——这是「本机要哪些工具栏入口」，与工作空间无关。  
@@ -133,6 +170,8 @@
   - [x] P1 文件夹 / 文件 basename 重命名（执行顺序：文件夹 → 文件 → 文本）  
 - [~] **Code UUID 替换** — 同上 §11  
   - [x] 扫描 + 勾选 apply（`map_per_value` / `fresh_per_hit`）  
+  - [x] CAA `.iid` / `0x` 块 / 跨格式同值 + 大小写组内一致  
+  - [x] Web 表：同值分组、列顺序、预检后显示「替换后」列  
   - [x] 与 Code 索引范围联动（`use_index_scope`）；报告 JSON 落 `.phoenix/reports/`
 - [x] **成员排序 · 锁定段（P0）**：`reorder_avoidance.py` + `test_reorder_avoidance_rules.py`；可选 Web 自检 API
 - [x] **成员排序 · 锁定段回归单测**：`tests/test_reorder_avoidance_rules.py`；改规则须全套件通过

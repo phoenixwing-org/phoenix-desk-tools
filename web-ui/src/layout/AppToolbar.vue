@@ -4,6 +4,27 @@ import { removeRecentWorkspace } from "../api";
 import { NAV_MODULE_OPTIONS } from "../constants/navModules";
 import { useAppShell } from "../composables/useAppShell";
 import { DEFAULT_APP_TITLE } from "../types/config";
+import RibbonTabBar from "./ribbon/RibbonTabBar.vue";
+
+const props = withDefaults(
+  defineProps<{
+    showRibbonTabs?: boolean;
+    ribbonTabs?: { id: string; label: string }[];
+    ribbonActiveTab?: string;
+    ribbonCollapsed?: boolean;
+  }>(),
+  {
+    showRibbonTabs: false,
+    ribbonTabs: () => [],
+    ribbonActiveTab: "start",
+    ribbonCollapsed: false,
+  },
+);
+
+const emit = defineEmits<{
+  "update:ribbonActiveTab": [id: string];
+  "update:ribbonCollapsed": [value: boolean];
+}>();
 
 const shell = useAppShell();
 const recentOpen = ref(false);
@@ -53,14 +74,24 @@ async function removeRecent(path: string, event: MouseEvent) {
   }
 }
 
+async function toggleRibbon() {
+  const next = shell.shellLayout.value.ribbon_mode === 1 ? 0 : 1;
+  await shell.persistShellLayout({ ribbon_mode: next });
+  shell.setStatus(next === 1 ? "已启用 Ribbon 工具台" : "已恢复左侧导航");
+}
+
 function openConfig() {
   recentOpen.value = false;
   shell.goToPage("config");
 }
+
+function toggleRibbonCollapsed() {
+  emit("update:ribbonCollapsed", !props.ribbonCollapsed);
+}
 </script>
 
 <template>
-  <header class="toolbar">
+  <header class="toolbar" :class="{ 'toolbar-ribbon': showRibbonTabs }">
     <div class="toolbar-left">
       <span class="app-title">{{ title }}</span>
       <div class="module-chips" aria-label="功能模块">
@@ -76,8 +107,20 @@ function openConfig() {
           {{ opt.shortLabel }}
         </button>
       </div>
-      <span class="workspace-chip" :title="workspacePath">{{ workspaceShort }}</span>
+      <span v-if="!showRibbonTabs" class="workspace-chip" :title="workspacePath">{{ workspaceShort }}</span>
     </div>
+
+    <div v-if="showRibbonTabs" class="toolbar-center">
+      <RibbonTabBar
+        :tabs="ribbonTabs"
+        :active-tab="ribbonActiveTab"
+        @update:active-tab="emit('update:ribbonActiveTab', $event)"
+      />
+    </div>
+    <span v-else-if="workspacePath" class="workspace-chip toolbar-center-fallback" :title="workspacePath">
+      {{ workspaceShort }}
+    </span>
+
     <div class="toolbar-actions">
       <div class="recent-wrap">
         <button type="button" class="tb-btn" @click="recentOpen = !recentOpen">最近 ▾</button>
@@ -106,6 +149,27 @@ function openConfig() {
           </button>
         </div>
       </div>
+      <span v-if="showRibbonTabs" class="workspace-chip workspace-chip-compact" :title="workspacePath">
+        {{ workspaceShort }}
+      </span>
+      <button
+        v-if="showRibbonTabs"
+        type="button"
+        class="tb-btn tb-btn-icon"
+        :title="ribbonCollapsed ? '展开功能区' : '折叠功能区'"
+        @click="toggleRibbonCollapsed"
+      >
+        {{ ribbonCollapsed ? "▼" : "▲" }}
+      </button>
+      <button
+        type="button"
+        class="tb-btn"
+        :class="{ 'tb-btn-on': shell.shellLayout.value.ribbon_mode === 1 }"
+        title="切换 Ribbon 工具台（或地址栏 ?ribbon=1 预览）"
+        @click="toggleRibbon"
+      >
+        Ribbon
+      </button>
       <button type="button" class="tb-btn primary" @click="openConfig">配置</button>
     </div>
   </header>
@@ -114,13 +178,37 @@ function openConfig() {
 <style scoped>
 .toolbar {
   height: 44px;
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
   padding: 0 12px 0 8px;
   background: var(--toolbar-bg);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+}
+
+.toolbar:not(.toolbar-ribbon) {
+  display: flex;
+  justify-content: space-between;
+}
+
+.toolbar-center {
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.toolbar-center-fallback {
+  flex: 1;
+  text-align: center;
+  max-width: none;
+}
+
+.workspace-chip-compact {
+  max-width: min(200px, 18vw);
+  font-size: 0.72rem;
 }
 
 .toolbar-left {
@@ -222,6 +310,18 @@ function openConfig() {
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
+}
+
+.tb-btn-on {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+.tb-btn-icon {
+  width: 30px;
+  padding: 0;
+  font-size: 0.65rem;
 }
 
 .recent-wrap {

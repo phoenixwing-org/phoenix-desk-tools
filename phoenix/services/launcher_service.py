@@ -81,6 +81,7 @@ def update_launcher_freecad(path: str | None) -> str:
 def update_shell_layout(patch: dict[str, Any]) -> dict[str, Any]:
     save_launcher_shell_layout(
         nav_rail_mode=patch.get("nav_rail_mode"),
+        ribbon_mode=patch.get("ribbon_mode"),
         right_panel_open=patch.get("right_panel_open"),
         mid_right_sash_px=patch.get("mid_right_sash_px"),
         right_panel_width_px=patch.get("right_panel_width_px"),

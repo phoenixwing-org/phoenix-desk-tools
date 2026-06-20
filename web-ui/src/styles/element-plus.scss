@@ -1,0 +1,5 @@
+/** Element Plus 主题覆盖：工具台 / Ribbon 偏硬朗、小圆角 */
+@forward "element-plus/theme-chalk/src/common/var.scss" with (
+  $border-radius-base: 2px,
+  $border-radius-small: 2px
+);

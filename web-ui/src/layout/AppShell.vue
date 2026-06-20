@@ -2,6 +2,8 @@
 import { computed, onMounted, onUnmounted, ref, type Component } from "vue";
 import AppToolbar from "./AppToolbar.vue";
 import NavSidebar from "./NavSidebar.vue";
+import RibbonShell from "./ribbon/RibbonShell.vue";
+import { useRibbonTabs } from "./ribbon/useRibbonTabs";
 import StatusBar from "./StatusBar.vue";
 import WorkspaceTreeSidebar from "./WorkspaceTreeSidebar.vue";
 import WorkbenchTabBar from "./WorkbenchTabBar.vue";
@@ -39,7 +41,24 @@ const legacyDbError = ref("");
 
 const activeTab = computed(() => shell.activeTab());
 
+const ribbonUrlPreview = ref(
+  typeof window !== "undefined" && new URLSearchParams(window.location.search).get("ribbon") === "1",
+);
+const ribbonCollapsed = ref(false);
+
 const shellLayout = computed(() => shell.shellLayout.value);
+const showRibbon = computed(
+  () => ribbonUrlPreview.value || shellLayout.value.ribbon_mode === 1,
+);
+const navigation = computed(() => shell.appConfig.value?.navigation ?? []);
+
+const { activeTab: ribbonActiveTab, visibleTabs: ribbonVisibleTabs, activeTabDef: ribbonActiveTabDef } =
+  useRibbonTabs({
+    navigation,
+    currentPage: computed(() => shell.currentPage.value),
+    enabledModules: computed(() => shell.enabledNavModules.value),
+  });
+
 const rightWidth = computed(() =>
   shellLayout.value.right_panel_open ? `${shellLayout.value.right_panel_width_px}px` : "0px",
 );
@@ -69,6 +88,10 @@ const PAGE_COMPONENTS: Record<string, Component> = {
 
 function pageComponent(pageId: string): Component {
   return PAGE_COMPONENTS[pageId] ?? PlaceholderPage;
+}
+
+function onRibbonOpen(pageId: string) {
+  shell.goToPage(pageId);
 }
 
 function onResizeStart(e: MouseEvent) {
@@ -162,9 +185,23 @@ onUnmounted(() => {
         {{ legacyDbRecreating ? "重建中…" : "确认重建数据库" }}
       </button>
     </div>
-    <AppToolbar />
+    <AppToolbar
+      :show-ribbon-tabs="showRibbon"
+      :ribbon-tabs="ribbonVisibleTabs"
+      v-model:ribbon-active-tab="ribbonActiveTab"
+      v-model:ribbon-collapsed="ribbonCollapsed"
+    />
+    <RibbonShell
+      v-if="showRibbon"
+      :active-tab-def="ribbonActiveTabDef"
+      :collapsed="ribbonCollapsed"
+      :navigation="navigation"
+      :current-page="shell.currentPage.value"
+      :can-open="(p) => shell.canNavigateToPage(p)"
+      @open="onRibbonOpen"
+    />
     <div class="shell-body">
-      <NavSidebar />
+      <NavSidebar :hide-tool-nav="showRibbon" />
       <main class="shell-main" :style="{ marginRight: rightWidth }">
         <WorkbenchTabBar v-if="shell.showTabBar.value" />
         <div class="shell-pages" data-tour="main-content">
