@@ -19,6 +19,7 @@ import {
   ONBOARDING_PAGES_ALWAYS,
   WORKSPACE_GATE_MSG,
 } from "../utils/onboardingConstants";
+import { parseShellUrl, replaceShellUrl, type ShellUrlIntent } from "../utils/shellUrlSync";
 import { useOnboardingStore } from "../stores/onboarding";
 import type { OpenTabOptions, WorkbenchTab, WorkbenchTabPayload } from "../types/workbench";
 
@@ -197,10 +198,12 @@ export function provideAppShell(): AppShellContext {
   function openWelcome() {
     showWelcomeScreen.value = true;
     navHover.value = null;
+    syncShellUrl();
   }
 
   function leaveWelcomeForWorkbench() {
     showWelcomeScreen.value = false;
+    syncShellUrl();
   }
   const codeRightSidebarTab = ref<"tree" | "ignore">(readCodeRightSidebarTab());
   const onboarding = useOnboardingStore();
@@ -394,6 +397,13 @@ export function provideAppShell(): AppShellContext {
   );
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let persistenceReady = false;
+
+  function syncShellUrl() {
+    replaceShellUrl({
+      showWelcome: showWelcomeScreen.value,
+      activeTab: wb.activeTab(),
+    });
+  }
 
   const currentNavItem = computed(() =>
     appConfig.value?.navigation.find((n) => n.page === currentPage.value),
@@ -705,18 +715,25 @@ export function provideAppShell(): AppShellContext {
       pruneTreeHandlers();
       syncOnboardingFromTabs();
       scheduleWorkbenchSave();
+      syncShellUrl();
     }, { deep: true });
     watch(wb.activeTabId, () => {
       syncActiveTreeHandler();
       scheduleWorkbenchSave();
+      syncShellUrl();
     }, { immediate: true });
+    watch(showWelcomeScreen, () => {
+      syncShellUrl();
+    });
     if (typeof window !== "undefined") {
       window.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "hidden") flushWorkbenchSession();
       });
       window.addEventListener("beforeunload", () => flushWorkbenchSession());
+      window.addEventListener("pagehide", () => flushWorkbenchSession());
     }
     persistenceReady = true;
+    syncShellUrl();
   }
 
   let shellLogCursor = 0;
@@ -806,48 +823,58 @@ export function provideAppShell(): AppShellContext {
 
   function resolveInitialPage(): string | undefined {
     const nav = appConfig.value?.navigation ?? [];
-    const fromUrl = new URLSearchParams(window.location.search).get("page")?.trim();
-    if (fromUrl === "welcome") {
+    const intent = parseShellUrl();
+    if (!intent || intent.kind === "welcome" || intent.kind === "config") {
       return undefined;
     }
-    if (fromUrl && nav.some((n) => n.page === fromUrl) && isPageModuleVisible(fromUrl)) {
-      return fromUrl;
+    if (intent.kind === "page" && nav.some((n) => n.page === intent.pageId) && isPageModuleVisible(intent.pageId)) {
+      return intent.pageId;
     }
     return undefined;
   }
 
-  function applyUrlDeepLink(): void {
-    const params = new URLSearchParams(window.location.search);
-    const page = params.get("page")?.trim();
-    if (page === "welcome") {
+  function applyShellUrlIntent(intent: ShellUrlIntent): void {
+    if (intent.kind === "welcome") {
       openWelcome();
       return;
     }
-    if (!page) return;
-
-    const rel = params.get("rel")?.trim();
-    if (page === "bom_apply" && rel) {
-      openBomApplyForRel(rel);
-      return;
-    }
-    if (page === "file_rename" && rel) {
-      openFileDetailForRel(rel, { subTab: "rename" });
-      return;
-    }
-    if (page === "rename_analysis" || (page === "file_rename" && params.get("rename_log_id"))) {
-      const logRaw = params.get("rename_log_id")?.trim();
-      const logId = logRaw ? Number(logRaw) : NaN;
-      openRenameAnalysis({
-        renameLogId: Number.isFinite(logId) ? logId : undefined,
-        autoAnalyze: params.get("analyze") === "1",
-      });
-      return;
-    }
-    if (page === "config") {
+    if (intent.kind === "config") {
       openConfig();
       return;
     }
-    goToPage(page);
+    if (intent.kind !== "page") return;
+
+    const { pageId, rel, renameLogId, analyze } = intent;
+    if (pageId === "bom_apply" && rel) {
+      openBomApplyForRel(rel);
+      return;
+    }
+    if (pageId === "file_rename" && rel) {
+      openFileDetailForRel(rel, { subTab: "rename" });
+      return;
+    }
+    if (pageId === "rename_analysis" || pageId === "file_rename") {
+      openRenameAnalysis({
+        renameLogId,
+        autoAnalyze: analyze,
+      });
+      return;
+    }
+    if (pageId === "part_key_detail" && rel) {
+      const dot = rel.indexOf(".");
+      if (dot > 0) {
+        openPartKeyDetail(rel.slice(0, dot), rel.slice(dot + 1));
+      }
+      return;
+    }
+    goToPage(pageId);
+  }
+
+  function applyUrlDeepLink(): boolean {
+    const intent = parseShellUrl();
+    if (!intent) return false;
+    applyShellUrlIntent(intent);
+    return true;
   }
 
   async function openCodeIgnoreSidebar() {
@@ -874,14 +901,26 @@ export function provideAppShell(): AppShellContext {
     workspacePath.value = ws.path;
     await reloadLauncher();
     await onboarding.refreshStatus();
+
+    const urlIntent = parseShellUrl();
     await restoreWorkbenchSession();
+
     syncOnboardingFromTabs();
     purgeConfigTabs();
+
+    if (urlIntent) {
+      applyShellUrlIntent(urlIntent);
+    } else if (!showWelcomeScreen.value && wb.tabs.value.length) {
+      leaveWelcomeForWorkbench();
+    }
+
     if (!onboarding.workspaceOk) {
-      openWelcome();
+      if (!wb.tabs.value.length && !urlIntent) {
+        openWelcome();
+      }
       openConfig();
     }
-    applyUrlDeepLink();
+
     purgeHiddenModuleTabs();
     setupWorkbenchPersistence();
     setupShellLogPolling();
