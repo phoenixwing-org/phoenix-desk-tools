@@ -1,4 +1,8 @@
-"""Code 模块 SQLite 表（``phoenix_code_*``，与 CAD 表同库）。"""
+"""Code 模块 SQLite 表（``phoenix_code_*``，与 CAD 表同库）。
+
+命名：Code 域一律 ``phoenix_code_`` 前缀；``phoenix_audit_*`` 为 CAD 改名/XLink 审计，勿混用。
+未来改名审计等待定：``phoenix_code_rename_log``、``phoenix_code_change_event`` 等。
+"""
 
 from __future__ import annotations
 

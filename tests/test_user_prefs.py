@@ -101,7 +101,7 @@ class TestUserPrefs(unittest.TestCase):
                 tmp_ws.rmdir()
                 good.rmdir()
 
-    def test_workspace_dotfile_roundtrip(self) -> None:
+    def test_workspace_prefs_sqlite_roundtrip(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             repo = Path(td) / "proj"
             repo.mkdir()
@@ -111,13 +111,33 @@ class TestUserPrefs(unittest.TestCase):
                     {"step_dir": "step", "view_fit": "last"},
                     repo,
                 )
-            dot = workspace_dotfile_path(repo)
-            self.assertTrue(dot.is_file())
-            self.assertEqual(dot.name, prefs.WORKSPACE_PREFS_BASENAME)
-            self.assertEqual(dot.parent.name, prefs.WORKSPACE_PHOENIX_DIR)
+            from phoenix.config.workspace_prefs_store import load_prefs_from_sqlite, prefs_table_empty
+            from phoenix.freecad.phoenix_schema import WORKSPACE_DATABASE_FILENAME
+
+            db = repo / prefs.WORKSPACE_PHOENIX_DIR / WORKSPACE_DATABASE_FILENAME
+            self.assertTrue(db.is_file())
+            self.assertFalse(prefs_table_empty(repo))
             loaded = prefs.load_workspace_prefs(repo)
             self.assertEqual(loaded["step_batch"]["step_dir"], "step")
             self.assertEqual(loaded["step_batch"]["view_fit"], "last")
+            stored = load_prefs_from_sqlite(repo)
+            self.assertEqual(stored["step_batch"]["step_dir"], "step")
+
+    def test_import_workspace_prefs_json_to_sqlite(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td) / "proj"
+            ph = repo / prefs.WORKSPACE_PHOENIX_DIR
+            ph.mkdir(parents=True)
+            dot = workspace_dotfile_path(repo)
+            dot.write_text(
+                json.dumps({"step_batch": {"step_dir": "from-json"}}),
+                encoding="utf-8",
+            )
+            loaded = prefs.load_workspace_prefs(repo)
+            self.assertEqual(loaded["step_batch"]["step_dir"], "from-json")
+            from phoenix.config.workspace_prefs_store import load_prefs_from_sqlite
+
+            self.assertEqual(load_prefs_from_sqlite(repo)["step_batch"]["step_dir"], "from-json")
 
     def test_migrate_legacy_workspace_dotfile(self) -> None:
         with tempfile.TemporaryDirectory() as td:

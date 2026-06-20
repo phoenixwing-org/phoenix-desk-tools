@@ -16,12 +16,14 @@ import ResizableDataTable from "../components/ResizableDataTable.vue";
 import type { TableColumnDef } from "../composables/useResizableTable";
 import { useAppShell } from "../composables/useAppShell";
 import { usePageSession } from "../composables/usePageSession";
+import { useFileWorksetsStore } from "../stores/fileWorksets";
 
 const props = defineProps<{
   workbenchTabId?: string;
 }>();
 
 const shell = useAppShell();
+const worksetStore = useFileWorksetsStore();
 
 const SESSION_V = 1;
 const PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
@@ -49,6 +51,7 @@ type KindFilter = (typeof KIND_OPTIONS)[number]["value"];
 type StatusFilter = (typeof STATUS_OPTIONS)[number]["value"];
 
 const columns: TableColumnDef[] = [
+  { key: "check", label: "", width: 36, minWidth: 36 },
   { key: "index", label: "#", width: 44, minWidth: 40, headerClass: "col-index" },
   { key: "status", label: "状态", width: 64, minWidth: 52 },
   { key: "kind", label: "类型", width: 80, minWidth: 64 },
@@ -73,6 +76,7 @@ const entriesTotal = ref(0);
 const pageOffset = ref(0);
 const pageSize = ref(50);
 const entriesLoading = ref(false);
+const selectedPaths = ref<Set<string>>(new Set());
 
 const stats = computed(() => data.value?.stats);
 const kindLabels = computed(() => data.value?.kind_labels ?? {});
@@ -108,6 +112,46 @@ const statCards = computed(() => {
       : []),
   ];
 });
+
+const allPageChecked = computed(
+  () => entries.value.length > 0 && entries.value.every((r) => selectedPaths.value.has(r.repo_rel_path)),
+);
+const selectedCount = computed(() => selectedPaths.value.size);
+
+function toggleRow(path: string, checked: boolean) {
+  const next = new Set(selectedPaths.value);
+  if (checked) next.add(path);
+  else next.delete(path);
+  selectedPaths.value = next;
+}
+
+function toggleAllPage(checked: boolean) {
+  selectedPaths.value = checked
+    ? new Set(entries.value.map((r) => r.repo_rel_path))
+    : new Set();
+}
+
+function addSelectedToWorkset() {
+  const paths = [...selectedPaths.value];
+  if (!paths.length) {
+    setStatus("请先勾选条目");
+    return;
+  }
+  worksetStore.addPathsToActive(paths, "code_index:selected");
+  setStatus(worksetStore.lastMessage);
+  void shell.openWorksetSidebar();
+}
+
+function addPageToWorkset() {
+  const paths = entries.value.map((r) => r.repo_rel_path);
+  if (!paths.length) {
+    setStatus("当前页无条目");
+    return;
+  }
+  worksetStore.addPathsToActive(paths, "code_index:page");
+  setStatus(worksetStore.lastMessage);
+  void shell.openWorksetSidebar();
+}
 
 function setStatus(msg: string) {
   shell.setStatus(msg);
@@ -496,6 +540,15 @@ onMounted(() => applyInitialTabState());
         <span v-if="entriesTotal > 0" class="count">
           显示 <strong>{{ pageOffset + 1 }}–{{ pageEnd }}</strong> / {{ entriesTotal }} 条
         </span>
+        <div v-if="entries.length" class="workset-actions">
+          <button type="button" class="btn mini" @click="toggleAllPage(!allPageChecked)">
+            {{ allPageChecked ? "取消全选" : "全选本页" }}
+          </button>
+          <button type="button" class="btn mini" :disabled="!selectedCount" @click="addSelectedToWorkset">
+            勾选加入工作集{{ selectedCount ? `（${selectedCount}）` : "" }}
+          </button>
+          <button type="button" class="btn mini" @click="addPageToWorkset">本页全部加入</button>
+        </div>
       </section>
 
       <div class="table-area" data-tour-page-code-table>
@@ -506,6 +559,13 @@ onMounted(() => applyInitialTabState());
               :key="row.repo_rel_path + row.file_status"
               :class="row.file_status"
             >
+              <td class="col-check">
+                <input
+                  type="checkbox"
+                  :checked="selectedPaths.has(row.repo_rel_path)"
+                  @change="toggleRow(row.repo_rel_path, ($event.target as HTMLInputElement).checked)"
+                />
+              </td>
               <td class="col-index">{{ pageOffset + idx + 1 }}</td>
               <td>
                 <span class="status-badge" :class="row.file_status">{{ statusLabel(row) }}</span>
@@ -699,6 +759,18 @@ onMounted(() => applyInitialTabState());
   align-items: center;
   margin-bottom: 10px;
   flex-shrink: 0;
+}
+
+.workset-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.col-check {
+  text-align: center;
+  width: 36px;
 }
 
 .filter-group {

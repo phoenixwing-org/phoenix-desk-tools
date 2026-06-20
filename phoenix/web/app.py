@@ -89,6 +89,7 @@ from phoenix.services.code_rename_service import (
     save_code_rename_prefs,
 )
 from phoenix.services.code_uuid_service import apply_code_uuids, scan_code_uuids
+from phoenix.services.file_workset_service import get_file_worksets_api, put_file_worksets_api
 from phoenix.services.reorder_members_service import (
     get_reorder_members_prefs,
     list_reorder_top_level_entries,
@@ -434,6 +435,13 @@ class CodeRenameRunBody(CodeRenamePrefsBody):
 class CodeUuidScanBody(BaseModel):
     scope: str | None = None
     kinds: list[str] | None = None
+    use_index_scope: bool | None = None
+    repo_rel_paths: list[str] | None = None
+    include_ignored: bool | None = None
+
+
+class FileWorksetsBody(BaseModel):
+    worksets: list[dict] = Field(default_factory=list)
 
 
 class CodeUuidApplyBody(BaseModel):
@@ -1576,6 +1584,20 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
     def api_code_uuid_apply(body: CodeUuidApplyBody) -> dict:
         try:
             return apply_code_uuids(get_workspace(), body.model_dump(exclude_none=True))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.get("/api/file-worksets")
+    def api_file_worksets_get() -> dict:
+        try:
+            return get_file_worksets_api(get_workspace())
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.put("/api/file-worksets")
+    def api_file_worksets_put(body: FileWorksetsBody) -> dict:
+        try:
+            return put_file_worksets_api(get_workspace(), body.model_dump(exclude_none=True))
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 

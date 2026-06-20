@@ -21,6 +21,7 @@ import {
 } from "../utils/onboardingConstants";
 import { parseShellUrl, replaceShellUrl, type ShellUrlIntent } from "../utils/shellUrlSync";
 import { useOnboardingStore } from "../stores/onboarding";
+import { useFileWorksetsStore } from "../stores/fileWorksets";
 import type { OpenTabOptions, WorkbenchTab, WorkbenchTabPayload } from "../types/workbench";
 
 /** 返回 false 表示当前 Tab 未接管此次树点击，由 shell 回退打开文件详情 */
@@ -133,9 +134,12 @@ export type AppShellContext = {
   consumeTabPageState: (tabId: string) => Record<string, unknown> | undefined;
   canOpenNewTab: (pageId: string) => boolean;
   scheduleWorkbenchSave: () => void;
-  /** Code 模块右侧栏：工作空间树 / 忽略设定 Tab */
-  codeRightSidebarTab: Ref<"tree" | "ignore">;
+  /** 侧栏 Tab：工作空间树 / 文件工作集（系统）/ Code 忽略设定 */
+  workspaceSidebarTab: Ref<"tree" | "workset" | "ignore">;
   openCodeIgnoreSidebar: () => Promise<void>;
+  openWorksetSidebar: () => Promise<void>;
+  /** @deprecated 使用 workspaceSidebarTab */
+  codeRightSidebarTab?: Ref<"tree" | "workset" | "ignore">;
 };
 
 const APP_SHELL_KEY: InjectionKey<AppShellContext> = Symbol("appShell");
@@ -182,12 +186,15 @@ const PAGE_MODULE_FALLBACK: Record<string, string> = {
 
 const DEFAULT_NAV_MODULES = ["cad", "code"];
 
-const CODE_RIGHT_TAB_KEY = "phoenix-code-right-tab";
+const SIDEBAR_TAB_KEY = "phoenix-workspace-sidebar-tab";
+const LEGACY_SIDEBAR_TAB_KEY = "phoenix-code-right-tab";
 
-function readCodeRightSidebarTab(): "tree" | "ignore" {
+function readWorkspaceSidebarTab(): "tree" | "workset" | "ignore" {
   try {
-    const v = sessionStorage.getItem(CODE_RIGHT_TAB_KEY);
-    return v === "ignore" ? "ignore" : "tree";
+    let v = sessionStorage.getItem(SIDEBAR_TAB_KEY);
+    if (!v) v = sessionStorage.getItem(LEGACY_SIDEBAR_TAB_KEY);
+    if (v === "ignore" || v === "workset") return v;
+    return "tree";
   } catch {
     return "tree";
   }
@@ -221,7 +228,7 @@ export function provideAppShell(): AppShellContext {
     showWelcomeScreen.value = false;
     syncShellUrl();
   }
-  const codeRightSidebarTab = ref<"tree" | "ignore">(readCodeRightSidebarTab());
+  const workspaceSidebarTab = ref<"tree" | "workset" | "ignore">(readWorkspaceSidebarTab());
   const onboarding = useOnboardingStore();
 
   function normalizePageId(pageId: string): string {
@@ -645,6 +652,7 @@ export function provideAppShell(): AppShellContext {
     await onboarding.refreshStatus();
     await restoreWorkbenchSession();
     syncOnboardingFromTabs();
+    void useFileWorksetsStore().hydrate(ws.path, true);
     setStatus(`工作空间: ${ws.path}`);
   }
 
@@ -924,18 +932,28 @@ export function provideAppShell(): AppShellContext {
   }
 
   async function openCodeIgnoreSidebar() {
-    codeRightSidebarTab.value = "ignore";
+    workspaceSidebarTab.value = "ignore";
     try {
-      sessionStorage.setItem(CODE_RIGHT_TAB_KEY, "ignore");
+      sessionStorage.setItem(SIDEBAR_TAB_KEY, "ignore");
     } catch {
       /* ignore */
     }
     await persistShellLayout({ right_panel_open: true });
   }
 
-  watch(codeRightSidebarTab, (tab) => {
+  async function openWorksetSidebar() {
+    workspaceSidebarTab.value = "workset";
     try {
-      sessionStorage.setItem(CODE_RIGHT_TAB_KEY, tab);
+      sessionStorage.setItem(SIDEBAR_TAB_KEY, "workset");
+    } catch {
+      /* ignore */
+    }
+    await persistShellLayout({ right_panel_open: true });
+  }
+
+  watch(workspaceSidebarTab, (tab) => {
+    try {
+      sessionStorage.setItem(SIDEBAR_TAB_KEY, tab);
     } catch {
       /* ignore */
     }
@@ -981,6 +999,9 @@ export function provideAppShell(): AppShellContext {
     setupWorkbenchPersistence();
     syncShellUrl();
     setupShellLogPolling();
+    if (workspacePath.value) {
+      void useFileWorksetsStore().hydrate(workspacePath.value);
+    }
   }
 
   const ctx: AppShellContext = {
@@ -1044,8 +1065,11 @@ export function provideAppShell(): AppShellContext {
     consumeTabPageState: wb.consumeTabPageState,
     canOpenNewTab: wb.canOpenNewTab,
     scheduleWorkbenchSave,
-    codeRightSidebarTab,
+    workspaceSidebarTab,
+    /** @deprecated 使用 workspaceSidebarTab */
+    codeRightSidebarTab: workspaceSidebarTab,
     openCodeIgnoreSidebar,
+    openWorksetSidebar,
   };
 
   provide(APP_SHELL_KEY, ctx);

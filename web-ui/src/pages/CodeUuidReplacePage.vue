@@ -8,7 +8,9 @@ import {
   type UuidApplyStrategy,
 } from "../api";
 import PageHelpButton from "../components/PageHelpButton.vue";
+import WorksetScopePicker from "../components/WorksetScopePicker.vue";
 import { useAppShell } from "../composables/useAppShell";
+import { useWorksetPageScope } from "../composables/useWorksetPageScope";
 import { useResizableTable, type TableColumnDef } from "../composables/useResizableTable";
 import { basenameFromRel, repoDirFromRel } from "../utils/workspaceFileQuery";
 
@@ -38,9 +40,8 @@ const visibleTableWidth = computed(() =>
 );
 
 const shell = useAppShell();
+const worksetScope = useWorksetPageScope("code_uuid");
 
-const scope = ref("");
-const useIndexScope = ref(false);
 const strategy = ref<UuidApplyStrategy>("map_per_value");
 const hits = ref<CodeUuidHit[]>([]);
 const selected = ref<Set<string>>(new Set());
@@ -164,8 +165,7 @@ async function onScan() {
   shell.appendLog("[Code UUID] 扫描…", { source: "code_uuid", open: true });
   try {
     const out = await scanCodeUuids({
-      scope: scope.value.trim() || undefined,
-      use_index_scope: useIndexScope.value,
+      ...worksetScope.buildScanBody(),
     });
     hits.value = out.hits || [];
     engineMessage.value = out.message || "";
@@ -173,8 +173,9 @@ async function onScan() {
     shell.appendLog(out.message || `扫描完成 · 命中 ${hits.value.length}`, { source: "code_uuid" });
     shell.setStatus(out.implemented ? `命中 ${hits.value.length}` : out.message || "引擎尚未接入");
   } catch (e) {
-    shell.appendLog(String(e), { source: "code_uuid" });
-    shell.setStatus(String(e));
+    const msg = String(e);
+    shell.appendLog(msg, { source: "code_uuid" });
+    shell.setStatus(msg);
   } finally {
     scanning.value = false;
   }
@@ -255,15 +256,8 @@ onMounted(() => {
     </header>
 
     <section class="card settings-card">
-      <div class="form-row">
-        <label class="field">
-          <span class="field-label">范围（可选）</span>
-          <input v-model="scope" class="input mono" type="text" spellcheck="false" placeholder="相对子目录" />
-        </label>
-        <label class="field opt-inline">
-          <input v-model="useIndexScope" type="checkbox" />
-          <span>仅 Code 索引 present 文件</span>
-        </label>
+      <WorksetScopePicker page-id="code_uuid" />
+      <div class="form-row settings-row2">
         <label class="field">
           <span class="field-label">替换策略</span>
           <select v-model="strategy" class="input">
@@ -419,6 +413,12 @@ onMounted(() => {
   flex-wrap: wrap;
   gap: 10px;
   align-items: flex-end;
+}
+
+.settings-row2 {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
 }
 
 .field {

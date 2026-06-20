@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from phoenix.code.rename.apply_batch import apply_rename_all
 from phoenix.code.rename.scan import preview_rename_all
@@ -99,11 +100,23 @@ def apply_rename(repo_root: Path, body: dict, *, dry_run: bool) -> dict:
     return out
 
 
+def _normalize_repo_rel_paths(raw: Any) -> frozenset[str]:
+    from phoenix.services.file_workset_service import normalize_workset_paths
+
+    if not isinstance(raw, list):
+        return frozenset()
+    return frozenset(normalize_workset_paths(raw))
+
+
 def scan_uuids(repo_root: Path, body: dict) -> dict:
     kinds = tuple(str(k).strip().lower() for k in (body.get("kinds") or ["uuid"]) if str(k).strip())
     use_index = bool(body.get("use_index_scope", False))
+    workset_paths = _normalize_repo_rel_paths(body.get("repo_rel_paths"))
     indexed_paths: set[str] | None = None
-    if use_index:
+    if workset_paths:
+        indexed_paths = set(workset_paths)
+        use_index = False
+    elif use_index:
         indexed_paths = _indexed_rel_paths(repo_root)
     opts = UuidScanOptions(
         scope=str(body.get("scope") or ""),
@@ -115,6 +128,7 @@ def scan_uuids(repo_root: Path, body: dict) -> dict:
     out["scope"] = opts.scope
     out["kinds"] = list(opts.kinds)
     out["use_index_scope"] = use_index
+    out["repo_rel_paths"] = sorted(workset_paths) if workset_paths else []
     return out
 
 

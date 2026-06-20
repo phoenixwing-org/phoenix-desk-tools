@@ -1,4 +1,4 @@
-"""用户偏好：启动器（本机 ``launcher.json``）+ 工作空间 ``.phoenix/phoenix-workspace-prefs.json``。"""
+"""用户偏好：启动器（本机 ``launcher.json``）+ 工作空间偏好（``phoenix-workspace.sqlite``）。"""
 
 from __future__ import annotations
 
@@ -607,11 +607,15 @@ def save_launcher_freecad_dir(path: Path | None) -> None:
 
 
 def load_workspace_prefs(repo_root: Path) -> dict[str, Any]:
+    from phoenix.config.workspace_prefs_store import import_dotfile_to_sqlite_if_needed, load_prefs_from_sqlite
+
     _migrate_workspace_prefs_if_needed(repo_root)
+    import_dotfile_to_sqlite_if_needed(repo_root)
     data = deepcopy(_WORKSPACE_DEFAULT)
-    raw = _read_json(workspace_dotfile_path(repo_root))
+    raw = load_prefs_from_sqlite(repo_root)
     if not raw:
-        return data
+        # 无 SQLite 数据时仍可读 JSON（只读回退，不写）
+        raw = _read_json(workspace_dotfile_path(repo_root)) or {}
     for key in _WORKSPACE_SECTIONS:
         inc = raw.get(key)
         if isinstance(inc, dict) and isinstance(data[key], dict):
@@ -622,7 +626,9 @@ def load_workspace_prefs(repo_root: Path) -> dict[str, Any]:
 
 
 def save_workspace_prefs(repo_root: Path, data: dict[str, Any]) -> None:
-    _write_json(workspace_dotfile_path(repo_root), data)
+    from phoenix.config.workspace_prefs_store import save_prefs_to_sqlite
+
+    save_prefs_to_sqlite(repo_root, data)
 
 
 def merge_workspace_section(section: str, patch: dict[str, Any], repo_root: Path) -> dict[str, Any]:

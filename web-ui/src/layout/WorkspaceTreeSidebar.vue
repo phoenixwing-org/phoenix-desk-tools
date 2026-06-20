@@ -2,10 +2,13 @@
 import { computed, onUnmounted, ref, watch } from "vue";
 import TreeBranch from "../components/TreeBranch.vue";
 import CodeIgnorePanel from "../components/CodeIgnorePanel.vue";
+import FileWorksetPanel from "../components/FileWorksetPanel.vue";
 import ShellLogPanel from "./ShellLogPanel.vue";
 import { fetchTree, type TreeNode } from "../api";
 import { useAppShell } from "../composables/useAppShell";
+import { useFileWorksetsStore } from "../stores/fileWorksets";
 import { countTreeFiles, filterTreeNode } from "../utils/workspaceTreeFilter";
+import { collectTreeFilePaths } from "../utils/treeFilePaths";
 import {
   applyProfileDefaults,
   ensureTreeFilterSelection,
@@ -33,6 +36,7 @@ const props = withDefaults(
 );
 
 const shell = useAppShell();
+const worksetStore = useFileWorksetsStore();
 const sidebarRef = ref<HTMLElement | null>(null);
 const sidebarHeight = ref(0);
 
@@ -59,10 +63,10 @@ const filterProfile = computed(() =>
 
 const showCadFilters = computed(() => filterProfile.value === "cad");
 const showCodeFilters = computed(() => filterProfile.value === "code");
-const codeRightTab = computed({
-  get: () => shell.codeRightSidebarTab.value,
-  set: (v: "tree" | "ignore") => {
-    shell.codeRightSidebarTab.value = v;
+const sidebarTab = computed({
+  get: () => shell.workspaceSidebarTab.value,
+  set: (v: "tree" | "workset" | "ignore") => {
+    shell.workspaceSidebarTab.value = v;
   },
 });
 
@@ -166,6 +170,17 @@ async function onSelect(rel: string) {
   await shell.dispatchTreeSelect(rel);
 }
 
+function onAddVisibleToWorkset() {
+  const paths = collectTreeFilePaths(displayTree.value);
+  if (!paths.length) {
+    shell.setStatus("当前树中无文件可加入");
+    return;
+  }
+  const { added } = worksetStore.addPathsToActive(paths, "tree:visible");
+  shell.setStatus(worksetStore.lastMessage);
+  if (added > 0) sidebarTab.value = "workset";
+}
+
 function onLogResizeStart(e: MouseEvent) {
   if (!splitTreeAndLog.value) return;
   e.preventDefault();
@@ -249,14 +264,14 @@ onUnmounted(() => {
     :style="{ width: panelWidth }"
   >
     <div v-if="showTree" class="ws-body">
-      <div v-if="showCodeFilters" class="ws-tab-bar" role="tablist">
+      <div class="ws-tab-bar" role="tablist">
         <button
           type="button"
           role="tab"
           class="ws-tab"
-          :class="{ active: codeRightTab === 'tree' }"
-          :aria-selected="codeRightTab === 'tree'"
-          @click="codeRightTab = 'tree'"
+          :class="{ active: sidebarTab === 'tree' }"
+          :aria-selected="sidebarTab === 'tree'"
+          @click="sidebarTab = 'tree'"
         >
           工作空间树
         </button>
@@ -264,15 +279,26 @@ onUnmounted(() => {
           type="button"
           role="tab"
           class="ws-tab"
-          :class="{ active: codeRightTab === 'ignore' }"
-          :aria-selected="codeRightTab === 'ignore'"
-          @click="codeRightTab = 'ignore'"
+          :class="{ active: sidebarTab === 'workset' }"
+          :aria-selected="sidebarTab === 'workset'"
+          @click="sidebarTab = 'workset'"
+        >
+          工作集
+        </button>
+        <button
+          v-if="showCodeFilters"
+          type="button"
+          role="tab"
+          class="ws-tab"
+          :class="{ active: sidebarTab === 'ignore' }"
+          :aria-selected="sidebarTab === 'ignore'"
+          @click="sidebarTab = 'ignore'"
         >
           忽略设定
         </button>
       </div>
 
-      <div v-show="!showCodeFilters || codeRightTab === 'tree'" class="ws-tree-section">
+      <div v-show="sidebarTab === 'tree'" class="ws-tree-section">
       <div class="ws-head">
         <div class="ws-title-row">
           <span class="ws-title" :title="treeTitle">{{ treeTitle }}</span>
@@ -319,6 +345,15 @@ onUnmounted(() => {
           >
             清除
           </button>
+          <button
+            type="button"
+            class="mini"
+            title="将当前可见文件加入活动工作集"
+            :disabled="!displayFileCount"
+            @click="onAddVisibleToWorkset"
+          >
+            +工作集
+          </button>
         </div>
       </div>
       <div class="ws-tree">
@@ -334,7 +369,11 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div v-show="showCodeFilters && codeRightTab === 'ignore'" class="ws-ignore-section">
+    <div v-show="sidebarTab === 'workset'" class="ws-workset-section">
+      <FileWorksetPanel />
+    </div>
+
+    <div v-show="showCodeFilters && sidebarTab === 'ignore'" class="ws-ignore-section">
       <CodeIgnorePanel layout="sidebar" />
     </div>
     </div>
@@ -426,7 +465,8 @@ onUnmounted(() => {
   background: var(--sidebar-bg);
 }
 
-.ws-ignore-section {
+.ws-ignore-section,
+.ws-workset-section {
   flex: 1;
   min-height: 0;
   min-width: 0;

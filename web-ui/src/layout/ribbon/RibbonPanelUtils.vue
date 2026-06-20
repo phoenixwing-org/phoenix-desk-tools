@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { Document, FolderOpened, Operation } from "@element-plus/icons-vue";
+import { Collection, Document, FolderOpened, Operation } from "@element-plus/icons-vue";
 import SideDockPrefsPanel from "../../components/SideDockPrefsPanel.vue";
 import { useAppShell } from "../../composables/useAppShell";
 import RibbonUtilButton from "./RibbonUtilButton.vue";
@@ -25,6 +25,11 @@ async function toggleLog() {
   }
   shell.setStatus(next ? "已展开运行日志" : "已收起运行日志");
 }
+
+async function openWorksetPanel() {
+  await shell.openWorksetSidebar();
+  shell.setStatus("已打开侧栏 · 工作集");
+}
 </script>
 
 <template>
@@ -36,6 +41,14 @@ async function toggleLog() {
       @click="togglePanel"
     >
       <template #icon><FolderOpened /></template>
+    </RibbonUtilButton>
+
+    <RibbonUtilButton
+      label="工作集"
+      title="侧栏 · 文件工作集（系统）"
+      @click="openWorksetPanel"
+    >
+      <template #icon><Collection /></template>
     </RibbonUtilButton>
 
     <RibbonUtilButton

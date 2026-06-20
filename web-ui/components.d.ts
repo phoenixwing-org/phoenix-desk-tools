@@ -33,6 +33,7 @@ declare module 'vue' {
     FileAttributesPanel: typeof import('./src/components/file-detail/FileAttributesPanel.vue')['default']
     FileOverviewPanel: typeof import('./src/components/file-detail/FileOverviewPanel.vue')['default']
     FileRenamePanel: typeof import('./src/components/file-detail/FileRenamePanel.vue')['default']
+    FileWorksetPanel: typeof import('./src/components/FileWorksetPanel.vue')['default']
     FileXrefPanel: typeof import('./src/components/file-detail/FileXrefPanel.vue')['default']
     OnboardingBanner: typeof import('./src/components/OnboardingBanner.vue')['default']
     OnboardingChecklist: typeof import('./src/components/OnboardingChecklist.vue')['default']
@@ -42,6 +43,7 @@ declare module 'vue' {
     ResizableDataTable: typeof import('./src/components/ResizableDataTable.vue')['default']
     SideDockPrefsPanel: typeof import('./src/components/SideDockPrefsPanel.vue')['default']
     TreeBranch: typeof import('./src/components/TreeBranch.vue')['default']
+    WorksetScopePicker: typeof import('./src/components/WorksetScopePicker.vue')['default']
     XlinkReplaceDialog: typeof import('./src/components/XlinkReplaceDialog.vue')['default']
     XrefQuerySection: typeof import('./src/components/XrefQuerySection.vue')['default']
   }

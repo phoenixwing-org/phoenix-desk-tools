@@ -41,11 +41,13 @@ def scan_code_uuids(repo_root: Path, body: dict[str, Any]) -> dict[str, Any]:
     scope = str(body.get("scope") or "").strip()
     kinds = _normalize_kinds(body.get("kinds"))
     use_index = bool(body.get("use_index_scope", False))
+    repo_rel_paths = body.get("repo_rel_paths")
     ignore = get_code_ignore_prefs(rr)
     out = scan_uuids(rr, {
         "scope": scope,
         "kinds": kinds,
         "use_index_scope": use_index,
+        "repo_rel_paths": repo_rel_paths,
         "include_ignored": bool(body.get("include_ignored", False)),
     })
     out["ignore_file_display"] = ignore.get("ignore_file_display")

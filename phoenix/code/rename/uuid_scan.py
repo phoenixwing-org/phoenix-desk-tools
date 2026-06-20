@@ -259,7 +259,7 @@ def scan_uuid_hits(repo_root: Path, opts: UuidScanOptions) -> dict[str, Any]:
         f"UUID 扫描：{files_scanned} 个文本文件，命中 {len(hits)} 处，去重 {unique} 个",
     ]
     if opts.indexed_paths is not None:
-        lines[0] += f"（Code 索引范围内 {len(opts.indexed_paths)} 个 present 文件）"
+        lines[0] += f"（限定 {len(opts.indexed_paths)} 个文件）"
     for h in hits[:30]:
         lines.append(f"  · {h['repo_rel_path']}:{h['line']} {h['matched_text']}")
     if len(hits) > 30:

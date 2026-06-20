@@ -1789,6 +1789,36 @@ export function applyCodeRename(body: Partial<CodeRenamePrefs> & { confirm_token
   });
 }
 
+export type FileWorkset = {
+  id: string;
+  name: string;
+  paths: string[];
+  source?: string;
+  updated_at: string;
+};
+
+export type FileWorksetPayload = {
+  version: number;
+  worksets: FileWorkset[];
+  workspace_path?: string;
+  workspace_path_display?: string;
+  path?: string;
+  path_display?: string;
+  storage?: string;
+};
+
+export function fetchFileWorksets() {
+  return jsonFetch<FileWorksetPayload>("/api/file-worksets");
+}
+
+export function saveFileWorksets(body: { worksets: FileWorkset[] }) {
+  return jsonFetch<FileWorksetPayload>("/api/file-worksets", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 export type UuidKind = "uuid" | "guid32" | "suspicious";
 export type UuidApplyStrategy = "map_per_value" | "fresh_per_hit";
 
@@ -1839,7 +1869,13 @@ export type CodeUuidApplyResult = {
   lines?: string[];
 };
 
-export function scanCodeUuids(body: { scope?: string; kinds?: UuidKind[]; use_index_scope?: boolean } = {}) {
+export function scanCodeUuids(body: {
+  scope?: string;
+  kinds?: UuidKind[];
+  use_index_scope?: boolean;
+  repo_rel_paths?: string[];
+  include_ignored?: boolean;
+} = {}) {
   return jsonFetch<CodeUuidScanResult>("/api/code/uuid/scan", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

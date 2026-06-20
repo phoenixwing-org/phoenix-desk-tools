@@ -13,6 +13,8 @@ CAD_DATABASE_FILENAME = WORKSPACE_DATABASE_FILENAME
 SCHEMA_VERSION = 11
 
 from phoenix.code.schema import CODE_CREATE_SCHEMA_DDL, migrate_code_schema
+from phoenix.config.workspace_prefs_schema import WORKSPACE_PREF_CREATE_SCHEMA_DDL, migrate_workspace_pref_schema
+from phoenix.workset.schema import WORKSET_CREATE_SCHEMA_DDL, migrate_workset_schema
 
 T_META = "phoenix_meta"
 T_CAD_SCAN = "phoenix_cad_scan"
@@ -224,7 +226,7 @@ CREATE INDEX IF NOT EXISTS idx_phoenix_cad_bom_occ_root
     ON {T_BOM_TREE_OCCURRENCE}(root_host_repo_rel_path);
 CREATE INDEX IF NOT EXISTS idx_phoenix_cad_bom_occ_host_target
     ON {T_BOM_TREE_OCCURRENCE}(host_repo_rel_path, target_repo_rel_path);
-""" + CODE_CREATE_SCHEMA_DDL
+""" + CODE_CREATE_SCHEMA_DDL + WORKSET_CREATE_SCHEMA_DDL + WORKSPACE_PREF_CREATE_SCHEMA_DDL
 
 
 class PhoenixDatabaseError(RuntimeError):
