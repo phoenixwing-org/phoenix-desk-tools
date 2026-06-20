@@ -109,13 +109,15 @@ _WORKSPACE_DEFAULT: dict[str, Any] = {
 
 _LAUNCHER_SHELL_LAYOUT_DEFAULT: dict[str, Any] = {
     "nav_rail_mode": 0,  # 0 窄仅图标 · 1 宽图标+文字
-    "ribbon_mode": 0,  # 0 左侧 Nav · 1 顶栏 Ribbon 工具台
+    "ribbon_mode": 1,  # 已固定 Ribbon 壳层；字段保留兼容旧 launcher.json
     "right_panel_open": True,
     "mid_right_sash_px": None,  # Panedwindow 首根 sash 距左侧像素；None 表示由窗口宽度推导默认
     "right_panel_width_px": 300,  # Web 右侧工作空间树宽度
     "log_panel_open": True,
     "log_panel_height_px": 180,
     "log_auto_open_on_append": True,
+    "workspace_tree_dock": "right",  # left | right
+    "shell_log_dock": "right",  # left | right
 }
 
 
@@ -146,6 +148,12 @@ def _normalized_shell_layout(raw: Any) -> dict[str, Any]:
     lao = raw.get("log_auto_open_on_append")
     if isinstance(lao, bool):
         merged["log_auto_open_on_append"] = lao
+    wtd = raw.get("workspace_tree_dock")
+    if wtd in ("left", "right"):
+        merged["workspace_tree_dock"] = str(wtd)
+    sld = raw.get("shell_log_dock")
+    if sld in ("left", "right"):
+        merged["shell_log_dock"] = str(sld)
     rm = raw.get("ribbon_mode")
     if rm in (0, 1):
         merged["ribbon_mode"] = int(rm)
@@ -424,6 +432,8 @@ def save_launcher_shell_layout(
     log_panel_open: bool | None = None,
     log_panel_height_px: int | None = None,
     log_auto_open_on_append: bool | None = None,
+    workspace_tree_dock: str | None = None,
+    shell_log_dock: str | None = None,
 ) -> None:
     """将左侧导航宽窄 / 右栏开合 / 中右分割 sash / 运行日志窗 写入 launcher JSON。"""
     launcher = load_launcher_prefs()
@@ -444,6 +454,10 @@ def save_launcher_shell_layout(
         cur["log_panel_height_px"] = max(80, int(log_panel_height_px))
     if log_auto_open_on_append is not None:
         cur["log_auto_open_on_append"] = bool(log_auto_open_on_append)
+    if workspace_tree_dock in ("left", "right"):
+        cur["workspace_tree_dock"] = str(workspace_tree_dock)
+    if shell_log_dock in ("left", "right"):
+        cur["shell_log_dock"] = str(shell_log_dock)
     launcher["shell_layout"] = cur
     save_launcher_prefs(launcher)
 

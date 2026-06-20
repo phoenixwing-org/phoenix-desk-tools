@@ -17,6 +17,19 @@ import {
 const LOG_MIN_H = 80;
 const LOG_MAX_RATIO = 0.7;
 
+const props = withDefaults(
+  defineProps<{
+    dockSide?: "left" | "right";
+    showTree?: boolean;
+    showLog?: boolean;
+  }>(),
+  {
+    dockSide: "right",
+    showTree: true,
+    showLog: true,
+  },
+);
+
 const shell = useAppShell();
 const sidebarRef = ref<HTMLElement | null>(null);
 const sidebarHeight = ref(0);
@@ -72,8 +85,8 @@ const treeTitle = computed(() => {
 const shellLayout = computed(() => shell.shellLayout.value);
 const workspacePath = computed(() => shell.workspacePath.value);
 const panelWidth = computed(() => `${shellLayout.value.right_panel_width_px}px`);
-const open = computed(() => shellLayout.value.right_panel_open);
 const logOpen = computed(() => shellLayout.value.log_panel_open);
+const panelVisible = computed(() => props.showTree || (props.showLog && logOpen.value));
 
 /** 展示高度：按侧栏可用空间钳制，但不改写已保存的偏好（避免切页后越变越矮） */
 const displayLogHeightPx = computed(() => {
@@ -104,6 +117,7 @@ function bindSidebarObserver(el: HTMLElement | null) {
 }
 
 async function scan() {
+  if (!props.showTree) return;
   if (!ensureTreeFilterSelection(filters.value, filterProfile.value)) {
     tree.value = null;
     fileCount.value = 0;
@@ -163,6 +177,7 @@ watch(sidebarRef, (el) => bindSidebarObserver(el), { flush: "post" });
 watch(
   filterProfile,
   (profile) => {
+    if (!props.showTree) return;
     applyProfileDefaults(filters, profile);
     void scan();
   },
@@ -170,6 +185,7 @@ watch(
 );
 
 watch(workspacePath, () => {
+  if (!props.showTree) return;
   selectedRel.value = null;
   treeFilterQuery.value = "";
   void scan();
@@ -178,6 +194,7 @@ watch(workspacePath, () => {
 watch(
   () => shell.treeRescanToken.value,
   async () => {
+    if (!props.showTree) return;
     await scan();
     const pick = shell.treeSelectAfterRescan.value;
     if (pick) {
@@ -196,13 +213,14 @@ onUnmounted(() => {
 
 <template>
   <aside
-    v-show="open"
+    v-show="panelVisible"
     ref="sidebarRef"
     class="ws-sidebar"
+    :class="[`dock-${dockSide}`, { 'log-only': showLog && !showTree }]"
     data-tour="workspace-tree"
     :style="{ width: panelWidth }"
   >
-    <div class="ws-body">
+    <div v-if="showTree" class="ws-body">
       <div v-if="showCodeFilters" class="ws-tab-bar" role="tablist">
         <button
           type="button"
@@ -293,7 +311,7 @@ onUnmounted(() => {
     </div>
     </div>
 
-    <template v-if="logOpen">
+    <template v-if="showLog && logOpen">
       <div
         class="log-resizer"
         title="拖拽调节日志区高度"
@@ -310,14 +328,27 @@ onUnmounted(() => {
 .ws-sidebar {
   position: absolute;
   top: 0;
-  right: 0;
   bottom: 0;
   display: flex;
   flex-direction: column;
   min-height: 0;
   background: var(--sidebar-bg);
-  border-left: 1px solid var(--border);
   overflow: hidden;
+}
+
+.ws-sidebar.dock-right {
+  right: 0;
+  border-left: 1px solid var(--border);
+}
+
+.ws-sidebar.dock-left {
+  left: 0;
+  border-right: 1px solid var(--border);
+}
+
+.ws-sidebar.log-only .ws-log-wrap {
+  flex: 1;
+  min-height: 0;
 }
 
 .ws-body {

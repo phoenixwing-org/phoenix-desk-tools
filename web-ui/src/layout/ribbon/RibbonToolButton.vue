@@ -5,6 +5,7 @@ defineProps<{
   label: string;
   icon: Component;
   size?: "large" | "small";
+  layout?: "inline" | "stacked";
   active?: boolean;
   disabled?: boolean;
   title?: string;
@@ -21,6 +22,7 @@ const emit = defineEmits<{
     class="ribbon-tool-btn"
     :class="[
       size === 'large' ? 'size-large' : 'size-small',
+      layout === 'stacked' ? 'layout-stacked' : 'layout-inline',
       { active, disabled },
     ]"
     :disabled="disabled"
@@ -48,6 +50,35 @@ const emit = defineEmits<{
   color: var(--text);
   cursor: pointer;
   min-width: 0;
+}
+
+.ribbon-tool-btn.layout-stacked {
+  flex-direction: column;
+  width: 52px;
+  min-width: 52px;
+  max-width: 64px;
+  min-height: 48px;
+  padding: 4px 2px 3px;
+  gap: 2px;
+  justify-content: center;
+}
+
+.layout-stacked .ribbon-tool-label {
+  font-size: 0.6rem;
+  line-height: 1.15;
+  text-align: center;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  max-width: 50px;
+}
+
+.layout-stacked .ribbon-tool-icon {
+  width: 18px;
+  height: 18px;
+  font-size: 17px;
 }
 
 .ribbon-tool-btn.size-large {

@@ -11,6 +11,9 @@
   --shell-bg: #eceef2;
   --page-bg: #f8f9fb;
   --toolbar-bg: #fff;
+  --header-bg: #e8ecf2;
+  --header-border: #cdd3dc;
+  --header-height: 40px;
   --nav-bg: #e8eaef;
   --sidebar-bg: #f0f2f6;
   --panel-head-bg: #fafbfc;
@@ -30,7 +33,7 @@
   --el-border-radius-round: 2px;
 
   /* Ribbon 工具台 */
-  --ribbon-bg: #f3f4f6;
+  --ribbon-bg: #fff;
   --ribbon-group-divider: #c5cdd8;
   --ribbon-btn-hover: #e8eef5;
   --ribbon-btn-radius: 2px;

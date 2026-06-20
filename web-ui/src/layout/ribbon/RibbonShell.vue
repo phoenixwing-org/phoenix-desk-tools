@@ -32,7 +32,7 @@ const emit = defineEmits<{
 <style scoped>
 .ribbon-shell {
   flex-shrink: 0;
-  background: var(--ribbon-bg);
+  background: #fff;
   border-bottom: 1px solid var(--border);
 }
 </style>

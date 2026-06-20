@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, type Component } from "vue";
 import AppToolbar from "./AppToolbar.vue";
-import NavSidebar from "./NavSidebar.vue";
 import RibbonShell from "./ribbon/RibbonShell.vue";
 import { useRibbonTabs } from "./ribbon/useRibbonTabs";
 import StatusBar from "./StatusBar.vue";
 import WorkspaceTreeSidebar from "./WorkspaceTreeSidebar.vue";
-import WorkbenchTabBar from "./WorkbenchTabBar.vue";
 import HomePage from "../pages/HomePage.vue";
+import WelcomePage from "../pages/WelcomePage.vue";
 import ConfigPage from "../pages/ConfigPage.vue";
 import FileDetailPage from "../pages/FileDetailPage.vue";
 import FcstdMapPage from "../pages/FcstdMapPage.vue";
@@ -26,6 +25,7 @@ import FileRenamePage from "../pages/FileRenamePage.vue";
 import BomExportPage from "../pages/BomExportPage.vue";
 import UnitTestsPage from "../pages/UnitTestsPage.vue";
 import PlaceholderPage from "../pages/PlaceholderPage.vue";
+import { sideDockVisibility } from "../utils/sideDockLayout";
 import { fetchPhoenixDatabaseStatus, recreatePhoenixDatabase } from "../api";
 import { provideAppShell } from "../composables/useAppShell";
 import ChoiceDialogHost from "../components/ChoiceDialogHost.vue";
@@ -41,15 +41,11 @@ const legacyDbError = ref("");
 
 const activeTab = computed(() => shell.activeTab());
 
-const ribbonUrlPreview = ref(
-  typeof window !== "undefined" && new URLSearchParams(window.location.search).get("ribbon") === "1",
-);
+const isWelcomeFullscreen = computed(() => shell.currentPage.value === "welcome");
+
 const ribbonCollapsed = ref(false);
 
 const shellLayout = computed(() => shell.shellLayout.value);
-const showRibbon = computed(
-  () => ribbonUrlPreview.value || shellLayout.value.ribbon_mode === 1,
-);
 const navigation = computed(() => shell.appConfig.value?.navigation ?? []);
 
 const { activeTab: ribbonActiveTab, visibleTabs: ribbonVisibleTabs, activeTabDef: ribbonActiveTabDef } =
@@ -59,9 +55,14 @@ const { activeTab: ribbonActiveTab, visibleTabs: ribbonVisibleTabs, activeTabDef
     enabledModules: computed(() => shell.enabledNavModules.value),
   });
 
-const rightWidth = computed(() =>
-  shellLayout.value.right_panel_open ? `${shellLayout.value.right_panel_width_px}px` : "0px",
-);
+const dockVis = computed(() => sideDockVisibility(shellLayout.value));
+
+const panelWidth = computed(() => `${shellLayout.value.right_panel_width_px}px`);
+
+const mainMargins = computed(() => ({
+  marginLeft: dockVis.value.leftVisible ? panelWidth.value : undefined,
+  marginRight: dockVis.value.rightVisible ? panelWidth.value : undefined,
+}));
 
 const PAGE_COMPONENTS: Record<string, Component> = {
   home: HomePage,
@@ -94,13 +95,13 @@ function onRibbonOpen(pageId: string) {
   shell.goToPage(pageId);
 }
 
-function onResizeStart(e: MouseEvent) {
+function onResizeStart(e: MouseEvent, side: "left" | "right") {
   e.preventDefault();
   const startX = e.clientX;
   const startW = shell.shellLayout.value.right_panel_width_px;
 
   function onMove(ev: MouseEvent) {
-    const delta = startX - ev.clientX;
+    const delta = side === "right" ? startX - ev.clientX : ev.clientX - startX;
     const next = Math.min(560, Math.max(160, startW + delta));
     shell.shellLayout.value.right_panel_width_px = next;
   }
@@ -168,8 +169,8 @@ onUnmounted(() => {
 <template>
   <div v-if="loading" class="shell-loading">载入中…</div>
   <div v-else-if="loadError" class="shell-loading err">{{ loadError }}</div>
-  <div v-else class="shell">
-    <div v-if="legacyDbBanner" class="legacy-db-banner" role="alert">
+  <div v-else class="shell" :class="{ 'shell-welcome': isWelcomeFullscreen }">
+    <div v-if="legacyDbBanner && !isWelcomeFullscreen" class="legacy-db-banner" role="alert">
       <div class="legacy-db-banner-text">
         <strong>检测到旧版 CAD 数据库</strong>
         <span>（旧库文件名或旧表名）。需重建为 phoenix-workspace.sqlite 后才能继续使用索引与 BOM 功能。</span>
@@ -186,13 +187,13 @@ onUnmounted(() => {
       </button>
     </div>
     <AppToolbar
-      :show-ribbon-tabs="showRibbon"
+      v-if="!isWelcomeFullscreen"
       :ribbon-tabs="ribbonVisibleTabs"
       v-model:ribbon-active-tab="ribbonActiveTab"
       v-model:ribbon-collapsed="ribbonCollapsed"
     />
     <RibbonShell
-      v-if="showRibbon"
+      v-if="!isWelcomeFullscreen"
       :active-tab-def="ribbonActiveTabDef"
       :collapsed="ribbonCollapsed"
       :navigation="navigation"
@@ -200,12 +201,16 @@ onUnmounted(() => {
       :can-open="(p) => shell.canNavigateToPage(p)"
       @open="onRibbonOpen"
     />
-    <div class="shell-body">
-      <NavSidebar :hide-tool-nav="showRibbon" />
-      <main class="shell-main" :style="{ marginRight: rightWidth }">
-        <WorkbenchTabBar v-if="shell.showTabBar.value" />
-        <div class="shell-pages" data-tour="main-content">
-          <KeepAlive :max="24">
+    <div class="shell-body" :class="{ 'shell-body-welcome': isWelcomeFullscreen }">
+      <!-- 左栏 NavSidebar（快捷栏）默认不渲染；日后可能迁入工作空间树，见 layout/NavSidebar.vue -->
+      <main
+        class="shell-main"
+        :class="{ 'shell-main-welcome': isWelcomeFullscreen }"
+        :style="isWelcomeFullscreen ? undefined : mainMargins"
+      >
+        <div class="shell-pages" :class="{ 'shell-pages-welcome': isWelcomeFullscreen }" data-tour="main-content">
+          <WelcomePage v-if="isWelcomeFullscreen" />
+          <KeepAlive v-else :max="24">
             <component
               v-if="activeTab"
               :key="activeTab.id"
@@ -216,15 +221,33 @@ onUnmounted(() => {
         </div>
       </main>
       <div
-        v-if="shellLayout.right_panel_open"
-        class="shell-resizer"
-        :style="{ right: rightWidth }"
+        v-if="!isWelcomeFullscreen && dockVis.leftVisible"
+        class="shell-resizer shell-resizer-left"
+        :style="{ left: panelWidth }"
         title="拖拽调节宽度"
-        @mousedown="onResizeStart"
+        @mousedown="onResizeStart($event, 'left')"
       />
-      <WorkspaceTreeSidebar />
+      <WorkspaceTreeSidebar
+        v-if="!isWelcomeFullscreen && dockVis.leftVisible"
+        dock-side="left"
+        :show-tree="dockVis.leftShowTree"
+        :show-log="dockVis.leftShowLog"
+      />
+      <div
+        v-if="!isWelcomeFullscreen && dockVis.rightVisible"
+        class="shell-resizer shell-resizer-right"
+        :style="{ right: panelWidth }"
+        title="拖拽调节宽度"
+        @mousedown="onResizeStart($event, 'right')"
+      />
+      <WorkspaceTreeSidebar
+        v-if="!isWelcomeFullscreen && dockVis.rightVisible"
+        dock-side="right"
+        :show-tree="dockVis.rightShowTree"
+        :show-log="dockVis.rightShowLog"
+      />
     </div>
-    <StatusBar />
+    <StatusBar v-if="!isWelcomeFullscreen" />
     <ChoiceDialogHost />
     <AppModalOverlay
       :open="shell.configOverlayOpen.value"
@@ -320,7 +343,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   background: var(--page-bg);
-  transition: margin-right 0.15s ease;
+  transition: margin-left 0.15s ease, margin-right 0.15s ease;
 }
 
 .shell-pages {
@@ -344,14 +367,42 @@ onUnmounted(() => {
   top: 0;
   bottom: 0;
   width: 6px;
-  margin-right: -3px;
   cursor: col-resize;
   z-index: 5;
   background: transparent;
 }
 
+.shell-resizer-right {
+  margin-right: -3px;
+}
+
+.shell-resizer-left {
+  margin-left: -3px;
+}
+
 .shell-resizer:hover {
   background: rgba(59, 130, 246, 0.25);
+}
+
+.shell-welcome {
+  background: #eceff3;
+}
+
+.shell-body-welcome {
+  flex: 1;
+  min-height: 0;
+}
+
+.shell-main-welcome {
+  background: transparent;
+}
+
+.shell-pages-welcome {
+  overflow: hidden;
+}
+
+.shell-pages-welcome :deep(> div) {
+  overflow: hidden;
 }
 </style>
 

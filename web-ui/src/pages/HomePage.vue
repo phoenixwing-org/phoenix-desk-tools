@@ -23,10 +23,9 @@ watch(
 );
 
 const appTitle = computed(() => shell.appConfig.value?.title ?? DEFAULT_APP_TITLE);
-const workspacePath = computed(() => shell.workspacePath.value);
 const featureNav = computed(() =>
   (shell.appConfig.value?.navigation ?? []).filter(
-    (n) => n.page !== "home" && n.page !== "config" && shell.isNavItemVisible(n),
+    (n) => n.page !== "home" && n.page !== "config" && n.page !== "welcome" && shell.isNavItemVisible(n),
   ),
 );
 
@@ -46,6 +45,10 @@ function openFeature(page: string) {
   shell.goToPage(page);
 }
 
+function openWelcome() {
+  shell.goToPage("welcome");
+}
+
 function openConfig() {
   shell.goToPage("config");
 }
@@ -56,6 +59,7 @@ function openConfig() {
     <div class="title-row">
       <h1 class="page-title">主页</h1>
       <div class="head-help">
+        <button type="button" class="link-btn back-welcome" @click="openWelcome">← 欢迎页</button>
         <PageHelpButton page-id="home" />
       </div>
     </div>
@@ -64,7 +68,7 @@ function openConfig() {
       <div class="module-section-head">
         <h2 class="module-section-title">功能模块</h2>
         <p class="module-lead">
-          勾选后左侧导航与下方入口才显示对应模块；偏好保存在本机 launcher，与工作空间无关。
+          勾选后顶栏 Ribbon 与下方入口才显示对应模块；偏好保存在本机 launcher，与工作空间无关。
         </p>
       </div>
       <ul class="module-grid">
@@ -90,19 +94,13 @@ function openConfig() {
         FreeCAD 目录协同。
       </p>
       <p class="lead muted">
-        左侧导航进入各功能；工作区树可打开文件详情。工作空间根目录、FreeCAD 安装路径与最近打开记录在
+        顶栏 Ribbon 进入各功能；右侧工作区树可打开文件详情。工作空间根目录、FreeCAD 安装路径与最近打开记录在
         <button type="button" class="link-btn" @click="openConfig">配置</button>
         中维护。
       </p>
     </section>
 
     <OnboardingChecklist />
-
-    <section class="section">
-      <h2 class="section-title">当前工作空间</h2>
-      <p class="workspace-path">{{ workspacePath || "（未设置）" }}</p>
-      <button type="button" class="btn" @click="openConfig">打开配置…</button>
-    </section>
 
     <section class="section">
       <h2 class="section-title">功能入口</h2>
@@ -144,6 +142,21 @@ function openConfig() {
 
 .title-row {
   margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.head-help {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.back-welcome {
+  font-size: 0.82rem;
+  white-space: nowrap;
 }
 
 .page-title {

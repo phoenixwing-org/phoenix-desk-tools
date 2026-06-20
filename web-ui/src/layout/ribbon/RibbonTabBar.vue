@@ -30,33 +30,33 @@ const emit = defineEmits<{
 .ribbon-tabs {
   display: flex;
   align-items: stretch;
-  justify-content: center;
-  gap: 2px;
+  gap: 0;
   min-width: 0;
-  overflow-x: auto;
+  height: 100%;
 }
 
 .ribbon-tab {
   border: none;
   border-bottom: 2px solid transparent;
   background: transparent;
-  padding: 4px 14px;
-  font-size: 0.82rem;
-  color: var(--muted);
+  padding: 0 14px;
+  font-size: 0.8rem;
+  color: #64748b;
   cursor: pointer;
   white-space: nowrap;
-  height: 44px;
+  height: 100%;
   box-sizing: border-box;
 }
 
 .ribbon-tab:hover {
-  color: var(--text);
-  background: var(--ribbon-btn-hover);
+  color: #1e293b;
+  background: rgba(255, 255, 255, 0.35);
 }
 
 .ribbon-tab.active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
+  color: #2563eb;
+  border-bottom-color: #2563eb;
   font-weight: 600;
+  background: rgba(255, 255, 255, 0.25);
 }
 </style>

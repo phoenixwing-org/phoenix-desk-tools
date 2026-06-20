@@ -31,7 +31,7 @@ export const RIBBON_TABS: RibbonTabDef[] = [
         id: "start-main",
         label: "常用",
         items: [
-          { pageId: "home", size: "large" },
+          { pageId: "home", size: "large", label: "主页" },
           { pageId: "config", size: "small" },
         ],
       },

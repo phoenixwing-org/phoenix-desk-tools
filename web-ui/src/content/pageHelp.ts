@@ -21,11 +21,22 @@ function tour(
 }
 
 export const PAGE_HELP: Record<string, PageHelpContent> = {
+  welcome: {
+    title: "欢迎",
+    bullets: [
+      "启动后默认页：点击最近工程进入 Ribbon 工作台；左侧可打开配置或新手指南。",
+      "Gitee 链接在左侧底部；完整功能模块与开工清单见「功能与模块」或 Ribbon「主页」。",
+    ],
+    docPath: "doc/user/快速开始.md",
+    tourSteps: [
+      tour("[data-tour-page-welcome-recent]", "最近使用", "保存过的工作空间根目录会出现在这里；点击行切换工程。"),
+    ],
+  },
   home: {
     title: "主页",
     bullets: [
       "新手指南四步：工作空间 → FreeCAD（推荐）→ CAD 索引 → 打开文件详情。",
-      "侧栏「? 新手指引」可随时回到本清单；「界面巡游」为全壳层导览。",
+      "侧栏「? 新手指引」或主页清单可随时回到开工步骤；「界面巡游」为全壳层导览。",
     ],
     docPath: "doc/user/新手指引.md",
     tourSteps: [

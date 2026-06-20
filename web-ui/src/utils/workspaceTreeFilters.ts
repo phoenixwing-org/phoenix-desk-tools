@@ -14,7 +14,7 @@ function pageModule(
   navigation: NavItem[] | undefined,
 ): string | undefined {
   const id = pageId === "rename_analysis" ? "file_rename" : pageId;
-  if (id === "home" || id === "config") return undefined;
+  if (id === "welcome" || id === "home" || id === "config") return undefined;
   const nav = navigation?.find((n) => n.page === id);
   if (nav?.module) return nav.module;
   return PAGE_MODULE_FALLBACK[id];

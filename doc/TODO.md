@@ -61,17 +61,16 @@
 - [x] 调试入口：`?ribbon=1` 或顶栏 **Ribbon** 按钮
 - [x] 四 Tab：开始 / CAD / Code / 系统；分组 + 竖线 + 方块按钮
 
-**R2 · 接入壳层（与 NavSidebar 并行）**
+**R2 · 接入壳层**
 
-- [x] `launcher.json` → `shell_layout.ribbon_mode: 0|1`（默认 0）
-- [x] `AppShell` 插入 `RibbonShell`；按钮 → `goToPage`
-- [x] `ribbon_mode=1` 时隐藏侧栏功能列表；保留树/日志开关
-- [x] 顶栏 **Ribbon** 切换 + `?ribbon=1` 预览
+- [x] `AppShell` 固定 `RibbonShell`；按钮 → `goToPage`
+- [x] 左侧快捷栏默认隐藏（`NavSidebar.vue` 保留待用）
+- [x] 移除顶栏 Ribbon 切换与 `?ribbon=1` 预览
 
 **R3 · 体验**
 
 - [x] Ribbon 折叠/展开（▲/▼）；当前页按钮高亮
-- [ ] 更新新手指引 / `pageHelp` / `data-tour` 锚点
+- [x] 更新界面巡游 `data-tour`（Ribbon Tab / 工具条 / 快捷栏）
 - [ ] [Web壳层-使用说明.md](user/Web壳层-使用说明.md) 补充 Ribbon 说明
 
 **R4 · 业务页渐进（按需）**

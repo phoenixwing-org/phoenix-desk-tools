@@ -1,20 +1,21 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { HomeFilled, Setting, FolderOpened, ArrowDown, Link } from "@element-plus/icons-vue";
 import { removeRecentWorkspace } from "../api";
+import { PROJECT_GITEE_HOME } from "../constants/projectLinks";
 import { NAV_MODULE_OPTIONS } from "../constants/navModules";
 import { useAppShell } from "../composables/useAppShell";
 import { DEFAULT_APP_TITLE } from "../types/config";
 import RibbonTabBar from "./ribbon/RibbonTabBar.vue";
+import WorkbenchTabBar from "./WorkbenchTabBar.vue";
 
 const props = withDefaults(
   defineProps<{
-    showRibbonTabs?: boolean;
     ribbonTabs?: { id: string; label: string }[];
     ribbonActiveTab?: string;
     ribbonCollapsed?: boolean;
   }>(),
   {
-    showRibbonTabs: false,
     ribbonTabs: () => [],
     ribbonActiveTab: "start",
     ribbonCollapsed: false,
@@ -30,13 +31,27 @@ const shell = useAppShell();
 const recentOpen = ref(false);
 
 const title = computed(() => shell.appConfig.value?.title ?? DEFAULT_APP_TITLE);
+const brandShort = computed(() => {
+  const t = title.value;
+  return t.startsWith("Phoenix") ? "Phoenix" : t.split(/\s+/)[0] ?? t;
+});
+const brandSub = computed(() => {
+  const t = title.value;
+  if (t.startsWith("Phoenix")) return t.replace(/^Phoenix\s*/, "") || "Desk Tools";
+  return "v0.1";
+});
+
 const recent = computed(() => shell.launcher.value?.recent_workspaces ?? []);
 const workspacePath = computed(() => shell.workspacePath.value);
 const workspaceShort = computed(() => {
   const p = workspacePath.value;
-  if (!p) return "—";
-  return p.length > 48 ? "…" + p.slice(-45) : p;
+  if (!p) return "未打开工作空间";
+  const norm = p.replace(/\\/g, "/");
+  const name = norm.split("/").pop() || p;
+  return name.length > 28 ? `…${name.slice(-25)}` : name;
 });
+
+const showWorkbenchTabs = computed(() => shell.showTabBar.value);
 
 function isModuleEnabled(id: string): boolean {
   return shell.enabledNavModules.value.includes(id);
@@ -74,15 +89,14 @@ async function removeRecent(path: string, event: MouseEvent) {
   }
 }
 
-async function toggleRibbon() {
-  const next = shell.shellLayout.value.ribbon_mode === 1 ? 0 : 1;
-  await shell.persistShellLayout({ ribbon_mode: next });
-  shell.setStatus(next === 1 ? "已启用 Ribbon 工具台" : "已恢复左侧导航");
-}
-
 function openConfig() {
   recentOpen.value = false;
-  shell.goToPage("config");
+  shell.openConfig();
+}
+
+function goWelcome() {
+  recentOpen.value = false;
+  shell.goToPage("welcome");
 }
 
 function toggleRibbonCollapsed() {
@@ -91,39 +105,69 @@ function toggleRibbonCollapsed() {
 </script>
 
 <template>
-  <header class="toolbar" :class="{ 'toolbar-ribbon': showRibbonTabs }">
-    <div class="toolbar-left">
-      <span class="app-title">{{ title }}</span>
-      <div class="module-chips" aria-label="功能模块">
-        <button
-          v-for="opt in NAV_MODULE_OPTIONS"
-          :key="opt.id"
-          type="button"
-          class="module-chip"
-          :class="{ on: isModuleEnabled(opt.id), off: !isModuleEnabled(opt.id) }"
-          :title="moduleChipTitle(opt)"
-          @click="toggleModule(opt.id)"
-        >
-          {{ opt.shortLabel }}
-        </button>
+  <header class="chili-header">
+    <button type="button" class="header-brand" title="返回欢迎页" @click="goWelcome">
+      <span class="brand-mark" aria-hidden="true">P</span>
+      <div class="brand-text">
+        <span class="brand-title">{{ brandShort }}</span>
+        <span class="brand-sub">{{ brandSub }}</span>
       </div>
-      <span v-if="!showRibbonTabs" class="workspace-chip" :title="workspacePath">{{ workspaceShort }}</span>
+    </button>
+
+    <div class="header-divider" aria-hidden="true" />
+
+    <div class="header-quick">
+      <button type="button" class="header-icon-btn" title="欢迎页" @click="goWelcome">
+        <HomeFilled />
+      </button>
+      <button type="button" class="header-icon-btn" title="配置" @click="openConfig">
+        <Setting />
+      </button>
     </div>
 
-    <div v-if="showRibbonTabs" class="toolbar-center">
+    <div class="header-divider" aria-hidden="true" />
+
+    <div class="header-tabs" data-tour="ribbon-tabs">
       <RibbonTabBar
         :tabs="ribbonTabs"
         :active-tab="ribbonActiveTab"
         @update:active-tab="emit('update:ribbonActiveTab', $event)"
       />
     </div>
-    <span v-else-if="workspacePath" class="workspace-chip toolbar-center-fallback" :title="workspacePath">
-      {{ workspaceShort }}
-    </span>
 
-    <div class="toolbar-actions">
+    <div class="header-spacer">
+      <WorkbenchTabBar v-if="showWorkbenchTabs" in-header />
+    </div>
+
+    <div class="header-modules" aria-label="功能模块">
+      <button
+        v-for="opt in NAV_MODULE_OPTIONS"
+        :key="opt.id"
+        type="button"
+        class="module-toggle"
+        :class="{ on: isModuleEnabled(opt.id) }"
+        :title="moduleChipTitle(opt)"
+        @click="toggleModule(opt.id)"
+      >
+        {{ opt.shortLabel }}
+      </button>
+    </div>
+
+    <div class="header-right">
+      <span class="workspace-pill" :title="workspacePath || '未设置工作空间'">
+        <FolderOpened class="workspace-pill-icon" />
+        {{ workspaceShort }}
+      </span>
+
       <div class="recent-wrap">
-        <button type="button" class="tb-btn" @click="recentOpen = !recentOpen">最近 ▾</button>
+        <button
+          type="button"
+          class="header-icon-btn"
+          title="最近工作空间"
+          @click="recentOpen = !recentOpen"
+        >
+          <ArrowDown />
+        </button>
         <div v-if="recentOpen" class="recent-menu">
           <div v-for="p in recent" :key="p" class="recent-row">
             <button
@@ -149,179 +193,214 @@ function toggleRibbonCollapsed() {
           </button>
         </div>
       </div>
-      <span v-if="showRibbonTabs" class="workspace-chip workspace-chip-compact" :title="workspacePath">
-        {{ workspaceShort }}
-      </span>
+
       <button
-        v-if="showRibbonTabs"
         type="button"
-        class="tb-btn tb-btn-icon"
-        :title="ribbonCollapsed ? '展开功能区' : '折叠功能区'"
+        class="header-icon-btn"
+        :title="ribbonCollapsed ? '展开工具 Ribbon' : '折叠工具 Ribbon'"
         @click="toggleRibbonCollapsed"
       >
         {{ ribbonCollapsed ? "▼" : "▲" }}
       </button>
-      <button
-        type="button"
-        class="tb-btn"
-        :class="{ 'tb-btn-on': shell.shellLayout.value.ribbon_mode === 1 }"
-        title="切换 Ribbon 工具台（或地址栏 ?ribbon=1 预览）"
-        @click="toggleRibbon"
+
+      <a
+        class="header-icon-btn header-link"
+        :href="PROJECT_GITEE_HOME"
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Gitee 仓库"
       >
-        Ribbon
-      </button>
-      <button type="button" class="tb-btn primary" @click="openConfig">配置</button>
+        <Link />
+      </a>
     </div>
   </header>
 </template>
 
 <style scoped>
-.toolbar {
-  height: 44px;
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+.chili-header {
+  height: var(--header-height, 40px);
+  min-height: var(--header-height, 40px);
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  padding: 0 8px 0 6px;
+  background: var(--header-bg, #e8ecf2);
+  border-bottom: 1px solid var(--header-border, #cdd3dc);
+  flex-shrink: 0;
+  gap: 0;
+}
+
+.header-brand {
+  display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 12px 0 8px;
-  background: var(--toolbar-bg);
-  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
-}
-
-.toolbar:not(.toolbar-ribbon) {
-  display: flex;
-  justify-content: space-between;
-}
-
-.toolbar-center {
-  display: flex;
-  justify-content: center;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.toolbar-center-fallback {
-  flex: 1;
-  text-align: center;
-  max-width: none;
-}
-
-.workspace-chip-compact {
-  max-width: min(200px, 18vw);
-  font-size: 0.72rem;
-}
-
-.toolbar-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-}
-
-.app-title {
-  font-weight: 600;
-  font-size: 0.92rem;
-  white-space: nowrap;
-}
-
-.module-chips {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  flex-shrink: 0;
-  padding: 0 2px 0 4px;
-  border-left: 1px solid var(--border);
-}
-
-.module-chip {
-  height: 24px;
-  padding: 0 9px;
-  border-radius: 999px;
-  border: 1px solid var(--border-strong);
-  background: #f1f5f9;
-  color: var(--muted);
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  margin: 0;
+  padding: 0 6px 0 4px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
   cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.header-brand:hover {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.header-brand:hover .brand-title {
+  color: #2563eb;
+}
+
+.brand-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 0.72rem;
+  color: #fff;
+  background: linear-gradient(145deg, #2563eb 0%, #1d4ed8 100%);
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  line-height: 1.15;
+  min-width: 0;
+}
+
+.brand-title {
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: #1e293b;
   white-space: nowrap;
 }
 
-.module-chip.on {
-  background: #dbeafe;
-  border-color: #93c5fd;
+.brand-sub {
+  font-size: 0.62rem;
+  color: #64748b;
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 6px 6px;
+  background: #c5ccd6;
+  flex-shrink: 0;
+}
+
+.header-quick,
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.header-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #475569;
+  font-size: 0.75rem;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.header-icon-btn :deep(svg) {
+  width: 16px;
+  height: 16px;
+}
+
+.header-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.55);
   color: #1d4ed8;
 }
 
-.module-chip.off {
-  opacity: 0.5;
+.header-tabs {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.header-spacer {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.header-modules {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+
+.module-toggle {
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 3px;
   background: transparent;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 600;
+  cursor: pointer;
 }
 
-.module-chip:hover {
-  border-color: #93c5fd;
+.module-toggle.on {
+  color: #1d4ed8;
+  background: rgba(255, 255, 255, 0.65);
+  border-color: #b6c4d4;
 }
 
-.module-chip.off:hover {
-  opacity: 0.75;
+.module-toggle:hover {
+  background: rgba(255, 255, 255, 0.45);
 }
 
-.workspace-chip {
-  font-size: 0.78rem;
-  color: var(--muted);
+.workspace-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: min(200px, 18vw);
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 4px;
+  border: 1px solid #c8ced8;
+  background: linear-gradient(180deg, #fff 0%, #eef1f5 100%);
+  color: #334155;
+  font-size: 0.72rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: min(360px, 32vw);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
-@media (max-width: 900px) {
-  .workspace-chip {
-    max-width: min(200px, 24vw);
-  }
-}
-
-@media (max-width: 720px) {
-  .module-chips {
-    display: none;
-  }
-
-  .workspace-chip {
-    max-width: min(420px, 40vw);
-  }
-}
-
-.toolbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.tb-btn {
-  height: 30px;
-  padding: 0 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  background: var(--btn-bg);
-  font-size: 0.85rem;
-}
-
-.tb-btn.primary {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
-}
-
-.tb-btn-on {
-  background: #dbeafe;
-  border-color: #93c5fd;
-  color: #1d4ed8;
-}
-
-.tb-btn-icon {
-  width: 30px;
-  padding: 0;
-  font-size: 0.65rem;
+.workspace-pill-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: #64748b;
 }
 
 .recent-wrap {
@@ -411,5 +490,21 @@ function toggleRibbonCollapsed() {
   margin: 8px;
   font-size: 0.82rem;
   color: var(--muted);
+}
+
+@media (max-width: 900px) {
+  .header-modules {
+    display: none;
+  }
+
+  .brand-sub {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .workspace-pill {
+    max-width: 100px;
+  }
 }
 </style>

@@ -6,30 +6,30 @@ import type { AppShellContext } from "./useAppShell";
 
 const TOUR_STEPS: DriveStep[] = [
   {
-    element: "[data-tour='nav-rail']",
+    element: "[data-tour='ribbon-tabs']",
     popover: {
-      title: "功能导航",
-      description: "除主页、配置外，各工具从这里进入。未设置工作空间时，功能项会暂时不可用。",
-      side: "right",
-      align: "start",
+      title: "功能 Tab",
+      description: "开始 / CAD / Code / 系统：切换模块后，下方 Ribbon 显示对应工具按钮。",
+      side: "bottom",
+      align: "center",
     },
   },
   {
-    element: "[data-tour='nav-config']",
+    element: "[data-tour='ribbon-bar']",
     popover: {
-      title: "配置",
-      description: "工作空间根目录、FreeCAD 安装路径、最近打开列表与界面偏好都在这里维护。",
-      side: "right",
-      align: "end",
+      title: "工具 Ribbon",
+      description: "当前 Tab 下的分组工具按钮；顶栏 ▲/▼ 可折叠本区以腾出主内容空间。",
+      side: "bottom",
+      align: "start",
     },
   },
   {
     element: "[data-tour='tab-bar']",
     popover: {
-      title: "Tab 栏",
-      description: "可同时打开多个文件详情或功能页；点击 × 关闭，关闭全部后回到主页。",
+      title: "页面 Tab",
+      description: "顶栏中部：已打开的功能页与文件详情；点击 × 关闭，关闭全部后回到欢迎页。",
       side: "bottom",
-      align: "start",
+      align: "center",
     },
   },
   {

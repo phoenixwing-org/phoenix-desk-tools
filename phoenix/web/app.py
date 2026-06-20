@@ -240,6 +240,8 @@ class ShellLayoutBody(BaseModel):
     log_panel_open: bool | None = None
     log_panel_height_px: int | None = None
     log_auto_open_on_append: bool | None = None
+    workspace_tree_dock: str | None = None
+    shell_log_dock: str | None = None
 
 
 class NavModulesBody(BaseModel):

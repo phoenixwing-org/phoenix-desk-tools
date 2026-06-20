@@ -6,6 +6,9 @@ import { confirmCloseAllTabs, confirmDirtyTabClose } from "./tabCloseConfirm";
 
 let tabSeq = 0;
 
+/** 不落盘、不参与 session 恢复的 Tab 页（欢迎页另有全屏层） */
+const EPHEMERAL_TAB_PAGES = new Set(["welcome", "home", "config"]);
+
 function newTabId(): string {
   tabSeq += 1;
   return `tab-${Date.now()}-${tabSeq}`;
@@ -55,8 +58,8 @@ export function createWorkbench(appConfig: Ref<AppConfig | null>) {
 
   const activePageId = computed(() => activeTab()?.pageId ?? "home");
 
-  /** 所有已打开 Tab 均显示在 Tab 栏（含单页功能），可点 × 关闭 */
-  const tabBarTabs = computed(() => tabs.value);
+  /** 工作台 Tab 栏（欢迎页不在 Tab 系统中） */
+  const tabBarTabs = computed(() => tabs.value.filter((t) => t.pageId !== "welcome"));
 
   const showTabBar = computed(() => tabBarTabs.value.length > 0);
 
@@ -68,6 +71,9 @@ export function createWorkbench(appConfig: Ref<AppConfig | null>) {
 
   function openTab(opts: OpenTabOptions): string {
     const { pageId, title, subtitle, contextKey, payload, forceNew } = opts;
+    if (pageId === "welcome") {
+      throw new Error("欢迎页不在 Tab 工作台中");
+    }
     const { maxTabs } = pagePolicy(pageId);
     const existing = findTabsForPage(pageId);
 
@@ -165,7 +171,7 @@ export function createWorkbench(appConfig: Ref<AppConfig | null>) {
       activeTabId.value = next?.id ?? "";
     }
     if (!tabs.value.length) {
-      openTab({ pageId: "home" });
+      activeTabId.value = "";
     }
     return true;
   }
@@ -183,7 +189,6 @@ export function createWorkbench(appConfig: Ref<AppConfig | null>) {
 
     tabs.value = [];
     activeTabId.value = "";
-    openTab({ pageId: "home" });
     return true;
   }
 
@@ -203,23 +208,27 @@ export function createWorkbench(appConfig: Ref<AppConfig | null>) {
 
   function restoreSession(snapshot: WorkbenchSessionSnapshot): boolean {
     if (snapshot.version !== 1 || !snapshot.tabs.length) return false;
-    tabs.value = snapshot.tabs.map((t) => ({
-      id: t.id,
-      pageId:
-        t.pageId === "rename_analysis"
-          ? "file_rename"
-          : t.pageId === "bom_apply"
-            ? "file_detail"
-            : t.pageId === "home" && t.title === "配置"
-              ? "config"
-              : t.pageId,
-      title: t.title,
-      subtitle: t.subtitle,
-      contextKey: t.contextKey,
-      dirty: false,
-      payloadConsumed: true,
-      pageState: t.pageState,
-    }));
+    const mapped = snapshot.tabs
+      .map((t) => ({
+        id: t.id,
+        pageId:
+          t.pageId === "rename_analysis"
+            ? "file_rename"
+            : t.pageId === "bom_apply"
+              ? "file_detail"
+              : t.pageId === "home" && t.title === "配置"
+                ? "config"
+                : t.pageId,
+        title: t.title,
+        subtitle: t.subtitle,
+        contextKey: t.contextKey,
+        dirty: false,
+        payloadConsumed: true,
+        pageState: t.pageState,
+      }))
+      .filter((t) => !EPHEMERAL_TAB_PAGES.has(t.pageId));
+    if (!mapped.length) return false;
+    tabs.value = mapped;
     const active = snapshot.activeTabId && getTab(snapshot.activeTabId);
     activeTabId.value = active ? snapshot.activeTabId : tabs.value[0].id;
     return true;
@@ -228,10 +237,15 @@ export function createWorkbench(appConfig: Ref<AppConfig | null>) {
   function exportSession(
     pageStates: Record<string, Record<string, unknown> | undefined>,
   ): WorkbenchSessionSnapshot {
+    const persistent = tabs.value.filter((t) => !EPHEMERAL_TAB_PAGES.has(t.pageId));
+    let activeId = activeTabId.value;
+    if (!persistent.some((t) => t.id === activeId)) {
+      activeId = persistent[0]?.id ?? "";
+    }
     return {
       version: 1,
-      activeTabId: activeTabId.value,
-      tabs: tabs.value.map((t) => ({
+      activeTabId: activeId,
+      tabs: persistent.map((t) => ({
         id: t.id,
         pageId: t.pageId,
         title: t.title,

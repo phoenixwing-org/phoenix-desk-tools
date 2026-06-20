@@ -2,6 +2,13 @@
 import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { useAppShell } from "../composables/useAppShell";
 
+const props = withDefaults(
+  defineProps<{
+    inHeader?: boolean;
+  }>(),
+  { inHeader: false },
+);
+
 const shell = useAppShell();
 
 const tabs = computed(() => shell.tabBarTabs.value);
@@ -73,7 +80,7 @@ async function onCloseAll() {
   try {
     const ok = await shell.closeAllTabs();
     if (ok) {
-      const msg = `已关闭 ${count} 个 Tab，已回到首页`;
+      const msg = `已关闭 ${count} 个 Tab，已回到欢迎页`;
       shell.setStatus(msg);
       shell.appendLog(`[Tab] ${msg}`, { source: "workbench" });
     } else {
@@ -104,7 +111,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="tab-bar" data-tour="tab-bar">
+  <div class="tab-bar" :class="{ 'tab-bar-header': inHeader }" data-tour="tab-bar">
     <div ref="scrollEl" class="tab-scroll" role="tablist">
       <button
         v-for="tab in tabs"
@@ -282,5 +289,59 @@ onMounted(() => {
 .tab-add:hover {
   border-color: var(--accent, #3b82f6);
   color: var(--accent, #3b82f6);
+}
+
+.tab-bar-header {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  padding: 0 4px;
+  background: transparent;
+  border-bottom: none;
+}
+
+.tab-bar-header .tab-scroll {
+  align-items: center;
+  padding-right: 0;
+}
+
+.tab-bar-header .tab-item {
+  max-width: 200px;
+  height: 28px;
+  padding: 0 8px 0 10px;
+  margin: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+.tab-bar-header .tab-item:hover {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.tab-bar-header .tab-item.active {
+  background: #fff;
+  border-color: #c8ced8;
+  color: #1e293b;
+  margin-bottom: 0;
+  padding-bottom: 0;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.tab-bar-header .tab-close-all {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 0.68rem;
+  background: transparent;
+  box-shadow: none;
+}
+
+.tab-bar-header .tab-add {
+  width: 24px;
+  height: 24px;
+  font-size: 1rem;
+  background: transparent;
+  box-shadow: none;
 }
 </style>

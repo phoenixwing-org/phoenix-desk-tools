@@ -12,6 +12,12 @@
   },
   "navigation": [
     {
+      "id": "welcome",
+      "label": "欢迎",
+      "page": "welcome",
+      "description": "最近工程与快速入门"
+    },
+    {
       "id": "home",
       "label": "主页",
       "page": "home",
@@ -155,6 +161,7 @@
       "code_rename": { "max_tabs": 1 },
       "code_uuid": { "max_tabs": 1 },
       "bom_export": { "max_tabs": 1 },
+      "welcome": { "max_tabs": 1 },
       "home": { "max_tabs": 1 },
       "config": { "max_tabs": 1 },
       "unit_tests": { "max_tabs": 1 }

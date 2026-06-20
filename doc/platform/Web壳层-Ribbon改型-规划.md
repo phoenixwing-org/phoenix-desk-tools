@@ -116,21 +116,20 @@ Phase 2（可选）：`app_config.json` 增加 `ribbon` 段或由 API 下发。
 
 **验收**：浏览器可看到 Ribbon 分组与 hover；按钮可 `goToPage`。
 
-### R2 · 接入 AppShell（与侧栏并行）
+### R2 · 接入 AppShell（固定 Ribbon）
 
-- [x] `shell_layout.ribbon_mode: 0 | 1` 写入 `launcher.json`
-- [x] `AppShell`：`ribbon_mode=1` 或 `?ribbon=1` 时插入 `RibbonShell`
+- [x] `AppShell` 始终渲染 `RibbonShell` + 顶栏 Tab
 - [x] Ribbon 按钮 → `goToPage`；当前页高亮
-- [x] `ribbon_mode=1` 时 `NavSidebar` 隐藏功能列表
-- [x] 默认 **`ribbon_mode=0`**；顶栏 **Ribbon** 切换
+- [x] 左侧 **28px 快捷栏**（新手指引 / 配置 / 树开关）；移除宽侧栏功能列表
+- [x] 移除顶栏 Ribbon 切换与 `?ribbon=1` 预览
 
-**验收**：切换模式后功能入口等价；Tab 工作台与右栏树正常。
+**验收**：Ribbon 为唯一功能入口；Tab 工作台与右栏树正常。
 
 ### R3 · 体验与引导
 
-- [ ] Ribbon **折叠/展开**（Chevron，类似 Office）
+- [x] Ribbon **折叠/展开**（▲/▼）
+- [x] 更新 driver.js `data-tour`（Ribbon Tab / 工具条 / 快捷栏）
 - [ ] 窄屏：Panel 横向滚动
-- [ ] 更新 `pageHelp` / driver.js `data-tour` 锚点
 - [ ] [Web壳层-使用说明.md](../user/Web壳层-使用说明.md) 截图或文字说明 Ribbon
 
 ### R4 · 业务页渐进 Element 化（按需）

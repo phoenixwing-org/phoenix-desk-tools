@@ -42,7 +42,7 @@ export function useRibbonTabs(options: {
       if (mod) {
         const tab = tabForModule(mod);
         if (tab) activeTab.value = tab.id;
-      } else if (page === "home" || page === "config") {
+      } else if (page === "welcome" || page === "home" || page === "config") {
         activeTab.value = "start";
       } else if (page === "unit_tests") {
         activeTab.value = "system";

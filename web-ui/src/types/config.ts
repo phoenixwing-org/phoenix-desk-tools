@@ -33,6 +33,8 @@ export type AppConfig = {
   launcher_config_path: string;
 };
 
+export type SideDock = "left" | "right";
+
 export type ShellLayout = {
   nav_rail_mode: 0 | 1;
   ribbon_mode: 0 | 1;
@@ -42,6 +44,10 @@ export type ShellLayout = {
   log_panel_open: boolean;
   log_panel_height_px: number;
   log_auto_open_on_append: boolean;
+  /** 工作空间树停靠侧 */
+  workspace_tree_dock: SideDock;
+  /** 运行日志停靠侧 */
+  shell_log_dock: SideDock;
 };
 
 export type RecentWorkspaceEntry = {
@@ -62,6 +68,7 @@ export type LauncherPrefs = {
 };
 
 export const DEFAULT_PAGE_ICONS: Record<string, string> = {
+  welcome: "◆",
   home: "⌂",
   config: "⚙",
   fcstd_map: "◫",

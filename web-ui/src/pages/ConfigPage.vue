@@ -6,6 +6,8 @@ import PageHelpButton from "../components/PageHelpButton.vue";
 import { useShellTour } from "../composables/useShellTour";
 import { useOnboardingStore } from "../stores/onboarding";
 import { useUiPrefsStore } from "../stores/uiPrefs";
+import type { SideDock } from "../types/config";
+
 import {
   EXPAND_ICON_SIZE_MAX,
   EXPAND_ICON_SIZE_MIN,
@@ -14,9 +16,30 @@ import {
 
 const uiPrefs = useUiPrefsStore();
 const onboarding = useOnboardingStore();
-
 const shell = useAppShell();
 const { startShellTour } = useShellTour(shell);
+
+const treeDock = computed({
+  get: () => shell.shellLayout.value.workspace_tree_dock,
+  set: (v: SideDock) => {
+    shell.shellLayout.value = { ...shell.shellLayout.value, workspace_tree_dock: v };
+  },
+});
+
+const logDock = computed({
+  get: () => shell.shellLayout.value.shell_log_dock,
+  set: (v: SideDock) => {
+    shell.shellLayout.value = { ...shell.shellLayout.value, shell_log_dock: v };
+  },
+});
+
+async function saveSideDockPrefs() {
+  await shell.persistShellLayout({
+    workspace_tree_dock: treeDock.value,
+    shell_log_dock: logDock.value,
+  });
+  shell.setStatus("侧栏停靠已保存");
+}
 
 const repoInput = ref("");
 const fcInput = ref("");
@@ -314,6 +337,31 @@ const navItems = () =>
 
     <section class="section">
       <h2 class="section-title">界面</h2>
+      <div class="dock-prefs">
+        <label class="field-label" for="tree-dock">工作空间树停靠</label>
+        <select
+          id="tree-dock"
+          v-model="treeDock"
+          class="dock-select"
+          @change="saveSideDockPrefs"
+        >
+          <option value="left">左侧</option>
+          <option value="right">右侧</option>
+        </select>
+        <label class="field-label" for="log-dock">运行日志停靠</label>
+        <select
+          id="log-dock"
+          v-model="logDock"
+          class="dock-select"
+          @change="saveSideDockPrefs"
+        >
+          <option value="left">左侧</option>
+          <option value="right">右侧</option>
+        </select>
+      </div>
+      <p class="hint">
+        树与日志可分别选左/右；某一侧无打开栏目时自动隐藏。宽度仍共用同一拖拽调节值。
+      </p>
       <label class="field-label" for="expand-icon-size">
         展开/折叠图标大小（{{ uiPrefs.expandControlSizePx }}px，三角约
         {{ expandGlyphSizePx(uiPrefs.expandControlSizePx) }}px）
@@ -639,6 +687,23 @@ code {
 .expand-size-hint {
   font-size: 0.82rem;
   white-space: nowrap;
+}
+
+.dock-prefs {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 12px;
+  align-items: center;
+  max-width: 360px;
+  margin-bottom: 12px;
+}
+
+.dock-select {
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  font-size: 0.88rem;
+  background: #fff;
 }
 
 .footer-hint,

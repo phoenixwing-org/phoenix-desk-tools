@@ -103,12 +103,7 @@ kill <PID>
 | 状态 | Pinia |
 | 与后端 | 仅 `/api/*`；开发时 Vite 代理到 8765 |
 
-壳层 **Ribbon 改型**（Chili3D 式 Tab + 分组工具按钮）已接入壳层，默认仍用左侧 NavSidebar。
-
-**启用 Ribbon：**
-
-1. 顶栏点 **Ribbon**（写入 `launcher.json` → `shell_layout.ribbon_mode`）
-2. 或开发预览：`http://127.0.0.1:5173/?ribbon=1`（不写偏好）
+壳层采用 **Ribbon 工具台**（Chili3D 式 Tab + 分组工具按钮）。启动默认 **欢迎页**（最近工程、Gitee 链接）；**主页**保留新手指南与功能模块入口。
 
 规划见 [doc/platform/Web壳层-Ribbon改型-规划.md](../doc/platform/Web壳层-Ribbon改型-规划.md)。
 
