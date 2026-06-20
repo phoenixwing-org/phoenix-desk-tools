@@ -70,8 +70,20 @@
 **R3 · 体验**
 
 - [x] Ribbon 折叠/展开（▲/▼）；当前页按钮高亮
-- [x] 更新界面巡游 `data-tour`（Ribbon Tab / 工具条 / 快捷栏）
+- [x] 更新界面巡游 `data-tour`（Ribbon Tab / 工具条 / 页面 Tab）
 - [x] [Web壳层-使用说明.md](user/Web壳层-使用说明.md) 补充 Ribbon / 欢迎页 / 顶栏 Tab 说明
+
+**R3+ · 顶栏收拢与侧栏（2026-06）**
+
+- [x] 顶栏精简：移除 🏠/⚙ 快捷区、Gitee、顶栏工作空间 pill / 模块 chip
+- [x] **开始** Ribbon 集中：工作空间切换、CAD/Code 模块开关、树/日志/侧栏常用操作（其它 Tab 不重复）
+- [x] 页面 Tab：复用 Ribbon 图标；全部关闭改为图标钮；功能区/页面 Tab 视觉分层
+- [x] 切换功能区 Tab 时，若 Ribbon 已折叠则**自动展开**
+- [x] 左右侧栏独立宽度 `left_panel_width_px` / `right_panel_width_px`（launcher 持久化）
+- [x] 同侧树+日志：中间横条上下拖拽；`log_panel_height_px` 持久化
+- [x] 浏览器标题同步工作空间与当前页；品牌副标题显示工作空间名
+- [x] F5 / sessionStorage 恢复 Tab；地址栏 `?page=` 同步（见 commit 链 45c31dc 等）
+- [x] 文档：[Web壳层-使用说明.md](user/Web壳层-使用说明.md)、[新手指引.md](user/新手指引.md) 同步
 
 **R4 · 业务页渐进（按需）**
 

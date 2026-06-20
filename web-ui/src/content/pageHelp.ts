@@ -25,7 +25,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
     title: "欢迎",
     bullets: [
       "启动后默认页：点击最近工程进入 Ribbon 工作台；左侧可打开配置或新手指南。",
-      "Gitee 链接在左侧底部；完整功能模块与开工清单见「功能与模块」或 Ribbon「主页」。",
+      "Gitee 链接在欢迎页；完整功能模块与开工清单见主页「功能与模块」或 Ribbon「开始 → 主页」。",
     ],
     docPath: "doc/user/快速开始.md",
     tourSteps: [

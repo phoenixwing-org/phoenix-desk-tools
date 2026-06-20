@@ -25,13 +25,13 @@
 ## 2. 现状（2026-06 归档后）
 
 ```
-AppToolbar          ← Chili3D 顶栏：品牌 / 快捷 / 功能 Tab / 页面 Tab / 模块 chip / 工作空间
-RibbonShell         ← 分组或单行工具按钮
-WorkbenchTabBar     ← 已迁入顶栏中部（in-header）
+AppToolbar          ← 顶栏：品牌（含工作空间副标题）/ 功能区 Tab / 页面 Tab / ▲
+RibbonShell         ← 分组或单行工具按钮；「开始」Tab 含壳层常用区
+WorkbenchTabBar     ← 顶栏中部 in-header（page 图标 + 标题）
 WelcomePage         ← 启动默认全屏欢迎
 主内容 KeepAlive    ← 各业务页
-WorkspaceTreeSidebar← 左或右停靠：树 + 日志
-StatusBar
+WorkspaceTreeSidebar← 左或右停靠：树 + 日志（同侧可上下分栏）
+StatusBar           ← 日志收起时可一键展开
 ```
 
 - Element Plus 已接入壳层；Ribbon 为唯一功能入口。
@@ -43,11 +43,12 @@ StatusBar
 ## 3. 目标布局（已落地）
 
 ```
-┌─ AppToolbar（Chili3D 顶栏 40px）─────────────────────────────────┐
-│ 品牌·快捷 │ 开始|CAD|Code|系统 │ ← 页面 Tab → │ 模块·工作空间…   │
-├─ Ribbon Panel（可折叠；单行/分组）────────────────────────────────┤
-├─ 主内容 ────────────────────────────────────────│ 树 / 日志（左/右）│
-└─ StatusBar ───────────────────────────────────────────────────────┘
+┌─ AppToolbar（顶栏 40px）─────────────────────────────────────────────┐
+│ Phoenix/工作空间 │ [开始|CAD|Code|系统] │ ← 页面 Tab（图标）→ │ ▲      │
+├─ Ribbon Panel（可折叠；切功能区 Tab 时自动展开）───────────────────────┤
+│ 工具按钮… │「开始」：工作空间 / 模块 / 树·日志·侧栏                      │
+├─ 主内容 ────────────────────────────────────────│ 树 / 日志（左/右）    │
+└─ StatusBar ───────────────────────────────────────────────────────────┘
 WelcomePage：全屏，不在上述 Tab 行中。
 ```
 
@@ -64,6 +65,10 @@ web-ui/src/layout/ribbon/
   RibbonPanel.vue         # 单 Tab 下 Flex 横排
   RibbonGroup.vue         # 分组 + 底标题 + 右侧竖线
   RibbonToolButton.vue    # large | small；icon + label
+  RibbonPanelUtils.vue    # 「开始」Tab：树/日志/侧栏常用操作
+  RibbonModuleToggles.vue # 「开始」Tab：CAD/Code 模块开关
+  RibbonWorkspaceSwitcher.vue
+  RibbonUtilButton.vue
   ribbonConfig.ts         # Tab / Group / Item（初版可静态）
   ribbonIcons.ts          # pageId → Element Plus icon
 ```
@@ -125,9 +130,11 @@ Phase 2（可选）：`app_config.json` 增加 `ribbon` 段或由 API 下发。
 
 ### R3 · 体验与引导
 
-- [x] Ribbon **折叠/展开**（▲/▼）
+- [x] Ribbon **折叠/展开**（▲/▼）；切换功能区 Tab 时若已折叠则自动展开
+- [x] 顶栏收拢：模块/工作空间/常用操作迁入 **开始** Ribbon；页面 Tab 对齐 Ribbon 图标
+- [x] 左右侧栏独立宽度；同侧树+日志上下分栏拖拽
 - [x] 更新 driver.js `data-tour`（Ribbon Tab / 工具条 / 页面 Tab）
-- [x] [Web壳层-使用说明.md](../user/Web壳层-使用说明.md) Ribbon / 欢迎页 / 顶栏 Tab 文字说明
+- [x] [Web壳层-使用说明.md](../user/Web壳层-使用说明.md) 同步 2026-06 布局
 - [ ] 窄屏：Panel 横向滚动
 
 ### R4 · 业务页渐进 Element 化（按需）
