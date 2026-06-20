@@ -132,7 +132,7 @@ Phase 2（可选）：`app_config.json` 增加 `ribbon` 段或由 API 下发。
 
 ### R4 · 业务页渐进 Element 化（按需）
 
-- [~] **欢迎页 / 主页 / 配置·界面**：`el-button`、`el-link`、`el-tag`、`el-select` 等
+- [x] **欢迎页 / 主页 / 配置·界面**：`el-button`、`el-link`、`el-tag`、`el-empty`、`el-select`、`el-checkbox`
 - [ ] 其它大改版页优先 `el-table`、`el-form`
 - [ ] 旧页保留现状，不阻塞 Ribbon 上线
 - [ ] 可选：`app_config.ribbon` 配置化分组

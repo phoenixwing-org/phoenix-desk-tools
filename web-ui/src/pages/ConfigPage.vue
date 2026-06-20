@@ -337,28 +337,20 @@ const navItems = () =>
 
     <section class="section">
       <h2 class="section-title">界面</h2>
-      <div class="dock-prefs">
-        <label class="field-label" for="tree-dock">工作空间树停靠</label>
-        <select
-          id="tree-dock"
-          v-model="treeDock"
-          class="dock-select"
-          @change="saveSideDockPrefs"
-        >
-          <option value="left">左侧</option>
-          <option value="right">右侧</option>
-        </select>
-        <label class="field-label" for="log-dock">运行日志停靠</label>
-        <select
-          id="log-dock"
-          v-model="logDock"
-          class="dock-select"
-          @change="saveSideDockPrefs"
-        >
-          <option value="left">左侧</option>
-          <option value="right">右侧</option>
-        </select>
-      </div>
+      <el-form label-position="top" class="dock-form">
+        <el-form-item label="工作空间树停靠">
+          <el-select v-model="treeDock" @change="saveSideDockPrefs">
+            <el-option label="左侧" value="left" />
+            <el-option label="右侧" value="right" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="运行日志停靠">
+          <el-select v-model="logDock" @change="saveSideDockPrefs">
+            <el-option label="左侧" value="left" />
+            <el-option label="右侧" value="right" />
+          </el-select>
+        </el-form-item>
+      </el-form>
       <p class="hint">
         树与日志可分别选左/右；某一侧无打开栏目时自动隐藏。宽度仍共用同一拖拽调节值。
       </p>
@@ -689,21 +681,13 @@ code {
   white-space: nowrap;
 }
 
-.dock-prefs {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 8px 12px;
-  align-items: center;
-  max-width: 360px;
+.dock-form {
+  max-width: 280px;
   margin-bottom: 12px;
 }
 
-.dock-select {
-  padding: 6px 8px;
-  border: 1px solid var(--border-strong);
-  border-radius: 4px;
-  font-size: 0.88rem;
-  background: #fff;
+.dock-form :deep(.el-select) {
+  width: 100%;
 }
 
 .footer-hint,

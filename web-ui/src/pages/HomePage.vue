@@ -59,7 +59,7 @@ function openConfig() {
     <div class="title-row">
       <h1 class="page-title">主页</h1>
       <div class="head-help">
-        <button type="button" class="link-btn back-welcome" @click="openWelcome">← 欢迎页</button>
+        <el-button link type="primary" class="back-welcome" @click="openWelcome">← 欢迎页</el-button>
         <PageHelpButton page-id="home" />
       </div>
     </div>
@@ -73,16 +73,24 @@ function openConfig() {
       </div>
       <ul class="module-grid">
         <li v-for="opt in NAV_MODULE_OPTIONS" :key="opt.id">
-          <label class="module-card" :class="{ active: isModuleEnabled(opt.id) }">
-            <input
-              type="checkbox"
+          <div
+            class="module-card"
+            :class="{ active: isModuleEnabled(opt.id) }"
+            role="button"
+            tabindex="0"
+            @click="toggleModule(opt.id)"
+            @keydown.enter="toggleModule(opt.id)"
+            @keydown.space.prevent="toggleModule(opt.id)"
+          >
+            <el-checkbox
+              :model-value="isModuleEnabled(opt.id)"
               class="module-check"
-              :checked="isModuleEnabled(opt.id)"
+              @click.stop
               @change="toggleModule(opt.id)"
             />
             <span class="module-label">{{ opt.label }}</span>
             <span class="module-hint">{{ opt.hint }}</span>
-          </label>
+          </div>
         </li>
       </ul>
     </section>
@@ -95,7 +103,7 @@ function openConfig() {
       </p>
       <p class="lead muted">
         顶栏 Ribbon 进入各功能；右侧工作区树可打开文件详情。工作空间根目录、FreeCAD 安装路径与最近打开记录在
-        <button type="button" class="link-btn" @click="openConfig">配置</button>
+        <el-button link type="primary" @click="openConfig">配置</el-button>
         中维护。
       </p>
     </section>
@@ -106,8 +114,7 @@ function openConfig() {
       <h2 class="section-title">功能入口</h2>
       <ul class="feature-grid" data-tour-page-home-features>
         <li v-for="item in featureNav" :key="item.page">
-          <button
-            type="button"
+          <el-button
             class="feature-card"
             :class="{ 'feature-disabled': !shell.canNavigateToPage(item.page) }"
             :disabled="!shell.canNavigateToPage(item.page)"
@@ -115,7 +122,7 @@ function openConfig() {
           >
             <span class="feature-label">{{ item.label }}</span>
             <span class="feature-desc">{{ item.description }}</span>
-          </button>
+          </el-button>
         </li>
       </ul>
     </section>
@@ -254,12 +261,14 @@ function openConfig() {
 
 .module-check {
   position: absolute;
-  top: 14px;
-  right: 14px;
-  width: 16px;
-  height: 16px;
+  top: 10px;
+  right: 10px;
+  height: auto;
   margin: 0;
-  accent-color: var(--accent);
+}
+
+.module-check :deep(.el-checkbox__label) {
+  display: none;
 }
 
 .module-label {
@@ -313,12 +322,14 @@ function openConfig() {
   align-items: flex-start;
   gap: 4px;
   width: 100%;
+  height: auto;
+  margin: 0;
   padding: 12px 14px;
   text-align: left;
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   background: var(--btn-bg);
-  cursor: pointer;
+  white-space: normal;
 }
 
 .feature-card:hover:not(:disabled) {

@@ -98,26 +98,26 @@ function openHome() {
       </header>
 
       <div class="rail-actions">
-        <button type="button" class="rail-btn rail-btn-primary" @click="openConfig">
+        <el-button type="primary" class="rail-btn-full" @click="openConfig">
           打开工作空间
-        </button>
-        <button type="button" class="rail-btn" @click="openGuide">新手指南</button>
-        <button type="button" class="rail-btn" @click="openHome">功能与模块</button>
+        </el-button>
+        <el-button class="rail-btn-full" @click="openGuide">新手指南</el-button>
+        <el-button class="rail-btn-full" @click="openHome">功能与模块</el-button>
       </div>
 
       <div class="rail-links">
-        <a class="rail-link" :href="PROJECT_GITEE_HOME" target="_blank" rel="noopener noreferrer">
+        <el-link :href="PROJECT_GITEE_HOME" target="_blank" rel="noopener noreferrer">
           Gitee 主页
-        </a>
-        <a class="rail-link" :href="PROJECT_GITEE_REPO" target="_blank" rel="noopener noreferrer">
+        </el-link>
+        <el-link :href="PROJECT_GITEE_REPO" target="_blank" rel="noopener noreferrer">
           克隆地址
-        </a>
-        <a class="rail-link" :href="PROJECT_INSTALL_DOC" target="_blank" rel="noopener noreferrer">
+        </el-link>
+        <el-link :href="PROJECT_INSTALL_DOC" target="_blank" rel="noopener noreferrer">
           安装说明
-        </a>
-        <a class="rail-link" :href="PROJECT_QUICKSTART_DOC" target="_blank" rel="noopener noreferrer">
+        </el-link>
+        <el-link :href="PROJECT_QUICKSTART_DOC" target="_blank" rel="noopener noreferrer">
           快速开始
-        </a>
+        </el-link>
       </div>
     </aside>
 
@@ -133,9 +133,11 @@ function openHome() {
       <section class="recent-section" data-tour-page-welcome-recent>
         <h2 class="recent-heading">最近使用</h2>
 
-        <p v-if="!recentEntries.length" class="recent-empty">
-          尚无最近工程。点击左侧「打开工作空间」在配置中填写工程根目录并保存。
-        </p>
+        <el-empty
+          v-if="!recentEntries.length"
+          description="尚无最近工程。点击左侧「打开工作空间」在配置中填写工程根目录并保存。"
+          :image-size="72"
+        />
 
         <ul v-else class="recent-list">
           <li
@@ -147,26 +149,36 @@ function openHome() {
               missing: !entry.exists,
             }"
           >
-            <button
-              type="button"
+            <el-button
               class="recent-open"
               :disabled="!entry.exists"
               :title="entry.path"
               @click="openWorkspace(entry.path)"
             >
-              <span class="recent-name">{{ pathLabel(entry.path) }}</span>
-              <span class="recent-path">{{ pathParent(entry.path) }}</span>
-              <span v-if="!entry.exists" class="recent-badge">路径不存在</span>
-              <span v-else-if="entry.path === workspacePath" class="recent-badge current-badge">当前</span>
-            </button>
-            <button
-              type="button"
+              <span class="recent-open-body">
+                <span class="recent-name">{{ pathLabel(entry.path) }}</span>
+                <span class="recent-path">{{ pathParent(entry.path) }}</span>
+                <el-tag v-if="!entry.exists" type="danger" size="small" effect="light">
+                  路径不存在
+                </el-tag>
+                <el-tag
+                  v-else-if="entry.path === workspacePath"
+                  type="primary"
+                  size="small"
+                  effect="light"
+                >
+                  当前
+                </el-tag>
+              </span>
+            </el-button>
+            <el-button
               class="recent-remove"
+              text
               title="从最近列表移除"
               @click="removeRecent(entry.path, $event)"
             >
               ×
-            </button>
+            </el-button>
           </li>
         </ul>
       </section>
@@ -234,29 +246,9 @@ function openHome() {
   gap: 10px;
 }
 
-.rail-btn {
+.rail-btn-full {
   width: 100%;
-  min-height: 40px;
-  padding: 0 14px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  background: #fff;
-  font-size: 0.9rem;
-  text-align: center;
-  cursor: pointer;
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-
-.rail-btn:hover {
-  border-color: #93c5fd;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
-}
-
-.rail-btn-primary {
-  font-weight: 600;
-  border-color: #93c5fd;
-  background: #fff;
-  color: #1e40af;
+  margin: 0;
 }
 
 .rail-links {
@@ -267,21 +259,19 @@ function openHome() {
   gap: 6px;
 }
 
-.rail-link {
+.rail-links :deep(.el-link) {
   display: block;
   padding: 8px 10px;
   border-radius: 6px;
   font-size: 0.82rem;
-  color: #475569;
-  text-decoration: none;
+  justify-content: flex-start;
   background: rgba(255, 255, 255, 0.55);
   border: 1px solid transparent;
 }
 
-.rail-link:hover {
-  color: #1d4ed8;
-  border-color: #bfdbfe;
+.rail-links :deep(.el-link:hover) {
   background: #fff;
+  border-color: #bfdbfe;
 }
 
 .welcome-main {
@@ -322,14 +312,6 @@ function openHome() {
   color: #334155;
 }
 
-.recent-empty {
-  margin: 0;
-  max-width: 520px;
-  font-size: 0.9rem;
-  line-height: 1.65;
-  color: #64748b;
-}
-
 .recent-list {
   margin: 0;
   padding: 0;
@@ -347,18 +329,16 @@ function openHome() {
 
 .recent-open {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
+  height: auto;
   min-height: 56px;
   padding: 12px 16px;
+  margin: 0;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #fafafa;
   text-align: left;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  justify-content: flex-start;
+  white-space: normal;
 }
 
 .recent-open:hover:not(:disabled) {
@@ -373,7 +353,14 @@ function openHome() {
 
 .recent-item.missing .recent-open {
   opacity: 0.65;
-  cursor: not-allowed;
+}
+
+.recent-open-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
 }
 
 .recent-name {
@@ -386,31 +373,19 @@ function openHome() {
   font-size: 0.78rem;
   color: #64748b;
   word-break: break-all;
-}
-
-.recent-badge {
-  font-size: 0.72rem;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: #fee2e2;
-  color: #b91c1c;
-}
-
-.recent-badge.current-badge {
-  background: #dbeafe;
-  color: #1d4ed8;
+  text-align: left;
 }
 
 .recent-remove {
   flex-shrink: 0;
   width: 36px;
+  min-width: 36px;
+  height: auto;
+  margin: 0;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  background: #fff;
-  color: #94a3b8;
   font-size: 1.1rem;
-  line-height: 1;
-  cursor: pointer;
+  color: #94a3b8;
 }
 
 .recent-remove:hover {
@@ -436,7 +411,7 @@ function openHome() {
     margin-top: 16px;
   }
 
-  .rail-link {
+  .rail-links :deep(.el-link) {
     flex: 1 1 auto;
   }
 
