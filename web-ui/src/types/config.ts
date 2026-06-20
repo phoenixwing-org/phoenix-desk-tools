@@ -40,6 +40,8 @@ export type ShellLayout = {
   ribbon_mode: 0 | 1;
   right_panel_open: boolean;
   mid_right_sash_px: number | null;
+  /** 左侧停靠栏宽度（树 / 日志在左时） */
+  left_panel_width_px: number;
   right_panel_width_px: number;
   log_panel_open: boolean;
   log_panel_height_px: number;

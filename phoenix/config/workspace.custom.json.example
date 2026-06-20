@@ -9,6 +9,7 @@
     "nav_rail_mode": 0,
     "right_panel_open": true,
     "mid_right_sash_px": null,
+    "left_panel_width_px": 300,
     "right_panel_width_px": 300,
     "log_panel_open": true,
     "log_panel_height_px": 180,

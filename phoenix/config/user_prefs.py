@@ -112,7 +112,8 @@ _LAUNCHER_SHELL_LAYOUT_DEFAULT: dict[str, Any] = {
     "ribbon_mode": 1,  # 已固定 Ribbon 壳层；字段保留兼容旧 launcher.json
     "right_panel_open": True,
     "mid_right_sash_px": None,  # Panedwindow 首根 sash 距左侧像素；None 表示由窗口宽度推导默认
-    "right_panel_width_px": 300,  # Web 右侧工作空间树宽度
+    "left_panel_width_px": 300,  # Web 左侧停靠栏宽度
+    "right_panel_width_px": 300,  # Web 右侧停靠栏宽度
     "log_panel_open": True,
     "log_panel_height_px": 180,
     "log_auto_open_on_append": True,
@@ -139,6 +140,11 @@ def _normalized_shell_layout(raw: Any) -> dict[str, Any]:
     rpw = raw.get("right_panel_width_px")
     if isinstance(rpw, int) and rpw > 0:
         merged["right_panel_width_px"] = int(rpw)
+    lpw = raw.get("left_panel_width_px")
+    if isinstance(lpw, int) and lpw > 0:
+        merged["left_panel_width_px"] = int(lpw)
+    elif isinstance(merged.get("right_panel_width_px"), int):
+        merged["left_panel_width_px"] = int(merged["right_panel_width_px"])
     lpo = raw.get("log_panel_open")
     if isinstance(lpo, bool):
         merged["log_panel_open"] = lpo
@@ -428,6 +434,7 @@ def save_launcher_shell_layout(
     ribbon_mode: int | None = None,
     right_panel_open: bool | None = None,
     mid_right_sash_px: int | None = None,
+    left_panel_width_px: int | None = None,
     right_panel_width_px: int | None = None,
     log_panel_open: bool | None = None,
     log_panel_height_px: int | None = None,
@@ -446,8 +453,10 @@ def save_launcher_shell_layout(
         cur["right_panel_open"] = bool(right_panel_open)
     if mid_right_sash_px is not None:
         cur["mid_right_sash_px"] = int(mid_right_sash_px)
+    if left_panel_width_px is not None:
+        cur["left_panel_width_px"] = max(160, min(560, int(left_panel_width_px)))
     if right_panel_width_px is not None:
-        cur["right_panel_width_px"] = int(right_panel_width_px)
+        cur["right_panel_width_px"] = max(160, min(560, int(right_panel_width_px)))
     if log_panel_open is not None:
         cur["log_panel_open"] = bool(log_panel_open)
     if log_panel_height_px is not None:

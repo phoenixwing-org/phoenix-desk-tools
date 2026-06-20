@@ -28,35 +28,46 @@ const emit = defineEmits<{
 
 <style scoped>
 .ribbon-tabs {
-  display: flex;
-  align-items: stretch;
-  gap: 0;
-  min-width: 0;
-  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  gap: 1px;
+  height: 28px;
+  padding: 2px;
+  border-radius: 7px;
+  background: rgba(15, 23, 42, 0.06);
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.06);
 }
 
 .ribbon-tab {
   border: none;
-  border-bottom: 2px solid transparent;
+  border-radius: 5px;
   background: transparent;
-  padding: 0 14px;
-  font-size: 0.8rem;
+  padding: 0 13px;
+  height: 24px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
   color: #64748b;
   cursor: pointer;
   white-space: nowrap;
-  height: 100%;
-  box-sizing: border-box;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
-.ribbon-tab:hover {
-  color: #1e293b;
-  background: rgba(255, 255, 255, 0.35);
+.ribbon-tab:hover:not(.active) {
+  color: #334155;
+  background: rgba(255, 255, 255, 0.45);
 }
 
 .ribbon-tab.active {
-  color: #2563eb;
-  border-bottom-color: #2563eb;
+  color: #1d4ed8;
   font-weight: 600;
-  background: rgba(255, 255, 255, 0.25);
+  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.08),
+    inset 0 0 0 1px rgba(148, 163, 184, 0.35);
 }
 </style>

@@ -4,8 +4,10 @@ import type { NavItem } from "../../types/config";
 import { useUiPrefsStore } from "../../stores/uiPrefs";
 import { WORKSPACE_GATE_MSG } from "../../utils/onboardingConstants";
 import RibbonGroup, { type RibbonGroupItem } from "./RibbonGroup.vue";
+import RibbonModuleToggles from "./RibbonModuleToggles.vue";
+import RibbonWorkspaceSwitcher from "./RibbonWorkspaceSwitcher.vue";
 import RibbonToolButton from "./RibbonToolButton.vue";
-import RibbonLogToggle from "./RibbonLogToggle.vue";
+import RibbonPanelUtils from "./RibbonPanelUtils.vue";
 import type { RibbonGroupDef, RibbonTabDef } from "./ribbonConfig";
 import { ribbonIconFor } from "./ribbonIcons";
 
@@ -90,9 +92,11 @@ function toggleLayout() {
           @open="emit('open', $event)"
         />
       </template>
+      <RibbonWorkspaceSwitcher v-if="tab.id === 'start'" :layout="isInline ? 'inline' : 'group'" />
+      <RibbonModuleToggles v-if="tab.id === 'start'" :layout="isInline ? 'inline' : 'group'" />
       <div class="ribbon-panel-spacer" aria-hidden="true" />
-      <div class="ribbon-panel-utils">
-        <RibbonLogToggle />
+      <div v-if="tab.id === 'start'" class="ribbon-panel-utils">
+        <RibbonPanelUtils />
       </div>
     </div>
     <button

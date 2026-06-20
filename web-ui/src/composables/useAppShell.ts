@@ -147,6 +147,7 @@ const DEFAULT_SHELL: ShellLayout = {
   ribbon_mode: 1,
   right_panel_open: true,
   mid_right_sash_px: null,
+  left_panel_width_px: 300,
   right_panel_width_px: 300,
   log_panel_open: true,
   log_panel_height_px: 180,
@@ -154,6 +155,21 @@ const DEFAULT_SHELL: ShellLayout = {
   workspace_tree_dock: "right",
   shell_log_dock: "right",
 };
+
+function clampPanelWidth(px: number): number {
+  return Math.min(560, Math.max(160, px));
+}
+
+function normalizeShellLayout(partial?: Partial<ShellLayout>): ShellLayout {
+  const merged = { ...DEFAULT_SHELL, ...partial };
+  merged.right_panel_width_px = clampPanelWidth(merged.right_panel_width_px);
+  if (typeof merged.left_panel_width_px !== "number" || merged.left_panel_width_px < 160) {
+    merged.left_panel_width_px = merged.right_panel_width_px;
+  } else {
+    merged.left_panel_width_px = clampPanelWidth(merged.left_panel_width_px);
+  }
+  return merged;
+}
 
 const NAV_ALWAYS_VISIBLE = new Set(["welcome", "home", "config", "unit_tests"]);
 
@@ -182,7 +198,7 @@ export function provideAppShell(): AppShellContext {
   const launcher = shallowRef<LauncherPrefs | null>(null);
   const workspacePath = ref("");
   const navHover = ref<string | null>(null);
-  const shellLayout = ref<ShellLayout>({ ...DEFAULT_SHELL });
+  const shellLayout = ref<ShellLayout>(normalizeShellLayout());
   const statusText = ref("");
   const logText = ref("");
   const logSource = ref<string | null>(null);
@@ -618,7 +634,7 @@ export function provideAppShell(): AppShellContext {
   async function reloadLauncher() {
     launcher.value = await fetchLauncherPrefs();
     const sl = launcher.value.shell_layout;
-    shellLayout.value = { ...DEFAULT_SHELL, ...sl };
+    shellLayout.value = normalizeShellLayout(sl);
   }
 
   async function switchWorkspace(path: string) {
@@ -764,9 +780,9 @@ export function provideAppShell(): AppShellContext {
   }
 
   async function persistShellLayout(patch: Partial<ShellLayout>) {
-    shellLayout.value = { ...shellLayout.value, ...patch };
+    shellLayout.value = normalizeShellLayout({ ...shellLayout.value, ...patch });
     const updated = await patchShellLayout(patch);
-    shellLayout.value = { ...DEFAULT_SHELL, ...shellLayout.value, ...updated };
+    shellLayout.value = normalizeShellLayout({ ...shellLayout.value, ...updated });
   }
 
   async function persistNavModules(enabled: string[]) {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, type Component } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch, type Component } from "vue";
 import AppToolbar from "./AppToolbar.vue";
 import RibbonShell from "./ribbon/RibbonShell.vue";
 import { useRibbonTabs } from "./ribbon/useRibbonTabs";
@@ -28,10 +28,13 @@ import PlaceholderPage from "../pages/PlaceholderPage.vue";
 import { sideDockVisibility } from "../utils/sideDockLayout";
 import { fetchPhoenixDatabaseStatus, recreatePhoenixDatabase } from "../api";
 import { provideAppShell } from "../composables/useAppShell";
+import { useDocumentTitle } from "../composables/useDocumentTitle";
+import { useWorkspaceSwitcher } from "../composables/useWorkspaceSwitcher";
 import ChoiceDialogHost from "../components/ChoiceDialogHost.vue";
 import AppModalOverlay from "../components/AppModalOverlay.vue";
 
 const shell = provideAppShell();
+const { workspacePath, workspaceShort } = useWorkspaceSwitcher(shell);
 const loading = ref(true);
 const loadError = ref("");
 const legacyDbBanner = ref(false);
@@ -48,6 +51,14 @@ const ribbonCollapsed = ref(false);
 const shellLayout = computed(() => shell.shellLayout.value);
 const navigation = computed(() => shell.appConfig.value?.navigation ?? []);
 
+const pageLabel = computed(() => {
+  const page = shell.currentPage.value;
+  if (page === "welcome") return "欢迎";
+  return navigation.value.find((n) => n.page === page)?.label;
+});
+
+useDocumentTitle({ workspaceShort, workspacePath, pageLabel });
+
 const { activeTab: ribbonActiveTab, visibleTabs: ribbonVisibleTabs, activeTabDef: ribbonActiveTabDef } =
   useRibbonTabs({
     navigation,
@@ -55,13 +66,18 @@ const { activeTab: ribbonActiveTab, visibleTabs: ribbonVisibleTabs, activeTabDef
     enabledModules: computed(() => shell.enabledNavModules.value),
   });
 
+watch(ribbonActiveTab, () => {
+  if (ribbonCollapsed.value) ribbonCollapsed.value = false;
+});
+
 const dockVis = computed(() => sideDockVisibility(shellLayout.value));
 
-const panelWidth = computed(() => `${shellLayout.value.right_panel_width_px}px`);
+const leftPanelWidth = computed(() => `${shellLayout.value.left_panel_width_px}px`);
+const rightPanelWidth = computed(() => `${shellLayout.value.right_panel_width_px}px`);
 
 const mainMargins = computed(() => ({
-  marginLeft: dockVis.value.leftVisible ? panelWidth.value : undefined,
-  marginRight: dockVis.value.rightVisible ? panelWidth.value : undefined,
+  marginLeft: dockVis.value.leftVisible ? leftPanelWidth.value : undefined,
+  marginRight: dockVis.value.rightVisible ? rightPanelWidth.value : undefined,
 }));
 
 const PAGE_COMPONENTS: Record<string, Component> = {
@@ -97,20 +113,21 @@ function onRibbonOpen(pageId: string) {
 
 function onResizeStart(e: MouseEvent, side: "left" | "right") {
   e.preventDefault();
+  const widthKey = side === "left" ? "left_panel_width_px" : "right_panel_width_px";
   const startX = e.clientX;
-  const startW = shell.shellLayout.value.right_panel_width_px;
+  const startW = shell.shellLayout.value[widthKey];
 
   function onMove(ev: MouseEvent) {
     const delta = side === "right" ? startX - ev.clientX : ev.clientX - startX;
     const next = Math.min(560, Math.max(160, startW + delta));
-    shell.shellLayout.value.right_panel_width_px = next;
+    shell.shellLayout.value[widthKey] = next;
   }
 
   async function onUp() {
     window.removeEventListener("mousemove", onMove);
     window.removeEventListener("mouseup", onUp);
     await shell.persistShellLayout({
-      right_panel_width_px: shell.shellLayout.value.right_panel_width_px,
+      [widthKey]: shell.shellLayout.value[widthKey],
     });
   }
 
@@ -223,7 +240,7 @@ onUnmounted(() => {
       <div
         v-if="!isWelcomeFullscreen && dockVis.leftVisible"
         class="shell-resizer shell-resizer-left"
-        :style="{ left: panelWidth }"
+        :style="{ left: leftPanelWidth }"
         title="拖拽调节宽度"
         @mousedown="onResizeStart($event, 'left')"
       />
@@ -236,7 +253,7 @@ onUnmounted(() => {
       <div
         v-if="!isWelcomeFullscreen && dockVis.rightVisible"
         class="shell-resizer shell-resizer-right"
-        :style="{ right: panelWidth }"
+        :style="{ right: rightPanelWidth }"
         title="拖拽调节宽度"
         @mousedown="onResizeStart($event, 'right')"
       />

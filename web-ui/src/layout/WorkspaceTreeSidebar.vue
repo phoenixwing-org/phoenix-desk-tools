@@ -16,6 +16,8 @@ import {
 
 const LOG_MIN_H = 80;
 const LOG_MAX_RATIO = 0.7;
+const TREE_MIN_H = 120;
+const LOG_RESIZER_H = 6;
 
 const props = withDefaults(
   defineProps<{
@@ -84,21 +86,40 @@ const treeTitle = computed(() => {
 
 const shellLayout = computed(() => shell.shellLayout.value);
 const workspacePath = computed(() => shell.workspacePath.value);
-const panelWidth = computed(() => `${shellLayout.value.right_panel_width_px}px`);
+const panelWidth = computed(() => {
+  const px =
+    props.dockSide === "left"
+      ? shellLayout.value.left_panel_width_px
+      : shellLayout.value.right_panel_width_px;
+  return `${px}px`;
+});
 const logOpen = computed(() => shellLayout.value.log_panel_open);
 const panelVisible = computed(() => props.showTree || (props.showLog && logOpen.value));
+/** 工作空间树与运行日志同侧且均展开：上树下日志，中间可拖拽 */
+const splitTreeAndLog = computed(() => props.showTree && props.showLog && logOpen.value);
 
-/** 展示高度：按侧栏可用空间钳制，但不改写已保存的偏好（避免切页后越变越矮） */
+function maxLogHeightPx(sidebarH: number): number {
+  if (sidebarH <= 0) return shellLayout.value.log_panel_height_px;
+  const byTree = sidebarH - TREE_MIN_H - LOG_RESIZER_H;
+  const byRatio = Math.floor(sidebarH * LOG_MAX_RATIO);
+  return Math.max(LOG_MIN_H, Math.min(byTree, byRatio));
+}
+
+/** 展示高度：日志区固定高度；树区占剩余空间 */
 const displayLogHeightPx = computed(() => {
   const stored = shellLayout.value.log_panel_height_px;
+  if (!splitTreeAndLog.value) return stored;
   if (sidebarHeight.value <= 0) return stored;
-  const maxH = Math.floor(sidebarHeight.value * LOG_MAX_RATIO);
-  return Math.min(maxH, Math.max(LOG_MIN_H, stored));
+  return Math.min(maxLogHeightPx(sidebarHeight.value), Math.max(LOG_MIN_H, stored));
 });
 
-const logPanelStyle = computed(() =>
-  logOpen.value ? { height: `${displayLogHeightPx.value}px`, flexShrink: "0" } : undefined,
-);
+const logPanelStyle = computed(() => {
+  if (!logOpen.value || !props.showLog) return undefined;
+  if (!splitTreeAndLog.value) {
+    return { flex: "1 1 auto", minHeight: "0" };
+  }
+  return { height: `${displayLogHeightPx.value}px`, flexShrink: "0" };
+});
 
 let resizeObserver: ResizeObserver | null = null;
 
@@ -146,16 +167,18 @@ async function onSelect(rel: string) {
 }
 
 function onLogResizeStart(e: MouseEvent) {
+  if (!splitTreeAndLog.value) return;
   e.preventDefault();
   const startY = e.clientY;
   const startH = shellLayout.value.log_panel_height_px;
   const sidebarEl = sidebarRef.value;
   if (!sidebarEl) return;
-  const startSidebarH = sidebarEl.clientHeight;
+  document.body.style.cursor = "row-resize";
+  document.body.style.userSelect = "none";
 
   function onMove(ev: MouseEvent) {
     const delta = startY - ev.clientY;
-    const maxH = Math.floor(startSidebarH * LOG_MAX_RATIO);
+    const maxH = maxLogHeightPx(sidebarEl.clientHeight);
     const next = Math.min(maxH, Math.max(LOG_MIN_H, startH + delta));
     shell.shellLayout.value.log_panel_height_px = next;
   }
@@ -163,6 +186,8 @@ function onLogResizeStart(e: MouseEvent) {
   async function onUp() {
     window.removeEventListener("mousemove", onMove);
     window.removeEventListener("mouseup", onUp);
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
     await shell.persistShellLayout({
       log_panel_height_px: shell.shellLayout.value.log_panel_height_px,
     });
@@ -216,7 +241,10 @@ onUnmounted(() => {
     v-show="panelVisible"
     ref="sidebarRef"
     class="ws-sidebar"
-    :class="[`dock-${dockSide}`, { 'log-only': showLog && !showTree }]"
+    :class="[
+      `dock-${dockSide}`,
+      { 'log-only': showLog && !showTree, 'has-split': splitTreeAndLog },
+    ]"
     data-tour="workspace-tree"
     :style="{ width: panelWidth }"
   >
@@ -313,8 +341,9 @@ onUnmounted(() => {
 
     <template v-if="showLog && logOpen">
       <div
+        v-if="splitTreeAndLog"
         class="log-resizer"
-        title="拖拽调节日志区高度"
+        title="拖拽调节日志区高度（上方工作空间树随动伸缩）"
         @mousedown="onLogResizeStart"
       />
       <div class="ws-log-wrap" :style="logPanelStyle">
@@ -349,6 +378,11 @@ onUnmounted(() => {
 .ws-sidebar.log-only .ws-log-wrap {
   flex: 1;
   min-height: 0;
+}
+
+.ws-sidebar.has-split .ws-body {
+  flex: 1 1 auto;
+  min-height: 120px;
 }
 
 .ws-body {
@@ -505,11 +539,34 @@ onUnmounted(() => {
 }
 
 .log-resizer {
+  flex-shrink: 0;
+  height: 6px;
+  min-height: 6px;
   cursor: row-resize;
-  background: transparent;
+  background: var(--panel-head-bg, #f1f5f9);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+
+.log-resizer::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 28px;
+  height: 3px;
+  margin: -1.5px 0 0 -14px;
+  border-radius: 2px;
+  background: rgba(148, 163, 184, 0.55);
+  pointer-events: none;
 }
 
 .log-resizer:hover {
-  background: rgba(59, 130, 246, 0.25);
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.log-resizer:hover::after {
+  background: rgba(59, 130, 246, 0.55);
 }
 </style>

@@ -236,6 +236,7 @@ class ShellLayoutBody(BaseModel):
     ribbon_mode: int | None = None
     right_panel_open: bool | None = None
     mid_right_sash_px: int | None = None
+    left_panel_width_px: int | None = None
     right_panel_width_px: int | None = None
     log_panel_open: bool | None = None
     log_panel_height_px: int | None = None

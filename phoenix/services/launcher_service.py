@@ -84,6 +84,7 @@ def update_shell_layout(patch: dict[str, Any]) -> dict[str, Any]:
         ribbon_mode=patch.get("ribbon_mode"),
         right_panel_open=patch.get("right_panel_open"),
         mid_right_sash_px=patch.get("mid_right_sash_px"),
+        left_panel_width_px=patch.get("left_panel_width_px"),
         right_panel_width_px=patch.get("right_panel_width_px"),
         log_panel_open=patch.get("log_panel_open"),
         log_panel_height_px=patch.get("log_panel_height_px"),
