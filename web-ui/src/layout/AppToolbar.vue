@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { HomeFilled, Setting, FolderOpened, ArrowDown, Link } from "@element-plus/icons-vue";
+import { HomeFilled, Setting, FolderOpened, ArrowDown, Link, Document } from "@element-plus/icons-vue";
 import { removeRecentWorkspace } from "../api";
 import { PROJECT_GITEE_HOME } from "../constants/projectLinks";
 import { NAV_MODULE_OPTIONS } from "../constants/navModules";
@@ -52,6 +52,13 @@ const workspaceShort = computed(() => {
 });
 
 const showWorkbenchTabs = computed(() => shell.showTabBar.value);
+const logPanelOpen = computed(() => shell.shellLayout.value.log_panel_open);
+
+async function toggleLogPanel() {
+  const next = !logPanelOpen.value;
+  await shell.setLogOpen(next);
+  shell.setStatus(next ? "已展开运行日志" : "已收起运行日志");
+}
 
 function isModuleEnabled(id: string): boolean {
   return shell.enabledNavModules.value.includes(id);
@@ -197,6 +204,16 @@ function toggleRibbonCollapsed() {
       <button
         type="button"
         class="header-icon-btn"
+        :class="{ 'header-icon-btn-active': logPanelOpen }"
+        :title="logPanelOpen ? '收起运行日志' : '展开运行日志'"
+        @click="toggleLogPanel"
+      >
+        <Document />
+      </button>
+
+      <button
+        type="button"
+        class="header-icon-btn"
         :title="ribbonCollapsed ? '展开工具 Ribbon' : '折叠工具 Ribbon'"
         @click="toggleRibbonCollapsed"
       >
@@ -331,6 +348,12 @@ function toggleRibbonCollapsed() {
 .header-icon-btn:hover {
   background: rgba(255, 255, 255, 0.55);
   color: #1d4ed8;
+}
+
+.header-icon-btn-active {
+  background: rgba(255, 255, 255, 0.72);
+  color: #1d4ed8;
+  box-shadow: inset 0 0 0 1px #b6c4d4;
 }
 
 .header-tabs {

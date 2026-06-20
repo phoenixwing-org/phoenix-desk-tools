@@ -57,6 +57,11 @@ function onLogDockChange(value: SideDock) {
   void saveSideDockPrefs({ log: value });
 }
 
+async function onLogPanelOpenChange(open: boolean) {
+  await shell.setLogOpen(open);
+  shell.setStatus(open ? "已展开运行日志" : "已收起运行日志");
+}
+
 const repoInput = ref("");
 const fcInput = ref("");
 const pickingWorkspace = ref(false);
@@ -366,12 +371,13 @@ const navItems = () =>
             <el-option label="右侧" value="right" />
           </el-select>
         </el-form-item>
+        <el-form-item label="显示运行日志">
+          <el-switch :model-value="shell.shellLayout.value.log_panel_open" @change="onLogPanelOpenChange" />
+        </el-form-item>
       </el-form>
       <p class="hint">
         树与日志可分别选左/右；某一侧无打开栏目时自动隐藏。宽度仍共用同一拖拽调节值。
-        <template v-if="!shell.shellLayout.value.log_panel_open">
-          运行日志当前已收起，改停靠侧后点侧栏或等任务输出时会按新侧显示。
-        </template>
+        日志收起后，可点底栏 **运行日志**、顶栏 **文档图标**，或在此处重新打开。
       </p>
       <label class="field-label" for="expand-icon-size">
         展开/折叠图标大小（{{ uiPrefs.expandControlSizePx }}px，三角约
