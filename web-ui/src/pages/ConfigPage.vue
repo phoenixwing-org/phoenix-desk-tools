@@ -317,7 +317,7 @@ const navItems = () =>
       <h2 class="section-title">界面</h2>
       <SideDockPrefsPanel />
       <p class="hint">
-        日志收起后，可点底栏 **运行日志**、顶栏 **文档图标**，或顶栏 **侧栏** 按钮重新打开。
+        日志收起后，可点 Ribbon 工具条 **运行日志**、底栏按钮，或顶栏 **侧栏** 重新打开。
       </p>
       <label class="field-label" for="expand-icon-size">
         展开/折叠图标大小（{{ uiPrefs.expandControlSizePx }}px，三角约

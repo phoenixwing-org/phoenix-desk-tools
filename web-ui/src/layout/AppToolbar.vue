@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { HomeFilled, Setting, FolderOpened, ArrowDown, Link, Document, Operation } from "@element-plus/icons-vue";
+import { HomeFilled, Setting, FolderOpened, ArrowDown, Link, Operation } from "@element-plus/icons-vue";
 import SideDockPrefsPanel from "../components/SideDockPrefsPanel.vue";
 import { removeRecentWorkspace } from "../api";
 import { PROJECT_GITEE_HOME } from "../constants/projectLinks";
@@ -54,13 +54,6 @@ const workspaceShort = computed(() => {
 });
 
 const showWorkbenchTabs = computed(() => shell.showTabBar.value);
-const logPanelOpen = computed(() => shell.shellLayout.value.log_panel_open);
-
-async function toggleLogPanel() {
-  const next = !logPanelOpen.value;
-  await shell.setLogOpen(next);
-  shell.setStatus(next ? "已展开运行日志" : "已收起运行日志");
-}
 
 function isModuleEnabled(id: string): boolean {
   return shell.enabledNavModules.value.includes(id);
@@ -218,16 +211,6 @@ function toggleRibbonCollapsed() {
         </template>
         <SideDockPrefsPanel compact />
       </el-popover>
-
-      <button
-        type="button"
-        class="header-icon-btn"
-        :class="{ 'header-icon-btn-active': logPanelOpen }"
-        :title="logPanelOpen ? '收起运行日志' : '展开运行日志'"
-        @click="toggleLogPanel"
-      >
-        <Document />
-      </button>
 
       <button
         type="button"

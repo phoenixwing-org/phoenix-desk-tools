@@ -5,6 +5,7 @@ import { useUiPrefsStore } from "../../stores/uiPrefs";
 import { WORKSPACE_GATE_MSG } from "../../utils/onboardingConstants";
 import RibbonGroup, { type RibbonGroupItem } from "./RibbonGroup.vue";
 import RibbonToolButton from "./RibbonToolButton.vue";
+import RibbonLogToggle from "./RibbonLogToggle.vue";
 import type { RibbonGroupDef, RibbonTabDef } from "./ribbonConfig";
 import { ribbonIconFor } from "./ribbonIcons";
 
@@ -89,6 +90,10 @@ function toggleLayout() {
           @open="emit('open', $event)"
         />
       </template>
+      <div class="ribbon-panel-spacer" aria-hidden="true" />
+      <div class="ribbon-panel-utils">
+        <RibbonLogToggle />
+      </div>
     </div>
     <button
       type="button"
@@ -125,6 +130,22 @@ function toggleLayout() {
   overflow-x: auto;
   overflow-y: hidden;
   padding: 0 2px;
+}
+
+.ribbon-panel-spacer {
+  flex: 1;
+  min-width: 8px;
+}
+
+.ribbon-panel-utils {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 0 4px 0 0;
+}
+
+.ribbon-panel-inline .ribbon-panel-utils {
+  padding-right: 2px;
 }
 
 .ribbon-panel-inline {
