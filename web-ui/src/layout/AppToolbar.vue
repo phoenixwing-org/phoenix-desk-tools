@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { HomeFilled, Setting, FolderOpened, ArrowDown, Link, Document } from "@element-plus/icons-vue";
+import { HomeFilled, Setting, FolderOpened, ArrowDown, Link, Document, Operation } from "@element-plus/icons-vue";
+import SideDockPrefsPanel from "../components/SideDockPrefsPanel.vue";
 import { removeRecentWorkspace } from "../api";
 import { PROJECT_GITEE_HOME } from "../constants/projectLinks";
 import { NAV_MODULE_OPTIONS } from "../constants/navModules";
@@ -29,6 +30,7 @@ const emit = defineEmits<{
 
 const shell = useAppShell();
 const recentOpen = ref(false);
+const sideDockOpen = ref(false);
 
 const title = computed(() => shell.appConfig.value?.title ?? DEFAULT_APP_TITLE);
 const brandShort = computed(() => {
@@ -200,6 +202,22 @@ function toggleRibbonCollapsed() {
           </button>
         </div>
       </div>
+
+      <el-popover
+        v-model:visible="sideDockOpen"
+        placement="bottom-end"
+        :width="280"
+        trigger="click"
+        popper-class="side-dock-popover"
+        title="侧栏停靠"
+      >
+        <template #reference>
+          <button type="button" class="header-icon-btn" title="侧栏停靠：工作空间树 / 运行日志 左·右">
+            <Operation />
+          </button>
+        </template>
+        <SideDockPrefsPanel compact />
+      </el-popover>
 
       <button
         type="button"
@@ -529,5 +547,11 @@ function toggleRibbonCollapsed() {
   .workspace-pill {
     max-width: 100px;
   }
+}
+</style>
+
+<style>
+.side-dock-popover {
+  z-index: 9500 !important;
 }
 </style>

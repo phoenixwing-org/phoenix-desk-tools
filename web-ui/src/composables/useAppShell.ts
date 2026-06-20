@@ -760,7 +760,7 @@ export function provideAppShell(): AppShellContext {
   async function persistShellLayout(patch: Partial<ShellLayout>) {
     shellLayout.value = { ...shellLayout.value, ...patch };
     const updated = await patchShellLayout(patch);
-    shellLayout.value = { ...shellLayout.value, ...updated };
+    shellLayout.value = { ...DEFAULT_SHELL, ...shellLayout.value, ...updated };
   }
 
   async function persistNavModules(enabled: string[]) {

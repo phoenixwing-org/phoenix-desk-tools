@@ -6,8 +6,8 @@ import PageHelpButton from "../components/PageHelpButton.vue";
 import { useShellTour } from "../composables/useShellTour";
 import { useOnboardingStore } from "../stores/onboarding";
 import { useUiPrefsStore } from "../stores/uiPrefs";
-import type { SideDock } from "../types/config";
 
+import SideDockPrefsPanel from "../components/SideDockPrefsPanel.vue";
 import {
   EXPAND_ICON_SIZE_MAX,
   EXPAND_ICON_SIZE_MIN,
@@ -18,49 +18,6 @@ const uiPrefs = useUiPrefsStore();
 const onboarding = useOnboardingStore();
 const shell = useAppShell();
 const { startShellTour } = useShellTour(shell);
-
-const treeDock = computed({
-  get: () => shell.shellLayout.value.workspace_tree_dock,
-  set: (v: SideDock) => {
-    shell.shellLayout.value = { ...shell.shellLayout.value, workspace_tree_dock: v };
-  },
-});
-
-const logDock = computed({
-  get: () => shell.shellLayout.value.shell_log_dock,
-  set: (v: SideDock) => {
-    shell.shellLayout.value = { ...shell.shellLayout.value, shell_log_dock: v };
-  },
-});
-
-async function saveSideDockPrefs(patch?: Partial<{ tree: SideDock; log: SideDock }>) {
-  const nextTree = patch?.tree ?? treeDock.value;
-  const nextLog = patch?.log ?? logDock.value;
-  if (patch?.tree !== undefined) {
-    shell.shellLayout.value = { ...shell.shellLayout.value, workspace_tree_dock: nextTree };
-  }
-  if (patch?.log !== undefined) {
-    shell.shellLayout.value = { ...shell.shellLayout.value, shell_log_dock: nextLog };
-  }
-  await shell.persistShellLayout({
-    workspace_tree_dock: nextTree,
-    shell_log_dock: nextLog,
-  });
-  shell.setStatus("侧栏停靠已保存");
-}
-
-function onTreeDockChange(value: SideDock) {
-  void saveSideDockPrefs({ tree: value });
-}
-
-function onLogDockChange(value: SideDock) {
-  void saveSideDockPrefs({ log: value });
-}
-
-async function onLogPanelOpenChange(open: boolean) {
-  await shell.setLogOpen(open);
-  shell.setStatus(open ? "已展开运行日志" : "已收起运行日志");
-}
 
 const repoInput = ref("");
 const fcInput = ref("");
@@ -358,26 +315,9 @@ const navItems = () =>
 
     <section class="section">
       <h2 class="section-title">界面</h2>
-      <el-form label-position="top" class="dock-form">
-        <el-form-item label="工作空间树停靠">
-          <el-select :model-value="treeDock" @update:model-value="onTreeDockChange">
-            <el-option label="左侧" value="left" />
-            <el-option label="右侧" value="right" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="运行日志停靠">
-          <el-select :model-value="logDock" @update:model-value="onLogDockChange">
-            <el-option label="左侧" value="left" />
-            <el-option label="右侧" value="right" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="显示运行日志">
-          <el-switch :model-value="shell.shellLayout.value.log_panel_open" @change="onLogPanelOpenChange" />
-        </el-form-item>
-      </el-form>
+      <SideDockPrefsPanel />
       <p class="hint">
-        树与日志可分别选左/右；某一侧无打开栏目时自动隐藏。宽度仍共用同一拖拽调节值。
-        日志收起后，可点底栏 **运行日志**、顶栏 **文档图标**，或在此处重新打开。
+        日志收起后，可点底栏 **运行日志**、顶栏 **文档图标**，或顶栏 **侧栏** 按钮重新打开。
       </p>
       <label class="field-label" for="expand-icon-size">
         展开/折叠图标大小（{{ uiPrefs.expandControlSizePx }}px，三角约
@@ -704,15 +644,6 @@ code {
 .expand-size-hint {
   font-size: 0.82rem;
   white-space: nowrap;
-}
-
-.dock-form {
-  max-width: 280px;
-  margin-bottom: 12px;
-}
-
-.dock-form :deep(.el-select) {
-  width: 100%;
 }
 
 .footer-hint,
