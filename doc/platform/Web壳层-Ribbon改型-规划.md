@@ -1,6 +1,6 @@
 # Web 壳层 · Ribbon 改型规划
 
-> 状态：**R0–R2 已落地 · 2026-06**（R3 引导文档待补）  
+> 状态：**R0–R3 已落地 · R4 进行中 · 2026-06**  
 > 关联：[Web壳层-Tab与状态持久化-规划讨论.md](Web壳层-Tab与状态持久化-规划讨论.md)、[Phoenix平台-多应用壳层-规划讨论.md](Phoenix平台-多应用壳层-规划讨论.md)  
 > 待办跟踪：[TODO.md](../TODO.md) § Web 壳层 · Ribbon 改型
 
@@ -22,38 +22,36 @@
 
 ---
 
-## 2. 现状
+## 2. 现状（2026-06 归档后）
 
 ```
-AppToolbar          ← 应用标题、CAD/Code 模块 chip、工作空间、最近、配置
-NavSidebar          ← 左 rail：全部功能入口（读 app_config.navigation）
-WorkbenchTabBar     ← 已打开页 Tab
+AppToolbar          ← Chili3D 顶栏：品牌 / 快捷 / 功能 Tab / 页面 Tab / 模块 chip / 工作空间
+RibbonShell         ← 分组或单行工具按钮
+WorkbenchTabBar     ← 已迁入顶栏中部（in-header）
+WelcomePage         ← 启动默认全屏欢迎
 主内容 KeepAlive    ← 各业务页
-WorkspaceTreeSidebar← 右栏树 + 日志
+WorkspaceTreeSidebar← 左或右停靠：树 + 日志
 StatusBar
 ```
 
-- 前端依赖已加入 `element-plus`、`unplugin-auto-import`、`unplugin-vue-components`（见 `web-ui/vite.config.ts`）。
-- **尚未**接入 Ribbon 组件；侧栏仍是主入口。
-- API 契约不变：前端只调 `/api/*`，见 `web-ui/src/api.ts`。
+- Element Plus 已接入壳层；Ribbon 为唯一功能入口。
+- 左侧 `NavSidebar` 快捷栏默认不渲染，代码保留。
+- API 契约不变：前端只调 `/api/*`。
 
 ---
 
-## 3. 目标布局
+## 3. 目标布局（已落地）
 
 ```
-┌─ QuickBar（保留 AppToolbar，略瘦身）────────────────────────────┐
-│ 标题 · 模块 CAD/Code · 工作空间 · 最近 · 配置 · 侧栏/树开关      │
-├─ Ribbon Tabs：开始 | CAD | Code | 系统 ─────────────────────────┤
-├─ Ribbon Panel（随 Tab：分组 + 竖线 + 方块按钮）─────────────────┤
-├─ WorkbenchTabBar（保留）────────────────────────────────────────┤
-├─ 主内容区 ────────────────────────────────│ 右栏树 / 日志        │
-└─ StatusBar ─────────────────────────────────────────────────────┘
+┌─ AppToolbar（Chili3D 顶栏 40px）─────────────────────────────────┐
+│ 品牌·快捷 │ 开始|CAD|Code|系统 │ ← 页面 Tab → │ 模块·工作空间…   │
+├─ Ribbon Panel（可折叠；单行/分组）────────────────────────────────┤
+├─ 主内容 ────────────────────────────────────────│ 树 / 日志（左/右）│
+└─ StatusBar ───────────────────────────────────────────────────────┘
+WelcomePage：全屏，不在上述 Tab 行中。
 ```
 
-Ribbon 按钮行为：调用现有 `shell.goToPage(pageId)`，与 `NavSidebar` 等价。
-
-**左 NavSidebar**：Ribbon 稳定后默认隐藏功能列表，仅保留「新手指引 / 配置 / 右栏开关」或迁入 QuickBar（R2 定稿）。
+Ribbon 按钮 → `shell.goToPage(pageId)`。
 
 ---
 
@@ -128,13 +126,14 @@ Phase 2（可选）：`app_config.json` 增加 `ribbon` 段或由 API 下发。
 ### R3 · 体验与引导
 
 - [x] Ribbon **折叠/展开**（▲/▼）
-- [x] 更新 driver.js `data-tour`（Ribbon Tab / 工具条 / 快捷栏）
+- [x] 更新 driver.js `data-tour`（Ribbon Tab / 工具条 / 页面 Tab）
+- [x] [Web壳层-使用说明.md](../user/Web壳层-使用说明.md) Ribbon / 欢迎页 / 顶栏 Tab 文字说明
 - [ ] 窄屏：Panel 横向滚动
-- [ ] [Web壳层-使用说明.md](../user/Web壳层-使用说明.md) 截图或文字说明 Ribbon
 
 ### R4 · 业务页渐进 Element 化（按需）
 
-- [ ] 新页 / 大改版页优先 `el-table`、`el-form`、`el-button`
+- [~] **欢迎页 / 主页 / 配置·界面**：`el-button`、`el-link`、`el-tag`、`el-select` 等
+- [ ] 其它大改版页优先 `el-table`、`el-form`
 - [ ] 旧页保留现状，不阻塞 Ribbon 上线
 - [ ] 可选：`app_config.ribbon` 配置化分组
 
@@ -175,7 +174,7 @@ PHOENIX_API_PORT=8765 pnpm -C web-ui dev
 
 ---
 
-**下一步**：R3 更新新手指引与 `Web壳层-使用说明`；R4 业务页按需 Element 化。
+**下一步**：R4 欢迎页 / 主页 / 配置界面区 Element 化；业务页按需迁移。
 
 ---
 
