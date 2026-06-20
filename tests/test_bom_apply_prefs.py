@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import shutil
 import tempfile
 import unittest
@@ -17,6 +16,8 @@ from phoenix.bom_apply_prefs import (
     save_bom_apply_field_defaults,
 )
 from phoenix.config.user_prefs import workspace_dotfile_path
+from phoenix.config.workspace_prefs_store import load_prefs_from_sqlite
+from phoenix.freecad.phoenix_schema import WORKSPACE_DATABASE_FILENAME
 
 
 class TestBomApplyPrefs(unittest.TestCase):
@@ -47,8 +48,11 @@ class TestBomApplyPrefs(unittest.TestCase):
             self.assertEqual(prefs["last_part_version"], "002")
             self.assertEqual(prefs["last_type_code"], "S")
             self.assertEqual(prefs["last_model_series"], "5TA")
-            raw = json.loads(workspace_dotfile_path(td).read_text(encoding="utf-8"))
-            self.assertIn("bom_apply", raw)
+            db = td / ".phoenix" / WORKSPACE_DATABASE_FILENAME
+            self.assertTrue(db.is_file())
+            self.assertFalse(workspace_dotfile_path(td).is_file())
+            raw = load_prefs_from_sqlite(td)
+            self.assertEqual(raw["bom_apply"]["last_part_number"], "100346")
         finally:
             shutil.rmtree(td, ignore_errors=True)
 

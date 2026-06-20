@@ -336,11 +336,11 @@ onUnmounted(() => {
   min-height: 100vh;
   display: grid;
   place-items: center;
-  color: #64748b;
+  color: var(--phoenix-text-muted);
 }
 
 .shell-loading.err {
-  color: #b45309;
+  color: var(--phoenix-warning-text);
   padding: 24px;
   text-align: center;
 }
@@ -402,7 +402,7 @@ onUnmounted(() => {
 }
 
 .shell-welcome {
-  background: #eceff3;
+  background: var(--phoenix-bg-welcome-rail);
 }
 
 .shell-body-welcome {

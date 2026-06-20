@@ -115,6 +115,7 @@ onMounted(() => {
 <template>
   <div class="tab-bar" :class="{ 'tab-bar-header': inHeader }" data-tour="tab-bar">
     <div ref="scrollEl" class="tab-scroll" role="tablist" aria-label="已打开页面">
+      <span v-if="inHeader" class="tab-scroll-edge" aria-hidden="true" />
       <button
         v-for="tab in tabs"
         :key="tab.id"
@@ -134,6 +135,7 @@ onMounted(() => {
         <span v-if="tab.dirty" class="tab-dot" aria-label="未保存">●</span>
         <span class="tab-close" title="关闭 Tab" @click="onClose(tab.id, $event)">×</span>
       </button>
+      <span v-if="inHeader" class="tab-scroll-edge" aria-hidden="true" />
     </div>
     <button
       v-if="canCloseAll"
@@ -356,6 +358,7 @@ onMounted(() => {
   height: 100%;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   padding: 0 2px 0 0;
   background: transparent;
@@ -363,66 +366,103 @@ onMounted(() => {
 }
 
 .tab-bar-header .tab-scroll {
-  flex: 1;
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
   align-items: center;
-  gap: 3px;
-  min-height: 32px;
-  padding: 3px 4px;
-  border-radius: 8px;
-  background: rgba(15, 23, 42, 0.055);
-  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.05);
+  justify-content: flex-start;
+  gap: 5px;
+  min-height: 36px;
+  padding: 4px 6px;
+  border-radius: var(--phoenix-radius-md, 8px);
+  background: var(--phoenix-ribbon-tab-track, rgba(15, 23, 42, 0.055));
+  box-shadow: inset 0 1px 2px var(--phoenix-border-subtle, rgba(15, 23, 42, 0.05));
+}
+
+.tab-bar-header .tab-scroll-edge {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 48vw;
+  pointer-events: none;
 }
 
 .tab-bar-header .tab-item {
-  max-width: 220px;
-  height: 26px;
-  padding: 0 6px 0 8px;
-  gap: 5px;
+  position: relative;
+  max-width: 240px;
+  height: 28px;
+  padding: 0 10px 0 11px;
+  gap: 6px;
   margin: 0;
   border: 1px solid transparent;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.42);
-  color: #64748b;
-  font-size: 0.72rem;
-  font-weight: 400;
+  border-radius: calc(var(--phoenix-radius-md, 8px) - 2px);
+  background: transparent;
+  color: var(--phoenix-text-muted, #64748b);
+  font-size: 0.74rem;
+  font-weight: 500;
+  transform: scale(0.96);
+  transform-origin: center center;
   transition:
-    background 0.15s ease,
-    border-color 0.15s ease,
-    box-shadow 0.15s ease,
-    color 0.15s ease;
+    transform 0.22s cubic-bezier(0.34, 1.28, 0.64, 1),
+    height 0.22s ease,
+    padding 0.22s ease,
+    background 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.22s ease,
+    color 0.18s ease,
+    font-size 0.18s ease;
 }
 
 .tab-bar-header .tab-icon {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
+  transition: color 0.18s ease;
 }
 
 .tab-bar-header .tab-icon :deep(svg) {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
 }
 
 .tab-bar-header .tab-item:hover:not(.active) {
-  background: rgba(255, 255, 255, 0.72);
-  border-color: rgba(148, 163, 184, 0.35);
-  color: #334155;
+  background: var(--phoenix-ribbon-tab-hover, rgba(255, 255, 255, 0.72));
+  border-color: rgba(148, 163, 184, 0.28);
+  color: var(--phoenix-text-secondary, #334155);
+  transform: scale(0.98);
 }
 
 .tab-bar-header .tab-item.active {
-  background: #fff;
-  border-color: #c8d3e0;
-  color: #0f172a;
-  font-weight: 500;
+  height: 32px;
+  padding: 0 15px 0 13px;
+  background: var(--phoenix-ribbon-tab-active-bg, #fff);
+  border-color: var(--phoenix-border-subtle, #c8d3e0);
+  color: var(--phoenix-text, #0f172a);
+  font-size: 0.78rem;
+  font-weight: 600;
   margin-bottom: 0;
   padding-bottom: 0;
+  transform: scale(1);
+  z-index: 1;
   box-shadow:
-    0 1px 3px rgba(15, 23, 42, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    var(--phoenix-shadow-sm, 0 1px 3px rgba(15, 23, 42, 0.1)),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.65);
+  animation: tab-header-pop 0.24s cubic-bezier(0.34, 1.35, 0.64, 1);
+}
+
+@keyframes tab-header-pop {
+  0% {
+    transform: scale(0.94);
+  }
+  55% {
+    transform: scale(1.03);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .tab-bar-header .tab-item.active .tab-icon {
-  color: #2563eb;
+  color: var(--phoenix-accent-hover, #2563eb);
 }
 
 .tab-bar-header .tab-item.dirty .tab-icon {
@@ -449,14 +489,15 @@ onMounted(() => {
 }
 
 .tab-bar-header .tab-close-all {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   margin-left: 0;
   padding: 0;
-  border-radius: 6px;
+  border-radius: calc(var(--phoenix-radius-md, 8px) - 2px);
   border-color: rgba(148, 163, 184, 0.45);
   background: rgba(255, 255, 255, 0.35);
   box-shadow: none;
+  flex-shrink: 0;
 }
 
 .tab-bar-header .tab-close-all:hover:not(:disabled) {
@@ -466,15 +507,16 @@ onMounted(() => {
 }
 
 .tab-bar-header .tab-add {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   margin-left: 0;
   padding: 0;
-  border-radius: 6px;
+  border-radius: calc(var(--phoenix-radius-md, 8px) - 2px);
   border-style: solid;
   border-color: rgba(148, 163, 184, 0.45);
   background: rgba(255, 255, 255, 0.35);
   box-shadow: none;
+  flex-shrink: 0;
 }
 
 .tab-bar-header .tab-add:hover {

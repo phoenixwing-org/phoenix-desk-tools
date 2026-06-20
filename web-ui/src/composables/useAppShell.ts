@@ -1,13 +1,14 @@
 import { computed, inject, provide, ref, shallowRef, watch, type InjectionKey, type Ref } from "vue";
 import type { BomFields } from "../api";
-import type { AppConfig, LauncherPrefs, NavItem, ShellLayout } from "../types/config";
+import type { AppConfig, LauncherPrefs, NavItem, ShellLayout, WorkspaceNavModules } from "../types/config";
 import {
   fetchAppConfig,
   fetchLauncherPrefs,
   fetchShellLog,
+  fetchWorkspaceNavModules,
   getWorkspace,
-  patchNavModules,
   patchShellLayout,
+  patchWorkspaceNavModules,
   setWorkspace,
 } from "../api";
 import { collectPageStates } from "./usePageSession";
@@ -22,7 +23,7 @@ import {
 import { parseShellUrl, replaceShellUrl, type ShellUrlIntent } from "../utils/shellUrlSync";
 import { useOnboardingStore } from "../stores/onboarding";
 import { useFileWorksetsStore } from "../stores/fileWorksets";
-import type { OpenTabOptions, WorkbenchTab, WorkbenchTabPayload } from "../types/workbench";
+import type { ModuleScope } from "../constants/moduleScope";
 
 /** 返回 false 表示当前 Tab 未接管此次树点击，由 shell 回退打开文件详情 */
 export type TreeSelectHandler = (rel: string) => void | boolean | Promise<void | boolean>;
@@ -107,6 +108,7 @@ export type AppShellContext = {
   isPageModuleVisible: (pageId: string) => boolean;
   persistNavModules: (enabled: string[]) => Promise<void>;
   toggleNavModule: (id: string) => Promise<void>;
+  setWorkspaceModuleScope: (path: string, scope: ModuleScope) => Promise<void>;
   reloadLauncher: () => Promise<void>;
   init: () => Promise<void>;
   treeSelectHandler: Ref<TreeSelectHandler | null>;
@@ -644,11 +646,22 @@ export function provideAppShell(): AppShellContext {
     shellLayout.value = normalizeShellLayout(sl);
   }
 
+  function applyWorkspaceNavModules(nav: WorkspaceNavModules) {
+    if (!launcher.value) return;
+    launcher.value = {
+      ...launcher.value,
+      nav_modules: { enabled: [...nav.enabled] },
+    };
+    purgeHiddenModuleTabs();
+  }
+
   async function switchWorkspace(path: string) {
     flushWorkbenchSession();
     const ws = await setWorkspace(path.trim());
     workspacePath.value = ws.path;
     await reloadLauncher();
+    const nav = ws.nav_modules ?? (await fetchWorkspaceNavModules(ws.path));
+    applyWorkspaceNavModules(nav);
     await onboarding.refreshStatus();
     await restoreWorkbenchSession();
     syncOnboardingFromTabs();
@@ -794,11 +807,8 @@ export function provideAppShell(): AppShellContext {
   }
 
   async function persistNavModules(enabled: string[]) {
-    const updated = await patchNavModules(enabled);
-    if (launcher.value) {
-      launcher.value = { ...launcher.value, nav_modules: updated };
-    }
-    purgeHiddenModuleTabs();
+    const updated = await patchWorkspaceNavModules({ enabled });
+    applyWorkspaceNavModules(updated);
     const active = wb.activeTab()?.pageId;
     if (active && !isPageModuleVisible(active)) {
       wb.navigateToPage("home");
@@ -818,6 +828,14 @@ export function provideAppShell(): AppShellContext {
       cur.push(id);
     }
     await persistNavModules(cur);
+  }
+
+  async function setWorkspaceModuleScope(path: string, scope: ModuleScope) {
+    const nav = await patchWorkspaceNavModules({ path, scope });
+    await reloadLauncher();
+    if (path === workspacePath.value) {
+      applyWorkspaceNavModules(nav);
+    }
   }
 
   function registerTreeSelect(tabId: string | undefined, fn: TreeSelectHandler | null) {
@@ -964,6 +982,13 @@ export function provideAppShell(): AppShellContext {
     const ws = await getWorkspace();
     workspacePath.value = ws.path;
     await reloadLauncher();
+    if (workspacePath.value) {
+      try {
+        applyWorkspaceNavModules(await fetchWorkspaceNavModules());
+      } catch {
+        /* 工作空间尚未就绪 */
+      }
+    }
     await onboarding.refreshStatus();
 
     const urlIntent = parseShellUrl();
@@ -1040,6 +1065,7 @@ export function provideAppShell(): AppShellContext {
     isPageModuleVisible,
     persistNavModules,
     toggleNavModule,
+    setWorkspaceModuleScope,
     reloadLauncher,
     init,
     treeSelectHandler,

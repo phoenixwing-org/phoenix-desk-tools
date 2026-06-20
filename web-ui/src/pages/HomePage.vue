@@ -2,10 +2,11 @@
 import { computed, nextTick, onMounted, watch } from "vue";
 import PageHelpButton from "../components/PageHelpButton.vue";
 import OnboardingChecklist from "../components/OnboardingChecklist.vue";
-import { NAV_MODULE_OPTIONS } from "../constants/navModules";
+import { NAV_MODULE_OPTIONS, type NavModuleId } from "../constants/navModules";
 import { useAppShell } from "../composables/useAppShell";
 import { useOnboardingStore } from "../stores/onboarding";
-import { DEFAULT_APP_TITLE } from "../types/config";
+import { DEFAULT_APP_TITLE, type NavItem } from "../types/config";
+import { ribbonIconFor } from "../layout/ribbon/ribbonIcons";
 
 const shell = useAppShell();
 const onboarding = useOnboardingStore();
@@ -23,9 +24,18 @@ watch(
 );
 
 const appTitle = computed(() => shell.appConfig.value?.title ?? DEFAULT_APP_TITLE);
-const featureNav = computed(() =>
+
+const HUB_SKIP_PAGES = new Set(["home", "config", "welcome"]);
+
+function navItemsForModule(moduleId: NavModuleId): NavItem[] {
+  return (shell.appConfig.value?.navigation ?? []).filter(
+    (n) => n.module === moduleId && !HUB_SKIP_PAGES.has(n.page),
+  );
+}
+
+const systemFeatures = computed(() =>
   (shell.appConfig.value?.navigation ?? []).filter(
-    (n) => n.page !== "home" && n.page !== "config" && n.page !== "welcome" && shell.isNavItemVisible(n),
+    (n) => !n.module && !HUB_SKIP_PAGES.has(n.page) && shell.isNavItemVisible(n),
   ),
 );
 
@@ -52,10 +62,15 @@ function openWelcome() {
 function openConfig() {
   shell.goToPage("config");
 }
+
+function visibleFeatures(moduleId: NavModuleId): NavItem[] {
+  if (!isModuleEnabled(moduleId)) return [];
+  return navItemsForModule(moduleId).filter((n) => shell.isNavItemVisible(n));
+}
 </script>
 
 <template>
-  <div class="page welcome-page">
+  <div class="page home-page">
     <div class="title-row">
       <h1 class="page-title">主页</h1>
       <div class="head-help">
@@ -64,76 +79,96 @@ function openConfig() {
       </div>
     </div>
 
-    <section class="module-section" data-tour-page-home-modules>
-      <div class="module-section-head">
-        <h2 class="module-section-title">功能模块</h2>
-        <p class="module-lead">
-          勾选后顶栏 Ribbon 与下方入口才显示对应模块；偏好保存在本机 launcher，与工作空间无关。
-        </p>
-      </div>
-      <ul class="module-grid">
-        <li v-for="opt in NAV_MODULE_OPTIONS" :key="opt.id">
-          <div
-            class="module-card"
-            :class="{ active: isModuleEnabled(opt.id) }"
-            role="button"
-            tabindex="0"
-            @click="toggleModule(opt.id)"
-            @keydown.enter="toggleModule(opt.id)"
-            @keydown.space.prevent="toggleModule(opt.id)"
-          >
+    <p class="home-lead">
+      <strong>{{ appTitle }}</strong>
+      — FreeCAD / Code 工作空间 Web 壳层。顶栏 Ribbon 为主入口；下方按模块勾选并快捷打开功能页。工作空间与 FreeCAD 路径在
+      <el-button link type="primary" @click="openConfig">配置</el-button>
+      中维护。
+    </p>
+
+    <section class="module-hub" data-tour-page-home-modules data-tour-page-home-features>
+      <div
+        v-for="opt in NAV_MODULE_OPTIONS"
+        :key="opt.id"
+        class="module-group"
+        :class="[`module-group--${opt.id}`, { 'is-on': isModuleEnabled(opt.id) }]"
+      >
+        <header class="module-group-head">
+          <div class="module-group-title-row">
             <el-checkbox
               :model-value="isModuleEnabled(opt.id)"
               class="module-check"
-              @click.stop
               @change="toggleModule(opt.id)"
             />
-            <span class="module-label">{{ opt.label }}</span>
-            <span class="module-hint">{{ opt.hint }}</span>
+            <h2 class="module-group-title">{{ opt.label }}</h2>
+            <el-tag size="small" effect="plain" type="info">
+              {{ navItemsForModule(opt.id).length }} 项
+            </el-tag>
           </div>
-        </li>
-      </ul>
-    </section>
+          <p class="module-group-hint">{{ opt.hint }}</p>
+        </header>
 
-    <section class="intro">
-      <p class="lead">
-        <strong>{{ appTitle }}</strong>
-        面向 FreeCAD 工作空间的 Web 壳层：在浏览器中管理 CAD 索引、BOM、零件库、文件属性与引用路径，并与本机
-        FreeCAD 目录协同。
-      </p>
-      <p class="lead muted">
-        顶栏 Ribbon 进入各功能；右侧工作区树可打开文件详情。工作空间根目录、FreeCAD 安装路径与最近打开记录在
-        <el-button link type="primary" @click="openConfig">配置</el-button>
-        中维护。
-      </p>
+        <ul
+          v-if="isModuleEnabled(opt.id)"
+          class="feature-grid"
+        >
+          <li v-for="item in visibleFeatures(opt.id)" :key="item.page">
+            <button
+              type="button"
+              class="feature-card"
+              :class="{ 'is-disabled': !shell.canNavigateToPage(item.page) }"
+              :disabled="!shell.canNavigateToPage(item.page)"
+              @click="openFeature(item.page)"
+            >
+              <span class="feature-icon" aria-hidden="true">
+                <el-icon><component :is="ribbonIconFor(item.page)" /></el-icon>
+              </span>
+              <span class="feature-body">
+                <span class="feature-label">{{ item.label }}</span>
+                <span class="feature-desc">{{ item.description }}</span>
+              </span>
+            </button>
+          </li>
+        </ul>
+        <p v-else class="module-off-hint">未启用 — 勾选上方以在 Ribbon 与本页显示 {{ opt.shortLabel }} 功能</p>
+      </div>
+
+      <div v-if="systemFeatures.length" class="module-group module-group--system">
+        <header class="module-group-head">
+          <h2 class="module-group-title">系统</h2>
+          <p class="module-group-hint">与工作空间模块无关的壳层工具</p>
+        </header>
+        <ul class="feature-grid">
+          <li v-for="item in systemFeatures" :key="item.page">
+            <button
+              type="button"
+              class="feature-card"
+              :class="{ 'is-disabled': !shell.canNavigateToPage(item.page) }"
+              :disabled="!shell.canNavigateToPage(item.page)"
+              @click="openFeature(item.page)"
+            >
+              <span class="feature-icon" aria-hidden="true">
+                <el-icon><component :is="ribbonIconFor(item.page)" /></el-icon>
+              </span>
+              <span class="feature-body">
+                <span class="feature-label">{{ item.label }}</span>
+                <span class="feature-desc">{{ item.description }}</span>
+              </span>
+            </button>
+          </li>
+        </ul>
+      </div>
     </section>
 
     <OnboardingChecklist />
 
-    <section class="section">
-      <h2 class="section-title">功能入口</h2>
-      <ul class="feature-grid" data-tour-page-home-features>
-        <li v-for="item in featureNav" :key="item.page">
-          <el-button
-            class="feature-card"
-            :class="{ 'feature-disabled': !shell.canNavigateToPage(item.page) }"
-            :disabled="!shell.canNavigateToPage(item.page)"
-            @click="openFeature(item.page)"
-          >
-            <span class="feature-label">{{ item.label }}</span>
-            <span class="feature-desc">{{ item.description }}</span>
-          </el-button>
-        </li>
-      </ul>
-    </section>
-
-    <section class="section hints">
-      <h2 class="section-title">使用提示</h2>
+    <section class="hints-section">
+      <h2 class="hints-title">使用提示</h2>
       <ul class="hint-list">
-        <li>首次使用请在配置中填写工作空间根目录并保存偏好。</li>
-        <li>「CAD 索引」扫描后，BOM 列表与文件详情中的属性才完整可用。</li>
-        <li>文件详情支持多 Tab；改名、引用写回与 BOM 属性回写在同一页的不同子 Tab 中。</li>
-        <li>运行日志在右侧栏，便于查看批量任务与 API 输出。</li>
+        <li>模块偏好保存在当前工作空间 SQLite；欢迎页最近工程可设 CAD / Code / 全部。</li>
+        <li>首次使用请在配置中填写工作空间根目录。</li>
+        <li>「CAD 索引」扫描后，BOM 与文件详情属性才完整可用。</li>
+        <li>运行日志在侧栏，便于查看批量任务输出。</li>
       </ul>
     </section>
   </div>
@@ -142,13 +177,13 @@ function openConfig() {
 <style scoped>
 @import "./page-shared.css";
 
-.welcome-page {
+.home-page {
   padding: 24px 28px 40px;
-  max-width: 920px;
+  max-width: 1080px;
 }
 
 .title-row {
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -169,100 +204,67 @@ function openConfig() {
 .page-title {
   margin: 0;
   font-size: 1.25rem;
+  color: var(--phoenix-text);
 }
 
-.intro {
-  margin-bottom: 28px;
-}
-
-.lead {
-  margin: 0 0 12px;
-  font-size: 0.95rem;
+.home-lead {
+  margin: 0 0 22px;
+  font-size: 0.9rem;
   line-height: 1.65;
+  color: var(--phoenix-text-secondary);
 }
 
-.lead.muted {
-  color: var(--muted);
-}
-
-.link-btn {
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--accent);
-  text-decoration: underline;
-  cursor: pointer;
-  font: inherit;
-}
-
-.section {
+.module-hub {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
   margin-bottom: 28px;
 }
 
-.module-section {
-  margin-bottom: 24px;
+.module-group {
   padding: 16px 18px 18px;
-  border: 1px solid #93c5fd;
-  border-radius: 10px;
-  background: linear-gradient(180deg, #eff6ff 0%, #f8fafc 100%);
-  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.08);
+  border: 1px solid var(--phoenix-border);
+  border-radius: var(--phoenix-radius-lg);
+  background: var(--phoenix-bg-elevated);
+  box-shadow: var(--phoenix-shadow-sm);
+  transition: border-color 0.15s ease;
 }
 
-.module-section-head {
+.module-group.is-on {
+  border-color: var(--phoenix-accent-border);
+}
+
+.module-group--cad.is-on {
+  background: linear-gradient(180deg, var(--phoenix-accent-soft) 0%, var(--phoenix-bg-elevated) 72%);
+}
+
+.module-group--code.is-on {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--phoenix-accent-soft) 55%, var(--phoenix-bg-elevated)) 0%,
+    var(--phoenix-bg-elevated) 72%
+  );
+}
+
+.module-group-head {
   margin-bottom: 14px;
 }
 
-.module-section-title {
-  margin: 0 0 6px;
-  font-size: 1.05rem;
-  font-weight: 600;
-  color: #1e40af;
-}
-
-.module-lead {
-  margin: 0;
-  font-size: 0.86rem;
-  line-height: 1.55;
-  color: #475569;
-}
-
-.module-grid {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.module-card {
-  position: relative;
+.module-group-title-row {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-height: 88px;
-  padding: 14px 40px 14px 16px;
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  background: #fff;
-  cursor: pointer;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
 }
 
-.module-card:hover {
-  border-color: #93c5fd;
-}
-
-.module-card.active {
-  border-color: var(--accent);
-  background: #fff;
-  box-shadow: 0 0 0 1px var(--accent);
+.module-group-title {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 600;
+  color: var(--phoenix-text);
 }
 
 .module-check {
-  position: absolute;
-  top: 10px;
-  right: 10px;
   height: auto;
   margin: 0;
 }
@@ -271,40 +273,25 @@ function openConfig() {
   display: none;
 }
 
-.module-label {
-  font-weight: 600;
-  font-size: 0.95rem;
+.module-group-hint {
+  margin: 6px 0 0;
+  padding-left: 28px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--phoenix-text-muted);
 }
 
-.module-hint {
-  font-size: 0.8rem;
-  color: var(--muted);
-  line-height: 1.45;
+.module-group--system .module-group-hint {
+  padding-left: 0;
 }
 
-@media (max-width: 560px) {
-  .module-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.section-title {
-  margin: 0 0 10px;
-  font-size: 1rem;
-}
-
-.workspace-path {
-  margin: 0 0 12px;
-  font-weight: 600;
-  word-break: break-all;
-  font-size: 0.88rem;
-}
-
-.btn {
-  padding: 8px 16px;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  background: var(--btn-bg);
+.module-off-hint {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--phoenix-radius-md);
+  font-size: 0.82rem;
+  color: var(--phoenix-text-muted);
+  background: var(--phoenix-bg-muted);
 }
 
 .feature-grid {
@@ -313,52 +300,103 @@ function openConfig() {
   list-style: none;
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
 }
 
 .feature-card {
   display: flex;
-  flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
+  gap: 10px;
   width: 100%;
-  height: auto;
   margin: 0;
-  padding: 12px 14px;
+  padding: 11px 12px;
   text-align: left;
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  background: var(--btn-bg);
-  white-space: normal;
+  border: 1px solid var(--phoenix-border);
+  border-radius: var(--phoenix-radius-md);
+  background: var(--phoenix-bg-elevated);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .feature-card:hover:not(:disabled) {
-  border-color: var(--accent);
-  background: #f0f6ff;
+  border-color: var(--phoenix-accent-border);
+  background: var(--phoenix-accent-soft);
+  box-shadow: var(--phoenix-shadow-sm);
 }
 
-.feature-card.feature-disabled,
+.feature-card.is-disabled,
 .feature-card:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
+.feature-icon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--phoenix-radius-md);
+  color: var(--phoenix-accent);
+  background: var(--phoenix-accent-soft);
+}
+
+.feature-icon :deep(.el-icon) {
+  font-size: 1.05rem;
+}
+
+.feature-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
 .feature-label {
   font-weight: 600;
-  font-size: 0.92rem;
+  font-size: 0.88rem;
+  color: var(--phoenix-text);
 }
 
 .feature-desc {
-  font-size: 0.8rem;
-  color: var(--muted);
+  font-size: 0.76rem;
+  color: var(--phoenix-text-muted);
   line-height: 1.45;
+}
+
+.hints-section {
+  margin-top: 8px;
+}
+
+.hints-title {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--phoenix-text-secondary);
 }
 
 .hint-list {
   margin: 0;
   padding-left: 1.2rem;
-  font-size: 0.88rem;
+  font-size: 0.84rem;
   line-height: 1.7;
-  color: var(--muted);
+  color: var(--phoenix-text-muted);
+}
+
+@media (max-width: 640px) {
+  .home-page {
+    padding: 18px 16px 32px;
+  }
+
+  .module-group-hint {
+    padding-left: 0;
+  }
+
+  .feature-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

@@ -60,6 +60,21 @@ class TestWorkspacePrefsStore(unittest.TestCase):
                 "src/",
             )
 
+    def test_after_sqlite_import_json_is_not_rewritten(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td)
+            ph = repo / ".phoenix"
+            ph.mkdir()
+            dot = workspace_dotfile_path(repo)
+            dot.write_text(
+                json.dumps({"bom_apply": {"last_part_number": "OLD"}}),
+                encoding="utf-8",
+            )
+            mtime_before = dot.stat().st_mtime
+            prefs.merge_workspace_section("bom_apply", {"last_part_number": "NEW"}, repo)
+            self.assertEqual(prefs.load_workspace_prefs(repo)["bom_apply"]["last_part_number"], "NEW")
+            self.assertLessEqual(dot.stat().st_mtime, mtime_before + 0.001)
+
 
 if __name__ == "__main__":
     unittest.main()

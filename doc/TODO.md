@@ -3,7 +3,7 @@
 > 汇总跨模块待办；细项研究稿见 [文档索引.md](文档索引.md)。  
 > 状态：`[ ]` 未做 · `[~]` 进行中 · `[x]` 已完成
 
-最后更新：2026-06
+最后更新：2026-06-20
 
 ---
 
@@ -12,6 +12,7 @@
 - [x] 出向引用：`JOIN file_asset`，去掉 `get_file_asset_bom_fields` N+1（见 [出向引用-N+1查库-研究.md](cad/出向引用-N+1查库-研究.md)）
 - [x] `bom_xref` 冗余 `rule_label` + 子件 BOM 快照；查询单表、不读盘补 Label
 - [x] 文件详情：引用 Tab 懒加载、分 scope 请求、角标单条 SQL
+- [x] **`phoenix_store.connect()` 同线程同 repo 可重入**（nested `with connect` 复用连接，避免改名/BOM 刷新链 `database is locked`）
 - [ ] `rebuild_bom_tree_occurrences`：邻接表只查一次，消除 per-host 重复全表 SQL
 - [x] `query_bom_xrefs_incoming`：合并 `get_file_asset_id` 为单条 SQL
 - [ ] 改名 XLink 修正 + **同步引用 Label**：`apply_host_xlink_corrections(sync_reference_labels=True)` 在目标文件尚未改名、且无 CAD 索引时应仍从磁盘 FCStd 读 rule Label（现会退化为 basename）；补单测：单引用、同 Group 双 XLink 的 `.002` 后缀、跨路径同目标不重复编号（见 [改名引用写回-装配Label同步-需求.md](cad/改名引用写回-装配Label同步-需求.md)）
@@ -39,7 +40,8 @@
 - [x] **工作空间树**：Code 模块偏好下默认筛选 `.h/.cpp` 等（见 §导航模块偏好）
 - [ ] 桌面 `fcstd_map_page` 分页，去掉 `load_fcstd_document` 全表
 - [ ] 统一运行日志：长任务进度条 / 取消（见 [统一运行日志窗口-规划讨论.md](platform/统一运行日志窗口-规划讨论.md)）
-- [x] **单元测试 Web 页**：套件勾选运行、NDJSON 流式进度、终止；失败关注 Tab（排序 / 勾选复测 / 简介列）；Pinia 持久化选项与勾选
+- [x] **单元测试 Web 页**：套件勾选运行、**运行范围列表按模块勾选**（默认全选）、NDJSON 流式进度、终止；失败关注 Tab（排序 / 勾选复测 / 简介列）；Pinia 持久化选项与勾选
+- [x] **链接路径修正 · 分析**：未建 CAD 索引时明确提示（非 JSON 解析错误）；空脚本输出友好报错
 
 ### Web 壳层 · Ribbon 改型（Element Plus · 循序渐进）
 
@@ -84,16 +86,27 @@
 - [x] 浏览器标题同步工作空间与当前页；品牌副标题显示工作空间名
 - [x] F5 / sessionStorage 恢复 Tab；地址栏 `?page=` 同步（见 commit 链 45c31dc 等）
 - [x] 文档：[Web壳层-使用说明.md](user/Web壳层-使用说明.md)、[新手指引.md](user/新手指引.md) 同步
+- [x] **页面 Tab 托盘**：顶栏居中排列；当前 Tab 略放大 + 切换动画（Chili3D 式强调）
+- [x] **浏览器标题**：`Phoenix 桌面工具 - {工作空间} · {当前页}`
+- [x] **欢迎页 · 最近工程**：每条可记 CAD/Code/全部模块范围（launcher + 工作空间 `nav_modules`）
 
 ### 系统 · FileWorkset（文件工作集）
 
 > 规划：[FileWorkset-规划.md](platform/FileWorkset-规划.md) — **壳层系统能力**，为 CAD/Code 各模块提供 path 集合归集与跨页执行。
 
-- [~] **P1 基础**：`phoenix_workset*`（SQLite）+ `GET/PUT /api/file-worksets` + 侧栏「工作集」Tab
-- [~] **P1 归集**：Code 索引勾选/本页、工作空间树「+工作集」
-- [~] **P1 消费**：Code UUID · `WorksetScopePicker` + `repo_rel_paths` 扫描
+- [x] **P1 基础**：`phoenix_workset*`（SQLite）+ `GET/PUT /api/file-worksets` + 侧栏「工作集」Tab
+- [x] **P1 归集**：Code 索引勾选/本页、工作空间树「+工作集」
+- [x] **P1 消费**：Code UUID · `WorksetScopePicker` + `repo_rel_paths` 扫描；UUID 页从当前工作集扫描 / 命中加入工作集
+- [x] **P1 UX**：工作集删除确认（Element Plus）；侧栏去掉 SQLite 路径说明
 - [ ] 改名 / 转码 / CAD 批量页接入 `useWorksetPageScope`
 - [ ] 工作集「刷新 / 剔除 missing」、Saved Query 物化
+
+**P2 · 代码整洁（优先级靠后）**
+
+- [x] `FileWorksetPanel`：`watch(immediate)` 与 `onMounted` 重复 `hydrate`（已去 `onMounted`）
+- [ ] workset path 归一化：Python / TS 重复逻辑，可抽共享约定或仅文档说明
+- [ ] `save_worksets_to_db` 全量 DELETE+INSERT → 大工作集时改增量
+- [ ] `load_worksets_from_db` path 查询 N+1 → 批量 JOIN
 
 **R4 · 业务页渐进（按需）**
 
@@ -192,7 +205,7 @@
 - [~] **Code UUID 替换** — 同上 §11  
   - [x] 扫描 + 勾选 apply（`map_per_value` / `fresh_per_hit`）  
   - [x] CAA `.iid` / `0x` 块 / 跨格式同值 + 大小写组内一致  
-  - [x] Web 表：同值分组、列顺序、预检后显示「替换后」列  
+  - [x] Web 表：同值分组、列顺序、预检后显示「替换后」列；**替换策略**单行布局；工作集范围扫描
   - [x] 与 Code 索引范围联动（`use_index_scope`）；报告 JSON 落 `.phoenix/reports/`
 - [x] **成员排序 · 锁定段（P0）**：`reorder_avoidance.py` + `test_reorder_avoidance_rules.py`；可选 Web 自检 API
 - [x] **成员排序 · 锁定段回归单测**：`tests/test_reorder_avoidance_rules.py`；改规则须全套件通过
@@ -224,3 +237,5 @@
 - 索引字段变更后：工作空间内 **CAD 重扫** 或单文件 **重建引用索引**
 - 查询路径**不读 FCStd 补全**；缺 `link_label` / `rule_label` 需重建索引
 - **旧库 / 空索引**：若顶部出现旧库横幅，点 **确认重建数据库** 后 **CAD 索引 → 工程内搜索**；仍异常时可删除 `.phoenix/phoenix-workspace.sqlite` 再全量重扫
+- **链接路径修正 · 分析失败**：须先 **CAD 索引 → 工程内搜索**（空库会提示「请先在 CAD 索引页…」，勿在未索引时分析）
+- **全量单测**：`python -m unittest discover -s tests -p 'test_*.py'`（约 288 项，2026-06-20 通过）

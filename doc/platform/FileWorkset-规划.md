@@ -3,7 +3,7 @@
 > **壳层系统能力**：为 CAD / Code 等各业务模块提供统一的「文件 path 集合」归集与跨页执行支撑。  
 > 流程：**发现 → 归集 → 跨页执行**。
 
-最后更新：2026-06
+最后更新：2026-06-20
 
 ---
 
@@ -79,8 +79,8 @@ interface FileWorkset {
 
 | 阶段 | 内容 | 状态 |
 | --- | --- | --- |
-| A | API + store + 侧栏 Tab | 进行中 |
-| B | 索引/树 → 加入工作集 | 进行中 |
-| C | Code UUID · WorksetScopePicker | 进行中 |
+| A | API + store + 侧栏 Tab | **已完成** |
+| B | 索引/树 → 加入工作集 | **已完成** |
+| C | Code UUID · WorksetScopePicker | **已完成** |
 | D | 改名、转码、CAD 批量 | 待做 |
 | E | Saved Query 物化 | 待做 |

@@ -1,4 +1,6 @@
-export const DEFAULT_APP_TITLE = "Phoenix 桌面辅助工具";
+import type { ModuleScope } from "../constants/moduleScope";
+
+export const DEFAULT_APP_TITLE = "Phoenix 桌面工具";
 
 export type NavItem = {
   id: string;
@@ -55,6 +57,12 @@ export type ShellLayout = {
 export type RecentWorkspaceEntry = {
   path: string;
   exists: boolean;
+  module_scope?: ModuleScope;
+};
+
+export type WorkspaceNavModules = {
+  scope: ModuleScope;
+  enabled: string[];
 };
 
 export type LauncherPrefs = {

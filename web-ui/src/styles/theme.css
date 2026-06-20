@@ -1,0 +1,191 @@
+/**
+ * Phoenix Web 设计令牌（亮色默认；暗色通过 html[data-theme="dark"] 切换）。
+ * 组件样式请优先使用 --phoenix-* 或已映射的 --shell-* / --page-* 变量。
+ */
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* ── 品牌 ── */
+  --phoenix-brand-from: #2563eb;
+  --phoenix-brand-to: #1d4ed8;
+  --phoenix-brand-mark-fg: #ffffff;
+  --phoenix-brand-shadow: 0 2px 8px rgba(37, 99, 235, 0.28);
+  --phoenix-brand-title: #0f172a;
+  --phoenix-brand-sub: #64748b;
+  --phoenix-brand-hover-bg: rgba(255, 255, 255, 0.62);
+  --phoenix-brand-hover-title: #1d4ed8;
+
+  /* ── 壳层背景 ── */
+  --phoenix-bg-shell: #eceef2;
+  --phoenix-bg-page: #f8f9fb;
+  --phoenix-bg-header: linear-gradient(180deg, #eef1f6 0%, #e8ecf2 100%);
+  --phoenix-bg-toolbar: #ffffff;
+  --phoenix-bg-sidebar: #f0f2f6;
+  --phoenix-bg-panel-head: #fafbfc;
+  --phoenix-bg-elevated: #ffffff;
+  --phoenix-bg-muted: rgba(15, 23, 42, 0.04);
+  --phoenix-bg-welcome-rail: #eceff3;
+  --phoenix-bg-welcome-main: #ffffff;
+
+  /* ── 边框 ── */
+  --phoenix-border: #d8dce3;
+  --phoenix-border-strong: #b8bec8;
+  --phoenix-border-header: #cdd3dc;
+  --phoenix-border-subtle: rgba(15, 23, 42, 0.08);
+
+  /* ── 文字 ── */
+  --phoenix-text: #111827;
+  --phoenix-text-secondary: #334155;
+  --phoenix-text-muted: #64748b;
+  --phoenix-text-on-accent: #ffffff;
+
+  /* ── 强调 / 状态 ── */
+  --phoenix-accent: #2563eb;
+  --phoenix-accent-hover: #1d4ed8;
+  --phoenix-accent-soft: #eff6ff;
+  --phoenix-accent-border: #93c5fd;
+  --phoenix-warning-bg: #fef3c7;
+  --phoenix-warning-border: #f59e0b;
+  --phoenix-warning-text: #92400e;
+  --phoenix-danger: #dc2626;
+
+  /* ── 交互 ── */
+  --phoenix-hover-overlay: rgba(0, 0, 0, 0.05);
+  --phoenix-focus-ring: #93c5fd;
+  --phoenix-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --phoenix-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+
+  /* ── Ribbon / Tab ── */
+  --phoenix-ribbon-bg: #ffffff;
+  --phoenix-ribbon-tab-track: rgba(15, 23, 42, 0.06);
+  --phoenix-ribbon-tab-hover: rgba(255, 255, 255, 0.45);
+  --phoenix-ribbon-tab-active-bg: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+  --phoenix-ribbon-group-divider: #c5cdd8;
+  --phoenix-ribbon-btn-hover: #e8eef5;
+
+  /* ── 布局尺寸 ── */
+  --phoenix-header-height: 44px;
+  --phoenix-status-height: 28px;
+  --phoenix-radius-sm: 4px;
+  --phoenix-radius-md: 8px;
+  --phoenix-radius-lg: 10px;
+
+  /* ── 兼容旧变量名（逐步迁移到 --phoenix-*）── */
+  --shell-bg: var(--phoenix-bg-shell);
+  --page-bg: var(--phoenix-bg-page);
+  --toolbar-bg: var(--phoenix-bg-toolbar);
+  --header-bg: var(--phoenix-bg-header);
+  --header-border: var(--phoenix-border-header);
+  --header-height: var(--phoenix-header-height);
+  --nav-bg: #e8eaef;
+  --sidebar-bg: var(--phoenix-bg-sidebar);
+  --panel-head-bg: var(--phoenix-bg-panel-head);
+  --border: var(--phoenix-border);
+  --border-strong: var(--phoenix-border-strong);
+  --text: var(--phoenix-text);
+  --muted: var(--phoenix-text-muted);
+  --btn-bg: #fafafa;
+  --accent: var(--phoenix-accent);
+  --nav-hover: var(--phoenix-hover-overlay);
+  --nav-mode-bg: #c5cdd8;
+  --nav-mode-fg: var(--phoenix-text-secondary);
+  --ribbon-bg: var(--phoenix-ribbon-bg);
+  --ribbon-group-divider: var(--phoenix-ribbon-group-divider);
+  --ribbon-btn-hover: var(--phoenix-ribbon-btn-hover);
+  --ribbon-btn-radius: var(--phoenix-radius-sm);
+  --ribbon-panel-height: 58px;
+  --ribbon-group-body-height: 40px;
+
+  /* Element Plus 桥接（亮色） */
+  --el-color-primary: var(--phoenix-accent);
+  --el-color-primary-light-3: #60a5fa;
+  --el-color-primary-light-5: #93c5fd;
+  --el-color-primary-light-7: #bfdbfe;
+  --el-color-primary-light-8: #dbeafe;
+  --el-color-primary-light-9: var(--phoenix-accent-soft);
+  --el-color-primary-dark-2: var(--phoenix-accent-hover);
+  --el-bg-color: var(--phoenix-bg-elevated);
+  --el-bg-color-page: var(--phoenix-bg-page);
+  --el-bg-color-overlay: var(--phoenix-bg-elevated);
+  --el-text-color-primary: var(--phoenix-text);
+  --el-text-color-regular: var(--phoenix-text-secondary);
+  --el-text-color-secondary: var(--phoenix-text-muted);
+  --el-text-color-placeholder: #94a3b8;
+  --el-border-color: var(--phoenix-border);
+  --el-border-color-light: #e2e8f0;
+  --el-border-color-lighter: #eef2f6;
+  --el-fill-color-blank: var(--phoenix-bg-elevated);
+  --el-fill-color-light: #f8fafc;
+  --el-fill-color-lighter: #f1f5f9;
+  --el-border-radius-base: 6px;
+  --el-border-radius-small: 4px;
+  --el-border-radius-round: 999px;
+  --el-box-shadow-light: var(--phoenix-shadow-sm);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --phoenix-brand-from: #3b82f6;
+  --phoenix-brand-to: #2563eb;
+  --phoenix-brand-shadow: 0 2px 10px rgba(59, 130, 246, 0.35);
+  --phoenix-brand-title: #f1f5f9;
+  --phoenix-brand-sub: #94a3b8;
+  --phoenix-brand-hover-bg: rgba(255, 255, 255, 0.06);
+  --phoenix-brand-hover-title: #93c5fd;
+
+  --phoenix-bg-shell: #0f1419;
+  --phoenix-bg-page: #151b23;
+  --phoenix-bg-header: linear-gradient(180deg, #1a222d 0%, #151b23 100%);
+  --phoenix-bg-toolbar: #151b23;
+  --phoenix-bg-sidebar: #121820;
+  --phoenix-bg-panel-head: #1a222d;
+  --phoenix-bg-elevated: #1a222d;
+  --phoenix-bg-muted: rgba(255, 255, 255, 0.04);
+  --phoenix-bg-welcome-rail: #121820;
+  --phoenix-bg-welcome-main: #151b23;
+
+  --phoenix-border: #2a3441;
+  --phoenix-border-strong: #3d4a5c;
+  --phoenix-border-header: #2a3441;
+  --phoenix-border-subtle: rgba(255, 255, 255, 0.08);
+
+  --phoenix-text: #e2e8f0;
+  --phoenix-text-secondary: #cbd5e1;
+  --phoenix-text-muted: #94a3b8;
+
+  --phoenix-accent: #60a5fa;
+  --phoenix-accent-hover: #93c5fd;
+  --phoenix-accent-soft: rgba(59, 130, 246, 0.15);
+  --phoenix-accent-border: #3b82f6;
+  --phoenix-warning-bg: rgba(245, 158, 11, 0.15);
+  --phoenix-warning-border: #d97706;
+  --phoenix-warning-text: #fcd34d;
+
+  --phoenix-hover-overlay: rgba(255, 255, 255, 0.06);
+  --phoenix-focus-ring: #60a5fa;
+  --phoenix-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --phoenix-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+
+  --phoenix-ribbon-bg: #151b23;
+  --phoenix-ribbon-tab-track: rgba(255, 255, 255, 0.06);
+  --phoenix-ribbon-tab-hover: rgba(255, 255, 255, 0.08);
+  --phoenix-ribbon-tab-active-bg: linear-gradient(180deg, #1e293b 0%, #1a222d 100%);
+  --phoenix-ribbon-group-divider: #334155;
+  --phoenix-ribbon-btn-hover: rgba(255, 255, 255, 0.08);
+
+  --btn-bg: #1e293b;
+
+  --el-bg-color: var(--phoenix-bg-elevated);
+  --el-bg-color-page: var(--phoenix-bg-page);
+  --el-text-color-primary: var(--phoenix-text);
+  --el-text-color-regular: var(--phoenix-text-secondary);
+  --el-text-color-secondary: var(--phoenix-text-muted);
+  --el-border-color: var(--phoenix-border);
+  --el-border-color-light: #2a3441;
+  --el-fill-color-blank: var(--phoenix-bg-elevated);
+  --el-fill-color-light: #1e293b;
+  --el-fill-color-lighter: #151b23;
+}

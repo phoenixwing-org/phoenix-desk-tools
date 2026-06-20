@@ -14,12 +14,14 @@ from phoenix.config.user_prefs import (
     is_ephemeral_workspace_path,
     list_recent_workspace_paths_raw,
     load_launcher_prefs,
+    load_workspace_nav_modules,
     prune_recent_workspaces,
     record_recent_workspace,
     remove_recent_workspace,
     save_launcher_freecad_dir,
     save_launcher_nav_modules,
     save_launcher_shell_layout,
+    save_workspace_nav_modules,
 )
 from phoenix.freecad.default_install import default_freecad_install_dir
 
@@ -37,6 +39,15 @@ def app_config_payload() -> dict[str, Any]:
     }
 
 
+def _recent_entry_module_scope(p: Path) -> str:
+    try:
+        if p.is_dir():
+            return str(load_workspace_nav_modules(p).get("scope") or "all")
+    except OSError:
+        pass
+    return "all"
+
+
 def launcher_prefs_payload() -> dict[str, Any]:
     prune_recent_workspaces(persist=True)
     launcher = load_launcher_prefs()
@@ -45,6 +56,7 @@ def launcher_prefs_payload() -> dict[str, Any]:
             "path": format_absolute_config_path(p),
             "exists": p.is_dir(),
             "ephemeral": is_ephemeral_workspace_path(p),
+            "module_scope": _recent_entry_module_scope(p),
         }
         for p in list_recent_workspace_paths_raw()
         if not is_ephemeral_workspace_path(p)
@@ -100,12 +112,30 @@ def update_nav_modules(enabled: list[str]) -> dict[str, Any]:
     return save_launcher_nav_modules(enabled)
 
 
+def get_workspace_nav_modules_payload(repo_root: Path) -> dict[str, Any]:
+    return load_workspace_nav_modules(repo_root)
+
+
+def update_workspace_nav_modules(
+    repo_root: Path,
+    *,
+    scope: str | None = None,
+    enabled: list[str] | None = None,
+) -> dict[str, Any]:
+    return save_workspace_nav_modules(repo_root, scope=scope, enabled=enabled)
+
+
 def activate_workspace(path: Path) -> dict[str, str]:
     p = path.expanduser().resolve(strict=False)
     if not p.is_dir():
         raise ValueError(f"不是有效目录: {p}")
     record_recent_workspace(p)
-    return {"path": str(p), "name": p.name or str(p)}
+    nav = load_workspace_nav_modules(p)
+    return {
+        "path": str(p),
+        "name": p.name or str(p),
+        "nav_modules": nav,
+    }
 
 
 def add_recent_workspace_entry(path: str) -> dict[str, Any]:

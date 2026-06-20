@@ -32,23 +32,23 @@ const emit = defineEmits<{
   align-items: center;
   align-self: center;
   gap: 1px;
-  height: 28px;
+  height: 30px;
   padding: 2px;
-  border-radius: 7px;
-  background: rgba(15, 23, 42, 0.06);
-  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.06);
+  border-radius: var(--phoenix-radius-md);
+  background: var(--phoenix-ribbon-tab-track);
+  box-shadow: inset 0 1px 2px var(--phoenix-border-subtle);
 }
 
 .ribbon-tab {
   border: none;
-  border-radius: 5px;
+  border-radius: calc(var(--phoenix-radius-md) - 2px);
   background: transparent;
-  padding: 0 13px;
-  height: 24px;
-  font-size: 0.72rem;
+  padding: 0 14px;
+  height: 26px;
+  font-size: 0.74rem;
   font-weight: 500;
   letter-spacing: 0.02em;
-  color: #64748b;
+  color: var(--phoenix-text-muted);
   cursor: pointer;
   white-space: nowrap;
   transition:
@@ -58,16 +58,16 @@ const emit = defineEmits<{
 }
 
 .ribbon-tab:hover:not(.active) {
-  color: #334155;
-  background: rgba(255, 255, 255, 0.45);
+  color: var(--phoenix-text-secondary);
+  background: var(--phoenix-ribbon-tab-hover);
 }
 
 .ribbon-tab.active {
-  color: #1d4ed8;
+  color: var(--phoenix-accent-hover);
   font-weight: 600;
-  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+  background: var(--phoenix-ribbon-tab-active-bg);
   box-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.08),
-    inset 0 0 0 1px rgba(148, 163, 184, 0.35);
+    var(--phoenix-shadow-sm),
+    inset 0 0 0 1px var(--phoenix-border-subtle);
 }
 </style>

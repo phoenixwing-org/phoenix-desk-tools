@@ -87,6 +87,25 @@ class TestUnitTestRunner(unittest.TestCase):
         self.assertTrue(any(m["suite_id"] == "code" for m in plan["modules"]))
         self.assertTrue(any(m["suite_id"] == "platform" for m in plan["modules"]))
 
+    def test_include_module_names_filters_run(self) -> None:
+        from phoenix.testing.runner import UnitTestRunOptions, plan_unit_test_run, run_unit_test_suites
+
+        full_plan = plan_unit_test_run(["code"])
+        self.assertGreater(full_plan["total_modules"], 1)
+        only_mod = full_plan["modules"][0]["module"]
+        plan = plan_unit_test_run(
+            ["code"],
+            options=UnitTestRunOptions(include_module_names=frozenset([only_mod])),
+        )
+        self.assertEqual(plan["total_modules"], 1)
+        self.assertEqual(plan["modules"][0]["module"], only_mod)
+
+        result = run_unit_test_suites(
+            ["code"],
+            options=UnitTestRunOptions(include_module_names=frozenset([only_mod])),
+        )
+        self.assertTrue(all(c["module"] == only_mod for c in result.cases))
+
     def test_exclude_case_ids_skips_and_counts_ignored(self) -> None:
         from phoenix.testing.runner import UnitTestRunOptions, run_unit_test_suites
 

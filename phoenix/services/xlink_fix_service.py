@@ -29,6 +29,7 @@ from phoenix.freecad.phoenix_store import (
     connect,
     format_part_key,
     get_part_key_detail,
+    load_fcstd_document,
 )
 from phoenix.freecad.rename_analysis.types import RenameAnalysisError
 from phoenix.freecad.rename_analysis.xlink import (
@@ -110,7 +111,7 @@ def _run_xlink_script(
     batch_dir = _resolve_batch_dir(rr, batch_dir_input)
     if not batch_dir.is_dir():
         raise ValueError(f"修正目录不存在: {format_resolved_under_workspace(batch_dir, rr)}")
-    if not cad_database_path(rr).is_file():
+    if load_fcstd_document(rr) is None:
         raise ValueError("请先在「CAD 索引」页执行工程内搜索")
 
     cmd = [
@@ -149,9 +150,21 @@ def _run_xlink_script(
     jp = Path(json_out)
     try:
         if jp.is_file():
-            data = json.loads(jp.read_text(encoding="utf-8"))
+            raw_text = jp.read_text(encoding="utf-8").strip()
+            if raw_text:
+                data = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        jp.unlink(missing_ok=True)
+        tail = captured.strip().splitlines()
+        hint = tail[-1] if tail else str(exc)
+        raise ValueError(f"链接修正脚本输出无效 JSON：{hint}") from exc
     finally:
         jp.unlink(missing_ok=True)
+
+    if data is None and proc.returncode != 0:
+        tail = captured.strip().splitlines()
+        hint = tail[-1] if tail else f"脚本退出码 {proc.returncode}"
+        raise ValueError(hint)
 
     out: dict[str, Any] = {
         "exit_code": proc.returncode,

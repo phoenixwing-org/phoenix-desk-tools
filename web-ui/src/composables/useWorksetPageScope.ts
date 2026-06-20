@@ -56,7 +56,11 @@ export function useWorksetPageScope(pageId: string) {
   });
 
   function buildScanBody(): PathScopeBody {
-    const ws = store.worksetById(prefs.value.worksetId);
+    let wsId = prefs.value.worksetId;
+    if (prefs.value.scopeMode === "workset" && !wsId) {
+      wsId = store.activeId;
+    }
+    const ws = store.worksetById(wsId);
     return buildPathScopeBody(prefs.value, ws?.paths);
   }
 

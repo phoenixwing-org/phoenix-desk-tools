@@ -8,7 +8,7 @@ from typing import Any
 
 _DEFAULT_CONFIG = Path(__file__).resolve().parent / "app_config.json"
 
-DEFAULT_APP_TITLE = "Phoenix 桌面辅助工具"
+DEFAULT_APP_TITLE = "Phoenix 桌面工具"
 
 
 def load_app_config(path: Path | str | None = None) -> dict[str, Any]:

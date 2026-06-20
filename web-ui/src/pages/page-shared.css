@@ -116,9 +116,9 @@
   box-sizing: border-box;
   margin-bottom: 12px;
   padding: 16px 18px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #fff;
+  border: 1px solid var(--phoenix-border);
+  border-radius: var(--phoenix-radius-md);
+  background: var(--phoenix-bg-elevated);
 }
 
 .tool-page > .banner.warn {
@@ -187,18 +187,18 @@
   flex-wrap: wrap;
   gap: 14px;
   padding: 10px 12px;
-  background: #fff;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  background: var(--phoenix-bg-elevated);
+  border: 1px solid var(--phoenix-border);
+  border-radius: var(--phoenix-radius-md);
   font-size: 0.85rem;
   margin-bottom: 10px;
 }
 
 .table-wrap {
   overflow: auto;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #fff;
+  border: 1px solid var(--phoenix-border);
+  border-radius: var(--phoenix-radius-md);
+  background: var(--phoenix-bg-elevated);
   max-height: calc(100vh - 360px);
 }
 

@@ -104,12 +104,12 @@ const showRunScopeCases = computed({
 const runPlan = ref<UnitTestPlan | null>(null);
 const runPlanLoading = ref(false);
 const runPlanError = ref("");
+const runCheckedModules = ref<Set<string>>(new Set());
+const lastPlanModuleNames = ref<string[]>([]);
 
 const runnableSuites = computed(() =>
   suites.value.filter((s) => RUNNABLE_SUITE_IDS.includes(s.id as (typeof RUNNABLE_SUITE_IDS)[number])),
 );
-
-const allSuiteMeta = computed(() => suites.value.find((s) => s.id === "all"));
 
 const watchlistCount = computed(() => watchlist.value.length);
 const watchlistTotalFails = computed(() => watchlistTotalFailCount(watchlist.value));
@@ -125,6 +125,51 @@ const watchlistAllChecked = computed(
     sortedWatchlist.value.length > 0 &&
     sortedWatchlist.value.every((e) => watchlistChecked.value.has(e.id)),
 );
+
+const runScopeModuleNames = computed(() => runPlan.value?.modules.map((m) => m.module) ?? []);
+
+const runScopeModulesAllChecked = computed(
+  () =>
+    runScopeModuleNames.value.length > 0 &&
+    runScopeModuleNames.value.every((m) => runCheckedModules.value.has(m)),
+);
+
+const runScopeModuleCheckedCount = computed(() =>
+  runScopeModuleNames.value.filter((m) => runCheckedModules.value.has(m)).length,
+);
+
+const runScopeSelectedSummary = computed(() => {
+  if (!runPlan.value) return null;
+  const mods = runPlan.value.modules.filter((m) => runCheckedModules.value.has(m.module));
+  return {
+    modules: mods.length,
+    totalModules: runPlan.value.modules.length,
+    cases: mods.reduce((sum, m) => sum + m.case_count, 0),
+    totalCases: runPlan.value.total_cases,
+  };
+});
+
+const runScopeButtonModuleCount = computed(() => {
+  if (showRunScopeList.value && runPlan.value && !runPlanLoading.value) {
+    const s = runScopeSelectedSummary.value;
+    if (s && s.modules < s.totalModules) return `${s.modules}/${s.totalModules}`;
+    return String(runPlan.value.total_modules);
+  }
+  let sum = 0;
+  for (const id of runChecked.value) {
+    const suite = suites.value.find((s) => s.id === id);
+    if (suite) sum += suite.module_count;
+  }
+  return sum > 0 ? String(sum) : "";
+});
+
+const canRunFull = computed(() => {
+  if (!runCheckedCount.value) return false;
+  if (showRunScopeList.value && runPlan.value?.modules.length) {
+    return runScopeModuleCheckedCount.value > 0;
+  }
+  return true;
+});
 
 const runProgressPct = computed(() => {
   const p = runProgress.value;
@@ -212,6 +257,14 @@ function statusClass(status: string) {
 
 function shortModule(module: string) {
   return module.replace(/^tests\./, "");
+}
+
+function suiteShortLabel(suiteId: string): string {
+  if (suiteId === "cad") return "CAD";
+  if (suiteId === "code") return "Code";
+  if (suiteId === "platform") return "平台";
+  if (suiteId === "all") return "全部";
+  return suiteLabelById.value.get(suiteId) ?? suiteId;
 }
 
 function moduleCatalogEntry(module: string): TestModuleCatalogEntry | undefined {
@@ -434,9 +487,58 @@ async function loadSuites() {
   }
 }
 
-function runPlanOptions(): UnitTestRunOptions | undefined {
-  const exclude = excludeCaseIdsForFullRun(watchlist.value);
-  return exclude.length ? { exclude_cases: exclude } : undefined;
+function syncRunCheckedModulesFromPlan(plan: UnitTestPlan) {
+  const names = plan.modules.map((m) => m.module);
+  const prevAvailable = new Set(lastPlanModuleNames.value);
+  const prevChecked = runCheckedModules.value;
+
+  if (!prevAvailable.size) {
+    runCheckedModules.value = new Set(names);
+    lastPlanModuleNames.value = names;
+    return;
+  }
+
+  const next = new Set<string>();
+  for (const name of names) {
+    if (!prevAvailable.has(name)) next.add(name);
+    else if (prevChecked.has(name)) next.add(name);
+  }
+  runCheckedModules.value = next;
+  lastPlanModuleNames.value = names;
+}
+
+function toggleRunScopeModule(module: string, checked: boolean) {
+  const next = new Set(runCheckedModules.value);
+  if (checked) next.add(module);
+  else next.delete(module);
+  runCheckedModules.value = next;
+}
+
+function toggleAllRunScopeModules(checked: boolean) {
+  if (checked) {
+    runCheckedModules.value = new Set(runScopeModuleNames.value);
+    return;
+  }
+  runCheckedModules.value = new Set();
+}
+
+function runModuleFilterOptions(): Pick<UnitTestRunOptions, "include_modules"> | undefined {
+  if (!showRunScopeList.value || !runPlan.value?.modules.length) return undefined;
+  const allNames = runPlan.value.modules.map((m) => m.module);
+  const selected = allNames.filter((m) => runCheckedModules.value.has(m));
+  if (!selected.length || selected.length === allNames.length) return undefined;
+  return { include_modules: selected };
+}
+
+function mergeRunOptions(base?: UnitTestRunOptions): UnitTestRunOptions | undefined {
+  const exclude = base?.exclude_cases ?? excludeCaseIdsForFullRun(watchlist.value);
+  const includeCases = base?.include_cases;
+  const mod = runModuleFilterOptions();
+  const opts: UnitTestRunOptions = {};
+  if (exclude.length) opts.exclude_cases = exclude;
+  if (includeCases?.length) opts.include_cases = includeCases;
+  if (mod?.include_modules?.length) opts.include_modules = mod.include_modules;
+  return Object.keys(opts).length ? opts : undefined;
 }
 
 async function loadRunPlan() {
@@ -455,9 +557,10 @@ async function loadRunPlan() {
   runPlanError.value = "";
   try {
     runPlan.value = await fetchUnitTestPlan(ids, {
-      ...runPlanOptions(),
+      ...mergeRunOptions(),
       include_case_details: showRunScopeCases.value,
     });
+    syncRunCheckedModulesFromPlan(runPlan.value);
     void loadModuleCatalog(runPlan.value.modules.map((m) => m.module));
     if (showRunScopeCases.value) {
       const caseIds = runPlan.value.modules.flatMap((m) => (m.cases ?? []).map((c) => c.id));
@@ -612,6 +715,10 @@ async function onRun(mode: RunMode = "full") {
     shell.setStatus("请至少勾选一个要运行的套件");
     return;
   }
+  if (mode === "full" && showRunScopeList.value && runPlan.value?.modules.length && !runScopeModuleCheckedCount.value) {
+    shell.setStatus("请至少勾选一个要运行的模块");
+    return;
+  }
   if (mode === "watchlist" && !watchlist.value.length) {
     shell.setStatus("失败关注列表为空");
     return;
@@ -625,11 +732,15 @@ async function onRun(mode: RunMode = "full") {
     suiteIds = ids.length ? ids : ["all"];
     logLabel = `全部复测 ${watchlist.value.length} 条`;
   } else {
-    const exclude = excludeCaseIdsForFullRun(watchlist.value);
-    if (exclude.length) {
-      runOptions = { exclude_cases: exclude };
+    runOptions = mergeRunOptions();
+    const modCount = runScopeModuleCheckedCount.value;
+    const modTotal = runPlan.value?.modules.length ?? 0;
+    const suitePart = ids.map((id) => suiteLabelById.value.get(id) ?? id).join(" + ");
+    if (showRunScopeList.value && modTotal && modCount < modTotal) {
+      logLabel = `${suitePart} · ${modCount}/${modTotal} 模块`;
+    } else {
+      logLabel = suitePart;
     }
-    logLabel = ids.map((id) => suiteLabelById.value.get(id) ?? id).join(" + ");
   }
 
   await executeRun({
@@ -676,6 +787,13 @@ watch(result, (r) => {
   if (!r) return;
   if (!resultSuiteChecked.value.size && lastRunSuites.value.length) {
     resultSuiteChecked.value = new Set(lastRunSuites.value);
+  }
+});
+
+watch(showRunScopeList, (show) => {
+  if (!show) {
+    runCheckedModules.value = new Set();
+    lastPlanModuleNames.value = [];
   }
 });
 
@@ -740,6 +858,16 @@ onMounted(() => {
           </label>
         </div>
         <div class="run-toolbar-actions">
+          <button
+            type="button"
+            class="opt-chip scope-list-btn suite-chip-inline"
+            :class="{ checked: showRunScopeList }"
+            :disabled="running"
+            @click="showRunScopeList = !showRunScopeList"
+          >
+            <span>列出运行范围</span>
+            <span v-if="runScopeButtonModuleCount" class="suite-count">{{ runScopeButtonModuleCount }}</span>
+          </button>
           <button type="button" class="link-btn" :disabled="running" @click="selectAllRun">全选</button>
           <button type="button" class="link-btn" :disabled="running" @click="clearAllRun">清空</button>
           <button
@@ -765,24 +893,27 @@ onMounted(() => {
             type="button"
             class="btn primary btn-sm"
             data-tour-page-unit-tests-run
-            :disabled="!runCheckedCount"
+            :disabled="!canRunFull"
             @click="onRun('full')"
           >
-            运行（{{ runCheckedCount }}）
+            运行（{{ runCheckedCount }}<template v-if="showRunScopeList && runScopeSelectedSummary && runScopeSelectedSummary.modules < runScopeSelectedSummary.totalModules"> · {{ runScopeSelectedSummary.modules }} 模块</template>）
           </button>
         </div>
       </div>
-      <div class="run-scope-controls">
+      <div v-if="showRunScopeList" class="run-scope-controls">
         <label class="opt-chip scope-toggle">
-          <input v-model="showRunScopeList" type="checkbox" :disabled="running" />
-          <span>列出运行范围</span>
-        </label>
-        <label v-if="showRunScopeList" class="opt-chip scope-toggle">
           <input v-model="showRunScopeCases" type="checkbox" :disabled="running || runPlanLoading" />
           <span>展开用例</span>
         </label>
         <span v-if="showRunScopeList && runPlan && !runPlanLoading" class="run-scope-summary muted small">
-          {{ runPlan.suite_label }} · {{ runPlan.total_modules }} 模块 · {{ runPlan.total_cases }} 用例
+          {{ runPlan.suite_label }}
+          <template v-if="runScopeSelectedSummary && runScopeSelectedSummary.modules < runScopeSelectedSummary.totalModules">
+            · 已选 {{ runScopeSelectedSummary.modules }}/{{ runScopeSelectedSummary.totalModules }} 模块
+            · {{ runScopeSelectedSummary.cases }} 用例
+          </template>
+          <template v-else>
+            · {{ runPlan.total_modules }} 模块 · {{ runPlan.total_cases }} 用例
+          </template>
           <template v-if="runPlan.ignored_cases"> · 将忽略 {{ runPlan.ignored_cases }}</template>
         </span>
         <span v-if="runPlanLoading" class="muted small">加载计划…</span>
@@ -790,8 +921,23 @@ onMounted(() => {
       </div>
       <div v-if="showRunScopeList && runPlan?.modules.length" class="run-scope-list">
         <table class="data-table compact run-scope-table">
+          <colgroup>
+            <col class="col-check" />
+            <col />
+            <col />
+            <col />
+            <col class="col-num" />
+          </colgroup>
           <thead>
             <tr>
+              <th class="col-check">
+                <input
+                  type="checkbox"
+                  :checked="runScopeModulesAllChecked"
+                  :disabled="running || !runPlan.modules.length"
+                  @change="toggleAllRunScopeModules(($event.target as HTMLInputElement).checked)"
+                />
+              </th>
               <th>模块</th>
               <th>简介</th>
               <th>套件</th>
@@ -800,16 +946,24 @@ onMounted(() => {
           </thead>
           <tbody>
             <template v-for="mod in runPlan.modules" :key="mod.module">
-              <tr>
+              <tr :class="{ 'run-scope-row-off': !runCheckedModules.has(mod.module) }">
+                <td class="col-check">
+                  <input
+                    type="checkbox"
+                    :checked="runCheckedModules.has(mod.module)"
+                    :disabled="running"
+                    @change="toggleRunScopeModule(mod.module, ($event.target as HTMLInputElement).checked)"
+                  />
+                </td>
                 <td class="mono">{{ shortModule(mod.module) }}</td>
                 <td class="module-desc" :title="moduleDescription(mod.module)">
                   {{ moduleDescriptionBrief(mod.module) }}
                 </td>
-                <td>{{ suiteLabelById.get(mod.suite_id) ?? mod.suite_id }}</td>
+                <td>{{ suiteShortLabel(mod.suite_id) }}</td>
                 <td class="col-num">{{ mod.case_count }}</td>
               </tr>
               <tr v-if="showRunScopeCases && mod.cases?.length" class="run-scope-cases-row">
-                <td colspan="4">
+                <td colspan="5">
                   <ul class="run-scope-cases">
                     <li v-for="c in mod.cases" :key="c.id" class="mono">
                       {{ c.class_name }}.{{ c.method }}
@@ -858,8 +1012,7 @@ onMounted(() => {
           </li>
         </ul>
       </div>
-      <p v-else-if="allSuiteMeta || result || watchlistSkipCount" class="run-foot">
-        <span v-if="allSuiteMeta" class="run-foot-hint">共 {{ allSuiteMeta.module_count }} 模块</span>
+      <p v-else-if="watchlistSkipCount || result" class="run-foot">
         <span v-if="watchlistSkipCount && !running" class="run-foot-hint">
           全量时将忽略 {{ watchlistSkipCount }} 条关注项
         </span>
@@ -1284,6 +1437,12 @@ onMounted(() => {
   cursor: pointer;
 }
 
+.scope-list-btn {
+  cursor: pointer;
+  border: none;
+  font: inherit;
+}
+
 .run-scope-list {
   margin-top: 8px;
   max-height: min(40vh, 320px);
@@ -1294,6 +1453,18 @@ onMounted(() => {
 
 .run-scope-table {
   margin: 0;
+}
+
+.run-scope-table col.col-check {
+  width: 36px;
+}
+
+.run-scope-table .col-check {
+  text-align: center;
+}
+
+.run-scope-row-off {
+  opacity: 0.55;
 }
 
 .run-scope-cases-row td {

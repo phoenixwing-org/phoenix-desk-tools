@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
+import { ElMessageBox } from "element-plus";
 import { useAppShell } from "../composables/useAppShell";
 import { useFileWorksetsStore } from "../stores/fileWorksets";
 import { basenameFromRel, repoDirFromRel } from "../utils/workspaceFileQuery";
@@ -30,11 +31,6 @@ watch(active, (ws) => {
   renameDraft.value = ws?.name ?? "";
 });
 
-onMounted(() => {
-  const ws = shell.workspacePath.value;
-  if (ws) void store.hydrate(ws);
-});
-
 function onSelectWorkset(id: string) {
   store.setActiveId(id);
 }
@@ -48,10 +44,25 @@ function onRename() {
   store.renameWorkset(active.value.id, renameDraft.value);
 }
 
-function onDelete() {
+async function onDelete() {
   if (!active.value) return;
-  if (!window.confirm(`删除工作集「${active.value.name}」？`)) return;
-  store.deleteWorkset(active.value.id);
+  const ws = active.value;
+  const pathHint = ws.paths.length ? `（含 ${ws.paths.length} 个文件路径）` : "";
+  try {
+    await ElMessageBox.confirm(
+      `确定删除工作集「${ws.name}」${pathHint}？\n删除后不可恢复。`,
+      "删除工作集",
+      {
+        type: "warning",
+        confirmButtonText: "删除",
+        cancelButtonText: "取消",
+        distinguishCancelAndClose: true,
+      },
+    );
+    store.deleteWorkset(ws.id);
+  } catch {
+    /* 用户取消 */
+  }
 }
 
 function onRemovePath(path: string) {
@@ -96,9 +107,6 @@ function pathHasDir(rel: string): boolean {
         <button type="button" class="mini" @click="onRename">改名</button>
         <button type="button" class="mini danger" @click="onDelete">删</button>
       </div>
-      <p v-if="store.pathDisplay" class="muted small path-hint" :title="store.pathDisplay">
-        存于 phoenix-workspace.sqlite
-      </p>
       <p v-if="store.saving" class="muted small">保存中…</p>
     </div>
 
@@ -200,10 +208,6 @@ function pathHasDir(rel: string): boolean {
 
 .mini.danger {
   color: #b91c1c;
-}
-
-.path-hint {
-  margin: 4px 0 0;
 }
 
 .ws-body {

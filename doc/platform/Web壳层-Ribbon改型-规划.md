@@ -135,6 +135,7 @@ Phase 2（可选）：`app_config.json` 增加 `ribbon` 段或由 API 下发。
 - [x] 左右侧栏独立宽度；同侧树+日志上下分栏拖拽
 - [x] 更新 driver.js `data-tour`（Ribbon Tab / 工具条 / 页面 Tab）
 - [x] [Web壳层-使用说明.md](../user/Web壳层-使用说明.md) 同步 2026-06 布局
+- [x] **页面 Tab**：顶栏居中；当前 Tab 尺寸/动画强调（`WorkbenchTabBar.vue`）
 - [ ] 窄屏：Panel 横向滚动
 
 ### R4 · 业务页渐进 Element 化（按需）

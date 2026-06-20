@@ -41,7 +41,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
     docPath: "doc/user/新手指引.md",
     tourSteps: [
       tour("#onboarding-guide", "新手指南", "按步骤完成配置与首次扫描；完成后显示「已可开工」。"),
-      tour("[data-tour-page-home-features]", "功能入口", "配置好工作空间后，从这里进入各工具页。"),
+      tour("[data-tour-page-home-features]", "功能模块", "按 CAD / Code 分组勾选模块，并在下方卡片快捷打开各工具页。"),
     ],
   },
   config: {
@@ -214,7 +214,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
     title: "单元测试",
     bullets: [
       "在本机 Python 进程内运行仓库 tests/ 下 unittest，不依赖工作空间。",
-      "运行范围：勾选 Code / CAD / 平台 套件后点运行（可多选组合）。",
+      "运行范围：勾选 Code / CAD / 平台 套件；展开「列出运行范围」可再按模块勾选（默认全选）。",
       "有结果后，用「结果 · 套件 / 状态」勾选筛选明细，与运行范围分开。",
     ],
     tourSteps: [

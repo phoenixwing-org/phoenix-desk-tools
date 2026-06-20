@@ -22,6 +22,7 @@ def plan_unit_tests(
     *,
     exclude_case_ids: list[str] | None = None,
     include_case_ids: list[str] | None = None,
+    include_module_names: list[str] | None = None,
     include_cases: bool = False,
 ) -> dict:
     from phoenix.testing.suite_registry import list_suites
@@ -36,6 +37,7 @@ def plan_unit_tests(
     options = UnitTestRunOptions(
         exclude_case_ids=frozenset(exclude_case_ids or []),
         include_case_ids=frozenset(include_case_ids) if include_case_ids else None,
+        include_module_names=frozenset(include_module_names) if include_module_names else None,
     )
     return plan_unit_test_run(ids, options=options, include_cases=include_cases)
 
@@ -46,17 +48,20 @@ def run_unit_tests(
     *,
     exclude_case_ids: list[str] | None = None,
     include_case_ids: list[str] | None = None,
+    include_module_names: list[str] | None = None,
 ) -> dict:
     if suites is not None:
         return run_payload(
             suite_ids=suites,
             exclude_case_ids=exclude_case_ids,
             include_case_ids=include_case_ids,
+            include_module_names=include_module_names,
         )
     return run_payload(
         suite_id=suite or "all",
         exclude_case_ids=exclude_case_ids,
         include_case_ids=include_case_ids,
+        include_module_names=include_module_names,
     )
 
 
@@ -66,6 +71,7 @@ def iter_run_unit_tests_events(
     *,
     exclude_case_ids: list[str] | None = None,
     include_case_ids: list[str] | None = None,
+    include_module_names: list[str] | None = None,
     cancel_check=None,
 ):
     from phoenix.testing.suite_registry import list_suites
@@ -82,6 +88,7 @@ def iter_run_unit_tests_events(
     options = UnitTestRunOptions(
         exclude_case_ids=frozenset(exclude_case_ids or []),
         include_case_ids=frozenset(include_case_ids) if include_case_ids else None,
+        include_module_names=frozenset(include_module_names) if include_module_names else None,
     )
     yield from iter_unit_test_run_events(ids, options=options, cancel_check=cancel_check)
 

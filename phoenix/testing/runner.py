@@ -22,6 +22,7 @@ from phoenix.testing.suite_registry import (
 class UnitTestRunOptions:
     exclude_case_ids: FrozenSet[str] = frozenset()
     include_case_ids: FrozenSet[str] | None = None
+    include_module_names: FrozenSet[str] | None = None
 
 
 @dataclass
@@ -162,6 +163,18 @@ def _resolve_run_modules(suite_ids: List[str]) -> tuple[List[str], str, str]:
     return modules, "+".join(ordered_ids), label
 
 
+def _apply_module_filter(
+    modules: List[str],
+    include_module_names: FrozenSet[str] | None,
+) -> List[str]:
+    if include_module_names is None:
+        return modules
+    filtered = [m for m in modules if m in include_module_names]
+    if not filtered:
+        raise ValueError("所选测试模块为空")
+    return filtered
+
+
 def _iter_test_cases(suite: unittest.TestSuite):
     for test in suite:
         if isinstance(test, unittest.TestSuite):
@@ -189,8 +202,12 @@ def _load_modules_plan(module_names: List[str]) -> tuple[List[tuple[str, unittes
     return loaded, load_errors, module_names
 
 
-def _load_test_plan(suite_ids: List[str]) -> tuple[List[tuple[str, unittest.TestSuite]], List[str], List[str], str, str]:
+def _load_test_plan(
+    suite_ids: List[str],
+    include_module_names: FrozenSet[str] | None = None,
+) -> tuple[List[tuple[str, unittest.TestSuite]], List[str], List[str], str, str]:
     modules, suite_id, label = _resolve_run_modules(suite_ids)
+    modules = _apply_module_filter(modules, include_module_names)
     loaded, load_errors, _ = _load_modules_plan(modules)
     return loaded, load_errors, modules, suite_id, label
 
@@ -234,13 +251,17 @@ def _resolve_run_context(
 ) -> tuple[List[tuple[str, unittest.TestSuite]], List[str], List[str], str, str, List[tuple[str, unittest.TestCase]], List[Dict[str, Any]]]:
     if options.include_case_ids:
         modules = sorted({_module_from_case_id(cid) for cid in options.include_case_ids})
+        modules = _apply_module_filter(modules, options.include_module_names)
         loaded, load_errors, _ = _load_modules_plan(modules)
         suite_id = "+".join(sorted(set(suite_ids))) if suite_ids else "watchlist"
         label = f"失败关注（{len(options.include_case_ids)}）"
         planned, ignored = _plan_case_runs(loaded, options)
         return loaded, load_errors, modules, suite_id, label, planned, ignored
 
-    loaded, load_errors, modules, suite_id, label = _load_test_plan(suite_ids)
+    loaded, load_errors, modules, suite_id, label = _load_test_plan(
+        suite_ids,
+        options.include_module_names,
+    )
     planned, ignored = _plan_case_runs(loaded, options)
     return loaded, load_errors, modules, suite_id, label, planned, ignored
 
@@ -508,6 +529,7 @@ def run_payload(
     *,
     exclude_case_ids: List[str] | None = None,
     include_case_ids: List[str] | None = None,
+    include_module_names: List[str] | None = None,
 ) -> dict:
     valid = {s.id for s in list_suites()}
     ids = list(suite_ids or [])
@@ -521,5 +543,6 @@ def run_payload(
     options = UnitTestRunOptions(
         exclude_case_ids=frozenset(exclude_case_ids or []),
         include_case_ids=frozenset(include_case_ids) if include_case_ids else None,
+        include_module_names=frozenset(include_module_names) if include_module_names else None,
     )
     return asdict(run_unit_test_suites(ids, options=options))

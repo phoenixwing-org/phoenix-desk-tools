@@ -1,44 +1,20 @@
+@import "./styles/theme.css";
+
 :root {
   --phoenix-expand-size: 24px;
   --phoenix-expand-glyph: 16px;
   --phoenix-expand-icon-collapsed: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23475569' d='M6.2 3.8 11.4 8l-5.2 4.2z'/%3E%3C/svg%3E");
   --phoenix-expand-icon-expanded: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23475569' d='M3.8 5.8 8 11l4.2-5.2z'/%3E%3C/svg%3E");
-  font-family: "SF Pro Text", "PingFang SC", system-ui, sans-serif;
+  font-family: "SF Pro Text", "PingFang SC", "Hiragino Sans GB", system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, "Liberation Mono",
     "Courier New", monospace;
   line-height: 1.5;
-  color: #1a1a1a;
-  --shell-bg: #eceef2;
-  --page-bg: #f8f9fb;
-  --toolbar-bg: #fff;
-  --header-bg: #e8ecf2;
-  --header-border: #cdd3dc;
-  --header-height: 40px;
-  --nav-bg: #e8eaef;
-  --sidebar-bg: #f0f2f6;
-  --panel-head-bg: #fafbfc;
-  --border: #d8dce3;
-  --border-strong: #b8bec8;
-  --text: #111827;
-  --muted: #64748b;
-  --btn-bg: #fafafa;
-  --accent: #2563eb;
-  --nav-hover: rgba(0, 0, 0, 0.06);
-  --nav-mode-bg: #c5cdd8;
-  --nav-mode-fg: #1e293b;
+  color: var(--phoenix-text);
+}
 
-  /* Element Plus · CAD 硬朗圆角 */
-  --el-border-radius-base: 2px;
-  --el-border-radius-small: 2px;
-  --el-border-radius-round: 2px;
-
-  /* Ribbon 工具台 */
-  --ribbon-bg: #fff;
-  --ribbon-group-divider: #c5cdd8;
-  --ribbon-btn-hover: #e8eef5;
-  --ribbon-btn-radius: 2px;
-  --ribbon-panel-height: 58px;
-  --ribbon-group-body-height: 40px;
+[data-theme="dark"] {
+  --phoenix-expand-icon-collapsed: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%2394a3b8' d='M6.2 3.8 11.4 8l-5.2 4.2z'/%3E%3C/svg%3E");
+  --phoenix-expand-icon-expanded: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%2394a3b8' d='M3.8 5.8 8 11l4.2-5.2z'/%3E%3C/svg%3E");
 }
 
 * {
@@ -54,6 +30,8 @@ body,
 
 body {
   margin: 0;
+  background: var(--phoenix-bg-shell);
+  color: var(--phoenix-text);
 }
 
 button {
@@ -72,7 +50,6 @@ textarea {
   overflow: auto;
 }
 
-/* 展开/折叠三角：尺寸由 Pinia uiPrefs + expandIconTheme 写入 CSS 变量 */
 .phoenix-expand-twistie {
   flex-shrink: 0;
   display: inline-block;
@@ -101,29 +78,27 @@ textarea {
   margin: 0;
   padding: 0;
   border: none;
-  border-radius: 5px;
+  border-radius: var(--phoenix-radius-sm);
   background: transparent;
   cursor: pointer;
-  color: #475569;
+  color: var(--phoenix-text-muted);
 }
 
 .phoenix-expand-btn:hover:not(:disabled) {
-  background: #f1f5f9;
+  background: var(--el-fill-color-light);
 }
 
 .phoenix-expand-btn:focus-visible {
-  outline: 2px solid #93c5fd;
+  outline: 2px solid var(--phoenix-focus-ring);
   outline-offset: 1px;
 }
 
-/* 整段等宽（路径、文件名、PartKey 等） */
 .mono {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
 }
 
-/* 仅在 proportional 字体里让 0-9 等宽（混合中文列可用） */
 .tabular-nums {
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;

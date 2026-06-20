@@ -1,4 +1,4 @@
-import type { AppConfig, LauncherPrefs, ShellLayout } from "./types/config";
+import type { AppConfig, LauncherPrefs, ModuleScope, ShellLayout, WorkspaceNavModules } from "./types/config";
 
 export type TreeNode = {
   name: string;
@@ -239,10 +239,30 @@ export function getWorkspace() {
 }
 
 export function setWorkspace(path: string) {
-  return jsonFetch<{ path: string; name: string }>("/api/workspace", {
-    method: "POST",
+  return jsonFetch<{ path: string; name: string; nav_modules?: WorkspaceNavModules }>(
+    "/api/workspace",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path }),
+    },
+  );
+}
+
+export function fetchWorkspaceNavModules(path?: string) {
+  const q = path?.trim() ? `?path=${encodeURIComponent(path.trim())}` : "";
+  return jsonFetch<WorkspaceNavModules>(`/api/workspace/nav-modules${q}`);
+}
+
+export function patchWorkspaceNavModules(body: {
+  path?: string;
+  scope?: ModuleScope;
+  enabled?: string[];
+}) {
+  return jsonFetch<WorkspaceNavModules>("/api/workspace/nav-modules", {
+    method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path }),
+    body: JSON.stringify(body),
   });
 }
 
@@ -1983,6 +2003,7 @@ export function fetchUnitTestPlan(
       suites,
       exclude_cases: options?.exclude_cases,
       include_cases: options?.include_cases,
+      include_modules: options?.include_modules,
       include_case_details: options?.include_case_details ?? false,
     }),
   });
@@ -1991,6 +2012,8 @@ export function fetchUnitTestPlan(
 export type UnitTestRunOptions = {
   exclude_cases?: string[];
   include_cases?: string[];
+  /** Full module names (e.g. tests.test_code_index). Omit when all modules in selected suites should run. */
+  include_modules?: string[];
 };
 
 export function runUnitTests(suites: string[], options?: UnitTestRunOptions) {
@@ -2106,6 +2129,7 @@ export async function runUnitTestsStream(
     suites,
     exclude_cases: options?.exclude_cases,
     include_cases: options?.include_cases,
+    include_modules: options?.include_modules,
   };
   const res = await fetch("/api/unit-tests/run/stream", {
     method: "POST",

@@ -187,8 +187,8 @@ flowchart LR
 | 阶段 | 内容 |
 | --- | --- |
 | **U0** | `uuid_scan.py` + 单测（fixture 含 `.cpp` / `.json` / `.ui`） |
-| **U1** | 勾选 apply + 编码复用 §4；Web 表格 + 全选/按值选 |
-| **U2** | 与 Code 索引范围联动；导出 `code-uuid-report.json` |
+| **U1** | 勾选 apply + 编码复用 §4；Web 表格 + 全选/按值选 — **已落地** |
+| **U2** | 与 Code 索引 / **FileWorkset** 范围联动；导出报告 — **已落地**（2026-06） |
 
 ### 11.7 风险
 

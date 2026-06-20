@@ -11,7 +11,15 @@ from pathlib import Path
 from typing import Any
 
 from phoenix.config.launcher_paths import platform_launcher_prefs_file
-from phoenix.config.nav_modules import DEFAULT_NAV_MODULES_ENABLED, normalized_nav_modules
+from phoenix.config.nav_modules import (
+    DEFAULT_NAV_MODULES_ENABLED,
+    enabled_from_module_scope,
+    module_scope_from_enabled,
+    normalize_module_scope,
+    normalize_nav_modules_enabled,
+    normalized_nav_modules,
+    normalized_workspace_nav_modules,
+)
 
 WORKSPACE_PHOENIX_DIR = ".phoenix"
 WORKSPACE_PREFS_BASENAME = "phoenix-workspace-prefs.json"
@@ -47,6 +55,7 @@ _WORKSPACE_SECTIONS = (
     "code_reorder",
     "code_rename",
     "code_ignore",
+    "nav_modules",
 )
 
 _WORKSPACE_DEFAULT: dict[str, Any] = {
@@ -104,6 +113,9 @@ _WORKSPACE_DEFAULT: dict[str, Any] = {
     "code_ignore": {
         "custom_ignore": [],
         "ignore_preset": "",
+    },
+    "nav_modules": {
+        "scope": "all",
     },
 }
 
@@ -645,6 +657,37 @@ def merge_workspace_section(section: str, patch: dict[str, Any], repo_root: Path
             cur[k] = v
     save_workspace_prefs(rp, dat)
     return dat
+
+
+def load_workspace_nav_modules(repo_root: Path) -> dict[str, Any]:
+    prefs = load_workspace_prefs(repo_root)
+    block = prefs.get("nav_modules")
+    return normalized_workspace_nav_modules(block)
+
+
+def save_workspace_nav_modules(
+    repo_root: Path,
+    *,
+    scope: str | None = None,
+    enabled: list[str] | None = None,
+) -> dict[str, Any]:
+    rp = repo_root.expanduser().resolve()
+    if scope is not None:
+        norm_scope = normalize_module_scope(scope)
+        payload = {
+            "scope": norm_scope,
+            "enabled": enabled_from_module_scope(norm_scope),
+        }
+    elif enabled is not None:
+        norm_enabled = normalize_nav_modules_enabled(enabled)
+        payload = {
+            "scope": module_scope_from_enabled(norm_enabled),
+            "enabled": norm_enabled,
+        }
+    else:
+        raise ValueError("需要 scope 或 enabled")
+    merge_workspace_section("nav_modules", payload, rp)
+    return payload
 
 
 def apply_launcher_prefs_to_state(state: Any) -> None:

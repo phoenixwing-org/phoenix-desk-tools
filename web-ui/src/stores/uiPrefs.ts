@@ -4,6 +4,7 @@ import {
   clampExpandIconSize,
   EXPAND_ICON_SIZE_DEFAULT,
 } from "../utils/expandIconTheme";
+import { applyColorScheme, type ColorScheme } from "../utils/colorScheme";
 
 const STORAGE_KEY = "phoenix-ui-prefs-v1";
 
@@ -12,12 +13,14 @@ export type RibbonLayoutMode = "grouped" | "inline";
 type UiPrefsPersisted = {
   expandControlSizePx?: number;
   ribbonLayoutMode?: RibbonLayoutMode;
+  colorScheme?: ColorScheme;
 };
 
 export const useUiPrefsStore = defineStore("uiPrefs", {
   state: () => ({
     expandControlSizePx: EXPAND_ICON_SIZE_DEFAULT,
     ribbonLayoutMode: "grouped" as RibbonLayoutMode,
+    colorScheme: "light" as ColorScheme,
     hydrated: false,
   }),
   actions: {
@@ -33,17 +36,26 @@ export const useUiPrefsStore = defineStore("uiPrefs", {
           if (data.ribbonLayoutMode === "grouped" || data.ribbonLayoutMode === "inline") {
             this.ribbonLayoutMode = data.ribbonLayoutMode;
           }
+          if (
+            data.colorScheme === "light" ||
+            data.colorScheme === "dark" ||
+            data.colorScheme === "system"
+          ) {
+            this.colorScheme = data.colorScheme;
+          }
         }
       } catch {
         /* ignore corrupt storage */
       }
       applyExpandIconCssVars(this.expandControlSizePx);
+      applyColorScheme(this.colorScheme);
       this.hydrated = true;
     },
     persist() {
       const payload: UiPrefsPersisted = {
         expandControlSizePx: this.expandControlSizePx,
         ribbonLayoutMode: this.ribbonLayoutMode,
+        colorScheme: this.colorScheme,
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     },
@@ -58,6 +70,11 @@ export const useUiPrefsStore = defineStore("uiPrefs", {
     },
     toggleRibbonLayoutMode() {
       this.setRibbonLayoutMode(this.ribbonLayoutMode === "grouped" ? "inline" : "grouped");
+    },
+    setColorScheme(scheme: ColorScheme) {
+      this.colorScheme = scheme;
+      applyColorScheme(scheme);
+      this.persist();
     },
   },
 });

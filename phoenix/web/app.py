@@ -47,6 +47,7 @@ from phoenix.services.launcher_service import (
     activate_workspace,
     add_recent_workspace_entry,
     app_config_payload,
+    get_workspace_nav_modules_payload,
     launcher_prefs_payload,
     pick_workspace_directory_via_dialog,
     remove_recent_workspace_entry,
@@ -54,6 +55,7 @@ from phoenix.services.launcher_service import (
     update_launcher_freecad,
     update_shell_layout,
     update_nav_modules,
+    update_workspace_nav_modules,
 )
 from phoenix.services.part_key_service import (
     resolve_part_key_from_workspace_rel,
@@ -248,6 +250,12 @@ class ShellLayoutBody(BaseModel):
 
 class NavModulesBody(BaseModel):
     enabled: list[str] = Field(default_factory=list)
+
+
+class WorkspaceNavModulesBody(BaseModel):
+    path: str | None = None
+    scope: str | None = None
+    enabled: list[str] | None = None
 
 
 class ShellLogBody(BaseModel):
@@ -455,12 +463,14 @@ class UnitTestRunBody(BaseModel):
     suites: list[str] | None = None
     exclude_cases: list[str] | None = None
     include_cases: list[str] | None = None
+    include_modules: list[str] | None = None
 
 
 class UnitTestPlanBody(BaseModel):
     suites: list[str] | None = None
     exclude_cases: list[str] | None = None
     include_cases: list[str] | None = None
+    include_modules: list[str] | None = None
     include_case_details: bool = False
 
 
@@ -564,6 +574,33 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
     def api_config_nav_modules(body: NavModulesBody) -> dict:
         return update_nav_modules(body.enabled)
 
+    @app.get("/api/workspace/nav-modules")
+    def api_workspace_nav_modules_get(path: str | None = Query(None)) -> dict:
+        target = get_workspace()
+        if path and path.strip():
+            target = Path(path.strip()).expanduser().resolve(strict=False)
+            if not target.is_dir():
+                raise HTTPException(status_code=400, detail=f"不是有效目录: {target}")
+        return get_workspace_nav_modules_payload(target)
+
+    @app.patch("/api/workspace/nav-modules")
+    def api_workspace_nav_modules_patch(body: WorkspaceNavModulesBody) -> dict:
+        target = get_workspace()
+        if body.path and body.path.strip():
+            target = Path(body.path.strip()).expanduser().resolve(strict=False)
+            if not target.is_dir():
+                raise HTTPException(status_code=400, detail=f"不是有效目录: {target}")
+        if body.scope is None and body.enabled is None:
+            raise HTTPException(status_code=400, detail="需要 scope 或 enabled")
+        try:
+            return update_workspace_nav_modules(
+                target,
+                scope=body.scope,
+                enabled=body.enabled,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
     @app.get("/api/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
@@ -615,7 +652,7 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
             raise HTTPException(status_code=409, detail=str(e)) from e
 
     @app.post("/api/workspace")
-    def api_set_workspace(body: WorkspaceBody) -> dict[str, str]:
+    def api_set_workspace(body: WorkspaceBody) -> dict:
         try:
             ws = activate_workspace(Path(body.path))
             set_workspace(Path(ws["path"]))
@@ -1612,6 +1649,7 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
                 body.suites,
                 exclude_case_ids=body.exclude_cases,
                 include_case_ids=body.include_cases,
+                include_module_names=body.include_modules,
                 include_cases=body.include_case_details,
             )
         except ValueError as e:
@@ -1625,11 +1663,13 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
                     suites=body.suites,
                     exclude_case_ids=body.exclude_cases,
                     include_case_ids=body.include_cases,
+                    include_module_names=body.include_modules,
                 )
             return run_unit_tests(
                 suite=body.suite or "all",
                 exclude_case_ids=body.exclude_cases,
                 include_case_ids=body.include_cases,
+                include_module_names=body.include_modules,
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
@@ -1648,6 +1688,7 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
                     suites=body.suites,
                     exclude_case_ids=body.exclude_cases,
                     include_case_ids=body.include_cases,
+                    include_module_names=body.include_modules,
                     cancel_check=lambda: is_cancelled(run_id),
                 ):
                     if event.get("type") == "start":

@@ -11,6 +11,7 @@ import PageHelpButton from "../components/PageHelpButton.vue";
 import WorksetScopePicker from "../components/WorksetScopePicker.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useWorksetPageScope } from "../composables/useWorksetPageScope";
+import { useFileWorksetsStore } from "../stores/fileWorksets";
 import { useResizableTable, type TableColumnDef } from "../composables/useResizableTable";
 import { basenameFromRel, repoDirFromRel } from "../utils/workspaceFileQuery";
 
@@ -21,7 +22,6 @@ const hitColumns: TableColumnDef[] = [
   { key: "new_text", label: "替换后", width: 240, minWidth: 120 },
   { key: "text", label: "原文", width: 240, minWidth: 120 },
   { key: "dir", label: "目录", width: 320, minWidth: 160 },
-  { key: "actions", label: "操作", width: 80, minWidth: 72 },
 ];
 
 const showReplacementColumn = ref(false);
@@ -40,6 +40,7 @@ const visibleTableWidth = computed(() =>
 );
 
 const shell = useAppShell();
+const worksetStore = useFileWorksetsStore();
 const worksetScope = useWorksetPageScope("code_uuid");
 
 const strategy = ref<UuidApplyStrategy>("map_per_value");
@@ -90,6 +91,19 @@ const selectedNormCount = computed(() => {
   return norms.size;
 });
 
+const pathsFromSelectedHits = computed(() => {
+  const out = new Set<string>();
+  for (const id of selected.value) {
+    const h = hits.value.find((x) => x.hit_id === id);
+    if (h?.repo_rel_path) out.add(h.repo_rel_path);
+  }
+  return [...out];
+});
+
+const pathsFromAllHits = computed(() => [...new Set(hits.value.map((h) => h.repo_rel_path).filter(Boolean))]);
+
+const activeWorksetLabel = computed(() => worksetStore.activeWorkset?.name ?? "当前工作集");
+
 function formatNormDisplay(norm: string): string {
   const s = norm.replace(/[^0-9a-fA-F]/g, "").toLowerCase();
   if (s.length !== 32) return norm;
@@ -128,13 +142,6 @@ function toggleHit(id: string, checked: boolean) {
 
 function toggleAll(checked: boolean) {
   selected.value = checked ? new Set(hits.value.map((h) => h.hit_id)) : new Set();
-}
-
-function selectSameUuid(hit: CodeUuidHit) {
-  const norm = hit.uuid_normalized;
-  const ids = hits.value.filter((h) => h.uuid_normalized === norm).map((h) => h.hit_id);
-  selected.value = new Set([...selected.value, ...ids]);
-  shell.setStatus(`已勾选相同 UUID 的 ${ids.length} 条`);
 }
 
 async function loadIgnoreSummary() {
@@ -179,6 +186,37 @@ async function onScan() {
   } finally {
     scanning.value = false;
   }
+}
+
+async function scanFromActiveWorkset() {
+  const ws = worksetStore.activeWorkset;
+  if (!ws?.paths.length) {
+    shell.setStatus("侧栏当前工作集为空，请先加入文件");
+    await shell.openWorksetSidebar();
+    return;
+  }
+  worksetScope.scopeMode.value = "workset";
+  worksetScope.worksetId.value = ws.id;
+  await onScan();
+}
+
+function addHitsToWorkset(paths: string[], label: string) {
+  if (!paths.length) {
+    shell.setStatus(`没有可加入的${label}文件`);
+    return;
+  }
+  worksetStore.addPathsToActive(paths, "code_uuid:hits");
+  shell.setStatus(worksetStore.lastMessage);
+}
+
+async function addSelectedHitsToWorkset() {
+  addHitsToWorkset(pathsFromSelectedHits.value, "选中");
+  await shell.openWorksetSidebar();
+}
+
+async function addAllHitsToWorkset() {
+  addHitsToWorkset(pathsFromAllHits.value, "命中");
+  await shell.openWorksetSidebar();
 }
 
 async function onApply(dryRun: boolean) {
@@ -234,7 +272,6 @@ function hitDir(rel: string) {
 function thClass(key: string) {
   if (key === "check") return "col-check sticky-col-left sticky-col-check";
   if (key === "filename") return "sticky-col-left sticky-col-filename filename-cell";
-  if (key === "actions") return "col-actions sticky-col-right";
   return "";
 }
 
@@ -258,9 +295,9 @@ onMounted(() => {
     <section class="card settings-card">
       <WorksetScopePicker page-id="code_uuid" />
       <div class="form-row settings-row2">
-        <label class="field">
+        <label class="field field-inline strategy-field">
           <span class="field-label">替换策略</span>
-          <select v-model="strategy" class="input">
+          <select v-model="strategy" class="input strategy-select">
             <option value="map_per_value">同值一组 → 共用一个新 UUID（按写法分别格式化）</option>
             <option value="fresh_per_hit">每条命中独立新 UUID</option>
           </select>
@@ -268,6 +305,19 @@ onMounted(() => {
         <div class="actions">
           <button type="button" class="btn btn-sm" :disabled="scanning" @click="onScan">
             {{ scanning ? "…" : "扫描 UUID" }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-quiet btn-sm"
+            :disabled="scanning || !worksetStore.activeWorkset?.paths.length"
+            :title="
+              worksetStore.activeWorkset?.paths.length
+                ? `仅扫描侧栏「${activeWorksetLabel}」内 ${worksetStore.activeWorkset.paths.length} 个文件`
+                : '侧栏当前工作集为空'
+            "
+            @click="scanFromActiveWorkset"
+          >
+            当前工作集扫描
           </button>
           <button type="button" class="btn btn-sm" :disabled="applying || !selectedCount" @click="onApply(true)">
             {{ applying ? "…" : "预检" }}
@@ -292,6 +342,23 @@ onMounted(() => {
             已选 {{ selectedCount }} / {{ hits.length }} 条 ·
             {{ selectedNormCount }} / {{ uniqueUuidCount }} 组 UUID
           </span>
+          <div v-if="hits.length" class="results-workset-actions">
+            <el-button
+              size="small"
+              :disabled="!pathsFromSelectedHits.length"
+              :title="`去重 ${pathsFromSelectedHits.length} 个文件`"
+              @click="addSelectedHitsToWorkset"
+            >
+              选中 → {{ activeWorksetLabel }}
+            </el-button>
+            <el-button
+              size="small"
+              :title="`去重 ${pathsFromAllHits.length} 个文件`"
+              @click="addAllHitsToWorkset"
+            >
+              全部命中 → {{ activeWorksetLabel }}
+            </el-button>
+          </div>
         </div>
         <p v-if="engineMessage" class="engine-msg">{{ engineMessage }}</p>
       </header>
@@ -375,9 +442,6 @@ onMounted(() => {
                 <td class="mono dir-cell" :title="h.repo_rel_path">
                   {{ hitDir(h.repo_rel_path) }}
                 </td>
-                <td class="col-actions sticky-col-right">
-                  <button type="button" class="link-btn" @click="selectSameUuid(h)">同值全选</button>
-                </td>
               </tr>
             </template>
           </tbody>
@@ -419,6 +483,39 @@ onMounted(() => {
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.field-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.field.field-inline {
+  flex-direction: row;
+  align-items: center;
+}
+
+.strategy-field {
+  flex: 1 1 320px;
+}
+
+.strategy-select {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 180px;
+  max-width: 420px;
+  height: auto;
+  min-height: 0;
+}
+
+.field-inline .field-label {
+  flex-shrink: 0;
+  margin: 0;
+  white-space: nowrap;
 }
 
 .field {
@@ -452,6 +549,8 @@ onMounted(() => {
   flex-wrap: wrap;
   gap: 6px;
   margin-left: auto;
+  flex-shrink: 0;
+  align-items: center;
 }
 
 .btn-sm {
@@ -472,6 +571,17 @@ onMounted(() => {
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+}
+
+.results-workset-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.results-workset-actions :deep(.el-button) {
+  margin: 0;
 }
 
 .engine-msg {
@@ -559,12 +669,6 @@ onMounted(() => {
   text-align: right;
 }
 
-.col-actions {
-  width: 72px;
-  overflow: visible;
-  white-space: normal;
-}
-
 .sticky-col-left {
   position: sticky;
   z-index: 4;
@@ -581,23 +685,12 @@ onMounted(() => {
   box-shadow: 1px 0 0 #e2e8f0;
 }
 
-.sticky-col-right {
-  position: sticky;
-  right: 0;
-  z-index: 4;
-  box-shadow: -1px 0 0 #e2e8f0;
-}
-
 .entry-table thead .sticky-col-check {
   z-index: 8;
 }
 
 .entry-table thead .sticky-col-filename {
   z-index: 7;
-}
-
-.entry-table thead .sticky-col-right {
-  z-index: 6;
 }
 
 .row-alt .sticky-col-check,
@@ -630,6 +723,11 @@ onMounted(() => {
   background: #fff;
 }
 
+.uuid-group-row .sticky-col-check {
+  padding-left: 12px;
+  text-align: left;
+}
+
 .uuid-group-row.row-alt td {
   background: #fafbfc;
 }
@@ -653,15 +751,6 @@ onMounted(() => {
 
 .uuid-new-cell.uuid-new-filled {
   color: #047857;
-}
-
-.link-btn {
-  border: none;
-  background: none;
-  color: var(--accent);
-  font-size: 0.76rem;
-  cursor: pointer;
-  padding: 0;
 }
 
 .row-alt {

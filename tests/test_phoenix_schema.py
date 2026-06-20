@@ -37,6 +37,28 @@ class TestPhoenixSchema(unittest.TestCase):
                 self.assertIn(T_FILE_ASSET, tables)
                 self.assertNotIn("file_asset", tables)
 
+    def test_nested_connect_same_repo(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with connect(root) as outer:
+                outer.execute(
+                    "INSERT INTO phoenix_cad_file_asset(repo_rel_path, filename, updated_at) "
+                    "VALUES (?, ?, ?)",
+                    ("nested.fcstd", "nested.fcstd", "2026-01-01T00:00:00+00:00"),
+                )
+                with connect(root) as inner:
+                    row = inner.execute(
+                        "SELECT repo_rel_path FROM phoenix_cad_file_asset WHERE repo_rel_path = ?",
+                        ("nested.fcstd",),
+                    ).fetchone()
+                    self.assertIsNotNone(row)
+            with connect(root) as conn:
+                n = conn.execute(
+                    "SELECT COUNT(*) FROM phoenix_cad_file_asset WHERE repo_rel_path = ?",
+                    ("nested.fcstd",),
+                ).fetchone()[0]
+                self.assertEqual(n, 1)
+
     def test_database_status_empty_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -187,6 +187,22 @@ class TestCodeUuidEngine(unittest.TestCase):
             self.assertEqual(scoped["summary"]["total_hits"], 1)
             self.assertEqual(scoped["hits"][0]["repo_rel_path"], "in_index.json")
 
+    def test_scan_uuids_service_repo_rel_paths(self) -> None:
+        uid = "550e8400-e29b-41d4-a716-446655440000"
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp)
+            a = ws / "only.cpp"
+            b = ws / "skip.cpp"
+            a.write_text(f'const char* id = "{uid}";\n', encoding="utf-8")
+            b.write_text(f'const char* id = "{uid}";\n', encoding="utf-8")
+
+            from phoenix.code.rename.service import scan_uuids
+
+            out = scan_uuids(ws, {"repo_rel_paths": ["only.cpp"], "kinds": ["uuid"]})
+            self.assertEqual(out["repo_rel_paths"], ["only.cpp"])
+            self.assertEqual(out["summary"]["total_hits"], 1)
+            self.assertEqual(out["hits"][0]["repo_rel_path"], "only.cpp")
+
     def test_hit_id_roundtrip(self) -> None:
         hid = make_hit_id("src/x.cpp", 3, 10, "{ABC}")
         from phoenix.code.rename.uuid_scan import parse_hit_id

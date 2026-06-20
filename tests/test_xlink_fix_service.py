@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from phoenix.services.xlink_fix_service import apply_xlink_fix_override, part_hints_from_xlink_old_path
+from phoenix.services.xlink_fix_service import analyze_xlink_fix, apply_xlink_fix_override, part_hints_from_xlink_old_path
 
 
 def test_part_hints_from_xlink_old_path() -> None:
@@ -29,6 +29,11 @@ def test_part_hints_short_number_and_underscore() -> None:
     assert h["part_key"] == "8003.001"
     h2 = part_hints_from_xlink_old_path("8003.001-H-PX-滑轨.Drawing.FCStd")
     assert h2["part_key"] == "8003.001"
+
+
+def test_analyze_requires_cad_index(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="CAD 索引"):
+        analyze_xlink_fix(tmp_path)
 
 
 def test_apply_override_missing_host(tmp_path: Path) -> None:

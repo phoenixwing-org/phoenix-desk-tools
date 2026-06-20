@@ -74,6 +74,23 @@ class TestFileWorksetService(unittest.TestCase):
             again = get_file_worksets_api(root)
             self.assertEqual(json.loads(json.dumps(again))["worksets"][0]["id"], "a")
 
+    def test_save_rejects_invalid_and_dedupes_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            out = save_file_worksets(
+                root,
+                {
+                    "worksets": [
+                        {
+                            "id": "ws-bad",
+                            "name": "bad",
+                            "paths": ["ok.cpp", "../evil.cpp", "ok.cpp"],
+                        }
+                    ]
+                },
+            )
+            self.assertEqual(out["worksets"][0]["paths"], ["ok.cpp"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -49,6 +49,18 @@ const scope = computed({
 
 function onScopeModeChange(mode: WorksetScopeMode) {
   scopeMode.value = mode;
+  if (mode === "workset" && !worksetId.value && store.activeId) {
+    worksetId.value = store.activeId;
+  }
+}
+
+function syncActiveWorkset() {
+  if (!store.activeId) {
+    void openWorksetSidebar();
+    return;
+  }
+  worksetId.value = store.activeId;
+  scopeMode.value = "workset";
 }
 
 async function openWorksetSidebar() {
@@ -112,11 +124,20 @@ async function openWorksetSidebar() {
     </div>
     <div v-else-if="scopeMode === 'workset'" class="scope-extra workset-row">
       <select v-model="worksetIdSelect" class="input workset-select">
-        <option value="">（请选择工作集）</option>
+        <option value="">（侧栏当前工作集）</option>
         <option v-for="opt in store.worksetOptions" :key="opt.id" :value="opt.id">
           {{ opt.label }}（{{ opt.count }}）
         </option>
       </select>
+      <button
+        v-if="store.activeWorkset"
+        type="button"
+        class="btn btn-quiet btn-sm"
+        title="与侧栏活动工作集同步"
+        @click="syncActiveWorkset"
+      >
+        当前：{{ store.activeWorkset.name }}
+      </button>
       <button type="button" class="btn btn-quiet btn-sm" @click="openWorksetSidebar">侧栏 · 工作集</button>
     </div>
   </div>

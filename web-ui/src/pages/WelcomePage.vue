@@ -7,6 +7,12 @@ import {
   PROJECT_INSTALL_DOC,
   PROJECT_QUICKSTART_DOC,
 } from "../constants/projectLinks";
+import {
+  MODULE_SCOPE_OPTIONS,
+  moduleScopeLabel,
+  moduleScopeTagType,
+  type ModuleScope,
+} from "../constants/moduleScope";
 import { useAppShell } from "../composables/useAppShell";
 import { DEFAULT_APP_TITLE } from "../types/config";
 import type { RecentWorkspaceEntry } from "../types/config";
@@ -24,8 +30,13 @@ const recentEntries = computed((): RecentWorkspaceEntry[] => {
   return (launcher?.recent_workspaces ?? []).map((path) => ({
     path,
     exists: true,
+    module_scope: "all" as ModuleScope,
   }));
 });
+
+function entryScope(entry: RecentWorkspaceEntry): ModuleScope {
+  return entry.module_scope ?? "all";
+}
 
 onMounted(() => {
   void shell.reloadLauncher();
@@ -68,6 +79,15 @@ async function removeRecent(path: string, event: MouseEvent) {
     await removeRecentWorkspace(path);
     await shell.reloadLauncher();
     shell.setStatus("已从最近列表移除");
+  } catch (e) {
+    shell.setStatus(String(e));
+  }
+}
+
+async function onScopeChange(path: string, scope: ModuleScope) {
+  try {
+    await shell.setWorkspaceModuleScope(path, scope);
+    shell.setStatus(`模块范围已设为 ${moduleScopeLabel(scope)}`);
   } catch (e) {
     shell.setStatus(String(e));
   }
@@ -156,7 +176,17 @@ function openHome() {
               @click="openWorkspace(entry.path)"
             >
               <span class="recent-open-body">
-                <span class="recent-name">{{ pathLabel(entry.path) }}</span>
+                <span class="recent-name-row">
+                  <span class="recent-name">{{ pathLabel(entry.path) }}</span>
+                  <el-tag
+                    :type="moduleScopeTagType(entryScope(entry))"
+                    size="small"
+                    effect="light"
+                    class="recent-scope-tag"
+                  >
+                    {{ moduleScopeLabel(entryScope(entry)) }}
+                  </el-tag>
+                </span>
                 <span class="recent-path">{{ pathParent(entry.path) }}</span>
                 <el-tag v-if="!entry.exists" type="danger" size="small" effect="light">
                   路径不存在
@@ -171,6 +201,22 @@ function openHome() {
                 </el-tag>
               </span>
             </el-button>
+            <el-select
+              v-if="entry.exists"
+              :model-value="entryScope(entry)"
+              size="small"
+              class="recent-scope-select"
+              title="本工程的 CAD / Code 模块范围（写入工作空间偏好）"
+              @click.stop
+              @change="(v: ModuleScope) => onScopeChange(entry.path, v)"
+            >
+              <el-option
+                v-for="opt in MODULE_SCOPE_OPTIONS"
+                :key="opt.id"
+                :label="opt.label"
+                :value="opt.id"
+              />
+            </el-select>
             <el-button
               class="recent-remove"
               text
@@ -192,7 +238,7 @@ function openHome() {
   width: 100%;
   height: 100%;
   min-height: 100%;
-  background: #eceff3;
+  background: var(--phoenix-bg-welcome-rail);
 }
 
 .welcome-rail {
@@ -201,8 +247,8 @@ function openHome() {
   display: flex;
   flex-direction: column;
   padding: 28px 20px 24px;
-  background: #eceff3;
-  border-right: 1px solid #d8dee6;
+  background: var(--phoenix-bg-welcome-rail);
+  border-right: 1px solid var(--phoenix-border-header);
   box-sizing: border-box;
 }
 
@@ -230,7 +276,7 @@ function openHome() {
   font-size: 1.05rem;
   font-weight: 800;
   letter-spacing: 0.06em;
-  color: #0f172a;
+  color: var(--phoenix-brand-title);
 }
 
 .brand-sub {
@@ -279,7 +325,7 @@ function openHome() {
   min-width: 0;
   min-height: 0;
   padding: 48px 56px 56px;
-  background: #fff;
+  background: var(--phoenix-bg-welcome-main);
   overflow: auto;
 }
 
@@ -363,10 +409,32 @@ function openHome() {
   width: 100%;
 }
 
+.recent-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
 .recent-name {
   font-weight: 600;
   font-size: 0.95rem;
   color: #0f172a;
+}
+
+.recent-scope-tag {
+  flex-shrink: 0;
+}
+
+.recent-scope-select {
+  flex-shrink: 0;
+  width: 88px;
+  align-self: stretch;
+}
+
+.recent-scope-select :deep(.el-select__wrapper) {
+  min-height: 100%;
 }
 
 .recent-path {

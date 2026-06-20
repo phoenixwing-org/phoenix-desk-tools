@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { ArrowDownBold, ArrowUpBold } from "@element-plus/icons-vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useWorkspaceSwitcher } from "../composables/useWorkspaceSwitcher";
 import { DEFAULT_APP_TITLE } from "../types/config";
@@ -27,17 +28,10 @@ const emit = defineEmits<{
 const shell = useAppShell();
 const { workspacePath, workspaceShort } = useWorkspaceSwitcher();
 
-const title = computed(() => shell.appConfig.value?.title ?? DEFAULT_APP_TITLE);
-const brandShort = computed(() => {
-  const t = title.value;
-  return t.startsWith("Phoenix") ? "Phoenix" : t.split(/\s+/)[0] ?? t;
-});
-const brandSub = computed(() => {
-  if (workspacePath.value) return workspaceShort.value;
-  const t = title.value;
-  if (t.startsWith("Phoenix")) return t.replace(/^Phoenix\s*/, "") || "Desk Tools";
-  return "v0.1";
-});
+const appTitle = computed(() => shell.appConfig.value?.title ?? DEFAULT_APP_TITLE);
+const brandHint = computed(() =>
+  workspacePath.value ? workspaceShort.value : "选择或打开工作空间",
+);
 
 const showWorkbenchTabs = computed(() => shell.showTabBar.value);
 
@@ -52,11 +46,22 @@ function toggleRibbonCollapsed() {
 
 <template>
   <header class="chili-header">
-    <button type="button" class="header-brand" :title="workspacePath || '返回欢迎页'" @click="goWelcome">
+    <button
+      type="button"
+      class="header-brand"
+      :title="workspacePath ? `${appTitle}\n${workspacePath}` : '返回欢迎页'"
+      @click="goWelcome"
+    >
       <span class="brand-mark" aria-hidden="true">P</span>
       <div class="brand-text">
-        <span class="brand-title">{{ brandShort }}</span>
-        <span class="brand-sub">{{ brandSub }}</span>
+        <span class="brand-title">{{ appTitle }}</span>
+        <span class="brand-sub" :class="{ 'is-workspace': workspacePath }">
+          <template v-if="workspacePath">
+            <span class="brand-sub-dot" aria-hidden="true" />
+            <span class="brand-workspace mono">{{ brandHint }}</span>
+          </template>
+          <template v-else>{{ brandHint }}</template>
+        </span>
       </div>
     </button>
 
@@ -77,28 +82,33 @@ function toggleRibbonCollapsed() {
     </div>
 
     <div class="header-right">
-      <button
-        type="button"
+      <el-button
         class="header-icon-btn"
+        text
+        size="small"
         :title="ribbonCollapsed ? '展开工具 Ribbon' : '折叠工具 Ribbon'"
         @click="toggleRibbonCollapsed"
       >
-        {{ ribbonCollapsed ? "▼" : "▲" }}
-      </button>
+        <el-icon>
+          <ArrowDownBold v-if="ribbonCollapsed" />
+          <ArrowUpBold v-else />
+        </el-icon>
+      </el-button>
     </div>
   </header>
 </template>
 
 <style scoped>
 .chili-header {
-  height: var(--header-height, 40px);
-  min-height: var(--header-height, 40px);
+  height: var(--phoenix-header-height);
+  min-height: var(--phoenix-header-height);
   display: flex;
   flex-direction: row;
   align-items: stretch;
-  padding: 0 8px 0 6px;
-  background: var(--header-bg, #e8ecf2);
-  border-bottom: 1px solid var(--header-border, #cdd3dc);
+  padding: 0 10px 0 8px;
+  background: var(--phoenix-bg-header);
+  border-bottom: 1px solid var(--phoenix-border-header);
+  box-shadow: var(--phoenix-shadow-sm);
   flex-shrink: 0;
   gap: 0;
 }
@@ -106,68 +116,104 @@ function toggleRibbonCollapsed() {
 .header-brand {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-shrink: 0;
+  max-width: min(280px, 34vw);
   margin: 0;
-  padding: 0 6px 0 4px;
+  padding: 4px 8px 4px 4px;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--phoenix-radius-md);
   background: transparent;
   cursor: pointer;
   font: inherit;
   color: inherit;
   text-align: left;
+  transition: background 0.15s ease;
 }
 
 .header-brand:hover {
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--phoenix-brand-hover-bg);
 }
 
 .header-brand:hover .brand-title {
-  color: #2563eb;
+  color: var(--phoenix-brand-hover-title);
+}
+
+.header-brand:focus-visible {
+  outline: 2px solid var(--phoenix-focus-ring);
+  outline-offset: 1px;
 }
 
 .brand-mark {
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--phoenix-radius-md);
   display: grid;
   place-items: center;
+  flex-shrink: 0;
   font-weight: 800;
-  font-size: 0.72rem;
-  color: #fff;
-  background: linear-gradient(145deg, #2563eb 0%, #1d4ed8 100%);
+  font-size: 0.82rem;
+  letter-spacing: -0.02em;
+  color: var(--phoenix-brand-mark-fg);
+  background: linear-gradient(145deg, var(--phoenix-brand-from) 0%, var(--phoenix-brand-to) 100%);
+  box-shadow: var(--phoenix-brand-shadow);
 }
 
 .brand-text {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  line-height: 1.15;
+  gap: 1px;
+  line-height: 1.2;
   min-width: 0;
 }
 
 .brand-title {
-  font-weight: 700;
-  font-size: 0.82rem;
-  color: #1e293b;
+  font-weight: 650;
+  font-size: 0.78rem;
+  letter-spacing: 0.01em;
+  color: var(--phoenix-brand-title);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.15s ease;
 }
 
 .brand-sub {
-  font-size: 0.62rem;
-  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.68rem;
+  color: var(--phoenix-brand-sub);
   white-space: nowrap;
-  max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.brand-sub.is-workspace {
+  color: var(--phoenix-text-muted);
+}
+
+.brand-sub-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--phoenix-accent);
+  opacity: 0.85;
+}
+
+.brand-workspace {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.68rem;
 }
 
 .header-divider {
   width: 1px;
   align-self: stretch;
-  margin: 6px 6px;
-  background: #c5ccd6;
+  margin: 8px 8px;
+  background: var(--phoenix-border-header);
   flex-shrink: 0;
 }
 
@@ -179,36 +225,16 @@ function toggleRibbonCollapsed() {
 }
 
 .header-icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   margin: 0;
   padding: 0;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: #475569;
-  font-size: 0.75rem;
-  cursor: pointer;
-  text-decoration: none;
-}
-
-.header-icon-btn :deep(svg) {
-  width: 16px;
-  height: 16px;
+  color: var(--phoenix-text-muted);
 }
 
 .header-icon-btn:hover {
-  background: rgba(255, 255, 255, 0.55);
-  color: #1d4ed8;
-}
-
-.header-icon-btn-active {
-  background: rgba(255, 255, 255, 0.72);
-  color: #1d4ed8;
-  box-shadow: inset 0 0 0 1px #b6c4d4;
+  color: var(--phoenix-accent);
+  background: var(--phoenix-brand-hover-bg);
 }
 
 .header-tabs {
@@ -220,7 +246,7 @@ function toggleRibbonCollapsed() {
 }
 
 .header-divider-pages {
-  margin: 8px 4px 8px 2px;
+  margin: 10px 4px 10px 2px;
   opacity: 0.85;
 }
 
@@ -229,13 +255,22 @@ function toggleRibbonCollapsed() {
   min-width: 0;
   display: flex;
   align-items: center;
+  justify-content: center;
   overflow: hidden;
   padding: 0 4px 0 0;
 }
 
 @media (max-width: 900px) {
+  .brand-title {
+    font-size: 0.74rem;
+  }
+
   .brand-sub {
     display: none;
+  }
+
+  .header-brand {
+    max-width: 120px;
   }
 }
 </style>

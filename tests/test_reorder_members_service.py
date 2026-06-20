@@ -11,6 +11,7 @@ from phoenix.code.reorder_members import (
     format_changed_file_log_line,
     normalize_reorder_file_filters,
 )
+from phoenix.config import user_prefs
 from phoenix.services.reorder_members_service import (
     _format_batch_summary,
     list_reorder_top_level_entries,
@@ -105,11 +106,10 @@ class TestReorderMembersService(unittest.TestCase):
             mod.mkdir()
             (mod / "a.cpp").write_text("void a(){}\n", encoding="utf-8")
             (mod / "a.h").write_text("class A {};\n", encoding="utf-8")
-            ph = ws / ".phoenix"
-            ph.mkdir()
-            (ph / "phoenix-workspace-prefs.json").write_text(
-                '{"code_reorder":{"include_cpp":true,"include_header":false}}',
-                encoding="utf-8",
+            user_prefs.merge_workspace_section(
+                "code_reorder",
+                {"include_cpp": True, "include_header": False},
+                ws,
             )
             out = run_reorder_members_batch(
                 ws,

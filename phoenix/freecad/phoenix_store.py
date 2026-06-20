@@ -6,6 +6,7 @@ import inspect
 import json
 import logging
 import sqlite3
+import threading
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -146,24 +147,51 @@ class _LoggingConnection:
             setattr(self._inner, name, value)
 
 
+_connect_stack = threading.local()
+
+
+def _connect_entries() -> list[tuple[Path, sqlite3.Connection, _LoggingConnection]]:
+    entries = getattr(_connect_stack, "entries", None)
+    if entries is None:
+        entries = []
+        _connect_stack.entries = entries
+    return entries
+
+
 @contextmanager
 def connect(repo_root: Path) -> Iterator[sqlite3.Connection]:
+    """Open (or reuse) the workspace SQLite connection for ``repo_root``.
+
+    Same-thread nested ``with connect(...)`` for the same repo reuses one
+    connection so schema migration / writes do not deadlock on WAL locks.
+    """
     rr = repo_root.expanduser().resolve(strict=False)
+    for repo, _raw, wrapper in _connect_entries():
+        if repo == rr:
+            yield wrapper  # type: ignore[misc]
+            return
+
     phoenix_dir(rr).mkdir(parents=True, exist_ok=True)
     db = cad_database_path(rr)
     conn = sqlite3.connect(str(db), timeout=30.0)
     conn.row_factory = sqlite3.Row
+    wrapper = _LoggingConnection(conn)  # type: ignore[misc]
+    _connect_entries().append((rr, conn, wrapper))
     try:
         conn.execute("PRAGMA foreign_keys = ON")
         conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA busy_timeout = 30000")
         _ensure_schema(conn)
-        yield _LoggingConnection(conn)  # type: ignore[misc]
+        yield wrapper
         conn.commit()
     except Exception:
         conn.rollback()
         raise
     finally:
-        conn.close()
+        stack = _connect_entries()
+        if stack and stack[-1][0] == rr:
+            stack.pop()
+            conn.close()
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
