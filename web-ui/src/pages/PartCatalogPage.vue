@@ -3,7 +3,6 @@ import { computed, onMounted, ref } from "vue";
 import { fetchPartKeys, type PartKeyEntry, type PartKeysPayload } from "../api";
 import { BOM_FIELD_LABELS as L } from "../utils/bomFieldLabels";
 import { useAppShell } from "../composables/useAppShell";
-import { basenameFromRel, normalizeRepoRelForApi } from "../utils/workspaceFileQuery";
 import PageHelpButton from "../components/PageHelpButton.vue";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
 import type { TableColumnDef } from "../composables/useResizableTable";
@@ -44,6 +43,12 @@ const filteredEntries = computed(() => {
       .toLowerCase();
     return hay.includes(q);
   });
+});
+
+const emptyDescription = computed(() => {
+  if (loading.value) return "加载中…";
+  if (listData.value?.exists) return "当前筛选无条目";
+  return "尚无数据，请先在 CAD 索引页执行工程内搜索";
 });
 
 function setStatus(msg: string) {
@@ -93,53 +98,59 @@ onMounted(() => refreshList());
     </header>
 
     <section class="controls" data-tour-page-partcat-search>
-      <input v-model="search" class="path-input" placeholder="搜索零件号、名称、备注…" spellcheck="false" />
-      <button type="button" class="btn" :disabled="loading" @click="refreshList">刷新</button>
+      <el-input
+        v-model="search"
+        size="small"
+        clearable
+        placeholder="搜索零件号、名称、备注…"
+        spellcheck="false"
+        class="search-input"
+      />
+      <el-button size="small" :loading="loading" @click="refreshList">刷新</el-button>
     </section>
 
     <section class="filters">
-      <label class="filter"><input v-model="statusFilter" type="radio" value="all" /> 全部</label>
-      <label class="filter"><input v-model="statusFilter" type="radio" value="active" /> 有效</label>
-      <label class="filter"><input v-model="statusFilter" type="radio" value="obsolete" /> 失效</label>
+      <el-radio-group v-model="statusFilter" size="small">
+        <el-radio-button value="all">全部</el-radio-button>
+        <el-radio-button value="active">有效</el-radio-button>
+        <el-radio-button value="obsolete">失效</el-radio-button>
+      </el-radio-group>
       <span class="count">{{ filteredEntries.length }} 键</span>
     </section>
 
     <div v-if="filteredEntries.length" data-tour-page-partcat-table>
-    <ResizableDataTable
-      :columns="catalogColumns"
-      wrap-class="table-grow"
-    >
-      <tbody>
-        <tr v-for="row in filteredEntries" :key="row.part_key">
-          <td>
-            <button
-              v-if="row.label?.trim()"
-              type="button"
-              class="link-key"
-              @click="openDetail(row)"
-            >
-              {{ row.label }}
-            </button>
-            <span v-else class="muted">—</span>
-          </td>
-          <td class="mono">
-            <button type="button" class="link-key" @click="openDetail(row)">{{ row.part_key }}</button>
-          </td>
-          <td>{{ row.TypeCode }}</td>
-          <td>{{ row.ModelSeries }}</td>
-          <td>{{ row.PartName }}</td>
-          <td>{{ row.status === "obsolete" ? "失效" : "有效" }}</td>
-          <td>{{ row.file_count }}</td>
-          <td>{{ row.present_count }}/{{ row.missing_count }}</td>
-        </tr>
-      </tbody>
-    </ResizableDataTable>
+      <ResizableDataTable :columns="catalogColumns" wrap-class="table-grow">
+        <tbody>
+          <tr v-for="row in filteredEntries" :key="row.part_key">
+            <td>
+              <button
+                v-if="row.label?.trim()"
+                type="button"
+                class="link-key"
+                @click="openDetail(row)"
+              >
+                {{ row.label }}
+              </button>
+              <span v-else class="muted">—</span>
+            </td>
+            <td class="mono">
+              <button type="button" class="link-key" @click="openDetail(row)">{{ row.part_key }}</button>
+            </td>
+            <td>{{ row.TypeCode }}</td>
+            <td>{{ row.ModelSeries }}</td>
+            <td>{{ row.PartName }}</td>
+            <td>
+              <el-tag size="small" :type="row.status === 'obsolete' ? 'info' : 'success'" effect="plain">
+                {{ row.status === "obsolete" ? "失效" : "有效" }}
+              </el-tag>
+            </td>
+            <td>{{ row.file_count }}</td>
+            <td>{{ row.present_count }}/{{ row.missing_count }}</td>
+          </tr>
+        </tbody>
+      </ResizableDataTable>
     </div>
-    <div v-else-if="!loading" class="table-wrap table-grow empty-wrap">
-      <p class="empty">
-        {{ listData?.exists ? "当前筛选无条目" : "尚无数据，请先在 CAD 索引页执行工程内搜索" }}
-      </p>
-    </div>
+    <el-empty v-else class="empty-wrap table-grow" :description="emptyDescription" :image-size="72" />
   </div>
 </template>
 
@@ -158,22 +169,12 @@ onMounted(() => refreshList());
   gap: 8px;
   margin-bottom: 10px;
   flex-shrink: 0;
+  align-items: center;
 }
 
-.path-input {
+.search-input {
   flex: 1;
   min-width: 180px;
-  padding: 8px 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-}
-
-.btn {
-  padding: 8px 14px;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  background: var(--btn-bg);
-  font-size: 0.85rem;
 }
 
 .filters {
@@ -181,19 +182,13 @@ onMounted(() => refreshList());
   gap: 14px;
   align-items: center;
   margin-bottom: 8px;
-  font-size: 0.85rem;
   flex-shrink: 0;
-}
-
-.filter {
-  display: flex;
-  align-items: center;
-  gap: 4px;
 }
 
 .count {
   color: var(--muted);
   margin-left: auto;
+  font-size: 0.85rem;
 }
 
 .table-grow {
@@ -202,10 +197,11 @@ onMounted(() => refreshList());
 }
 
 .empty-wrap {
+  flex: 1;
+  min-height: 120px;
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: auto;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: #fff;
@@ -235,10 +231,8 @@ onMounted(() => refreshList());
   font-size: 0.76rem;
 }
 
-.empty {
-  padding: 28px;
+.muted {
   color: var(--muted);
-  text-align: center;
 }
 
 code {

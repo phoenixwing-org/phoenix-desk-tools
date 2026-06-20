@@ -134,55 +134,41 @@ onMounted(async () => {
           <span class="section-label">扫描设置</span>
           <label class="inline-field grow" for="scan-dir">
             <span class="inline-label">目录</span>
-            <input
+            <el-input
               id="scan-dir"
               v-model="scanDir"
-              class="compact-input mono"
+              size="small"
+              class="mono"
               spellcheck="false"
               placeholder="相对工作空间，如 ."
             />
           </label>
           <label class="inline-field" for="ext">
             <span class="inline-label">扩展名</span>
-            <select id="ext" v-model="extension" class="compact-input compact-select">
-              <option v-for="opt in EXT_OPTIONS" :key="opt" :value="opt">{{ opt }}</option>
-            </select>
+            <el-select id="ext" v-model="extension" size="small" class="ext-select">
+              <el-option v-for="opt in EXT_OPTIONS" :key="opt" :value="opt" :label="opt" />
+            </el-select>
           </label>
           <label class="inline-field tiny">
             <span class="inline-label">编号</span>
-            <input v-model.number="codeLen" type="number" min="1" max="20" class="compact-input num" />
+            <el-input-number v-model="codeLen" size="small" :min="1" :max="20" controls-position="right" />
           </label>
           <label class="inline-field tiny">
             <span class="inline-label">版本</span>
-            <input v-model.number="verLen" type="number" min="1" max="10" class="compact-input num" />
+            <el-input-number v-model="verLen" size="small" :min="1" :max="10" controls-position="right" />
           </label>
         </div>
 
         <div class="form-row form-foot">
-          <div class="option-chips">
-            <label class="opt-chip">
-              <input v-model="checkCode" type="checkbox" />
-              <span>查编号</span>
-            </label>
-            <label class="opt-chip">
-              <input v-model="checkVersion" type="checkbox" />
-              <span>查版本</span>
-            </label>
-            <label class="opt-chip">
-              <input v-model="codeMustBeDigit" type="checkbox" />
-              <span>编号须数字</span>
-            </label>
+          <div class="option-row">
+            <el-checkbox v-model="checkCode" size="small">查编号</el-checkbox>
+            <el-checkbox v-model="checkVersion" size="small">查版本</el-checkbox>
+            <el-checkbox v-model="codeMustBeDigit" size="small">编号须数字</el-checkbox>
           </div>
           <div class="settings-actions" data-tour-page-dedup-scan>
-            <button type="button" class="btn btn-quiet btn-sm" :disabled="saving" @click="onSave">
-              {{ saving ? "…" : "保存偏好" }}
-            </button>
-            <button type="button" class="btn primary btn-sm" :disabled="scanning" @click="onScan">
-              {{ scanning ? "扫描中…" : "开始扫描" }}
-            </button>
-            <button type="button" class="btn btn-sm" :disabled="exporting || !scanResult" @click="onExport">
-              {{ exporting ? "…" : "导出 CSV" }}
-            </button>
+            <el-button size="small" :loading="saving" @click="onSave">保存偏好</el-button>
+            <el-button type="primary" size="small" :loading="scanning" @click="onScan">开始扫描</el-button>
+            <el-button size="small" :loading="exporting" :disabled="!scanResult" @click="onExport">导出 CSV</el-button>
           </div>
         </div>
       </div>
@@ -192,32 +178,11 @@ onMounted(async () => {
       <header class="results-head">
         <div class="results-head-row">
           <span class="section-label">查重结果</span>
-          <div class="filter-tabs">
-            <button
-              type="button"
-              class="tab"
-              :class="{ active: tab === 'name_dup' }"
-              @click="tab = 'name_dup'"
-            >
-              文件名 {{ stats?.name_dup ?? 0 }}
-            </button>
-            <button
-              type="button"
-              class="tab"
-              :class="{ active: tab === 'code_dup' }"
-              @click="tab = 'code_dup'"
-            >
-              编号 {{ stats?.code_dup ?? 0 }}
-            </button>
-            <button
-              type="button"
-              class="tab"
-              :class="{ active: tab === 'ver_dup' }"
-              @click="tab = 'ver_dup'"
-            >
-              编号+版本 {{ stats?.ver_dup ?? 0 }}
-            </button>
-          </div>
+          <el-radio-group v-model="tab" size="small" class="filter-tabs">
+            <el-radio-button value="name_dup">文件名 {{ stats?.name_dup ?? 0 }}</el-radio-button>
+            <el-radio-button value="code_dup">编号 {{ stats?.code_dup ?? 0 }}</el-radio-button>
+            <el-radio-button value="ver_dup">编号+版本 {{ stats?.ver_dup ?? 0 }}</el-radio-button>
+          </el-radio-group>
         </div>
         <p v-if="stats" class="scan-summary">
           <span>文件 <strong>{{ scanResult?.file_count }}</strong></span>
@@ -259,14 +224,18 @@ onMounted(async () => {
                   <span class="mono dup-key">{{ group.label }}</span>
                 </td>
                 <td v-if="j === 0" :rowspan="pathsOf(group).length" class="col-count">
-                  <span class="dup-badge">{{ pathsOf(group).length }}</span>
+                  <el-tag size="small" effect="plain" round>{{ pathsOf(group).length }}</el-tag>
                 </td>
                 <td class="path-cell mono">{{ p }}</td>
               </tr>
             </template>
           </tbody>
         </table>
-        <p v-else class="empty">{{ scanning ? "扫描中…" : scanResult ? "当前类别无重复" : "设置参数后点击「开始扫描」" }}</p>
+        <el-empty
+          v-else
+          :description="scanning ? '扫描中…' : scanResult ? '当前类别无重复' : '设置参数后点击「开始扫描」'"
+          :image-size="64"
+        />
       </div>
     </section>
   </div>
@@ -338,53 +307,19 @@ onMounted(async () => {
   white-space: nowrap;
 }
 
-.compact-input {
-  min-width: 0;
-  padding: 4px 8px;
-  border: 1px solid var(--border-strong);
-  border-radius: 5px;
-  font-size: 0.82rem;
-  box-sizing: border-box;
-  background: #fff;
-}
-
-.inline-field.grow .compact-input {
+.inline-field.grow :deep(.el-input) {
   width: 100%;
   max-width: 420px;
 }
 
-.compact-select {
+.ext-select {
   width: 96px;
 }
 
-.compact-input.num {
-  width: 48px;
-  font-variant-numeric: tabular-nums;
-}
-
-.option-chips {
+.option-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-}
-
-.opt-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: #f8fafc;
-  font-size: 0.76rem;
-  cursor: pointer;
-  user-select: none;
-}
-
-.opt-chip:has(input:checked) {
-  background: #eff6ff;
-  border-color: #93c5fd;
-  color: #1d4ed8;
+  gap: 8px 12px;
 }
 
 .settings-actions {
@@ -392,22 +327,6 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 6px;
   margin-left: auto;
-}
-
-.btn-sm {
-  padding: 5px 11px;
-  font-size: 0.78rem;
-}
-
-.btn-quiet {
-  color: var(--muted);
-  border-color: transparent;
-  background: transparent;
-}
-
-.btn-quiet:hover:not(:disabled) {
-  background: #f1f5f9;
-  border-color: var(--border);
 }
 
 .results-head {
@@ -444,26 +363,6 @@ onMounted(async () => {
 
 .scan-summary .warn strong {
   color: #b45309;
-}
-
-.filter-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.tab {
-  padding: 5px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--border-strong);
-  background: var(--btn-bg);
-  font-size: 0.78rem;
-}
-
-.tab.active {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
 }
 
 .dedup-page .table-wrap {
@@ -520,19 +419,6 @@ onMounted(async () => {
   line-height: 1.45;
 }
 
-.dup-badge {
-  display: inline-block;
-  min-width: 22px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: #fef3c7;
-  border: 1px solid #fcd34d;
-  color: #92400e;
-  font-size: 0.72rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
 .path-cell {
   color: var(--muted);
   word-break: break-all;
@@ -575,7 +461,7 @@ onMounted(async () => {
     justify-content: flex-end;
   }
 
-  .inline-field.grow .compact-input {
+  .inline-field.grow :deep(.el-input) {
     max-width: none;
   }
 }

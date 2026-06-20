@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import {
   fetchFileWorksets,
+  pruneMissingFileWorksetPaths,
   saveFileWorksets,
   type FileWorkset,
   type FileWorksetPayload,
@@ -217,6 +218,25 @@ export const useFileWorksetsStore = defineStore("fileWorksets", {
         return true;
       } catch {
         return false;
+      } finally {
+        this.saving = false;
+      }
+    },
+
+    async pruneMissing(worksetId?: string): Promise<number> {
+      this.saving = true;
+      try {
+        const out = await pruneMissingFileWorksetPaths(
+          worksetId ? { workset_id: worksetId } : undefined,
+        );
+        this.applyPayload(out);
+        const removed = out.prune_removed ?? 0;
+        if (removed) {
+          this.lastMessage = `已剔除 ${removed} 条缺失路径`;
+        } else {
+          this.lastMessage = "无缺失路径";
+        }
+        return removed;
       } finally {
         this.saving = false;
       }

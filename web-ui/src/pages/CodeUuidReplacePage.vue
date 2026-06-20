@@ -9,6 +9,7 @@ import {
 } from "../api";
 import PageHelpButton from "../components/PageHelpButton.vue";
 import WorksetScopePicker from "../components/WorksetScopePicker.vue";
+import { promptChoice } from "../composables/choiceDialog";
 import { useAppShell } from "../composables/useAppShell";
 import { useWorksetPageScope } from "../composables/useWorksetPageScope";
 import { useFileWorksetsStore } from "../stores/fileWorksets";
@@ -225,8 +226,16 @@ async function onApply(dryRun: boolean) {
     return;
   }
   if (!dryRun) {
-    const ok = window.confirm(`将替换 ${selectedCount.value} 条 UUID 命中。\n建议先预检。\n\n确定写盘？`);
-    if (!ok) return;
+    const choice = await promptChoice({
+      title: "执行 UUID 替换",
+      message: `将替换 ${selectedCount.value} 条 UUID 命中。\n建议先预检。\n\n确定写盘？`,
+      defaultChoiceId: "cancel",
+      choices: [
+        { id: "cancel", label: "取消" },
+        { id: "confirm", label: "写盘", variant: "danger" },
+      ],
+    });
+    if (choice !== "confirm") return;
   }
   applying.value = true;
   const mode = dryRun ? "预检" : "写盘";
@@ -295,21 +304,21 @@ onMounted(() => {
     <section class="card settings-card">
       <WorksetScopePicker page-id="code_uuid" />
       <div class="form-row settings-row2">
-        <label class="field field-inline strategy-field">
-          <span class="field-label">替换策略</span>
-          <select v-model="strategy" class="input strategy-select">
-            <option value="map_per_value">同值一组 → 共用一个新 UUID（按写法分别格式化）</option>
-            <option value="fresh_per_hit">每条命中独立新 UUID</option>
-          </select>
-        </label>
+        <el-form-item label="替换策略" class="strategy-field">
+          <el-select v-model="strategy" size="small" class="strategy-select">
+            <el-option
+              value="map_per_value"
+              label="同值一组 → 共用一个新 UUID（按写法分别格式化）"
+            />
+            <el-option value="fresh_per_hit" label="每条命中独立新 UUID" />
+          </el-select>
+        </el-form-item>
         <div class="actions">
-          <button type="button" class="btn btn-sm" :disabled="scanning" @click="onScan">
-            {{ scanning ? "…" : "扫描 UUID" }}
-          </button>
-          <button
-            type="button"
-            class="btn btn-quiet btn-sm"
-            :disabled="scanning || !worksetStore.activeWorkset?.paths.length"
+          <el-button size="small" :loading="scanning" @click="onScan">扫描 UUID</el-button>
+          <el-button
+            size="small"
+            :loading="scanning"
+            :disabled="!worksetStore.activeWorkset?.paths.length"
             :title="
               worksetStore.activeWorkset?.paths.length
                 ? `仅扫描侧栏「${activeWorksetLabel}」内 ${worksetStore.activeWorkset.paths.length} 个文件`
@@ -318,20 +327,26 @@ onMounted(() => {
             @click="scanFromActiveWorkset"
           >
             当前工作集扫描
-          </button>
-          <button type="button" class="btn btn-sm" :disabled="applying || !selectedCount" @click="onApply(true)">
-            {{ applying ? "…" : "预检" }}
-          </button>
-          <button type="button" class="btn primary btn-sm" :disabled="applying || !selectedCount" @click="onApply(false)">
-            {{ applying ? "…" : "执行替换" }}
-          </button>
+          </el-button>
+          <el-button size="small" :loading="applying" :disabled="!selectedCount" @click="onApply(true)">
+            预检
+          </el-button>
+          <el-button
+            type="primary"
+            size="small"
+            :loading="applying"
+            :disabled="!selectedCount"
+            @click="onApply(false)"
+          >
+            执行替换
+          </el-button>
         </div>
       </div>
     </section>
 
     <section class="card ignore-banner">
       <span v-if="ignoreSummary" class="muted small">{{ ignoreSummary }}</span>
-      <button type="button" class="btn btn-quiet btn-sm" @click="openIgnorePanel">右侧栏 · 忽略</button>
+      <el-button size="small" link type="primary" @click="openIgnorePanel">右侧栏 · 忽略</el-button>
     </section>
 
     <section class="card results-card">
@@ -346,17 +361,25 @@ onMounted(() => {
             <el-button
               size="small"
               :disabled="!pathsFromSelectedHits.length"
-              :title="`去重 ${pathsFromSelectedHits.length} 个文件`"
+              :title="`去重 ${pathsFromSelectedHits.length} 个文件，加入「${activeWorksetLabel}」`"
               @click="addSelectedHitsToWorkset"
             >
-              选中 → {{ activeWorksetLabel }}
+              <span class="ws-action-label">
+                选中
+                <span class="ws-action-arrow" aria-hidden="true">→</span>
+                <el-tag size="small" effect="plain" round class="ws-action-tag">{{ activeWorksetLabel }}</el-tag>
+              </span>
             </el-button>
             <el-button
               size="small"
-              :title="`去重 ${pathsFromAllHits.length} 个文件`"
+              :title="`去重 ${pathsFromAllHits.length} 个文件，加入「${activeWorksetLabel}」`"
               @click="addAllHitsToWorkset"
             >
-              全部命中 → {{ activeWorksetLabel }}
+              <span class="ws-action-label">
+                全部命中
+                <span class="ws-action-arrow" aria-hidden="true">→</span>
+                <el-tag size="small" effect="plain" round class="ws-action-tag">{{ activeWorksetLabel }}</el-tag>
+              </span>
             </el-button>
           </div>
         </div>
@@ -446,7 +469,7 @@ onMounted(() => {
             </template>
           </tbody>
         </table>
-        <p v-else class="empty">点击「扫描 UUID」；引擎接入前表格为空</p>
+        <el-empty v-else description="点击「扫描 UUID」；引擎接入前表格为空" :image-size="64" />
       </div>
     </section>
   </div>
@@ -501,47 +524,18 @@ onMounted(() => {
 
 .strategy-field {
   flex: 1 1 320px;
+  margin-bottom: 0;
 }
 
-.strategy-select {
-  flex: 1 1 auto;
-  width: 100%;
-  min-width: 180px;
-  max-width: 420px;
-  height: auto;
-  min-height: 0;
-}
-
-.field-inline .field-label {
-  flex-shrink: 0;
-  margin: 0;
-  white-space: nowrap;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 160px;
-}
-
-.opt-inline {
-  flex-direction: row;
-  align-items: center;
-  min-width: auto;
-  padding-bottom: 6px;
-}
-
-.field-label {
+.strategy-field :deep(.el-form-item__label) {
   font-size: 0.72rem;
   color: var(--muted);
 }
 
-.input {
-  padding: 6px 8px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: 0.82rem;
+.strategy-select {
+  width: 100%;
+  min-width: 180px;
+  max-width: 420px;
 }
 
 .actions {
@@ -582,6 +576,31 @@ onMounted(() => {
 
 .results-workset-actions :deep(.el-button) {
   margin: 0;
+}
+
+.ws-action-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+}
+
+.ws-action-arrow {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 0.9em;
+  line-height: 1;
+}
+
+.ws-action-tag {
+  max-width: min(160px, 28vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.results-workset-actions :deep(.el-button.is-disabled .ws-action-tag) {
+  opacity: 0.65;
 }
 
 .engine-msg {

@@ -23,10 +23,17 @@ from phoenix.config.nav_modules import (
 
 WORKSPACE_PHOENIX_DIR = ".phoenix"
 WORKSPACE_PREFS_BASENAME = "phoenix-workspace-prefs.json"
-# 读取兼容；新写入仅用 ``WORKSPACE_PREFS_BASENAME``
+# 读取兼容；新写入仅用 ``resolve_workspace_prefs_basename()`` 的返回值
 _LEGACY_WORKSPACE_PREFS_BASENAMES = ("phoenix-freecad-desktop.json",)
 _LEGACY_ROOT_DOTFILE_NAME = ".phoenix-freecad-desktop.json"
 WORKSPACE_DOTFILE_NAME = f"{WORKSPACE_PHOENIX_DIR}/{WORKSPACE_PREFS_BASENAME}"
+_ENV_WORKSPACE_PREFS_BASENAME = "PHOENIX_WORKSPACE_PREFS"
+
+
+def resolve_workspace_prefs_basename() -> str:
+    """工作空间偏好 JSON 文件名；可用 ``PHOENIX_WORKSPACE_PREFS`` 覆盖。"""
+    env = os.environ.get(_ENV_WORKSPACE_PREFS_BASENAME, "").strip()
+    return env or WORKSPACE_PREFS_BASENAME
 MAX_RECENT_WORKSPACES = 10
 
 # 临时 / 测试目录名片段：不应进入「最近工作空间」
@@ -247,7 +254,7 @@ def workspace_phoenix_dir(repo_root: Path) -> Path:
 
 
 def workspace_dotfile_path(repo_root: Path) -> Path:
-    return workspace_phoenix_dir(repo_root) / WORKSPACE_PREFS_BASENAME
+    return workspace_phoenix_dir(repo_root) / resolve_workspace_prefs_basename()
 
 
 def _legacy_workspace_prefs_paths(repo_root: Path) -> list[Path]:

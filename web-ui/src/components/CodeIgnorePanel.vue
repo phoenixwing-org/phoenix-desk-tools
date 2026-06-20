@@ -175,9 +175,7 @@ defineExpose({ reload: loadPrefs });
       <p class="meta-line muted small">
         合并生效 <strong>{{ mergedIgnoreCount }}</strong> 条（内置 {{ ignoreBuiltinCount }} + 文件
         {{ ignoreFilePatterns.length }} + 自定义 {{ customLineCount }}）
-        <button type="button" class="btn btn-quiet btn-sm" :disabled="loading" @click="loadPrefs">
-          {{ loading ? "…" : "刷新" }}
-        </button>
+        <el-button link type="primary" size="small" :loading="loading" @click="loadPrefs">刷新</el-button>
       </p>
     </header>
 
@@ -186,12 +184,10 @@ defineExpose({ reload: loadPrefs });
         合并 {{ mergedIgnoreCount }} 条
       </span>
       <div class="sidebar-actions">
-        <button type="button" class="mini" :disabled="loading" title="重新读取 code.ignore" @click="loadPrefs">
-          {{ loading ? "…" : "刷新" }}
-        </button>
-        <button type="button" class="mini primary" :disabled="saving" @click="onSave">
-          {{ saving ? "…" : "保存" }}
-        </button>
+        <el-button size="small" :loading="loading" title="重新读取 code.ignore" @click="loadPrefs">
+          刷新
+        </el-button>
+        <el-button type="primary" size="small" :loading="saving" @click="onSave">保存</el-button>
       </div>
     </header>
 
@@ -239,9 +235,7 @@ defineExpose({ reload: loadPrefs });
             </li>
           </ul>
           <div class="panel-actions">
-            <button type="button" class="btn btn-quiet btn-sm" @click="onApplySuggestions">
-              填入自定义
-            </button>
+            <el-button size="small" @click="onApplySuggestions">填入自定义</el-button>
           </div>
         </div>
       </details>
@@ -256,23 +250,28 @@ defineExpose({ reload: loadPrefs });
           <div class="preset-row">
             <label class="preset-label">
               预设
-              <select v-model="ignorePreset" class="preset-select" @change="onApplyPreset">
-                <option value="">（无）</option>
-                <option v-for="p in ignorePresets" :key="p.id" :value="p.id">{{ p.label }}</option>
-              </select>
+              <el-select
+                v-model="ignorePreset"
+                size="small"
+                class="preset-select"
+                placeholder="（无）"
+                @change="onApplyPreset"
+              >
+                <el-option value="" label="（无）" />
+                <el-option v-for="p in ignorePresets" :key="p.id" :value="p.id" :label="p.label" />
+              </el-select>
             </label>
           </div>
-          <textarea
+          <el-input
             v-model="customIgnoreText"
+            type="textarea"
             class="custom-ignore-input mono"
             :rows="compact ? 8 : 10"
             spellcheck="false"
             placeholder="# 每行一条&#10;ImportedInterfaces"
           />
           <div v-if="!compact" class="panel-actions">
-            <button type="button" class="btn primary btn-sm" :disabled="saving" @click="onSave">
-              {{ saving ? "…" : "保存配置" }}
-            </button>
+            <el-button type="primary" size="small" :loading="saving" @click="onSave">保存配置</el-button>
           </div>
         </div>
       </details>
@@ -349,26 +348,6 @@ defineExpose({ reload: loadPrefs });
 .sidebar-actions {
   display: flex;
   gap: 4px;
-}
-
-.mini {
-  padding: 2px 8px;
-  font-size: 0.72rem;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: #fff;
-  cursor: pointer;
-}
-
-.mini.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-
-.mini:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .sections {
@@ -475,33 +454,19 @@ defineExpose({ reload: loadPrefs });
 }
 
 .preset-select {
-  padding: 2px 6px;
-  border-radius: 4px;
-  border: 1px solid var(--border);
-  font-size: inherit;
+  width: 160px;
 }
 
-.custom-ignore-input {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 6px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
+.custom-ignore-input :deep(textarea) {
+  font-family: var(--mono-font, ui-monospace, monospace);
   font-size: 0.72rem;
   line-height: 1.35;
-  resize: vertical;
-  background: #fff;
 }
 
 .panel-actions {
   margin-top: 8px;
   display: flex;
   justify-content: flex-end;
-}
-
-.btn-sm {
-  padding: 5px 11px;
-  font-size: 0.78rem;
 }
 
 .help-panel {

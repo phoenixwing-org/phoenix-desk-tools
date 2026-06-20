@@ -13,29 +13,30 @@ def load_worksets_from_db(repo_root: Path) -> list[dict[str, Any]]:
     rr = repo_root.expanduser().resolve(strict=False)
     with connect(rr) as conn:
         rows = conn.execute(
-            f"SELECT id, name, source, updated_at FROM {T_WORKSET} ORDER BY name, id"
+            f"""
+            SELECT w.id, w.name, w.source, w.updated_at, p.repo_rel_path
+            FROM {T_WORKSET} w
+            LEFT JOIN {T_WORKSET_PATH} p ON p.workset_id = w.id
+            ORDER BY w.name, w.id, p.sort_order, p.repo_rel_path
+            """
         ).fetchall()
-        out: list[dict[str, Any]] = []
+        by_id: dict[str, dict[str, Any]] = {}
+        order: list[str] = []
         for row in rows:
             wid = str(row["id"])
-            path_rows = conn.execute(
-                f"""
-                SELECT repo_rel_path FROM {T_WORKSET_PATH}
-                WHERE workset_id = ?
-                ORDER BY sort_order, repo_rel_path
-                """,
-                (wid,),
-            ).fetchall()
-            out.append(
-                {
+            if wid not in by_id:
+                by_id[wid] = {
                     "id": wid,
                     "name": str(row["name"]),
                     "source": str(row["source"] or ""),
                     "updated_at": str(row["updated_at"]),
-                    "paths": [str(p["repo_rel_path"]) for p in path_rows],
+                    "paths": [],
                 }
-            )
-        return out
+                order.append(wid)
+            rel = row["repo_rel_path"]
+            if rel is not None:
+                by_id[wid]["paths"].append(str(rel))
+        return [by_id[wid] for wid in order]
 
 
 def save_worksets_to_db(repo_root: Path, worksets: list[dict[str, Any]]) -> list[dict[str, Any]]:

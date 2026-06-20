@@ -1839,6 +1839,17 @@ export function saveFileWorksets(body: { worksets: FileWorkset[] }) {
   });
 }
 
+export function pruneMissingFileWorksetPaths(body?: { workset_id?: string }) {
+  return jsonFetch<FileWorksetPayload & { prune_removed?: number }>(
+    "/api/file-worksets/prune-missing",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    },
+  );
+}
+
 export type UuidKind = "uuid" | "guid32" | "suspicious";
 export type UuidApplyStrategy = "map_per_value" | "fresh_per_hit";
 

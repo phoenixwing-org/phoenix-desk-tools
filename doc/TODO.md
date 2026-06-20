@@ -98,19 +98,25 @@
 - [x] **P1 归集**：Code 索引勾选/本页、工作空间树「+工作集」
 - [x] **P1 消费**：Code UUID · `WorksetScopePicker` + `repo_rel_paths` 扫描；UUID 页从当前工作集扫描 / 命中加入工作集
 - [x] **P1 UX**：工作集删除确认（Element Plus）；侧栏去掉 SQLite 路径说明
-- [ ] 改名 / 转码 / CAD 批量页接入 `useWorksetPageScope`
-- [ ] 工作集「刷新 / 剔除 missing」、Saved Query 物化
+- [ ] 改名 / 转码 / CAD 批量页接入 `useWorksetPageScope`（Code 批量改名已接）
+- [x] 工作集「刷新 / 剔除 missing」、Saved Query 物化（剔除 missing 已做；Saved Query 未做）
 
 **P2 · 代码整洁（优先级靠后）**
 
 - [x] `FileWorksetPanel`：`watch(immediate)` 与 `onMounted` 重复 `hydrate`（已去 `onMounted`）
 - [ ] workset path 归一化：Python / TS 重复逻辑，可抽共享约定或仅文档说明
 - [ ] `save_worksets_to_db` 全量 DELETE+INSERT → 大工作集时改增量
-- [ ] `load_worksets_from_db` path 查询 N+1 → 批量 JOIN
+- [x] `load_worksets_from_db` path 查询 N+1 → 批量 JOIN
 
 **R4 · 业务页渐进（按需）**
 
-- [~] 新改版页优先 Element 组件（欢迎页 / 主页 / 配置·界面 已迁移；其它页按需）
+- [~] 新改版页优先 Element 组件（欢迎页 / 主页 / 配置·界面 已迁移；**梳理见** [Web壳层-业务页Element化-梳理.md](platform/Web壳层-业务页Element化-梳理.md)）
+- [x] P0 批次：占位页、`WorksetScopePicker`、`FileWorksetPanel`、Code 批量改名
+- [x] P1 批次：Code UUID 替换（表单区）、C++ 成员排序、配置主表单
+- [x] P2 批次：链接修正、STEP 批量、SW 导出、零件去重、Code 忽略 Panel（大表/展开表保留原生 table）
+- [x] P3 首批：零件目录、CAD/Code 索引工具栏（表仍 `ResizableDataTable`）；2026-06-20 smoke 通过
+- [x] **验收**：成员排序 GBK 预检、UUID 写盘、索引/目录、顶栏 Gitee（见 [归档](platform/Web壳层-业务页Element化-归档.md)）
+- [ ] **P3 二批 · Element（工具栏/按钮，大表保留）**：单元测试 · BOM 导出/应用 · 文件改名 `RenameAnalysisPanel` · 文件详情/零件键详情（见 [梳理 §批次](platform/Web壳层-业务页Element化-梳理.md)）
 
 ### 导航模块偏好（主页勾选 → 左侧只显示已选）
 
@@ -141,7 +147,7 @@
 - [x] 常量 `WORKSPACE_PREFS_BASENAME` → `phoenix-workspace-prefs.json`；读时兼容旧文件名
 - [x] 主要文档 / 注释 / README 替换
 - [x] Gitee 远程仓库改名 + 本地 `git remote`
-- [ ] 可选：`PHOENIX_WORKSPACE_PREFS` 环境变量覆盖 basename
+- [x] 可选：`PHOENIX_WORKSPACE_PREFS` 环境变量覆盖 basename
 
 ---
 
@@ -202,6 +208,7 @@
 - [~] **Code 批量改名**（文件夹 / 文件 / 文本三级）— 见 [Code模块-批量改名-规划.md](code/Code模块-批量改名-规划.md) §1–10  
   - [x] P0 **文本级** preview + apply、编码检测、忽略列表、单测  
   - [x] P1 文件夹 / 文件 basename 重命名（执行顺序：文件夹 → 文件 → 文本）  
+  - [x] Web：`WorksetScopePicker` + `repo_rel_paths` / Code 索引范围
 - [~] **Code UUID 替换** — 同上 §11  
   - [x] 扫描 + 勾选 apply（`map_per_value` / `fresh_per_hit`）  
   - [x] CAA `.iid` / `0x` 块 / 跨格式同值 + 大小写组内一致  

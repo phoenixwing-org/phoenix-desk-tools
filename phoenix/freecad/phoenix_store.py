@@ -1609,16 +1609,24 @@ def delete_bom_xrefs_for_hosts(repo_root: Path, host_repo_rel_paths: list[str]) 
     with connect(rr) as conn:
         conn.execute("DELETE FROM phoenix_cad_bom_assembly_cache")
         conn.execute("DELETE FROM phoenix_cad_bom_tree_occurrence")
-        for key in keys:
-            cur = conn.execute("DELETE FROM phoenix_cad_bom_xref WHERE host_repo_rel_path = ?", (key,))
-            deleted += int(cur.rowcount)
-            asset_id = get_file_asset_id(rr, key)
-            if asset_id is not None:
-                cur2 = conn.execute(
-                    "DELETE FROM phoenix_cad_bom_xref WHERE host_file_asset_id = ?",
-                    (asset_id,),
-                )
-                deleted += int(cur2.rowcount)
+        placeholders = ",".join("?" * len(keys))
+        cur = conn.execute(
+            f"DELETE FROM phoenix_cad_bom_xref WHERE host_repo_rel_path IN ({placeholders})",
+            keys,
+        )
+        deleted += int(cur.rowcount)
+        asset_rows = conn.execute(
+            f"SELECT id FROM phoenix_cad_file_asset WHERE repo_rel_path IN ({placeholders})",
+            keys,
+        ).fetchall()
+        asset_ids = [int(r["id"]) for r in asset_rows]
+        if asset_ids:
+            id_ph = ",".join("?" * len(asset_ids))
+            cur2 = conn.execute(
+                f"DELETE FROM phoenix_cad_bom_xref WHERE host_file_asset_id IN ({id_ph})",
+                asset_ids,
+            )
+            deleted += int(cur2.rowcount)
     return deleted
 
 

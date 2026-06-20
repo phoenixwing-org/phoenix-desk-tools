@@ -184,7 +184,7 @@ def _zero_scan_hints(
         else:
             hints.append(f"  · {name}: 扫描 0（预期 {filtered}，请检查路径或权限）")
     hints.append(
-        "若目标工程不在当前工作空间，请先在「配置」切换工作空间（例如 /Users/kathy/sam/KtAlarmClock），"
+        "若目标工程不在当前工作空间，请先在「配置」切换工作空间（例如同级目录下的 KtAlarmClock），"
         "再勾选「源文件」列非 0 的目录（如 KtAlarmClockUI）。"
     )
     return hints

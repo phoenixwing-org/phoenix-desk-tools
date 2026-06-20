@@ -354,6 +354,18 @@ function onPageSizeChange(ev: Event) {
   void loadEntries();
 }
 
+function onPagerCurrentChange(page: number) {
+  pageOffset.value = (page - 1) * pageSize.value;
+  void loadEntries();
+}
+
+function onPagerSizeChange(size: number) {
+  if (!PAGE_SIZE_OPTIONS.includes(size as (typeof PAGE_SIZE_OPTIONS)[number])) return;
+  pageSize.value = size;
+  pageOffset.value = 0;
+  void loadEntries();
+}
+
 function scheduleEntriesReload(resetPage = true) {
   if (resetPage) pageOffset.value = 0;
   if (searchDebounce) clearTimeout(searchDebounce);
@@ -435,21 +447,21 @@ onMounted(() => applyInitialTabState());
         </div>
         <div class="head-trailing">
           <div class="head-actions" data-tour-page-code-scan>
-            <button type="button" class="btn primary" :disabled="scanning" @click="onScan">
-              {{ scanning ? "扫描中…" : "工程内搜索" }}
-            </button>
-            <button
-              type="button"
-              class="btn"
-              :disabled="purging || !missingCount"
+            <el-button type="primary" size="small" :loading="scanning" @click="onScan">工程内搜索</el-button>
+            <el-button
+              size="small"
+              type="danger"
+              plain
+              :loading="purging"
+              :disabled="!missingCount"
               @click="onPurgeMissing"
             >
-              {{ purging ? "删除中…" : `删除缺失${missingCount ? `（${missingCount}）` : ""}` }}
-            </button>
-            <button type="button" class="btn" :disabled="exporting || !hasScan" @click="onExportJson">
-              {{ exporting ? "导出中…" : "导出 JSON" }}
-            </button>
-            <button type="button" class="btn" :disabled="loading" @click="refresh()">刷新</button>
+              删除缺失{{ missingCount ? `（${missingCount}）` : "" }}
+            </el-button>
+            <el-button size="small" :loading="exporting" :disabled="!hasScan" @click="onExportJson">
+              导出 JSON
+            </el-button>
+            <el-button size="small" :loading="loading" @click="refresh()">刷新</el-button>
           </div>
           <div class="head-help">
             <PageHelpButton page-id="code_index" />
@@ -475,79 +487,51 @@ onMounted(() => applyInitialTabState());
       </section>
 
       <section class="index-toolbar">
-        <span class="search-icon" aria-hidden="true">⌕</span>
-        <input
+        <el-input
           id="code-index-search"
           v-model="searchQuery"
-          class="search-input"
+          size="small"
+          clearable
           type="search"
           spellcheck="false"
           :placeholder="searchPlaceholder"
+          class="search-field"
         />
-        <div class="search-mode-group" role="group" aria-label="搜索模式">
-          <button
-            v-for="opt in SEARCH_MODE_OPTIONS"
-            :key="opt.value"
-            type="button"
-            class="chip search-mode-chip"
-            :class="{ active: searchMode === opt.value }"
-            :title="
-              opt.value === 'filename'
-                ? '仅匹配文件名；含扩展名时精确匹配，可输入相对路径'
-                : '在文件名与相对路径中模糊匹配'
-            "
-            @click="searchMode = opt.value"
-          >
+        <el-radio-group v-model="searchMode" size="small" class="search-mode-group">
+          <el-radio-button v-for="opt in SEARCH_MODE_OPTIONS" :key="opt.value" :value="opt.value">
             {{ opt.label }}
-          </button>
-        </div>
-        <button v-if="searchQuery.trim()" type="button" class="btn mini" @click="searchQuery = ''">
-          清除
-        </button>
+          </el-radio-button>
+        </el-radio-group>
       </section>
 
       <section class="filter-bar">
         <div class="filter-group">
           <span class="filter-label">状态</span>
-          <div class="chip-group" role="group" aria-label="状态筛选">
-            <button
-              v-for="opt in STATUS_OPTIONS"
-              :key="opt.value"
-              type="button"
-              class="chip"
-              :class="{ active: statusFilter === opt.value }"
-              @click="statusFilter = opt.value"
-            >
+          <el-radio-group v-model="statusFilter" size="small">
+            <el-radio-button v-for="opt in STATUS_OPTIONS" :key="opt.value" :value="opt.value">
               {{ opt.label }}
-            </button>
-          </div>
+            </el-radio-button>
+          </el-radio-group>
         </div>
         <div class="filter-group">
           <span class="filter-label">类型</span>
-          <div class="chip-group" role="group" aria-label="类型筛选">
-            <button
-              v-for="opt in KIND_OPTIONS"
-              :key="opt.value"
-              type="button"
-              class="chip"
-              :class="{ active: kindFilter === opt.value }"
-              @click="kindFilter = opt.value"
-            >
+          <el-radio-group v-model="kindFilter" size="small">
+            <el-radio-button v-for="opt in KIND_OPTIONS" :key="opt.value" :value="opt.value">
               {{ opt.label }}
-            </button>
-          </div>
+            </el-radio-button>
+          </el-radio-group>
         </div>
         <span v-if="entriesTotal > 0" class="count">
           显示 <strong>{{ pageOffset + 1 }}–{{ pageEnd }}</strong> / {{ entriesTotal }} 条
         </span>
         <div v-if="entries.length" class="workset-actions">
-          <button type="button" class="btn mini" @click="toggleAllPage(!allPageChecked)">
+          <el-button size="small" @click="toggleAllPage(!allPageChecked)">
             {{ allPageChecked ? "取消全选" : "全选本页" }}
-          </button>
-          <button type="button" class="btn mini" :disabled="!selectedCount" @click="addSelectedToWorkset">
+          </el-button>
+          <el-button size="small" :disabled="!selectedCount" @click="addSelectedToWorkset">
             勾选加入工作集{{ selectedCount ? `（${selectedCount}）` : "" }}
-          </button>
-          <button type="button" class="btn mini" @click="addPageToWorkset">本页全部加入</button>
+          </el-button>
+          <el-button size="small" @click="addPageToWorkset">本页全部加入</el-button>
         </div>
       </section>
 
@@ -560,18 +544,19 @@ onMounted(() => applyInitialTabState());
               :class="row.file_status"
             >
               <td class="col-check">
-                <input
-                  type="checkbox"
-                  :checked="selectedPaths.has(row.repo_rel_path)"
-                  @change="toggleRow(row.repo_rel_path, ($event.target as HTMLInputElement).checked)"
+                <el-checkbox
+                  :model-value="selectedPaths.has(row.repo_rel_path)"
+                  @change="toggleRow(row.repo_rel_path, Boolean($event))"
                 />
               </td>
               <td class="col-index">{{ pageOffset + idx + 1 }}</td>
               <td>
-                <span class="status-badge" :class="row.file_status">{{ statusLabel(row) }}</span>
+                <el-tag size="small" :type="row.file_status === 'present' ? 'success' : 'warning'" effect="plain">
+                  {{ statusLabel(row) }}
+                </el-tag>
               </td>
               <td>
-                <span class="kind-badge" :data-kind="row.asset_kind">{{ kindLabel(row) }}</span>
+                <el-tag size="small" effect="plain">{{ kindLabel(row) }}</el-tag>
               </td>
               <td class="mono file-cell" :title="row.repo_rel_path">{{ row.filename }}</td>
               <td class="mono">{{ row.file_ext || "—" }}</td>
@@ -581,40 +566,39 @@ onMounted(() => applyInitialTabState());
             </tr>
           </tbody>
         </ResizableDataTable>
-        <div v-else-if="entriesLoading || loading" class="empty-wrap table-grow">
-          <p class="empty">加载索引列表…</p>
-        </div>
-        <div v-else class="empty-wrap table-grow">
-          <p class="empty">
-            {{
-              hasScan
-                ? searchQuery.trim()
-                  ? "无匹配条目，请调整搜索或筛选"
-                  : "当前筛选无条目"
-                : "尚未扫描；点击「工程内搜索」建立 Code 索引"
-            }}
-          </p>
-        </div>
+        <el-empty
+          v-else-if="entriesLoading || loading"
+          class="empty-wrap table-grow"
+          description="加载索引列表…"
+          :image-size="72"
+        />
+        <el-empty
+          v-else
+          class="empty-wrap table-grow"
+          :description="
+            hasScan
+              ? searchQuery.trim()
+                ? '无匹配条目，请调整搜索或筛选'
+                : '当前筛选无条目'
+              : '尚未扫描；点击「工程内搜索」建立 Code 索引'
+          "
+          :image-size="72"
+        />
       </div>
 
-      <nav v-if="hasScan && entriesTotal > 0" class="pager">
-        <button type="button" class="btn mini" :disabled="!hasPrevPage || entriesLoading" @click="goPrevPage">
-          上一页
-        </button>
-        <span class="pager-info">
-          第 {{ currentPage }} / {{ totalPages }} 页
-        </span>
-        <button type="button" class="btn mini" :disabled="!hasNextPage || entriesLoading" @click="goNextPage">
-          下一页
-        </button>
-        <label class="pager-size">
-          每页
-          <select :value="pageSize" @change="onPageSizeChange">
-            <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
-          </select>
-          条
-        </label>
-      </nav>
+      <el-pagination
+        v-if="hasScan && entriesTotal > 0"
+        class="pager"
+        size="small"
+        layout="total, sizes, prev, pager, next"
+        :total="entriesTotal"
+        :page-size="pageSize"
+        :current-page="currentPage"
+        :page-sizes="[...PAGE_SIZE_OPTIONS]"
+        :disabled="entriesLoading"
+        @current-change="onPagerCurrentChange"
+        @size-change="onPagerSizeChange"
+      />
     </div>
   </div>
 </template>

@@ -107,46 +107,44 @@ onMounted(async () => {
       </div>
     </header>
 
-    <div v-if="prefsMeta && !prefsMeta.com_available" class="banner warn">
-      当前平台 {{ prefsMeta.platform }} 不支持 COM 批量导出；预览与保存偏好仍可用。
-    </div>
+    <el-alert
+      v-if="prefsMeta && !prefsMeta.com_available"
+      class="platform-alert"
+      type="warning"
+      :closable="false"
+      show-icon
+      :title="`当前平台 ${prefsMeta.platform} 不支持 COM 批量导出；预览与保存偏好仍可用。`"
+    />
 
-    <section class="controls" data-tour-page-sw-form>
-      <div class="form-grid">
-        <label class="field-label" for="src-dir">SolidWorks 模型目录</label>
-        <input id="src-dir" v-model="sourceDir" class="path-input" spellcheck="false" />
-
-        <label class="field-label" for="out-dir">STEP 输出目录</label>
-        <input id="out-dir" v-model="outStepDir" class="path-input" spellcheck="false" />
-
-        <span class="field-label">选项</span>
-        <div class="checks">
-          <label><input v-model="recursiveScan" type="checkbox" /> 递归扫描子目录</label>
-        </div>
-
-        <span class="field-label">操作</span>
-        <div class="row" data-tour-page-sw-run>
-          <button type="button" class="btn" :disabled="saving" @click="onSave">
-            {{ saving ? "…" : "保存偏好" }}
-          </button>
-          <button type="button" class="btn" :disabled="previewing" @click="onPreview">
-            {{ previewing ? "…" : "预览数量" }}
-          </button>
-          <button
-            type="button"
-            class="btn primary"
-            :disabled="running || !prefsMeta?.com_available"
-            @click="onRun"
-          >
-            {{ running ? "导出中…" : "开始导出" }}
-          </button>
-        </div>
-
-        <template v-if="modelCount !== null">
-          <span class="field-label">预览结果</span>
+    <section class="controls card" data-tour-page-sw-form>
+      <el-form label-width="11rem" class="sw-form" @submit.prevent>
+        <el-form-item label="SolidWorks 模型目录">
+          <el-input id="src-dir" v-model="sourceDir" spellcheck="false" />
+        </el-form-item>
+        <el-form-item label="STEP 输出目录">
+          <el-input id="out-dir" v-model="outStepDir" spellcheck="false" />
+        </el-form-item>
+        <el-form-item label="选项">
+          <el-checkbox v-model="recursiveScan">递归扫描子目录</el-checkbox>
+        </el-form-item>
+        <el-form-item label="操作">
+          <div class="row" data-tour-page-sw-run>
+            <el-button :loading="saving" @click="onSave">保存偏好</el-button>
+            <el-button :loading="previewing" @click="onPreview">预览数量</el-button>
+            <el-button
+              type="primary"
+              :loading="running"
+              :disabled="!prefsMeta?.com_available"
+              @click="onRun"
+            >
+              开始导出
+            </el-button>
+          </div>
+        </el-form-item>
+        <el-form-item v-if="modelCount !== null" label="预览结果">
           <p class="meta-line">发现 {{ modelCount }} 个 .sldprt / .sldasm</p>
-        </template>
-      </div>
+        </el-form-item>
+      </el-form>
     </section>
   </div>
 </template>
@@ -154,43 +152,33 @@ onMounted(async () => {
 <style scoped>
 @import "./page-shared.css";
 
-.form-grid {
-  display: grid;
-  grid-template-columns: 11rem minmax(0, 1fr);
-  gap: 14px 20px;
-  align-items: center;
-}
-
-.form-grid .field-label {
-  margin: 0;
-  text-align: right;
-  align-self: center;
-}
-
-.form-grid .path-input {
-  width: 100%;
-  min-width: 0;
-}
-
-.form-grid .checks {
-  margin: 0;
-}
-
-.form-grid .row {
-  margin-top: 0;
-}
-
-.form-grid .meta-line {
-  margin: 0;
-}
-
-.banner.warn {
-  padding: 10px 12px;
-  margin-bottom: 12px;
-  background: #fff7ed;
-  border: 1px solid #fed7aa;
+.card {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  color: #9a3412;
-  font-size: 0.85rem;
+  background: #fff;
+}
+
+.platform-alert {
+  margin-bottom: 12px;
+}
+
+.sw-form {
+  max-width: 720px;
+}
+
+.sw-form :deep(.el-form-item__label) {
+  color: var(--muted);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.meta-line {
+  margin: 0;
+  font-size: 0.88rem;
 }
 </style>

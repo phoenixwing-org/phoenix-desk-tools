@@ -52,7 +52,7 @@ tests/fixtures/PNXCaaStudy    → …/PNXCaaStudy
 示例（KtAlarmClock 不在仓库同级时）：
 
 ```bash
-export PHOENIX_FIXTURE_KtAlarmClock=/Users/kathy/sam/KtAlarmClock
+export PHOENIX_FIXTURE_KtAlarmClock=/path/to/KtAlarmClock
 python3 scripts/link_test_fixtures.py
 ```
 

@@ -81,6 +81,20 @@ class TestReorderMembersCpp(unittest.TestCase):
             pret = text.index("KtAlarmClockCore::pretreat()")
             self.assertLess(calc, pret)
 
+    def test_gbk_encoded_cpp_dry_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "GbSample.cpp"
+            body = (
+                "// comment with Chinese: \u4e2d\u6587\n"
+                "void GbSample::run() {}\n"
+                "void GbSample::init() {}\n"
+            )
+            raw = body.encode("gbk")
+            path.write_bytes(raw)
+            # 可读且不因 UTF-8 硬解码而 400；无类体块时可能无变更
+            self.assertIsNotNone(reorder_cpp_file(path, dry_run=True))
+            self.assertEqual(path.read_bytes(), raw)
+
 
 if __name__ == "__main__":
     unittest.main()

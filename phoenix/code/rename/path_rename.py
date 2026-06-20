@@ -50,6 +50,7 @@ def _collect_matches(repo_root: Path, opts: RenameScanOptions, kind: PathKind) -
         include_ignored=opts.include_ignored,
         dirs=kind == "dir",
         files=kind == "file",
+        indexed_paths=opts.indexed_paths,
     ):
         if entry_kind != kind:
             continue

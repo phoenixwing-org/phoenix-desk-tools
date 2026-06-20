@@ -41,6 +41,7 @@ from typing import Iterable, List, Optional, Sequence, Tuple
 from phoenix.code.reorder_avoidance import split_by_avoidance_rules
 from phoenix.code.reorder_ignore import load_ignore_patterns
 from phoenix.code.ignore import is_ignored_name
+from phoenix.code.rename.encoding import choose_write_encoding, detect_and_read, write_text
 
 # 运行日志 / 摘要中标记「此文件有成员排序变更」（Web 侧栏、CLI 共用）
 CHANGED_LOG_MARK = "✎"
@@ -546,8 +547,11 @@ def _rebuild_cpp_blocks(special_blocks: List[Tuple[str, str, str]], member_block
     return out
 
 
-def reorder_cpp_file(path: Path, dry_run: bool = False) -> bool:
-    text = path.read_text(encoding="utf-8")
+def reorder_cpp_file(path: Path, dry_run: bool = False) -> bool | None:
+    payload = detect_and_read(path)
+    if payload is None:
+        return None
+    text = payload.text
     class_name = _find_class_name(text, path.stem)
     if not class_name:
         return False
@@ -565,7 +569,8 @@ def reorder_cpp_file(path: Path, dry_run: bool = False) -> bool:
     if new_text == text:
         return False
     if not dry_run:
-        path.write_text(new_text, encoding="utf-8")
+        out_enc = choose_write_encoding(payload, new_text)
+        write_text(path, new_text, out_enc, had_bom=payload.had_bom)
     return True
 
 
@@ -1404,8 +1409,11 @@ def reorder_header_file(
     path: Path,
     dry_run: bool = False,
     sort_members: bool = False,
-) -> Tuple[bool, List[str]]:
-    text = path.read_text(encoding="utf-8")
+) -> Tuple[bool | None, List[str]]:
+    payload = detect_and_read(path)
+    if payload is None:
+        return None, ["无法识别文件编码，已跳过"]
+    text = payload.text
     changed = False
     new_text = text
     warnings: List[str] = []
@@ -1426,7 +1434,8 @@ def reorder_header_file(
         new_text = collapsed
 
     if changed and not dry_run:
-        path.write_text(new_text, encoding="utf-8")
+        out_enc = choose_write_encoding(payload, new_text)
+        write_text(path, new_text, out_enc, had_bom=payload.had_bom)
     return changed, warnings
 
 
@@ -1579,24 +1588,38 @@ def run_reorder_members(
         rel_s = rel.as_posix() if hasattr(rel, "as_posix") else str(rel)
         if verbose:
             lines.append(f"processing {rel_s}...")
-        if path.suffix == ".cpp":
-            if reorder_cpp_file(path, dry_run):
-                cpp_changed += 1
-                changed_files.append(rel_s)
+        try:
+            if path.suffix == ".cpp":
+                cpp_result = reorder_cpp_file(path, dry_run)
+                if cpp_result is None:
+                    if verbose:
+                        lines.append(f"skip  {rel_s}: 无法识别文件编码")
+                    continue
+                if cpp_result:
+                    cpp_changed += 1
+                    changed_files.append(rel_s)
+                    if verbose:
+                        prefix = "[dry-run] " if dry_run else ""
+                        lines.append(f"{prefix}{CHANGED_LOG_MARK} cpp   {rel_s}")
+            else:
+                changed, hints = reorder_header_file(path, dry_run, sort_members)
+                if changed is None:
+                    if verbose:
+                        lines.append(f"skip  {rel_s}: 无法识别文件编码")
+                    continue
                 if verbose:
-                    prefix = "[dry-run] " if dry_run else ""
-                    lines.append(f"{prefix}{CHANGED_LOG_MARK} cpp   {rel_s}")
-        else:
-            changed, hints = reorder_header_file(path, dry_run, sort_members)
+                    for hint in hints:
+                        lines.append(f"hint  {rel_s}: {hint}")
+                if changed:
+                    hdr_changed += 1
+                    changed_files.append(rel_s)
+                    if verbose:
+                        prefix = "[dry-run] " if dry_run else ""
+                        lines.append(f"{prefix}{CHANGED_LOG_MARK} header  {rel_s}")
+        except UnicodeDecodeError:
             if verbose:
-                for hint in hints:
-                    lines.append(f"hint  {rel_s}: {hint}")
-            if changed:
-                hdr_changed += 1
-                changed_files.append(rel_s)
-                if verbose:
-                    prefix = "[dry-run] " if dry_run else ""
-                    lines.append(f"{prefix}{CHANGED_LOG_MARK} header  {rel_s}")
+                lines.append(f"skip  {rel_s}: 无法解码文件编码")
+            continue
 
     if verbose and (cpp_changed or hdr_changed or files_scanned):
         mode = "would update" if dry_run else "updated"

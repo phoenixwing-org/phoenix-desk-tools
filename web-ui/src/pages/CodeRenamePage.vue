@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
+import { ElMessageBox } from "element-plus";
 import {
   applyCodeRename,
   fetchCodeIgnorePrefs,
@@ -10,7 +11,9 @@ import {
   type RenameLevel,
 } from "../api";
 import PageHelpButton from "../components/PageHelpButton.vue";
+import WorksetScopePicker from "../components/WorksetScopePicker.vue";
 import { useAppShell } from "../composables/useAppShell";
+import { useWorksetPageScope } from "../composables/useWorksetPageScope";
 import {
   CODE_RENAME_LEVEL_OPTIONS,
   useCodeRenamePageStore,
@@ -18,6 +21,7 @@ import {
 
 const shell = useAppShell();
 const pageStore = useCodeRenamePageStore();
+const worksetScope = useWorksetPageScope("code_rename");
 
 const LEVEL_OPTIONS = CODE_RENAME_LEVEL_OPTIONS;
 
@@ -28,10 +32,6 @@ const oldName = computed({
 const newName = computed({
   get: () => pageStore.new,
   set: (value: string) => pageStore.setNew(value),
-});
-const scope = computed({
-  get: () => pageStore.scope,
-  set: (value: string) => pageStore.setScope(value),
 });
 const targetEncoding = computed({
   get: () => pageStore.targetEncoding,
@@ -111,6 +111,11 @@ async function onSavePrefs() {
   }
 }
 
+function buildRunBody() {
+  const { scope: _legacyScope, ...rest } = pageStore.prefsPayload;
+  return { ...rest, ...worksetScope.buildScanBody() };
+}
+
 async function onPreview() {
   if (!canRun.value) {
     shell.setStatus("请填写旧名、新名并勾选级别");
@@ -120,7 +125,7 @@ async function onPreview() {
   engineMessage.value = "";
   shell.appendLog("[Code 批量改名] 预览扫描…", { source: "code_rename", open: true });
   try {
-    const out = await previewCodeRename(pageStore.prefsPayload);
+    const out = await previewCodeRename(buildRunBody());
     hits.value = out.hits || [];
     previewSummary.value = out.summary;
     engineMessage.value = out.message || "";
@@ -144,14 +149,24 @@ async function onApply() {
     shell.setStatus("请填写旧名、新名并勾选级别");
     return;
   }
-  const ok = window.confirm(
+  const ok = await ElMessageBox.confirm(
     `将执行批量改名：\n  ${oldName.value.trim()} → ${newName.value.trim()}\n\n建议先预览。确定写盘？`,
+    "执行批量改名",
+    {
+      type: "warning",
+      confirmButtonText: "写盘",
+      cancelButtonText: "取消",
+      distinguishCancelAndClose: true,
+    },
+  ).then(
+    () => true,
+    () => false,
   );
   if (!ok) return;
   applying.value = true;
   shell.appendLog("[Code 批量改名] 执行写盘…", { source: "code_rename", open: true });
   try {
-    const out = await applyCodeRename(pageStore.prefsPayload);
+    const out = await applyCodeRename(buildRunBody());
     engineMessage.value = out.message || "";
     const logText = out.lines?.join("\n") || out.log || out.message || "完成";
     shell.appendLog(logText, { source: "code_rename" });
@@ -195,66 +210,53 @@ onMounted(async () => {
     </header>
 
     <section class="card settings-card">
-      <div class="settings-form">
+      <el-form class="settings-form" label-position="top" @submit.prevent>
         <div class="form-row name-row">
-          <label class="field">
-            <span class="field-label">旧名</span>
-            <input v-model="oldName" class="input mono" type="text" spellcheck="false" placeholder="精确匹配" />
-          </label>
+          <el-form-item label="旧名" class="name-field">
+            <el-input v-model="oldName" size="small" class="mono" spellcheck="false" placeholder="精确匹配" />
+          </el-form-item>
           <span class="arrow" aria-hidden="true">→</span>
-          <label class="field">
-            <span class="field-label">新名</span>
-            <input v-model="newName" class="input mono" type="text" spellcheck="false" />
-          </label>
-          <label class="field field-scope">
-            <span class="field-label">范围（可选）</span>
-            <input v-model="scope" class="input mono" type="text" spellcheck="false" placeholder="相对子目录，空=全工作空间" />
-          </label>
+          <el-form-item label="新名" class="name-field">
+            <el-input v-model="newName" size="small" class="mono" spellcheck="false" />
+          </el-form-item>
         </div>
 
+        <WorksetScopePicker page-id="code_rename" />
+
         <div class="form-row form-foot">
-          <div class="option-chips">
-            <label v-for="opt in LEVEL_OPTIONS" :key="opt.id" class="opt-chip">
-              <input
-                type="checkbox"
-                :checked="levels.has(opt.id)"
-                @change="toggleLevel(opt.id, ($event.target as HTMLInputElement).checked)"
-              />
-              <span>{{ opt.label }}</span>
-            </label>
-            <label class="opt-chip">
-              <select v-model="targetEncoding" class="encoding-select">
-                <option value="utf-8">UTF-8 写回</option>
-                <option value="gbk">GBK 写回</option>
-              </select>
-            </label>
-            <label class="opt-chip">
-              <input v-model="rescanIndex" type="checkbox" />
-              <span>完成后重扫 Code 索引</span>
-            </label>
-            <label class="opt-chip danger-chip" title="包含忽略目录内的条目，慎用">
-              <input v-model="includeIgnored" type="checkbox" />
-              <span>包含忽略目录</span>
-            </label>
+          <div class="option-row">
+            <el-checkbox
+              v-for="opt in LEVEL_OPTIONS"
+              :key="opt.id"
+              :model-value="levels.has(opt.id)"
+              size="small"
+              @change="toggleLevel(opt.id, Boolean($event))"
+            >
+              {{ opt.label }}
+            </el-checkbox>
+            <el-select v-model="targetEncoding" size="small" class="encoding-select">
+              <el-option value="utf-8" label="UTF-8 写回" />
+              <el-option value="gbk" label="GBK 写回" />
+            </el-select>
+            <el-checkbox v-model="rescanIndex" size="small">完成后重扫 Code 索引</el-checkbox>
+            <el-checkbox v-model="includeIgnored" size="small" class="danger-opt" title="包含忽略目录内的条目，慎用">
+              包含忽略目录
+            </el-checkbox>
           </div>
           <div class="settings-actions">
-            <button type="button" class="btn btn-quiet btn-sm" :disabled="saving" @click="onSavePrefs">
-              {{ saving ? "…" : "保存偏好" }}
-            </button>
-            <button type="button" class="btn btn-sm" :disabled="previewing || !canRun" @click="onPreview">
-              {{ previewing ? "…" : "预览" }}
-            </button>
-            <button type="button" class="btn primary btn-sm" :disabled="applying || !canRun" @click="onApply">
-              {{ applying ? "…" : "执行改名" }}
-            </button>
+            <el-button size="small" :loading="saving" @click="onSavePrefs">保存偏好</el-button>
+            <el-button size="small" :loading="previewing" :disabled="!canRun" @click="onPreview">预览</el-button>
+            <el-button type="primary" size="small" :loading="applying" :disabled="!canRun" @click="onApply">
+              执行改名
+            </el-button>
           </div>
         </div>
-      </div>
+      </el-form>
     </section>
 
     <section class="card ignore-banner">
       <span v-if="ignoreSummary" class="muted small">{{ ignoreSummary }}</span>
-      <button type="button" class="btn btn-quiet btn-sm" @click="openIgnorePanel">右侧栏 · 忽略</button>
+      <el-button size="small" link type="primary" @click="openIgnorePanel">右侧栏 · 忽略</el-button>
     </section>
 
     <section class="card results-card">
@@ -268,27 +270,27 @@ onMounted(async () => {
         <p v-if="engineMessage" class="engine-msg">{{ engineMessage }}</p>
       </header>
 
-      <div class="table-wrap">
-        <table v-if="hits.length" class="entry-table">
-          <thead>
-            <tr>
-              <th>路径</th>
-              <th class="col-level">级别</th>
-              <th class="col-num">次数</th>
-              <th>目标 / 行号</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(h, i) in hits" :key="h.hit_id || `${h.repo_rel_path}-${i}`" :class="{ 'row-alt': i % 2 === 1 }">
-              <td class="mono">{{ h.repo_rel_path }}</td>
-              <td class="col-level">{{ hitLevelLabel(h.level) }}</td>
-              <td class="col-num">{{ h.hits }}</td>
-              <td class="mono muted">{{ h.new_path || h.lines?.join(", ") || "—" }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <p v-else class="empty">{{ loading ? "加载中…" : "点击「预览」列出命中" }}</p>
-      </div>
+      <el-table
+        v-if="hits.length"
+        :data="hits"
+        size="small"
+        stripe
+        class="hits-table"
+        row-key="hit_id"
+        :empty-text="loading ? '加载中…' : '点击「预览」列出命中'"
+      >
+        <el-table-column prop="repo_rel_path" label="路径" min-width="200" class-name="mono" />
+        <el-table-column label="级别" width="72" align="center">
+          <template #default="{ row }">{{ hitLevelLabel(row.level) }}</template>
+        </el-table-column>
+        <el-table-column prop="hits" label="次数" width="64" align="center" />
+        <el-table-column label="目标 / 行号" min-width="160">
+          <template #default="{ row }">
+            <span class="mono muted">{{ row.new_path || row.lines?.join(', ') || '—' }}</span>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-else :description="loading ? '加载中…' : '点击「预览」列出命中'" :image-size="64" />
     </section>
   </div>
 </template>
@@ -334,29 +336,21 @@ onMounted(async () => {
   align-items: center;
 }
 
-.name-row .field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 140px;
+.name-row {
+  align-items: flex-end;
+}
+
+.name-row .name-field {
   flex: 1;
+  min-width: 140px;
+  margin-bottom: 0;
 }
 
-.field-scope {
-  min-width: 200px;
-  flex: 1.4;
-}
-
-.field-label {
+.settings-form :deep(.el-form-item__label) {
   font-size: 0.72rem;
   color: var(--muted);
-}
-
-.input {
-  padding: 6px 8px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: 0.82rem;
+  padding-bottom: 2px;
+  line-height: 1.2;
 }
 
 .arrow {
@@ -364,55 +358,27 @@ onMounted(async () => {
   color: var(--muted);
 }
 
-.option-chips {
+.option-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-}
-
-.opt-chip {
-  display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: #f8fafc;
-  font-size: 0.76rem;
-  cursor: pointer;
-  user-select: none;
+  gap: 8px 12px;
 }
 
-.opt-chip:has(input:checked),
-.opt-chip:has(select) {
-  background: #eff6ff;
-  border-color: #93c5fd;
+.encoding-select {
+  width: 120px;
 }
 
-.danger-chip:has(input:checked) {
-  background: #fef2f2;
-  border-color: #fca5a5;
+.danger-opt :deep(.el-checkbox__label) {
   color: #b91c1c;
-}
-
-.encoding-select,
-.preset-select {
-  border: none;
-  background: transparent;
-  font-size: inherit;
-  cursor: pointer;
 }
 
 .settings-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   margin-left: auto;
-}
-
-.btn-sm {
-  padding: 5px 11px;
-  font-size: 0.78rem;
+  flex-shrink: 0;
 }
 
 .ignore-banner {
@@ -436,52 +402,16 @@ onMounted(async () => {
   color: #b45309;
 }
 
-.table-wrap {
-  max-height: calc(100vh - 520px);
-  overflow: auto;
-}
-
-.entry-table {
+.hits-table {
   width: 100%;
-  border-collapse: collapse;
+}
+
+.hits-table :deep(.mono) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.82rem;
 }
 
-.entry-table th,
-.entry-table td {
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border);
-  text-align: left;
-}
-
-.entry-table th {
-  position: sticky;
-  top: 0;
-  background: #f8fafc;
-  font-weight: 600;
-  font-size: 0.78rem;
+.muted {
   color: var(--muted);
-  z-index: 1;
-}
-
-.col-level {
-  width: 72px;
-}
-
-.col-num {
-  width: 56px;
-  text-align: center;
-}
-
-.row-alt {
-  background: #fafbfc;
-}
-
-.empty {
-  margin: 0;
-  padding: 16px;
-  text-align: center;
-  color: var(--muted);
-  font-size: 0.82rem;
 }
 </style>

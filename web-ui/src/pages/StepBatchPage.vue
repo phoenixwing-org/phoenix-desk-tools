@@ -131,48 +131,43 @@ onMounted(async () => {
       @action="shell.goToPage('config')"
     />
 
-    <section class="controls" data-tour-page-step-form>
-      <div class="form-grid">
-        <label class="field-label" for="step-dir">STEP 目录</label>
-        <input id="step-dir" v-model="stepDir" class="path-input" spellcheck="false" />
-
-        <label class="field-label" for="out-dir">FCStd 输出目录</label>
-        <input id="out-dir" v-model="outDir" class="path-input" spellcheck="false" />
-
-        <span class="field-label">选项</span>
-        <div class="checks">
-          <label><input v-model="skipExisting" type="checkbox" /> 跳过已存在 FCStd</label>
-          <label><input v-model="stepRecursive" type="checkbox" /> 递归子目录</label>
-        </div>
-
-        <label class="field-label" for="view-fit">视图适应</label>
-        <select id="view-fit" v-model="viewFit" class="path-input fit-select">
-          <option value="none">不调整</option>
-          <option value="last">最后一个</option>
-          <option value="all">全部</option>
-        </select>
-
-        <span class="field-label">操作</span>
-        <div class="row" data-tour-page-step-run>
-          <button type="button" class="btn" :disabled="saving" @click="onSave">
-            {{ saving ? "…" : "保存偏好" }}
-          </button>
-          <button type="button" class="btn" :disabled="previewing || freecadBlocked" @click="onPreview">
-            {{ previewing ? "…" : "预览数量" }}
-          </button>
-          <button type="button" class="btn primary" :disabled="running || freecadBlocked" @click="onRun">
-            {{ running ? "转换中…" : "开始转换" }}
-          </button>
-        </div>
-
-        <template v-if="preview">
-          <span class="field-label">预览结果</span>
+    <section class="controls card" data-tour-page-step-form>
+      <el-form label-width="11rem" class="step-form" @submit.prevent>
+        <el-form-item label="STEP 目录">
+          <el-input id="step-dir" v-model="stepDir" spellcheck="false" />
+        </el-form-item>
+        <el-form-item label="FCStd 输出目录">
+          <el-input id="out-dir" v-model="outDir" spellcheck="false" />
+        </el-form-item>
+        <el-form-item label="选项">
+          <div class="checks">
+            <el-checkbox v-model="skipExisting">跳过已存在 FCStd</el-checkbox>
+            <el-checkbox v-model="stepRecursive">递归子目录</el-checkbox>
+          </div>
+        </el-form-item>
+        <el-form-item label="视图适应">
+          <el-select v-model="viewFit" class="fit-select">
+            <el-option value="none" label="不调整" />
+            <el-option value="last" label="最后一个" />
+            <el-option value="all" label="全部" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="操作">
+          <div class="row" data-tour-page-step-run>
+            <el-button :loading="saving" @click="onSave">保存偏好</el-button>
+            <el-button :loading="previewing" :disabled="freecadBlocked" @click="onPreview">预览数量</el-button>
+            <el-button type="primary" :loading="running" :disabled="freecadBlocked" @click="onRun">
+              开始转换
+            </el-button>
+          </div>
+        </el-form-item>
+        <el-form-item v-if="preview" label="预览结果">
           <p class="meta-line">
             {{ preview.step_dir_display }} · 批处理 {{ preview.batch_count }} 个
             {{ preview.recursive ? "（含子目录）" : "" }}
           </p>
-        </template>
-      </div>
+        </el-form-item>
+      </el-form>
     </section>
   </div>
 </template>
@@ -180,37 +175,40 @@ onMounted(async () => {
 <style scoped>
 @import "./page-shared.css";
 
-.form-grid {
-  display: grid;
-  grid-template-columns: 11rem minmax(0, 1fr);
-  gap: 14px 20px;
-  align-items: center;
+.card {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
 }
 
-.form-grid .field-label {
+.step-form {
+  max-width: 720px;
+}
+
+.step-form :deep(.el-form-item__label) {
+  color: var(--muted);
+}
+
+.checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.meta-line {
   margin: 0;
-  text-align: right;
-  align-self: center;
-}
-
-.form-grid .path-input {
-  width: 100%;
-  min-width: 0;
-}
-
-.form-grid .checks {
-  margin: 0;
-}
-
-.form-grid .row {
-  margin-top: 0;
-}
-
-.form-grid .meta-line {
-  margin: 0;
+  font-size: 0.88rem;
+  color: var(--text);
 }
 
 .fit-select {
-  max-width: 240px;
+  width: min(240px, 100%);
 }
 </style>

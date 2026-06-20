@@ -80,6 +80,7 @@ const stats = computed(() => data.value?.stats);
 const pageEnd = computed(() => Math.min(pageOffset.value + entries.value.length, entriesTotal.value));
 const hasPrevPage = computed(() => pageOffset.value > 0);
 const hasNextPage = computed(() => pageOffset.value + pageSize.value < entriesTotal.value);
+const currentPage = computed(() => Math.floor(pageOffset.value / pageSize.value) + 1);
 
 function setStatus(msg: string) {
   shell.setStatus(msg);
@@ -302,6 +303,18 @@ function onPageSizeChange(ev: Event) {
   void loadEntries();
 }
 
+function onPagerCurrentChange(page: number) {
+  pageOffset.value = (page - 1) * pageSize.value;
+  void loadEntries();
+}
+
+function onPagerSizeChange(size: number) {
+  if (!PAGE_SIZE_OPTIONS.includes(size as (typeof PAGE_SIZE_OPTIONS)[number])) return;
+  pageSize.value = size;
+  pageOffset.value = 0;
+  void loadEntries();
+}
+
 function scheduleEntriesReload(resetPage = true) {
   if (resetPage) pageOffset.value = 0;
   if (searchDebounce) clearTimeout(searchDebounce);
@@ -389,19 +402,19 @@ onMounted(() => applyInitialTabState());
         </p>
         <div class="head-trailing">
         <div class="head-actions" data-tour-page-fcstd-scan>
-          <button type="button" class="btn primary" :disabled="scanning" @click="onScan">
-            {{ scanning ? "扫描中…" : "工程内搜索" }}
-          </button>
-          <button type="button" class="btn" :disabled="loading" @click="refresh">刷新</button>
-          <button
-            type="button"
-            class="btn danger"
-            :disabled="loading || purging || scanning || !(stats?.missing)"
+          <el-button type="primary" size="small" :loading="scanning" @click="onScan">工程内搜索</el-button>
+          <el-button size="small" :loading="loading" @click="refresh">刷新</el-button>
+          <el-button
+            size="small"
+            type="danger"
+            plain
+            :loading="purging"
+            :disabled="loading || scanning || !(stats?.missing)"
             :title="stats?.missing ? '从索引库移除缺失条目' : '当前无缺失条目'"
             @click="onPurgeMissing"
           >
-            {{ purging ? "删除中…" : `删除缺失${stats?.missing ? `（${stats.missing}）` : ""}` }}
-          </button>
+            删除缺失{{ stats?.missing ? `（${stats.missing}）` : "" }}
+          </el-button>
         </div>
         <div class="head-help">
           <PageHelpButton page-id="fcstd_map" />
@@ -410,56 +423,36 @@ onMounted(() => applyInitialTabState());
       </div>
     </header>
 
-    <nav class="sub-tabs" role="tablist">
-      <button
-        type="button"
-        role="tab"
-        class="sub-tab"
-        :class="{ active: activeSubTab === 'index' }"
-        @click="activeSubTab = 'index'"
-      >
-        索引列表
-      </button>
-      <button
-        type="button"
-        role="tab"
-        class="sub-tab"
-        :class="{ active: activeSubTab === 'settings' }"
-        @click="activeSubTab = 'settings'"
-      >
-        扫描设置
-      </button>
-    </nav>
+    <el-radio-group v-model="activeSubTab" size="small" class="sub-tabs">
+      <el-radio-button value="index">索引列表</el-radio-button>
+      <el-radio-button value="settings">扫描设置</el-radio-button>
+    </el-radio-group>
 
     <div v-show="activeSubTab === 'index'" class="sub-panel index-panel">
       <section class="index-toolbar">
-        <input
+        <el-input
           id="cad-index-search"
           v-model="searchQuery"
-          class="search-input"
+          size="small"
+          clearable
           type="search"
           spellcheck="false"
           placeholder="搜索文件名、零件标识、路径…"
+          class="search-field"
         />
-        <button v-if="searchQuery.trim()" type="button" class="btn mini" @click="searchQuery = ''">
-          清除
-        </button>
       </section>
 
       <section class="filters">
-        <label class="filter">
-          <input v-model="statusFilter" type="radio" value="all" /> 全部
-        </label>
-        <label class="filter">
-          <input v-model="statusFilter" type="radio" value="present" /> 存在
-        </label>
-        <label class="filter">
-          <input v-model="statusFilter" type="radio" value="missing" /> 缺失
-        </label>
-        <span class="filter-sep">|</span>
-        <label v-for="opt in KIND_OPTIONS" :key="opt.value" class="filter">
-          <input v-model="kindFilter" type="radio" :value="opt.value" /> {{ opt.label }}
-        </label>
+        <el-radio-group v-model="statusFilter" size="small">
+          <el-radio-button value="all">全部</el-radio-button>
+          <el-radio-button value="present">存在</el-radio-button>
+          <el-radio-button value="missing">缺失</el-radio-button>
+        </el-radio-group>
+        <el-radio-group v-model="kindFilter" size="small" class="kind-filter">
+          <el-radio-button v-for="opt in KIND_OPTIONS" :key="opt.value" :value="opt.value">
+            {{ opt.label }}
+          </el-radio-button>
+        </el-radio-group>
         <span class="count">
           显示 <strong>{{ entriesTotal ? `${pageOffset + 1}–${pageEnd}` : 0 }}</strong>
           / {{ entriesTotal }} 条
@@ -480,8 +473,14 @@ onMounted(() => applyInitialTabState());
             :class="row.file_status"
           >
             <td class="col-index">{{ pageOffset + idx + 1 }}</td>
-            <td>{{ statusLabel(row) }}</td>
-            <td>{{ assetKindLabel(row) }}</td>
+            <td>
+              <el-tag size="small" :type="row.file_status === 'present' ? 'success' : 'warning'" effect="plain">
+                {{ statusLabel(row) }}
+              </el-tag>
+            </td>
+            <td>
+              <el-tag size="small" effect="plain">{{ assetKindLabel(row) }}</el-tag>
+            </td>
             <td class="mono">
               <button
                 v-if="canOpenFileDetail(row)"
@@ -515,40 +514,39 @@ onMounted(() => applyInitialTabState());
           </tr>
         </tbody>
       </ResizableDataTable>
-      <div v-else-if="entriesLoading || loading" class="empty-wrap table-grow">
-        <p class="empty">加载索引列表…</p>
-      </div>
-      <div v-else class="empty-wrap table-grow">
-        <p class="empty">
-          {{
-            data?.exists
-              ? searchQuery.trim()
-                ? "无匹配条目，请调整搜索或筛选"
-                : "当前筛选无条目"
-              : "尚无索引，点击「工程内搜索」开始扫描"
-          }}
-        </p>
-      </div>
+      <el-empty
+        v-else-if="entriesLoading || loading"
+        class="empty-wrap table-grow"
+        description="加载索引列表…"
+        :image-size="72"
+      />
+      <el-empty
+        v-else
+        class="empty-wrap table-grow"
+        :description="
+          data?.exists
+            ? searchQuery.trim()
+              ? '无匹配条目，请调整搜索或筛选'
+              : '当前筛选无条目'
+            : '尚无索引，点击「工程内搜索」开始扫描'
+        "
+        :image-size="72"
+      />
       </div>
 
-      <nav v-if="data?.exists && entriesTotal > 0" class="pager">
-        <button type="button" class="btn mini" :disabled="!hasPrevPage || entriesLoading" @click="goPrevPage">
-          上一页
-        </button>
-        <span class="pager-info">
-          第 {{ Math.floor(pageOffset / pageSize) + 1 }} / {{ Math.max(1, Math.ceil(entriesTotal / pageSize)) }} 页
-        </span>
-        <button type="button" class="btn mini" :disabled="!hasNextPage || entriesLoading" @click="goNextPage">
-          下一页
-        </button>
-        <label class="pager-size">
-          每页
-          <select :value="pageSize" @change="onPageSizeChange">
-            <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
-          </select>
-          条
-        </label>
-      </nav>
+      <el-pagination
+        v-if="data?.exists && entriesTotal > 0"
+        class="pager"
+        size="small"
+        layout="total, sizes, prev, pager, next"
+        :total="entriesTotal"
+        :page-size="pageSize"
+        :current-page="currentPage"
+        :page-sizes="[...PAGE_SIZE_OPTIONS]"
+        :disabled="entriesLoading"
+        @current-change="onPagerCurrentChange"
+        @size-change="onPagerSizeChange"
+      />
     </div>
 
     <div v-show="activeSubTab === 'settings'" class="sub-panel settings-panel">
@@ -559,15 +557,13 @@ onMounted(() => applyInitialTabState());
           <code>.phoenix/phoenix-workspace.sqlite</code>。请使用页顶「工程内搜索」；再次扫描时磁盘上已不存在的条目标记为缺失。
         </p>
         <p v-if="shell.workspacePath" class="meta-line mono">工作空间：{{ shell.workspacePath }}</p>
-        <label class="force-opt">
-          <input
-            v-model="forceUpdatePartName"
-            type="checkbox"
-            :disabled="saving"
-            @change="onSaveScanOptions"
-          />
+        <el-checkbox
+          v-model="forceUpdatePartName"
+          :disabled="saving"
+          @change="onSaveScanOptions"
+        >
           强制更新零件名
-        </label>
+        </el-checkbox>
         <p class="hint">
           零件名默认仅在为空时从标签/文件名推断；勾选变更后会自动保存；重新扫描会覆盖索引中已有零件名（不写回 FCStd）。
         </p>
@@ -578,14 +574,9 @@ onMounted(() => applyInitialTabState());
         <p class="block-desc">
           导出 <code>fcstd_map.json</code> 仅含 FCStd 条目，供 xlink 脚本等外部工具使用。
         </p>
-        <button
-          type="button"
-          class="btn"
-          :disabled="exporting || !data?.exists"
-          @click="onExportJson"
-        >
-          {{ exporting ? "导出中…" : "导出 fcstd_map.json" }}
-        </button>
+        <el-button size="small" :loading="exporting" :disabled="!data?.exists" @click="onExportJson">
+          导出 fcstd_map.json
+        </el-button>
       </section>
 
       <section v-if="stats" class="settings-block">

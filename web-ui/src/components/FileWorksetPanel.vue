@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { ElMessageBox } from "element-plus";
 import { useAppShell } from "../composables/useAppShell";
+import { promptChoice } from "../composables/choiceDialog";
 import { useFileWorksetsStore } from "../stores/fileWorksets";
 import { basenameFromRel, repoDirFromRel } from "../utils/workspaceFileQuery";
 
@@ -10,8 +10,14 @@ const store = useFileWorksetsStore();
 
 const pathFilter = ref("");
 const renameDraft = ref("");
+const pruning = ref(false);
 
 const active = computed(() => store.activeWorkset);
+const activeIdSelect = computed({
+  get: () => store.activeId ?? "",
+  set: (id: string) => onSelectWorkset(id),
+});
+
 const filteredPaths = computed(() => {
   const paths = active.value?.paths ?? [];
   const q = pathFilter.value.trim().toLowerCase();
@@ -32,7 +38,7 @@ watch(active, (ws) => {
 });
 
 function onSelectWorkset(id: string) {
-  store.setActiveId(id);
+  if (id) store.setActiveId(id);
 }
 
 function onCreate() {
@@ -48,26 +54,35 @@ async function onDelete() {
   if (!active.value) return;
   const ws = active.value;
   const pathHint = ws.paths.length ? `（含 ${ws.paths.length} 个文件路径）` : "";
-  try {
-    await ElMessageBox.confirm(
-      `确定删除工作集「${ws.name}」${pathHint}？\n删除后不可恢复。`,
-      "删除工作集",
-      {
-        type: "warning",
-        confirmButtonText: "删除",
-        cancelButtonText: "取消",
-        distinguishCancelAndClose: true,
-      },
-    );
-    store.deleteWorkset(ws.id);
-  } catch {
-    /* 用户取消 */
-  }
+  const choice = await promptChoice({
+    title: "删除工作集",
+    defaultChoiceId: "cancel",
+    message: `确定删除工作集「${ws.name}」${pathHint}？\n删除后不可恢复。`,
+    choices: [
+      { id: "cancel", label: "取消", variant: "default" },
+      { id: "delete", label: "删除", variant: "danger" },
+    ],
+  });
+  if (choice !== "delete") return;
+  store.deleteWorkset(ws.id);
 }
 
 function onRemovePath(path: string) {
   if (!active.value) return;
   store.removePath(active.value.id, path);
+}
+
+async function onPruneMissing() {
+  if (!active.value?.paths.length) return;
+  pruning.value = true;
+  try {
+    const removed = await store.pruneMissing(active.value.id);
+    shell.setStatus(removed ? `已剔除 ${removed} 条缺失路径` : "当前工作集无缺失路径");
+  } catch (e) {
+    shell.setStatus(String(e));
+  } finally {
+    pruning.value = false;
+  }
 }
 
 function openFile(path: string) {
@@ -89,23 +104,21 @@ function pathHasDir(rel: string): boolean {
     <div class="ws-head">
       <div class="ws-title-row">
         <span class="ws-title">文件工作集</span>
-        <button type="button" class="mini" title="新建工作集" @click="onCreate">+ 新建</button>
+        <el-button size="small" link type="primary" title="新建工作集" @click="onCreate">+ 新建</el-button>
       </div>
-      <select
+      <el-select
+        v-model="activeIdSelect"
+        size="small"
         class="ws-select"
-        :value="store.activeId ?? ''"
-        :disabled="store.loading"
-        @change="onSelectWorkset(($event.target as HTMLSelectElement).value)"
+        :disabled="store.loading || !store.worksets.length"
+        placeholder="（尚无工作集）"
       >
-        <option v-if="!store.worksets.length" value="">（尚无工作集）</option>
-        <option v-for="opt in store.worksetOptions" :key="opt.id" :value="opt.id">
-          {{ opt.label }}（{{ opt.count }}）
-        </option>
-      </select>
+        <el-option v-for="opt in store.worksetOptions" :key="opt.id" :value="opt.id" :label="`${opt.label}（${opt.count}）`" />
+      </el-select>
       <div v-if="active" class="rename-row">
-        <input v-model="renameDraft" class="rename-input" type="text" spellcheck="false" />
-        <button type="button" class="mini" @click="onRename">改名</button>
-        <button type="button" class="mini danger" @click="onDelete">删</button>
+        <el-input v-model="renameDraft" size="small" spellcheck="false" />
+        <el-button size="small" @click="onRename">改名</el-button>
+        <el-button size="small" type="danger" plain @click="onDelete">删</el-button>
       </div>
       <p v-if="store.saving" class="muted small">保存中…</p>
     </div>
@@ -113,10 +126,22 @@ function pathHasDir(rel: string): boolean {
     <div v-if="active" class="ws-body">
       <div class="summary-row">
         <span class="summary">{{ active.paths.length }} 个文件</span>
-        <input
+        <el-button
+          size="small"
+          link
+          type="primary"
+          :loading="pruning"
+          :disabled="!active.paths.length || store.saving"
+          title="移除磁盘上已不存在的路径"
+          @click="onPruneMissing"
+        >
+          剔除缺失
+        </el-button>
+        <el-input
           v-model="pathFilter"
+          size="small"
           class="filter-input"
-          type="search"
+          clearable
           spellcheck="false"
           placeholder="筛选路径…"
         />
@@ -130,14 +155,18 @@ function pathHasDir(rel: string): boolean {
               <span class="path-dir mono">{{ pathDir(p) }}</span>
             </template>
           </button>
-          <button type="button" class="mini path-remove" title="移出工作集" @click="onRemovePath(p)">×</button>
+          <el-button size="small" link type="danger" class="path-remove" title="移出工作集" @click="onRemovePath(p)">
+            ×
+          </el-button>
         </li>
       </ul>
-      <p v-else class="muted empty-hint">
-        {{ active.paths.length ? "无匹配路径" : "从 Code 索引或工作空间树加入文件" }}
-      </p>
+      <el-empty v-else :image-size="48" :description="active.paths.length ? '无匹配路径' : '从 Code 索引或工作空间树加入文件'" />
     </div>
-    <p v-else-if="!store.loading" class="muted empty-hint">点击「+ 新建」或从索引/树加入文件</p>
+    <el-empty
+      v-else-if="!store.loading"
+      :image-size="48"
+      description="点击「+ 新建」或从索引/树加入文件"
+    />
     <p v-else class="muted empty-hint">加载中…</p>
   </div>
 </template>
@@ -174,11 +203,6 @@ function pathHasDir(rel: string): boolean {
 .ws-select {
   width: 100%;
   margin-bottom: 6px;
-  padding: 4px 6px;
-  font-size: 0.78rem;
-  border: 1px solid var(--border-strong);
-  border-radius: 4px;
-  background: var(--btn-bg);
 }
 
 .rename-row {
@@ -187,27 +211,9 @@ function pathHasDir(rel: string): boolean {
   align-items: center;
 }
 
-.rename-input {
+.rename-row :deep(.el-input) {
   flex: 1;
   min-width: 0;
-  padding: 3px 6px;
-  font-size: 0.78rem;
-  border: 1px solid var(--border-strong);
-  border-radius: 4px;
-}
-
-.mini {
-  padding: 2px 8px;
-  border: 1px solid var(--border-strong);
-  border-radius: 4px;
-  background: var(--btn-bg);
-  font-size: 0.72rem;
-  flex-shrink: 0;
-  cursor: pointer;
-}
-
-.mini.danger {
-  color: #b91c1c;
 }
 
 .ws-body {
@@ -236,10 +242,6 @@ function pathHasDir(rel: string): boolean {
 .filter-input {
   flex: 1;
   min-width: 0;
-  padding: 3px 6px;
-  font-size: 0.75rem;
-  border: 1px solid var(--border-strong);
-  border-radius: 4px;
 }
 
 .path-list {
@@ -309,12 +311,16 @@ function pathHasDir(rel: string): boolean {
 }
 
 .path-remove {
-  padding: 0 5px;
-  line-height: 1.2;
+  flex-shrink: 0;
+  padding: 0 4px;
 }
 
 .empty-hint {
   font-size: 0.75rem;
   padding: 8px 4px;
+}
+
+.ws-body :deep(.el-empty) {
+  padding: 12px 0;
 }
 </style>

@@ -141,8 +141,9 @@ Phase 2（可选）：`app_config.json` 增加 `ribbon` 段或由 API 下发。
 ### R4 · 业务页渐进 Element 化（按需）
 
 - [x] **欢迎页 / 主页 / 配置·界面**：`el-button`、`el-link`、`el-tag`、`el-empty`、`el-select`、`el-checkbox`
-- [ ] 其它大改版页优先 `el-table`、`el-form`
-- [ ] 旧页保留现状，不阻塞 Ribbon 上线
+- [x] **P0 批次**：占位页、`WorksetScopePicker`、`FileWorksetPanel`、Code 批量改名
+- [x] **P1 批次**：Code UUID（表单区）、C++ 成员排序、配置主表单
+- [ ] **P2 · CAD 中页**：链接修正、STEP 批量、SW 导出、零件去重
 - [ ] 可选：`app_config.ribbon` 配置化分组
 
 ### 明确不做（本阶段）

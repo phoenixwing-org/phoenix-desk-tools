@@ -13,6 +13,7 @@ from phoenix.services.file_workset_service import (
     get_file_worksets_api,
     load_file_worksets,
     normalize_workset_paths,
+    prune_missing_workset_paths,
     put_file_worksets_api,
     save_file_worksets,
 )
@@ -90,6 +91,44 @@ class TestFileWorksetService(unittest.TestCase):
                 },
             )
             self.assertEqual(out["worksets"][0]["paths"], ["ok.cpp"])
+
+    def test_load_multiple_worksets_single_query(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            save_file_worksets(
+                root,
+                {
+                    "worksets": [
+                        {"id": "a", "name": "A", "paths": ["x.cpp", "y.h"]},
+                        {"id": "b", "name": "B", "paths": ["z.cpp"]},
+                    ]
+                },
+            )
+            loaded = load_file_worksets(root)
+            by_id = {w["id"]: w for w in loaded["worksets"]}
+            self.assertEqual(by_id["a"]["paths"], ["x.cpp", "y.h"])
+            self.assertEqual(by_id["b"]["paths"], ["z.cpp"])
+
+    def test_prune_missing_workset_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            keep = root / "keep.cpp"
+            keep.write_text("ok", encoding="utf-8")
+            save_file_worksets(
+                root,
+                {
+                    "worksets": [
+                        {
+                            "id": "ws1",
+                            "name": "mix",
+                            "paths": ["keep.cpp", "gone.cpp"],
+                        }
+                    ]
+                },
+            )
+            out = prune_missing_workset_paths(root)
+            self.assertEqual(out["prune_removed"], 1)
+            self.assertEqual(out["worksets"][0]["paths"], ["keep.cpp"])
 
 
 if __name__ == "__main__":

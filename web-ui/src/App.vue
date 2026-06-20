@@ -12,7 +12,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <el-config-provider :locale="zhCn">
+  <el-config-provider :locale="zhCn" :z-index="10000">
     <AppShell />
   </el-config-provider>
 </template>

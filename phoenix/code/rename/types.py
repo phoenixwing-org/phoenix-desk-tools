@@ -17,7 +17,7 @@ NOT_IMPLEMENTED_MESSAGE = "引擎尚未接入，当前仅提供界面与 API 契
 
 
 class RenameScanOptions:
-    __slots__ = ("old", "new", "levels", "scope", "include_ignored")
+    __slots__ = ("old", "new", "levels", "scope", "include_ignored", "indexed_paths")
 
     def __init__(
         self,
@@ -26,12 +26,14 @@ class RenameScanOptions:
         levels: list[RenameLevel],
         scope: str = "",
         include_ignored: bool = False,
+        indexed_paths: frozenset[str] | None = None,
     ) -> None:
         self.old = old
         self.new = new
         self.levels = levels
         self.scope = scope
         self.include_ignored = include_ignored
+        self.indexed_paths = indexed_paths
 
 
 def empty_rename_summary() -> dict[str, int]:

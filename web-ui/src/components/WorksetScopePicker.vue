@@ -71,74 +71,47 @@ async function openWorksetSidebar() {
 <template>
   <div class="workset-scope-picker">
     <span class="picker-label">扫描范围</span>
-    <div class="mode-group" role="radiogroup" aria-label="扫描范围">
-      <label class="mode-opt">
-        <input
-          type="radio"
-          :name="`${pageId}-scope-mode`"
-          value="all"
-          :checked="scopeMode === 'all'"
-          @change="onScopeModeChange('all')"
-        />
-        全工作空间
-      </label>
-      <label class="mode-opt">
-        <input
-          type="radio"
-          :name="`${pageId}-scope-mode`"
-          value="scope"
-          :checked="scopeMode === 'scope'"
-          @change="onScopeModeChange('scope')"
-        />
-        子目录
-      </label>
-      <label v-if="showIndexScope" class="mode-opt">
-        <input
-          type="radio"
-          :name="`${pageId}-scope-mode`"
-          value="index"
-          :checked="scopeMode === 'index'"
-          @change="onScopeModeChange('index')"
-        />
-        Code 索引 present
-      </label>
-      <label class="mode-opt">
-        <input
-          type="radio"
-          :name="`${pageId}-scope-mode`"
-          value="workset"
-          :checked="scopeMode === 'workset'"
-          @change="onScopeModeChange('workset')"
-        />
-        工作集
-      </label>
-    </div>
+    <el-radio-group
+      :model-value="scopeMode"
+      size="small"
+      class="mode-group"
+      @update:model-value="onScopeModeChange($event as WorksetScopeMode)"
+    >
+      <el-radio value="all">全工作空间</el-radio>
+      <el-radio value="scope">子目录</el-radio>
+      <el-radio v-if="showIndexScope" value="index">Code 索引 present</el-radio>
+      <el-radio value="workset">工作集</el-radio>
+    </el-radio-group>
     <div v-if="scopeMode === 'scope'" class="scope-extra">
-      <input
+      <el-input
         v-model="scope"
-        class="input mono scope-input"
-        type="text"
+        size="small"
+        class="scope-input mono"
         spellcheck="false"
         placeholder="相对子目录"
       />
     </div>
     <div v-else-if="scopeMode === 'workset'" class="scope-extra workset-row">
-      <select v-model="worksetIdSelect" class="input workset-select">
-        <option value="">（侧栏当前工作集）</option>
-        <option v-for="opt in store.worksetOptions" :key="opt.id" :value="opt.id">
-          {{ opt.label }}（{{ opt.count }}）
-        </option>
-      </select>
-      <button
+      <el-select v-model="worksetIdSelect" size="small" class="workset-select" placeholder="侧栏当前工作集">
+        <el-option value="" label="（侧栏当前工作集）" />
+        <el-option
+          v-for="opt in store.worksetOptions"
+          :key="opt.id"
+          :value="opt.id"
+          :label="`${opt.label}（${opt.count}）`"
+        />
+      </el-select>
+      <el-button
         v-if="store.activeWorkset"
-        type="button"
-        class="btn btn-quiet btn-sm"
+        size="small"
+        link
+        type="primary"
         title="与侧栏活动工作集同步"
         @click="syncActiveWorkset"
       >
         当前：{{ store.activeWorkset.name }}
-      </button>
-      <button type="button" class="btn btn-quiet btn-sm" @click="openWorksetSidebar">侧栏 · 工作集</button>
+      </el-button>
+      <el-button size="small" link type="primary" @click="openWorksetSidebar">侧栏 · 工作集</el-button>
     </div>
   </div>
 </template>
@@ -159,17 +132,7 @@ async function openWorksetSidebar() {
 }
 
 .mode-group {
-  display: flex;
   flex-wrap: wrap;
-  gap: 8px 14px;
-}
-
-.mode-opt {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.82rem;
-  cursor: pointer;
 }
 
 .scope-extra {

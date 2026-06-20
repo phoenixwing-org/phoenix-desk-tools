@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import { ElMessageBox } from "element-plus";
 import {
   analyzeXlinkFix,
   applyXlinkFixOverride,
@@ -194,7 +195,20 @@ async function onApplyOne(row: XlinkFixIssueRow) {
     shell.setStatus("请先选择目标 FCStd");
     return;
   }
-  if (!window.confirm("将宿主内该 XLink 指向所选文件，是否继续？")) return;
+  const ok = await ElMessageBox.confirm(
+    "将宿主内该 XLink 指向所选文件，是否继续？",
+    "修正此项",
+    {
+      type: "warning",
+      confirmButtonText: "写回",
+      cancelButtonText: "取消",
+      distinguishCancelAndClose: true,
+    },
+  ).then(
+    () => true,
+    () => false,
+  );
+  if (!ok) return;
   applyingKey.value = key;
   try {
     const result = await applyXlinkFixOverride({
@@ -246,7 +260,20 @@ async function onAnalyze() {
 async function onApply() {
   if (!canApply.value) return;
   const fixable = stats.value?.fixable_count ?? 0;
-  if (!window.confirm(`将写回 ${fixable} 处 XLink 路径到 FCStd，是否继续？`)) return;
+  const ok = await ElMessageBox.confirm(
+    `将写回 ${fixable} 处 XLink 路径到 FCStd，是否继续？`,
+    "执行修正",
+    {
+      type: "warning",
+      confirmButtonText: "写回",
+      cancelButtonText: "取消",
+      distinguishCancelAndClose: true,
+    },
+  ).then(
+    () => true,
+    () => false,
+  );
+  if (!ok) return;
 
   applying.value = true;
   shell.appendLog("[链接路径修正] 执行写回…", { source: "xlink_fix", open: true });
@@ -278,6 +305,11 @@ function statusLabel(row: XlinkFixIssueRow) {
   return "未找到";
 }
 
+function statusTagType(row: XlinkFixIssueRow): "success" | "warning" | "info" {
+  if (row.status === "fixable" || row.status === "fixed_manual") return "success";
+  return "warning";
+}
+
 onMounted(async () => {
   try {
     await loadPrefs();
@@ -302,52 +334,51 @@ onMounted(async () => {
     <section class="card settings-card">
       <div class="scope-line">
         <label class="scope-label" for="batch-dir">扫描范围</label>
-        <input
+        <el-input
           id="batch-dir"
           v-model="batchDir"
+          size="small"
           class="dir-input mono"
           spellcheck="false"
           placeholder="修正目录，相对工作空间，如 ."
           title="修正目录（相对工作空间）"
         />
-        <label class="scope-chk">
-          <input v-model="allInDir" type="checkbox" />
-          <span>扫描目录内全部 FCStd（推荐）</span>
-        </label>
+        <el-checkbox v-model="allInDir" size="small">扫描目录内全部 FCStd（推荐）</el-checkbox>
       </div>
       <div
         v-if="analysis?.map_path_display || analysis?.batch_dir_display"
         class="settings-meta"
       >
-        <span
+        <el-tag
           v-if="analysis?.map_path_display"
-          class="meta-chip mono"
+          size="small"
+          effect="plain"
+          class="mono meta-tag"
           :title="analysis.map_path_display"
         >
           索引库 {{ analysis.map_path_display }}
-        </span>
-        <span v-if="analysis?.batch_dir_display" class="meta-chip mono">
+        </el-tag>
+        <el-tag v-if="analysis?.batch_dir_display" size="small" effect="plain" class="mono meta-tag">
           目录 {{ analysis.batch_dir_display }}
-        </span>
+        </el-tag>
       </div>
 
       <div class="settings-foot" data-tour-page-xlink-analyze>
-        <button type="button" class="btn btn-quiet" :disabled="saving" @click="onSavePrefs">
-          {{ saving ? "…" : "保存偏好" }}
-        </button>
+        <el-button size="small" :loading="saving" @click="onSavePrefs">保存偏好</el-button>
         <div class="settings-actions">
-          <button type="button" class="btn primary" :disabled="analyzing || applying" @click="onAnalyze">
-            {{ analyzing ? "分析中…" : "分析" }}
-          </button>
-          <button
-            type="button"
-            class="btn apply-btn"
+          <el-button type="primary" size="small" :loading="analyzing" :disabled="applying" @click="onAnalyze">
+            分析
+          </el-button>
+          <el-button
+            type="success"
+            size="small"
+            :loading="applying"
             :disabled="!canApply || analyzing"
             :title="canApply ? '' : '请先分析，且存在可修正项'"
             @click="onApply"
           >
-            {{ applying ? "写回中…" : "执行修正" }}
-          </button>
+            执行修正
+          </el-button>
         </div>
       </div>
     </section>
@@ -356,32 +387,11 @@ onMounted(async () => {
       <header class="results-head">
         <div class="results-head-row">
           <h2 class="card-title">问题链接</h2>
-          <div class="filter-tabs">
-          <button
-            type="button"
-            class="tab"
-            :class="{ active: filterTab === 'all' }"
-            @click="filterTab = 'all'"
-          >
-            全部 {{ stats?.issue_count ?? 0 }}
-          </button>
-          <button
-            type="button"
-            class="tab"
-            :class="{ active: filterTab === 'fixable' }"
-            @click="filterTab = 'fixable'"
-          >
-            可修正 {{ stats?.fixable_count ?? 0 }}
-          </button>
-          <button
-            type="button"
-            class="tab"
-            :class="{ active: filterTab === 'not_found' }"
-            @click="filterTab = 'not_found'"
-          >
-            未找到 {{ stats?.not_found_count ?? 0 }}
-          </button>
-          </div>
+          <el-radio-group v-model="filterTab" size="small" class="filter-tabs">
+            <el-radio-button value="all">全部 {{ stats?.issue_count ?? 0 }}</el-radio-button>
+            <el-radio-button value="fixable">可修正 {{ stats?.fixable_count ?? 0 }}</el-radio-button>
+            <el-radio-button value="not_found">未找到 {{ stats?.not_found_count ?? 0 }}</el-radio-button>
+          </el-radio-group>
         </div>
         <p v-if="stats" class="scan-summary">
           <span>扫描 <strong>{{ stats.host_count }}</strong> 个 FCStd</span>
@@ -450,7 +460,11 @@ onMounted(async () => {
                   <template v-if="row.status === 'fixable' || row.status === 'fixed_manual'">{{ row.new_path }}</template>
                   <span v-else class="muted">—</span>
                 </td>
-                <td><span class="badge" :class="row.status">{{ statusLabel(row) }}</span></td>
+                <td>
+                  <el-tag size="small" :type="statusTagType(row)" effect="light" round>
+                    {{ statusLabel(row) }}
+                  </el-tag>
+                </td>
                 <td class="note-cell">
                   <span v-if="row.target_display" class="target">→ {{ row.target_display }}</span>
                   <span v-if="row.verdict && row.verdict !== '未找到'">{{ row.verdict }}</span>
@@ -496,14 +510,15 @@ onMounted(async () => {
                     </div>
 
                     <div v-if="fcstdCandidates(issueRowKey(row)).length" class="expand-actions">
-                      <button
-                        type="button"
-                        class="btn apply-btn"
-                        :disabled="!selectedTargetRel[issueRowKey(row)] || applyingKey === issueRowKey(row)"
+                      <el-button
+                        type="success"
+                        size="small"
+                        :loading="applyingKey === issueRowKey(row)"
+                        :disabled="!selectedTargetRel[issueRowKey(row)]"
                         @click="onApplyOne(row)"
                       >
-                        {{ applyingKey === issueRowKey(row) ? "写回中…" : "修正此项" }}
-                      </button>
+                        修正此项
+                      </el-button>
                     </div>
                   </div>
                 </td>
@@ -512,15 +527,19 @@ onMounted(async () => {
           </tbody>
         </table>
       </div>
-      <p v-else class="empty">{{ analyzing ? "分析中…" : "当前筛选下无问题链接" }}</p>
+      <el-empty
+        v-else
+        :description="analyzing ? '分析中…' : '当前筛选下无问题链接'"
+        :image-size="64"
+      />
 
-      <button v-if="analysis.log" type="button" class="log-toggle" @click="showLog = !showLog">
+      <el-button v-if="analysis.log" link type="primary" class="log-toggle" @click="showLog = !showLog">
         {{ showLog ? "隐藏" : "显示" }}运行日志
-      </button>
+      </el-button>
       <pre v-if="showLog && analysis.log" class="log mono">{{ analysis.log }}</pre>
     </section>
 
-    <p v-else-if="!analyzing" class="empty-hint">设置扫描目录后点击「分析」</p>
+    <el-empty v-else-if="!analyzing" description="设置扫描目录后点击「分析」" :image-size="64" class="empty-hint" />
   </div>
 </template>
 
@@ -568,40 +587,15 @@ onMounted(async () => {
   min-width: 0;
 }
 
-.meta-chip {
+.meta-tag {
   max-width: min(320px, 42vw);
-  padding: 3px 8px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: #f8fafc;
-  font-size: 0.72rem;
-  color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.dir-input {
-  display: block;
+.scope-line :deep(.el-input) {
   width: 100%;
   min-width: 0;
-  padding: 7px 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  font-size: 0.85rem;
-  box-sizing: border-box;
-}
-
-.scope-chk {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  font-size: 0.82rem;
-  color: var(--text);
-  white-space: nowrap;
-  cursor: pointer;
-  user-select: none;
 }
 
 .settings-foot {
@@ -622,17 +616,6 @@ onMounted(async () => {
   margin-left: auto;
 }
 
-.btn-quiet {
-  color: var(--muted);
-  border-color: transparent;
-  background: transparent;
-}
-
-.btn-quiet:hover:not(:disabled) {
-  background: #f1f5f9;
-  border-color: var(--border);
-}
-
 @media (max-width: 720px) {
   .scope-line {
     grid-template-columns: auto 1fr;
@@ -645,11 +628,11 @@ onMounted(async () => {
     grid-area: label;
   }
 
-  .scope-line .dir-input {
+  .scope-line :deep(.el-input) {
     grid-area: input;
   }
 
-  .scope-chk {
+  .scope-line :deep(.el-checkbox) {
     grid-area: check;
     white-space: normal;
   }
@@ -658,18 +641,6 @@ onMounted(async () => {
     width: 100%;
     margin-left: 0;
   }
-}
-
-.apply-btn {
-  background: #059669;
-  color: #fff;
-  border-color: #059669;
-}
-
-.apply-btn:disabled {
-  background: var(--btn-bg);
-  color: inherit;
-  border-color: var(--border-strong);
 }
 
 .results-head {
@@ -715,25 +686,6 @@ onMounted(async () => {
 .scan-summary .applied {
   color: #0369a1;
   font-weight: 500;
-}
-
-.filter-tabs {
-  display: flex;
-  gap: 6px;
-}
-
-.tab {
-  padding: 5px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--border-strong);
-  background: var(--btn-bg);
-  font-size: 0.78rem;
-}
-
-.tab.active {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
 }
 
 .issue-table {
@@ -844,11 +796,6 @@ onMounted(async () => {
   margin-top: 10px;
 }
 
-.badge.fixed_manual {
-  background: #dcfce7;
-  color: #166534;
-}
-
 .path-cell {
   word-break: break-all;
   max-width: 220px;
@@ -870,24 +817,6 @@ onMounted(async () => {
   font-size: 0.75rem;
 }
 
-.badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 600;
-}
-
-.badge.fixable {
-  background: #dcfce7;
-  color: #166534;
-}
-
-.badge.not_found {
-  background: #fef3c7;
-  color: #92400e;
-}
-
 .link-btn {
   padding: 0;
   border: none;
@@ -904,19 +833,10 @@ onMounted(async () => {
 
 .log-toggle {
   margin-top: 10px;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--accent);
-  font-size: 0.78rem;
-  cursor: pointer;
 }
 
 .empty-hint {
-  padding: 32px;
-  text-align: center;
-  color: var(--muted);
-  font-size: 0.88rem;
+  margin-top: 14px;
 }
 
 .muted {

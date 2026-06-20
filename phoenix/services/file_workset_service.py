@@ -150,3 +150,54 @@ def get_file_worksets_api(repo_root: Path) -> dict[str, Any]:
 def put_file_worksets_api(repo_root: Path, body: dict[str, Any]) -> dict[str, Any]:
     saved = save_file_worksets(repo_root, body)
     return get_file_worksets_api(repo_root) | {"worksets": saved["worksets"]}
+
+
+def _path_exists_in_workspace(repo_root: Path, repo_rel: str) -> bool:
+    try:
+        return (repo_root / repo_rel).is_file()
+    except OSError:
+        return False
+
+
+def prune_missing_workset_paths(
+    repo_root: Path,
+    *,
+    workset_id: str | None = None,
+) -> dict[str, Any]:
+    """从工作集移除磁盘上已不存在的文件路径。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    if not rr.is_dir():
+        raise ValueError(f"工作空间不是有效目录: {rr}")
+    data = load_file_worksets(rr)
+    removed = 0
+    changed = False
+    worksets: list[dict[str, Any]] = []
+    for ws in data.get("worksets") or []:
+        if not isinstance(ws, dict):
+            continue
+        if workset_id and str(ws.get("id") or "") != workset_id:
+            worksets.append(ws)
+            continue
+        paths = ws.get("paths") if isinstance(ws.get("paths"), list) else []
+        kept: list[str] = []
+        for rel in paths:
+            rel_s = str(rel or "").strip()
+            if not rel_s:
+                continue
+            if _path_exists_in_workspace(rr, rel_s):
+                kept.append(rel_s)
+            else:
+                removed += 1
+        if len(kept) != len(paths):
+            changed = True
+            ws = {
+                **ws,
+                "paths": normalize_workset_paths(kept),
+                "updated_at": _utc_now_iso(),
+            }
+        worksets.append(ws)
+    if changed:
+        save_file_worksets(rr, {"worksets": worksets})
+    out = get_file_worksets_api(rr)
+    out["prune_removed"] = removed
+    return out

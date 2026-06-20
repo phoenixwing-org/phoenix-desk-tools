@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { ArrowDownBold, ArrowUpBold } from "@element-plus/icons-vue";
+import GiteeIcon from "../components/icons/GiteeIcon.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useWorkspaceSwitcher } from "../composables/useWorkspaceSwitcher";
+import { PROJECT_GITEE_HOME } from "../constants/projectLinks";
 import { DEFAULT_APP_TITLE } from "../types/config";
 import RibbonTabBar from "./ribbon/RibbonTabBar.vue";
 import WorkbenchTabBar from "./WorkbenchTabBar.vue";
@@ -94,6 +96,16 @@ function toggleRibbonCollapsed() {
           <ArrowUpBold v-else />
         </el-icon>
       </el-button>
+      <a
+        class="header-gitee-link"
+        :href="PROJECT_GITEE_HOME"
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Gitee 仓库主页 · phoenix-desk-tools"
+        aria-label="Gitee 仓库主页"
+      >
+        <GiteeIcon />
+      </a>
     </div>
   </header>
 </template>
@@ -105,7 +117,7 @@ function toggleRibbonCollapsed() {
   display: flex;
   flex-direction: row;
   align-items: stretch;
-  padding: 0 10px 0 8px;
+  padding: 0 4px 0 8px;
   background: var(--phoenix-bg-header);
   border-bottom: 1px solid var(--phoenix-border-header);
   box-shadow: var(--phoenix-shadow-sm);
@@ -220,7 +232,7 @@ function toggleRibbonCollapsed() {
 .header-right {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 0;
   flex-shrink: 0;
 }
 
@@ -235,6 +247,46 @@ function toggleRibbonCollapsed() {
 .header-icon-btn:hover {
   color: var(--phoenix-accent);
   background: var(--phoenix-brand-hover-bg);
+}
+
+.header-gitee-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--phoenix-radius-md, 8px);
+  background: transparent;
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+
+.header-gitee-link:hover {
+  background: var(--phoenix-brand-hover-bg);
+}
+
+.header-gitee-link:hover :deep(.gitee-icon) {
+  transform: scale(1.12);
+  filter: drop-shadow(0 2px 5px rgba(199, 29, 35, 0.4));
+}
+
+.header-gitee-link:active :deep(.gitee-icon) {
+  transform: scale(1.04);
+}
+
+.header-gitee-link:focus-visible {
+  outline: 2px solid var(--phoenix-focus-ring, #2563eb);
+  outline-offset: 1px;
+}
+
+.header-gitee-link :deep(.gitee-icon) {
+  transition:
+    transform 0.15s ease,
+    filter 0.15s ease;
 }
 
 .header-tabs {

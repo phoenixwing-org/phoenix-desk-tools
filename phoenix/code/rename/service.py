@@ -42,39 +42,58 @@ def _indexed_rel_paths(repo_root: Path) -> set[str]:
     return {str(e["repo_rel_path"]) for e in entries}
 
 
-def preview_rename(repo_root: Path, body: dict) -> dict:
-    opts = RenameScanOptions(
+def _rename_scan_options(repo_root: Path, body: dict) -> RenameScanOptions:
+    use_index = bool(body.get("use_index_scope", False))
+    workset_paths = _normalize_repo_rel_paths(body.get("repo_rel_paths"))
+    indexed_paths: frozenset[str] | None = None
+    if workset_paths:
+        indexed_paths = workset_paths
+        use_index = False
+    elif use_index:
+        indexed_paths = frozenset(_indexed_rel_paths(repo_root))
+    return RenameScanOptions(
         old=str(body["old"]),
         new=str(body["new"]),
         levels=_levels(body.get("levels") or ["text"]),
         scope=str(body.get("scope") or ""),
         include_ignored=bool(body.get("include_ignored", False)),
+        indexed_paths=indexed_paths,
     )
+
+
+def _rename_scope_echo(body: dict) -> dict[str, Any]:
+    workset_paths = _normalize_repo_rel_paths(body.get("repo_rel_paths"))
+    use_index = bool(body.get("use_index_scope", False)) and not workset_paths
+    return {
+        "use_index_scope": use_index,
+        "repo_rel_paths": sorted(workset_paths) if workset_paths else [],
+        "scope": str(body.get("scope") or ""),
+    }
+
+
+def preview_rename(repo_root: Path, body: dict) -> dict:
+    opts = _rename_scan_options(repo_root, body)
     out = preview_rename_all(repo_root, opts)
     out["dry_run"] = True
-    out.update({k: body[k] for k in ("old", "new", "scope", "target_encoding", "include_ignored", "rescan_index") if k in body})
+    out.update({k: body[k] for k in ("old", "new", "target_encoding", "include_ignored", "rescan_index") if k in body})
     if "levels" in body:
         out["levels"] = opts.levels
+    out.update(_rename_scope_echo(body))
     return out
 
 
 def apply_rename(repo_root: Path, body: dict, *, dry_run: bool) -> dict:
-    opts = RenameScanOptions(
-        old=str(body["old"]),
-        new=str(body["new"]),
-        levels=_levels(body.get("levels") or ["text"]),
-        scope=str(body.get("scope") or ""),
-        include_ignored=bool(body.get("include_ignored", False)),
-    )
+    opts = _rename_scan_options(repo_root, body)
     target_encoding = str(body.get("target_encoding") or "utf-8")
     out = apply_rename_all(repo_root, opts, dry_run=dry_run, target_encoding=target_encoding)
     out.update(
         {
             k: body[k]
-            for k in ("old", "new", "scope", "target_encoding", "include_ignored", "rescan_index", "levels")
+            for k in ("old", "new", "target_encoding", "include_ignored", "rescan_index", "levels")
             if k in body
         }
     )
+    out.update(_rename_scope_echo(body))
     summary = out.get("summary") or {}
     changed = int(summary.get("dirs", 0)) + int(summary.get("files", 0)) + int(summary.get("text_files", 0))
     if not dry_run and changed:

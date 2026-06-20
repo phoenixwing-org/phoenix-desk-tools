@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -138,6 +139,22 @@ class TestUserPrefs(unittest.TestCase):
             from phoenix.config.workspace_prefs_store import load_prefs_from_sqlite
 
             self.assertEqual(load_prefs_from_sqlite(repo)["step_batch"]["step_dir"], "from-json")
+
+    def test_workspace_prefs_basename_env_override(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td) / "proj"
+            ph = repo / prefs.WORKSPACE_PHOENIX_DIR
+            ph.mkdir(parents=True)
+            custom = "custom-prefs.json"
+            (ph / custom).write_text(
+                json.dumps({"step_batch": {"step_dir": "from-env"}}),
+                encoding="utf-8",
+            )
+            with mock.patch.dict(os.environ, {prefs._ENV_WORKSPACE_PREFS_BASENAME: custom}):
+                self.assertEqual(prefs.resolve_workspace_prefs_basename(), custom)
+                self.assertEqual(workspace_dotfile_path(repo).name, custom)
+                loaded = prefs.load_workspace_prefs(repo)
+            self.assertEqual(loaded["step_batch"]["step_dir"], "from-env")
 
     def test_migrate_legacy_workspace_dotfile(self) -> None:
         with tempfile.TemporaryDirectory() as td:

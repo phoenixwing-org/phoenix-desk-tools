@@ -17,11 +17,15 @@ const pageId = computed(() => shell.currentPage.value);
         <PageHelpButton :page-id="pageId" />
       </div>
     </div>
-    <p class="desc">{{ item?.description ?? "功能开发中" }}</p>
-    <p class="hint">
-      此页对应桌面壳中的同名功能，后续将通过 Python 服务层 API 接入（逻辑复用
-      <code>phoenix/</code> 核心模块，不重写算法）。
-    </p>
+    <el-empty :image-size="80">
+      <template #description>
+        <p class="desc">{{ item?.description ?? "功能开发中" }}</p>
+        <p class="hint">
+          此页对应桌面壳中的同名功能，后续将通过 Python 服务层 API 接入（逻辑复用
+          <code>phoenix/</code> 核心模块，不重写算法）。
+        </p>
+      </template>
+    </el-empty>
   </div>
 </template>
 
@@ -44,14 +48,16 @@ const pageId = computed(() => shell.currentPage.value);
 }
 
 .desc {
-  margin: 0 0 16px;
+  margin: 0 0 12px;
   color: var(--muted);
 }
 
 .hint {
+  margin: 0;
   font-size: 0.88rem;
   line-height: 1.6;
   color: #64748b;
+  max-width: 520px;
 }
 
 code {

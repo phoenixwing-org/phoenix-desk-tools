@@ -203,6 +203,29 @@ class TestCodeUuidEngine(unittest.TestCase):
             self.assertEqual(out["summary"]["total_hits"], 1)
             self.assertEqual(out["hits"][0]["repo_rel_path"], "only.cpp")
 
+    def test_preview_rename_repo_rel_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp)
+            a = ws / "only.cpp"
+            b = ws / "skip.cpp"
+            a.write_text("OldName();\n", encoding="utf-8")
+            b.write_text("OldName();\n", encoding="utf-8")
+
+            from phoenix.code.rename.service import preview_rename
+
+            out = preview_rename(
+                ws,
+                {
+                    "old": "OldName",
+                    "new": "NewName",
+                    "levels": ["text"],
+                    "repo_rel_paths": ["only.cpp"],
+                },
+            )
+            self.assertEqual(out["repo_rel_paths"], ["only.cpp"])
+            self.assertEqual(out["summary"]["total_hits"], 1)
+            self.assertEqual(out["hits"][0]["repo_rel_path"], "only.cpp")
+
     def test_hit_id_roundtrip(self) -> None:
         hid = make_hit_id("src/x.cpp", 3, 10, "{ABC}")
         from phoenix.code.rename.uuid_scan import parse_hit_id

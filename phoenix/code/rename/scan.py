@@ -38,6 +38,7 @@ def preview_text_rename(repo_root: Path, opts: RenameScanOptions) -> dict[str, A
         scope=opts.scope,
         ignore_patterns=patterns,
         include_ignored=opts.include_ignored,
+        indexed_paths=opts.indexed_paths,
     ):
         payload = detect_and_read(path)
         if payload is None:

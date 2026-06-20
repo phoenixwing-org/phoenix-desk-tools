@@ -91,7 +91,11 @@ from phoenix.services.code_rename_service import (
     save_code_rename_prefs,
 )
 from phoenix.services.code_uuid_service import apply_code_uuids, scan_code_uuids
-from phoenix.services.file_workset_service import get_file_worksets_api, put_file_worksets_api
+from phoenix.services.file_workset_service import (
+    get_file_worksets_api,
+    prune_missing_workset_paths,
+    put_file_worksets_api,
+)
 from phoenix.services.reorder_members_service import (
     get_reorder_members_prefs,
     list_reorder_top_level_entries,
@@ -438,6 +442,8 @@ class CodeIgnorePrefsBody(BaseModel):
 
 class CodeRenameRunBody(CodeRenamePrefsBody):
     confirm_token: str | None = None
+    use_index_scope: bool | None = None
+    repo_rel_paths: list[str] | None = None
 
 
 class CodeUuidScanBody(BaseModel):
@@ -450,6 +456,10 @@ class CodeUuidScanBody(BaseModel):
 
 class FileWorksetsBody(BaseModel):
     worksets: list[dict] = Field(default_factory=list)
+
+
+class FileWorksetPruneBody(BaseModel):
+    workset_id: str | None = None
 
 
 class CodeUuidApplyBody(BaseModel):
@@ -1635,6 +1645,16 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
     def api_file_worksets_put(body: FileWorksetsBody) -> dict:
         try:
             return put_file_worksets_api(get_workspace(), body.model_dump(exclude_none=True))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post("/api/file-worksets/prune-missing")
+    def api_file_worksets_prune_missing(body: FileWorksetPruneBody = ...) -> dict:
+        try:
+            return prune_missing_workset_paths(
+                get_workspace(),
+                workset_id=body.workset_id,
+            )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 

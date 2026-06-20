@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
+import { promptChoice } from "../composables/choiceDialog";
 import {
   fetchReorderMembersPrefs,
   fetchReorderMembersTopLevel,
@@ -169,10 +170,16 @@ async function onRun(dryRun: boolean) {
     return;
   }
   if (!dryRun) {
-    const ok = window.confirm(
-      "将直接写回选中的 .h / .cpp 文件。\n建议先点「预检」确认变更范围。\n\n确定执行排序？",
-    );
-    if (!ok) return;
+    const choice = await promptChoice({
+      title: "执行成员排序",
+      message: "将直接写回选中的 .h / .cpp 文件。\n建议先点「预检」确认变更范围。\n\n确定执行排序？",
+      defaultChoiceId: "cancel",
+      choices: [
+        { id: "cancel", label: "取消" },
+        { id: "confirm", label: "写盘", variant: "danger" },
+      ],
+    });
+    if (choice !== "confirm") return;
   }
   running.value = true;
   const mode = dryRun ? "预检" : "写盘";
@@ -242,64 +249,40 @@ watch(
     <section class="card settings-card">
       <div class="settings-form">
         <div class="form-row form-foot">
-          <div class="option-chips">
-            <label class="opt-chip">
-              <input
-                type="checkbox"
-                :checked="includeCpp"
-                @change="setIncludeCpp(($event.target as HTMLInputElement).checked)"
-              />
-              <span>.cpp</span>
-            </label>
-            <label class="opt-chip">
-              <input
-                type="checkbox"
-                :checked="includeHeader"
-                @change="setIncludeHeader(($event.target as HTMLInputElement).checked)"
-              />
-              <span>头文件（含 .h .hpp）</span>
-            </label>
-            <label
-              class="opt-chip disabled"
-              title="规划中：Doxygen 序号重编、.h/.cpp 构造析构序号一致等，见 doc/code/成员变量字母序-规则与待实现.md"
-            >
-              <input type="checkbox" disabled />
-              <span>成员变量字母序</span>
-            </label>
-            <label class="opt-chip">
-              <input v-model="verbose" type="checkbox" />
-              <span>详细日志</span>
-            </label>
+          <div class="option-row">
+            <el-checkbox :model-value="includeCpp" size="small" @change="setIncludeCpp(Boolean($event))">
+              .cpp
+            </el-checkbox>
+            <el-checkbox :model-value="includeHeader" size="small" @change="setIncludeHeader(Boolean($event))">
+              头文件（含 .h .hpp）
+            </el-checkbox>
+            <el-checkbox disabled size="small" title="规划中：Doxygen 序号重编等">
+              成员变量字母序
+            </el-checkbox>
+            <el-checkbox v-model="verbose" size="small">详细日志</el-checkbox>
           </div>
           <div class="settings-actions">
-            <button
-              type="button"
-              class="btn btn-quiet btn-sm"
-              :disabled="selfTesting"
+            <el-button
+              size="small"
+              :loading="selfTesting"
               title="跑内置 fixture 锁定段用例，不扫描工作空间"
               @click="onSelfTest"
             >
-              {{ selfTesting ? "…" : "回归自检" }}
-            </button>
-            <button type="button" class="btn btn-quiet btn-sm" :disabled="saving" @click="onSave">
-              {{ saving ? "…" : "保存偏好" }}
-            </button>
-            <button
-              type="button"
-              class="btn btn-sm"
-              :disabled="running || !selectedCount"
-              @click="onRun(true)"
-            >
-              {{ running ? "…" : "预检" }}
-            </button>
-            <button
-              type="button"
-              class="btn primary btn-sm"
-              :disabled="running || !selectedCount"
+              回归自检
+            </el-button>
+            <el-button size="small" :loading="saving" @click="onSave">保存偏好</el-button>
+            <el-button size="small" :loading="running" :disabled="!selectedCount" @click="onRun(true)">
+              预检
+            </el-button>
+            <el-button
+              type="primary"
+              size="small"
+              :loading="running"
+              :disabled="!selectedCount"
               @click="onRun(false)"
             >
-              {{ running ? "…" : "执行排序" }}
-            </button>
+              执行排序
+            </el-button>
           </div>
         </div>
       </div>
@@ -307,15 +290,10 @@ watch(
 
     <section class="card results-card" :class="{ collapsed: !entriesExpanded }">
       <div class="results-head-row">
-        <button
-          type="button"
-          class="collapse-trigger"
-          :aria-expanded="entriesExpanded"
-          @click="entriesExpanded = !entriesExpanded"
-        >
+        <el-button class="collapse-trigger" link type="primary" @click="entriesExpanded = !entriesExpanded">
           <span class="collapse-chevron" :class="{ open: entriesExpanded }" aria-hidden="true">▶</span>
           <span class="section-label">一级条目</span>
-        </button>
+        </el-button>
         <span v-if="entries.length" class="head-meta muted small">
           已选 {{ selectedCount }}/{{ entries.length }}
           · 目录 {{ dirCount }}
@@ -324,63 +302,41 @@ watch(
         </span>
         <span v-else-if="loading" class="head-meta muted small">加载中…</span>
         <div class="results-head-actions">
-          <button
-            type="button"
-            class="btn btn-sm"
-            :disabled="loading"
-            @click="refreshList"
-          >
-            {{ loading ? "…" : "刷新列表" }}
-          </button>
-          <button type="button" class="btn btn-sm" @click="rulesModalOpen = true">
-            忽略与规则
-          </button>
+          <el-button size="small" :loading="loading" @click="refreshList">刷新列表</el-button>
+          <el-button size="small" @click="rulesModalOpen = true">忽略与规则</el-button>
         </div>
       </div>
 
       <div v-show="entriesExpanded" class="results-body">
-        <p v-if="loadError" class="err-msg">{{ loadError }}</p>
+        <el-alert v-if="loadError" type="error" :title="loadError" show-icon :closable="false" class="err-alert" />
 
-        <div class="table-wrap">
-        <table v-if="entries.length" class="entry-table">
-          <thead>
-            <tr>
-              <th class="col-check">
-                <input
-                  type="checkbox"
-                  :checked="allChecked"
-                  aria-label="全选"
-                  @change="toggleAll(($event.target as HTMLInputElement).checked)"
-                />
-              </th>
-              <th>名称</th>
-              <th class="col-kind">类型</th>
-              <th class="col-num">源文件</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(e, i) in entries" :key="e.name" :class="{ 'row-alt': i % 2 === 1 }">
-              <td class="col-check">
-                <input
-                  type="checkbox"
-                  :checked="selected.has(e.name)"
-                  @change="toggleEntry(e.name, ($event.target as HTMLInputElement).checked)"
-                />
-              </td>
-              <td class="mono entry-name">{{ e.name }}</td>
-              <td class="col-kind">
-                <span class="kind-badge" :data-kind="e.kind">{{ kindLabel(e.kind) }}</span>
-              </td>
-              <td class="col-num">
-                <span class="count-badge">{{ e.source_file_count }}</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <p v-else class="empty">
-          {{ loading ? "加载中…" : loadError ? "加载失败" : "没有可列出的目录或源文件" }}
-        </p>
-        </div>
+        <el-table v-if="entries.length" :data="entries" size="small" stripe class="entries-table">
+          <el-table-column width="44" align="center">
+            <template #header>
+              <el-checkbox :model-value="allChecked" @change="toggleAll(Boolean($event))" />
+            </template>
+            <template #default="{ row }">
+              <el-checkbox
+                :model-value="selected.has(row.name)"
+                @change="toggleEntry(row.name, Boolean($event))"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column prop="name" label="名称" min-width="160" class-name="mono" />
+          <el-table-column label="类型" width="72" align="center">
+            <template #default="{ row }">
+              <el-tag size="small" :type="row.kind === 'file' ? 'success' : 'info'" effect="plain">
+                {{ kindLabel(row.kind) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="source_file_count" label="源文件" width="72" align="center" />
+        </el-table>
+        <el-empty
+          v-else
+          :description="loading ? '加载中…' : loadError ? '加载失败' : '没有可列出的目录或源文件'"
+          :image-size="64"
+        />
       </div>
     </section>
 
@@ -396,54 +352,32 @@ watch(
         <p v-if="lastRunSummary && !changedFiles.length" class="run-summary muted">{{ lastRunSummary.split("\n")[0] }}</p>
       </header>
 
-      <div v-if="changedFiles.length" class="table-wrap changed-table-wrap">
-        <table class="entry-table">
-          <thead>
-            <tr>
-              <th class="col-num">#</th>
-              <th>路径</th>
-              <th class="col-kind">类型</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="(path, i) in pagedChangedFiles"
-              :key="path"
-              :class="{ 'row-alt': i % 2 === 1 }"
-            >
-              <td class="col-num">{{ changedPageSafe * CHANGED_PAGE_SIZE + i + 1 }}</td>
-              <td class="mono entry-name">{{ path }}</td>
-              <td class="col-kind">
-                <span class="kind-badge" :data-kind="fileKindLabel(path) === '.cpp' ? 'file' : 'dir'">
-                  {{ fileKindLabel(path) }}
-                </span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <el-table v-if="changedFiles.length" :data="pagedChangedFiles" size="small" stripe class="changed-table">
+        <el-table-column label="#" width="52" align="center">
+          <template #default="{ $index }">
+            {{ changedPageSafe * CHANGED_PAGE_SIZE + $index + 1 }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="path" label="路径" min-width="200" class-name="mono">
+          <template #default="{ row }">{{ row }}</template>
+        </el-table-column>
+        <el-table-column label="类型" width="80" align="center">
+          <template #default="{ row }">
+            <el-tag size="small" effect="plain">{{ fileKindLabel(row) }}</el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
 
-      <div v-if="changedPageCount > 1" class="pager">
-        <button
-          type="button"
-          class="btn btn-sm"
-          :disabled="changedPageSafe <= 0"
-          @click="changedPage = Math.max(0, changedPageSafe - 1)"
-        >
-          上一页
-        </button>
-        <span class="pager-meta">
-          第 {{ changedPageSafe + 1 }} / {{ changedPageCount }} 页
-        </span>
-        <button
-          type="button"
-          class="btn btn-sm"
-          :disabled="changedPageSafe >= changedPageCount - 1"
-          @click="changedPage = Math.min(changedPageCount - 1, changedPageSafe + 1)"
-        >
-          下一页
-        </button>
-      </div>
+      <el-pagination
+        v-if="changedPageCount > 1"
+        class="pager"
+        layout="prev, pager, next"
+        :total="changedTotal"
+        :page-size="CHANGED_PAGE_SIZE"
+        :current-page="changedPageSafe + 1"
+        size="small"
+        @current-change="(p: number) => (changedPage = p - 1)"
+      />
     </section>
 
     <AppModalOverlay
@@ -455,7 +389,7 @@ watch(
       <div class="rules-modal-inner">
         <header class="rules-modal-head">
           <h2 class="rules-modal-title">忽略规则与排序说明</h2>
-          <button type="button" class="btn btn-sm" @click="rulesModalOpen = false">关闭</button>
+          <el-button size="small" @click="rulesModalOpen = false">关闭</el-button>
         </header>
 
         <h3 class="help-sub">忽略列表</h3>
@@ -472,31 +406,31 @@ watch(
           </li>
           <li>
             CAA 等工程差异在
-            <button type="button" class="link-btn" @click="shell.openCodeIgnoreSidebar(); rulesModalOpen = false">
+            <el-button
+              link
+              type="primary"
+              @click="
+                shell.openCodeIgnoreSidebar();
+                rulesModalOpen = false;
+              "
+            >
               右侧栏 · 忽略
-            </button>
+            </el-button>
             自定义区配置。
           </li>
         </ul>
 
         <div v-if="ignoredEntries.length" class="ignored-table-wrap">
           <p class="help-sub">当前已忽略（{{ ignoredEntries.length }}）</p>
-          <table class="entry-table compact">
-            <thead>
-              <tr>
-                <th>名称</th>
-                <th class="col-kind">类型</th>
-                <th>原因</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="row in ignoredEntries" :key="row.name">
-                <td class="mono">{{ row.name }}</td>
-                <td class="col-kind">{{ kindLabel(row.kind) }}</td>
-                <td>{{ row.reason === "内置" ? "内置" : "ignore 规则" }}</td>
-              </tr>
-            </tbody>
-          </table>
+          <el-table :data="ignoredEntries" size="small" stripe class="ignored-table">
+            <el-table-column prop="name" label="名称" class-name="mono" />
+            <el-table-column label="类型" width="72">
+              <template #default="{ row }">{{ kindLabel(row.kind) }}</template>
+            </el-table-column>
+            <el-table-column label="原因">
+              <template #default="{ row }">{{ row.reason === "内置" ? "内置" : "ignore 规则" }}</template>
+            </el-table-column>
+          </el-table>
         </div>
 
         <h3 class="help-sub">锁定段（P0）</h3>
@@ -567,65 +501,48 @@ watch(
   justify-content: space-between;
 }
 
-.option-chips {
+.option-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-}
-
-.opt-chip {
-  display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: #f8fafc;
-  font-size: 0.76rem;
-  cursor: pointer;
-  user-select: none;
-}
-
-.opt-chip:has(input:checked) {
-  background: #eff6ff;
-  border-color: #93c5fd;
-  color: #1d4ed8;
-}
-
-.opt-chip.disabled {
-  opacity: 0.48;
-  cursor: not-allowed;
-  background: #f1f5f9;
-  color: var(--muted);
-}
-
-.opt-chip.disabled:has(input:checked) {
-  background: #f1f5f9;
-  border-color: var(--border);
-  color: var(--muted);
+  gap: 8px 12px;
 }
 
 .settings-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   margin-left: auto;
 }
 
-.btn-sm {
-  padding: 5px 11px;
-  font-size: 0.78rem;
+.collapse-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  height: auto;
 }
 
-.btn-quiet {
-  color: var(--muted);
-  border-color: transparent;
-  background: transparent;
+.collapse-trigger :deep(.section-label) {
+  border-right: 2px solid var(--accent);
+  padding-right: 10px;
 }
 
-.btn-quiet:hover:not(:disabled) {
-  background: #f1f5f9;
-  border-color: var(--border);
+.err-alert {
+  margin-bottom: 8px;
+}
+
+.entries-table :deep(.mono) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.changed-table :deep(.mono) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.pager {
+  margin-top: 10px;
+  justify-content: center;
 }
 
 .results-head-row {

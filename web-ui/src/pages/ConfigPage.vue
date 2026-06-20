@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { addRecentWorkspace, pickWorkspaceDirectory, pruneRecentWorkspaces, removeRecentWorkspace, saveLauncherFreecad, shutdownWebServer } from "../api";
 import { useAppShell } from "../composables/useAppShell";
 import PageHelpButton from "../components/PageHelpButton.vue";
@@ -116,12 +117,12 @@ async function savePrefs() {
   const repo = repoInput.value.trim();
   const fc = fcInput.value.trim();
   if (!repo) {
-    alert("请先填写工作空间根目录。");
+    ElMessage.warning("请先填写工作空间根目录。");
     return;
   }
   if (workspaceSwitchBlocked(repo)) {
-    alert(
-      `当前仍有 ${nonHomeTabCount.value} 个工具 Tab 打开。\n请先全部关闭（可保留「主页」），再保存并切换工作空间。`,
+    ElMessage.warning(
+      `当前仍有 ${nonHomeTabCount.value} 个工具 Tab 打开。请先全部关闭（可保留「主页」），再保存并切换工作空间。`,
     );
     return;
   }
@@ -132,24 +133,32 @@ async function savePrefs() {
     fcInput.value = fcResult.freecad_dir || fc;
     workspaceSwitchHint.value = "";
     await onboarding.refreshStatus();
-    alert("已保存启动器偏好。");
+    ElMessage.success("已保存启动器偏好。");
   } catch (e) {
-    alert(String(e));
+    ElMessage.error(String(e));
   }
 }
 
 async function switchRecent(path: string) {
   if (isSameWorkspacePath(path, workspacePath.value)) {
-    alert("当前已是该工作空间。");
+    ElMessage.info("当前已是该工作空间。");
     return;
   }
   if (workspaceSwitchBlocked(path)) {
-    alert(
-      `当前仍有 ${nonHomeTabCount.value} 个工具 Tab 打开。\n请先全部关闭（可保留「主页」），再从最近列表切换工作空间。`,
+    ElMessage.warning(
+      `当前仍有 ${nonHomeTabCount.value} 个工具 Tab 打开。请先全部关闭（可保留「主页」），再从最近列表切换工作空间。`,
     );
     return;
   }
-  if (!window.confirm(`切换到以下工作空间？\n\n${path}`)) return;
+  const ok = await ElMessageBox.confirm(`切换到以下工作空间？\n\n${path}`, "切换工作空间", {
+    confirmButtonText: "切换",
+    cancelButtonText: "取消",
+    distinguishCancelAndClose: true,
+  }).then(
+    () => true,
+    () => false,
+  );
+  if (!ok) return;
   shell.appendLog(`切换工作空间：${path}`, { source: "config", open: true });
   try {
     await shell.switchWorkspace(path);
@@ -157,7 +166,7 @@ async function switchRecent(path: string) {
     shell.appendLog(`已切换到 ${path}`, { source: "config" });
   } catch (e) {
     shell.appendLog(String(e), { source: "config" });
-    alert(String(e));
+    ElMessage.error(String(e));
   }
 }
 
@@ -171,7 +180,20 @@ async function refreshWebStatus() {
 }
 
 async function stopWebServer() {
-  if (!window.confirm(`停止本地 Web 服务并释放端口？\n\n${webUrl.value}`)) return;
+  const ok = await ElMessageBox.confirm(
+    `停止本地 Web 服务并释放端口？\n\n${webUrl.value}`,
+    "关闭 Web 服务",
+    {
+      type: "warning",
+      confirmButtonText: "关闭",
+      cancelButtonText: "取消",
+      distinguishCancelAndClose: true,
+    },
+  ).then(
+    () => true,
+    () => false,
+  );
+  if (!ok) return;
   shell.appendLog(`请求关闭 Web 服务：${webUrl.value}`, { source: "config", open: true });
   try {
     await shutdownWebServer();
@@ -182,19 +204,27 @@ async function stopWebServer() {
     const msg = String(e);
     shell.appendLog(`关闭 Web 服务失败：${msg}`, { source: "config", open: true });
     shell.setStatus(msg);
-    alert(msg);
+    ElMessage.error(msg);
   }
 }
 
 async function removeRecent(path: string, event: MouseEvent) {
   event.stopPropagation();
-  if (!window.confirm(`从最近列表中移除？\n\n${path}`)) return;
+  const ok = await ElMessageBox.confirm(`从最近列表中移除？\n\n${path}`, "移除记录", {
+    confirmButtonText: "移除",
+    cancelButtonText: "取消",
+    distinguishCancelAndClose: true,
+  }).then(
+    () => true,
+    () => false,
+  );
+  if (!ok) return;
   try {
     await removeRecentWorkspace(path);
     await shell.reloadLauncher();
     shell.setStatus("已从最近列表移除");
   } catch (e) {
-    alert(String(e));
+    ElMessage.error(String(e));
   }
 }
 
@@ -223,7 +253,7 @@ async function onBrowseWorkspace() {
       shell.setStatus(`已选择：${picked}`);
     }
   } catch (e) {
-    alert(String(e));
+    ElMessage.error(String(e));
     shell.appendLog(String(e), { source: "config" });
   } finally {
     pickingWorkspace.value = false;
@@ -231,7 +261,15 @@ async function onBrowseWorkspace() {
 }
 
 async function pruneRecentList() {
-  if (!window.confirm("清理最近列表中的临时目录与无效路径？")) return;
+  const ok = await ElMessageBox.confirm("清理最近列表中的临时目录与无效路径？", "清理最近列表", {
+    confirmButtonText: "清理",
+    cancelButtonText: "取消",
+    distinguishCancelAndClose: true,
+  }).then(
+    () => true,
+    () => false,
+  );
+  if (!ok) return;
   shell.appendLog("清理最近工作空间列表…", { source: "config", open: true });
   try {
     const data = await pruneRecentWorkspaces();
@@ -242,7 +280,7 @@ async function pruneRecentList() {
     shell.setStatus(msg);
   } catch (e) {
     shell.appendLog(String(e), { source: "config" });
-    alert(String(e));
+    ElMessage.error(String(e));
   }
 }
 
@@ -257,15 +295,9 @@ const navItems = () =>
     <div class="title-row">
       <h1 class="page-title">配置</h1>
       <div class="head-actions">
-        <button
-          v-if="shell.configOverlayOpen.value"
-          type="button"
-          class="btn close-frame"
-          title="关闭（Esc）"
-          @click="shell.closeConfig()"
-        >
+        <el-button v-if="shell.configOverlayOpen.value" size="small" @click="shell.closeConfig()">
           关闭
-        </button>
+        </el-button>
         <PageHelpButton page-id="config" />
       </div>
     </div>
@@ -276,41 +308,44 @@ const navItems = () =>
 
       <label class="field-label" for="repo">工作空间根</label>
       <div class="row">
-        <input id="repo" v-model="repoInput" class="path-input" spellcheck="false" />
-        <button
-          type="button"
-          class="btn"
-          :disabled="pickingWorkspace"
-          title="在本机弹出选文件夹对话框（非浏览器选目录）"
-          @click="onBrowseWorkspace"
-        >
-          {{ pickingWorkspace ? "…" : "浏览…" }}
-        </button>
+        <el-input id="repo" v-model="repoInput" spellcheck="false" />
+        <el-button :loading="pickingWorkspace" title="在本机弹出选文件夹对话框" @click="onBrowseWorkspace">
+          浏览…
+        </el-button>
       </div>
-      <p v-if="workspaceSwitchHint" class="hint workspace-hint">{{ workspaceSwitchHint }}</p>
+      <el-alert
+        v-if="workspaceSwitchHint"
+        class="hint-alert"
+        type="warning"
+        :closable="false"
+        show-icon
+        :title="workspaceSwitchHint"
+      />
 
       <label class="field-label" for="fc" data-tour-page-config-freecad>FreeCAD 目录</label>
       <div class="row">
-        <input id="fc" v-model="fcInput" class="path-input" spellcheck="false" placeholder="可选" />
-        <button
-          v-if="defaultFreecadDir"
-          type="button"
-          class="btn"
-          title="填入本机常用安装路径"
-          @click="fillDefaultFreecad"
-        >
+        <el-input id="fc" v-model="fcInput" spellcheck="false" placeholder="可选" />
+        <el-button v-if="defaultFreecadDir" title="填入本机常用安装路径" @click="fillDefaultFreecad">
           默认位置
-        </button>
+        </el-button>
       </div>
 
       <div class="btn-row">
-        <button type="button" class="btn primary" @click="savePrefs">保存偏好</button>
-        <button type="button" class="btn" @click="refreshFields">刷新</button>
+        <el-button type="primary" @click="savePrefs">保存偏好</el-button>
+        <el-button @click="refreshFields">刷新</el-button>
       </div>
-      <p v-if="onboarding.workspaceOk && !onboarding.indexScanned" class="hint scan-hint">
-        该工作空间尚未执行 CAD 索引扫描，BOM/引用功能可能不完整。
-        <button type="button" class="link-btn" @click="openCadIndex">打开 CAD 索引</button>
-      </p>
+      <el-alert
+        v-if="onboarding.workspaceOk && !onboarding.indexScanned"
+        class="hint-alert"
+        type="info"
+        :closable="false"
+        show-icon
+      >
+        <template #title>
+          该工作空间尚未执行 CAD 索引扫描，BOM/引用功能可能不完整。
+          <el-button link type="primary" @click="openCadIndex">打开 CAD 索引</el-button>
+        </template>
+      </el-alert>
     </section>
 
     <section class="section">
@@ -324,14 +359,14 @@ const navItems = () =>
         {{ expandGlyphSizePx(uiPrefs.expandControlSizePx) }}px）
       </label>
       <div class="row expand-size-row">
-        <input
+        <el-slider
           id="expand-icon-size"
-          v-model.number="uiPrefs.expandControlSizePx"
-          type="range"
+          v-model="uiPrefs.expandControlSizePx"
           :min="EXPAND_ICON_SIZE_MIN"
           :max="EXPAND_ICON_SIZE_MAX"
-          step="1"
-          @input="uiPrefs.setExpandControlSizePx(uiPrefs.expandControlSizePx)"
+          :step="1"
+          show-stops
+          @change="uiPrefs.setExpandControlSizePx(uiPrefs.expandControlSizePx)"
         />
         <span class="expand-size-hint muted">{{ EXPAND_ICON_SIZE_MIN }}–{{ EXPAND_ICON_SIZE_MAX }} px</span>
       </div>
@@ -339,14 +374,7 @@ const navItems = () =>
         作用于工作区树、BOM 按宿主分组、装配结构树、链接路径修正等展开三角；写入本机浏览器 localStorage。
       </p>
       <div class="btn-row compact">
-        <button
-          type="button"
-          class="btn"
-          :disabled="!onboarding.workspaceOk"
-          @click="startShellTour(true)"
-        >
-          重新观看界面巡游
-        </button>
+        <el-button :disabled="!onboarding.workspaceOk" @click="startShellTour(true)">重新观看界面巡游</el-button>
       </div>
     </section>
 
@@ -356,10 +384,8 @@ const navItems = () =>
         {{ webRunning ? `运行中 · ${webUrl}` : "未检测到本页面对应的服务（可能已在其它端口运行）" }}
       </p>
       <div class="btn-row">
-        <button type="button" class="btn danger" :disabled="!webRunning" @click="stopWebServer">
-          关闭 Web 服务
-        </button>
-        <button type="button" class="btn" @click="refreshWebStatus">刷新状态</button>
+        <el-button type="danger" plain :disabled="!webRunning" @click="stopWebServer">关闭 Web 服务</el-button>
+        <el-button @click="refreshWebStatus">刷新状态</el-button>
       </div>
       <p class="hint">关闭后释放 5173 端口；详细步骤见右侧运行日志。</p>
     </section>
@@ -370,31 +396,37 @@ const navItems = () =>
         仅记录你主动切换/保存的工作空间根目录（写入本机 launcher.json）。系统临时目录不会再加入列表。
       </p>
       <div class="btn-row compact">
-        <button type="button" class="btn" @click="pruneRecentList">清理临时/无效项</button>
+        <el-button @click="pruneRecentList">清理临时/无效项</el-button>
       </div>
       <p class="hint">点击路径可切换；右侧 × 可单条移除（不删除磁盘目录）</p>
-      <div class="recent-list">
+      <div v-if="recentEntries.length" class="recent-list">
         <div
           v-for="entry in recentEntries"
           :key="entry.path"
           class="recent-row"
           :class="{ missing: !entry.exists, current: entry.path === workspacePath }"
         >
-          <button type="button" class="recent-btn" @click="switchRecent(entry.path)">
-            <span v-if="!entry.exists" class="missing-tag">已失效</span>
+          <el-button
+            class="recent-btn"
+            :type="entry.path === workspacePath ? 'primary' : 'default'"
+            text
+            @click="switchRecent(entry.path)"
+          >
+            <el-tag v-if="!entry.exists" size="small" type="warning" effect="plain" class="missing-tag">已失效</el-tag>
             {{ entry.path === workspacePath ? "● 当前 · " : "" }}{{ entry.path }}
-          </button>
-          <button
-            type="button"
+          </el-button>
+          <el-button
+            type="danger"
+            link
             class="recent-remove"
             title="从最近列表移除"
             @click="removeRecent(entry.path, $event)"
           >
             ×
-          </button>
+          </el-button>
         </div>
-        <p v-if="!recentEntries.length" class="muted">尚无记录</p>
       </div>
+      <el-empty v-else description="尚无记录" :image-size="64" />
     </section>
 
     <section class="section">
@@ -471,19 +503,18 @@ const navItems = () =>
 .row {
   display: flex;
   gap: 8px;
+  align-items: center;
 }
 
-.path-input {
+.row :deep(.el-input) {
   flex: 1;
-  padding: 8px 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
 }
 
 .btn-row {
   display: flex;
   gap: 10px;
   margin-top: 14px;
+  flex-wrap: wrap;
 }
 
 .btn-row.compact {
@@ -491,63 +522,14 @@ const navItems = () =>
   margin-bottom: 8px;
 }
 
-.btn {
-  padding: 8px 16px;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  background: var(--btn-bg);
-}
-
-.btn.primary {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
-}
-
-.btn.danger {
-  background: #fef2f2;
-  border-color: #fecaca;
-  color: #b91c1c;
-}
-
-.btn.danger:disabled {
-  opacity: 0.45;
+.hint-alert {
+  margin: 8px 0 10px;
 }
 
 .hint {
   margin: 0 0 8px;
   font-size: 0.82rem;
   color: var(--muted);
-}
-
-.workspace-hint {
-  margin: 6px 0 10px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  border: 1px solid #fcd34d;
-  background: #fffbeb;
-  color: #92400e;
-}
-
-.scan-hint {
-  margin-top: 10px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  border: 1px solid #bfdbfe;
-  background: #eff6ff;
-  color: #1e40af;
-}
-
-.link-btn {
-  margin-left: 4px;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--accent, #2563eb);
-  font: inherit;
-  font-size: 0.82rem;
-  cursor: pointer;
-  text-decoration: underline;
 }
 
 .recent-list {
@@ -563,55 +545,33 @@ const navItems = () =>
 }
 
 .recent-row.missing .recent-btn {
-  opacity: 0.72;
+  opacity: 0.85;
 }
 
 .recent-btn {
   flex: 1;
-  text-align: left;
+  justify-content: flex-start;
+  height: auto;
   padding: 8px 12px;
-  border: none;
-  border-radius: 6px;
-  background: #e8eef6;
-  font-size: 0.82rem;
+  white-space: normal;
+  word-break: break-all;
+  text-align: left;
+}
+
+.recent-btn :deep(span) {
+  white-space: normal;
   word-break: break-all;
 }
 
-.recent-row.current .recent-btn {
-  background: #2563eb;
-  color: #fff;
-}
-
 .missing-tag {
-  display: inline-block;
   margin-right: 6px;
-  padding: 0 5px;
-  border-radius: 4px;
-  font-size: 0.72rem;
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.recent-row.current .missing-tag {
-  background: rgba(255, 255, 255, 0.2);
-  color: #fff;
+  vertical-align: middle;
 }
 
 .recent-remove {
   flex-shrink: 0;
-  width: 32px;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  background: var(--btn-bg);
-  color: var(--muted);
   font-size: 1.1rem;
-  line-height: 1;
-}
-
-.recent-remove:hover {
-  background: #fee2e2;
-  border-color: #fecaca;
-  color: #b91c1c;
+  padding: 0 8px;
 }
 
 .feature-list {
@@ -636,7 +596,7 @@ code {
   align-items: center;
 }
 
-.expand-size-row input[type="range"] {
+.expand-size-row :deep(.el-slider) {
   flex: 1;
   max-width: 280px;
 }
