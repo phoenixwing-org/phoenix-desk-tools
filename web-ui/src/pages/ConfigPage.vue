@@ -33,12 +33,28 @@ const logDock = computed({
   },
 });
 
-async function saveSideDockPrefs() {
+async function saveSideDockPrefs(patch?: Partial<{ tree: SideDock; log: SideDock }>) {
+  const nextTree = patch?.tree ?? treeDock.value;
+  const nextLog = patch?.log ?? logDock.value;
+  if (patch?.tree !== undefined) {
+    shell.shellLayout.value = { ...shell.shellLayout.value, workspace_tree_dock: nextTree };
+  }
+  if (patch?.log !== undefined) {
+    shell.shellLayout.value = { ...shell.shellLayout.value, shell_log_dock: nextLog };
+  }
   await shell.persistShellLayout({
-    workspace_tree_dock: treeDock.value,
-    shell_log_dock: logDock.value,
+    workspace_tree_dock: nextTree,
+    shell_log_dock: nextLog,
   });
   shell.setStatus("侧栏停靠已保存");
+}
+
+function onTreeDockChange(value: SideDock) {
+  void saveSideDockPrefs({ tree: value });
+}
+
+function onLogDockChange(value: SideDock) {
+  void saveSideDockPrefs({ log: value });
 }
 
 const repoInput = ref("");
@@ -339,13 +355,13 @@ const navItems = () =>
       <h2 class="section-title">界面</h2>
       <el-form label-position="top" class="dock-form">
         <el-form-item label="工作空间树停靠">
-          <el-select v-model="treeDock" @change="saveSideDockPrefs">
+          <el-select :model-value="treeDock" @update:model-value="onTreeDockChange">
             <el-option label="左侧" value="left" />
             <el-option label="右侧" value="right" />
           </el-select>
         </el-form-item>
         <el-form-item label="运行日志停靠">
-          <el-select v-model="logDock" @change="saveSideDockPrefs">
+          <el-select :model-value="logDock" @update:model-value="onLogDockChange">
             <el-option label="左侧" value="left" />
             <el-option label="右侧" value="right" />
           </el-select>
@@ -353,6 +369,9 @@ const navItems = () =>
       </el-form>
       <p class="hint">
         树与日志可分别选左/右；某一侧无打开栏目时自动隐藏。宽度仍共用同一拖拽调节值。
+        <template v-if="!shell.shellLayout.value.log_panel_open">
+          运行日志当前已收起，改停靠侧后点侧栏或等任务输出时会按新侧显示。
+        </template>
       </p>
       <label class="field-label" for="expand-icon-size">
         展开/折叠图标大小（{{ uiPrefs.expandControlSizePx }}px，三角约
