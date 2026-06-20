@@ -11,7 +11,7 @@ import {
   setWorkspace,
 } from "../api";
 import { collectPageStates } from "./usePageSession";
-import { loadWorkbenchSession, saveWorkbenchSessionAll } from "./workbenchSession";
+import { loadWorkbenchSession, saveWorkbenchSessionAll, writeLocalWorkbenchSession } from "./workbenchSession";
 import { createWorkbench, type WorkbenchContext } from "./useWorkbench";
 import { basenameFromRel, normalizeRepoRelForApi } from "../utils/workspaceFileQuery";
 import { normalizeDetailTabRel, partKeyTabContextKey } from "../utils/detailTabRoute";
@@ -655,12 +655,17 @@ export function provideAppShell(): AppShellContext {
     }
   }
 
-  function flushWorkbenchSession() {
-    if (!persistenceReady || !workspacePath.value) return;
+  function flushWorkbenchSession(opts?: { force?: boolean }) {
+    if (!workspacePath.value) return;
+    if (!persistenceReady && !opts?.force) return;
     const ids = wb.tabs.value.map((t) => t.id);
-    const states = collectPageStates(ids);
+    const states = persistenceReady ? collectPageStates(ids) : {};
     const snap = wb.exportSession(states);
-    void saveWorkbenchSessionAll(workspacePath.value, snap);
+    if (persistenceReady) {
+      void saveWorkbenchSessionAll(workspacePath.value, snap);
+    } else {
+      writeLocalWorkbenchSession(workspacePath.value, snap);
+    }
   }
 
   function scheduleWorkbenchSave() {
@@ -672,15 +677,15 @@ export function provideAppShell(): AppShellContext {
     }, 800);
   }
 
-  async function restoreWorkbenchSession() {
+  async function restoreWorkbenchSession(): Promise<boolean> {
     const snap = await loadWorkbenchSession(workspacePath.value);
     if (snap && wb.restoreSession(snap)) {
       if (!wb.tabs.value.length) {
         openWelcome();
-        return;
+        return false;
       }
       leaveWelcomeForWorkbench();
-      return;
+      return true;
     }
     wb.tabs.value = [];
     wb.activeTabId.value = "";
@@ -688,9 +693,10 @@ export function provideAppShell(): AppShellContext {
     if (page) {
       leaveWelcomeForWorkbench();
       wb.ensureInitialTab(page);
-    } else {
-      openWelcome();
+      return true;
     }
+    openWelcome();
+    return false;
   }
 
   async function closeTab(tabId: string): Promise<boolean> {
@@ -727,10 +733,10 @@ export function provideAppShell(): AppShellContext {
     });
     if (typeof window !== "undefined") {
       window.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === "hidden") flushWorkbenchSession();
+        if (document.visibilityState === "hidden") flushWorkbenchSession({ force: true });
       });
-      window.addEventListener("beforeunload", () => flushWorkbenchSession());
-      window.addEventListener("pagehide", () => flushWorkbenchSession());
+      window.addEventListener("beforeunload", () => flushWorkbenchSession({ force: true }));
+      window.addEventListener("pagehide", () => flushWorkbenchSession({ force: true }));
     }
     persistenceReady = true;
     syncShellUrl();
@@ -833,6 +839,30 @@ export function provideAppShell(): AppShellContext {
     return undefined;
   }
 
+  function tabMatchesUrlIntent(tab: WorkbenchTab, intent: Extract<ShellUrlIntent, { kind: "page" }>): boolean {
+    const { pageId, rel } = intent;
+    const pid = tab.pageId;
+    if (pageId === "bom_apply" || pageId === "file_detail") {
+      if (pid !== "file_detail" && pid !== "bom_apply") return false;
+    } else if (pid !== normalizePageId(pageId)) {
+      return false;
+    }
+    if (!rel) return true;
+    const key = (tab.contextKey || tab.subtitle || "").trim();
+    return key === rel.trim();
+  }
+
+  /** 刷新后：优先在已恢复 Tab 中激活与 URL 匹配的页，避免重复开 Tab */
+  function focusTabFromUrlIntent(intent: ShellUrlIntent): boolean {
+    if (intent.kind !== "page") return false;
+    const hit = wb.tabs.value.find((t) => tabMatchesUrlIntent(t, intent));
+    if (hit) {
+      shellActivateTab(hit.id);
+      return true;
+    }
+    return false;
+  }
+
   function applyShellUrlIntent(intent: ShellUrlIntent): void {
     if (intent.kind === "welcome") {
       openWelcome();
@@ -903,14 +933,24 @@ export function provideAppShell(): AppShellContext {
     await onboarding.refreshStatus();
 
     const urlIntent = parseShellUrl();
-    await restoreWorkbenchSession();
+    const sessionRestored = await restoreWorkbenchSession();
 
     syncOnboardingFromTabs();
     purgeConfigTabs();
 
     if (urlIntent) {
-      applyShellUrlIntent(urlIntent);
-    } else if (!showWelcomeScreen.value && wb.tabs.value.length) {
+      if (urlIntent.kind === "welcome") {
+        openWelcome();
+      } else if (sessionRestored && urlIntent.kind === "page") {
+        if (!focusTabFromUrlIntent(urlIntent)) {
+          applyShellUrlIntent(urlIntent);
+        }
+      } else if (urlIntent.kind === "config") {
+        openConfig();
+      } else {
+        applyShellUrlIntent(urlIntent);
+      }
+    } else if (sessionRestored) {
       leaveWelcomeForWorkbench();
     }
 
@@ -923,6 +963,7 @@ export function provideAppShell(): AppShellContext {
 
     purgeHiddenModuleTabs();
     setupWorkbenchPersistence();
+    syncShellUrl();
     setupShellLogPolling();
   }
 

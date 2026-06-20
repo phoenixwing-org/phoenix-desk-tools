@@ -87,16 +87,30 @@ export async function persistRemoteWorkbenchSession(snapshot: WorkbenchSessionSn
 }
 
 export async function loadWorkbenchSession(workspacePath: string): Promise<WorkbenchSessionSnapshot | null> {
+  const local = readLocalWorkbenchSession(workspacePath);
+
+  let remote: WorkbenchSessionSnapshot | null = null;
   try {
-    const remote = await loadRemoteWorkbenchSession();
-    if (remote) {
-      writeLocalWorkbenchSession(workspacePath, remote);
-      return remote;
-    }
+    remote = await loadRemoteWorkbenchSession();
   } catch {
     /* fall through */
   }
-  return readLocalWorkbenchSession(workspacePath);
+
+  // 同标签 F5：sessionStorage 通常比 DB 更新；避免空 remote 覆盖本地 Tab
+  if (local?.tabs.length) {
+    if (!remote?.tabs.length || local.tabs.length >= remote.tabs.length) {
+      return local;
+    }
+    writeLocalWorkbenchSession(workspacePath, remote);
+    return remote;
+  }
+
+  if (remote?.tabs.length) {
+    writeLocalWorkbenchSession(workspacePath, remote);
+    return remote;
+  }
+
+  return null;
 }
 
 export async function saveWorkbenchSessionAll(
