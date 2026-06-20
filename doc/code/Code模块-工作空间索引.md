@@ -1,6 +1,17 @@
 # Code 模块 · 工作空间索引
 
-> 表前缀 **`phoenix_code_*`**，与 CAD 索引共用 `.phoenix/phoenix-workspace.sqlite`。
+> 表前缀 **`phoenix_code_*`**，与 CAD 索引共用 `.phoenix/phoenix-workspace.sqlite`。  
+> **勿用 `phoenix_audit_*`**：该前缀保留给 CAD 改名 / XLink 审计（`phoenix_audit_rename_log` 等）。
+
+## 表名约定
+
+| 前缀 | 模块 | 示例 |
+| --- | --- | --- |
+| `phoenix_code_*` | Code（索引、改名审计、后续 FileWorkset 落库等） | `phoenix_code_scan`、`phoenix_code_file_asset` |
+| `phoenix_audit_*` | CAD 审计 | `phoenix_audit_change_event`、`phoenix_audit_rename_log` |
+| `phoenix_cad_*` | CAD 索引 / BOM | `phoenix_cad_file_asset` |
+
+Code 新增表一律 **`phoenix_code_` 开头**；schema 变更不迁移旧库，版本不符时重建数据库即可。
 
 ## 用途
 

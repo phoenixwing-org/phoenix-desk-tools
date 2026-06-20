@@ -125,7 +125,7 @@ Web：
 | **P1** | 文件 / 文件夹重命名；自底向上路径更新；macOS 大小写-only 改名提示 |
 | **P2** | 对接旧 CLI 或迁入核心；Web 改名页 + Tab 会话 |
 | **P2b** | **UUID 扫描 + 勾选替换**（见 §11）；Web UUID 页 |
-| **P3** | 与 Code 索引联动（限定已索引文件）；`phoenix_audit_*` 审计表；Git 脏文件过滤 |
+| **P3** | 与 Code 索引联动（限定已索引文件）；`phoenix_code_*` 改名审计表（如 `phoenix_code_rename_log`）；Git 脏文件过滤 |
 
 ## 11. UUID 扫描与勾选替换（独立子功能）
 

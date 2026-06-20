@@ -85,6 +85,16 @@
 - [x] F5 / sessionStorage 恢复 Tab；地址栏 `?page=` 同步（见 commit 链 45c31dc 等）
 - [x] 文档：[Web壳层-使用说明.md](user/Web壳层-使用说明.md)、[新手指引.md](user/新手指引.md) 同步
 
+### 系统 · FileWorkset（文件工作集）
+
+> 规划：[FileWorkset-规划.md](platform/FileWorkset-规划.md) — **壳层系统能力**，为 CAD/Code 各模块提供 path 集合归集与跨页执行。
+
+- [~] **P1 基础**：`phoenix_workset*`（SQLite）+ `GET/PUT /api/file-worksets` + 侧栏「工作集」Tab
+- [~] **P1 归集**：Code 索引勾选/本页、工作空间树「+工作集」
+- [~] **P1 消费**：Code UUID · `WorksetScopePicker` + `repo_rel_paths` 扫描
+- [ ] 改名 / 转码 / CAD 批量页接入 `useWorksetPageScope`
+- [ ] 工作集「刷新 / 剔除 missing」、Saved Query 物化
+
 **R4 · 业务页渐进（按需）**
 
 - [~] 新改版页优先 Element 组件（欢迎页 / 主页 / 配置·界面 已迁移；其它页按需）
@@ -166,7 +176,7 @@
 - [ ] Python 路由 `register_freecad_routes` 拆分
 - [ ] 第二个插件原型（验证表前缀 `phoenix_<app>_`）
 - [~] **`app_config` 模块字段 + 主页导航偏好**（见 P1 §导航模块偏好；与下方原项合并实现）
-- [ ] 工作空间偏好迁入 SQLite（`phoenix_ui_session` 或专用表）；JSON 仅导出——见 [Phoenix工作空间存储-规划讨论.md](platform/Phoenix工作空间存储-规划讨论.md)
+- [x] 工作空间偏好迁入 SQLite（`phoenix_workspace_pref`）；JSON 首次打开自动导入，日常读写不再写 JSON
 
 ---
 
