@@ -12,6 +12,7 @@ import {
 } from "../api";
 import { promptChoice } from "../composables/choiceDialog";
 import { useAppShell } from "../composables/useAppShell";
+import { useFcstdMapPropertySheet } from "../composables/useFcstdMapPropertySheet";
 import { useOnboardingStore } from "../stores/onboarding";
 import { usePageSession } from "../composables/usePageSession";
 import PageHelpButton from "../components/PageHelpButton.vue";
@@ -76,6 +77,12 @@ const entriesLoading = ref(false);
 const debugSql = ref("");
 
 const stats = computed(() => data.value?.stats);
+
+useFcstdMapPropertySheet("fcstd_map", {
+  data,
+  forceUpdatePartName,
+  onSaveScanOptions,
+});
 
 const pageEnd = computed(() => Math.min(pageOffset.value + entries.value.length, entriesTotal.value));
 const hasPrevPage = computed(() => pageOffset.value > 0);
@@ -557,15 +564,8 @@ onMounted(() => applyInitialTabState());
           <code>.phoenix/phoenix-workspace.sqlite</code>。请使用页顶「工程内搜索」；再次扫描时磁盘上已不存在的条目标记为缺失。
         </p>
         <p v-if="shell.workspacePath" class="meta-line mono">工作空间：{{ shell.workspacePath }}</p>
-        <el-checkbox
-          v-model="forceUpdatePartName"
-          :disabled="saving"
-          @change="onSaveScanOptions"
-        >
-          强制更新零件名
-        </el-checkbox>
         <p class="hint">
-          零件名默认仅在为空时从标签/文件名推断；勾选变更后会自动保存；重新扫描会覆盖索引中已有零件名（不写回 FCStd）。
+          「强制更新零件名」等选项在侧栏<strong>属性</strong>；变更后自动保存。重新扫描会覆盖索引中已有零件名（不写回 FCStd）。
         </p>
       </section>
 
@@ -577,29 +577,6 @@ onMounted(() => applyInitialTabState());
         <el-button size="small" :loading="exporting" :disabled="!data?.exists" @click="onExportJson">
           导出 fcstd_map.json
         </el-button>
-      </section>
-
-      <section v-if="stats" class="settings-block">
-        <h2 class="block-title">统计</h2>
-        <dl class="stats-grid">
-          <dt>条目</dt><dd>{{ stats.total_entries }}</dd>
-          <dt>存在</dt><dd class="ok">{{ stats.present }}</dd>
-          <dt>缺失</dt><dd class="warn">{{ stats.missing }}</dd>
-          <dt>CAD 文件</dt><dd>{{ stats.cad_file_count }}</dd>
-          <dt>FCStd</dt><dd>{{ stats.fcstd_file_count }}</dd>
-          <dt>MD</dt><dd>{{ stats.markdown_file_count }}</dd>
-          <dt>PDF</dt><dd>{{ stats.pdf_file_count }}</dd>
-          <dt>DXF/DWG</dt><dd>{{ stats.cad_exchange_file_count }}</dd>
-          <dt>图片</dt><dd>{{ stats.image_file_count }}</dd>
-          <dt>重名</dt><dd>{{ stats.duplicate_filename_kinds }}</dd>
-        </dl>
-      </section>
-
-      <section v-if="data" class="settings-block meta-block">
-        <h2 class="block-title">路径</h2>
-        <p v-if="data.database_path_display" class="meta-line">数据库：{{ data.database_path_display }}</p>
-        <p v-if="data.map_path_display" class="meta-line">JSON：{{ data.map_path_display }}</p>
-        <p v-if="data.last_scan_at" class="meta-line">上次扫描：{{ data.last_scan_at }}</p>
       </section>
 
       <section v-if="debugSql" class="settings-block">

@@ -32,7 +32,7 @@ function onBoolChange(field: PagePropertyField & { kind: "boolean" }, checked: b
       <td class="prop-name" :class="{ emphasis: field.labelTone === 'emphasis' }" :title="field.hint || field.label">
         {{ field.label }}
       </td>
-      <td class="prop-value" :class="{ 'prop-value-action': field.kind === 'action' }">
+      <td class="prop-value">
         <label v-if="field.kind === 'boolean'" class="prop-bool-cell">
           <el-checkbox
             :model-value="Boolean(unref(field.value))"
@@ -84,35 +84,9 @@ function onBoolChange(field: PagePropertyField & { kind: "boolean" }, checked: b
           />
         </el-select>
 
-        <el-radio-group
-          v-else-if="field.kind === 'radio'"
-          :model-value="String(unref(field.value))"
-          :disabled="isDisabled(field)"
-          size="small"
-          class="prop-radio"
-          @update:model-value="field.onChange?.(String($event))"
-        >
-          <el-radio v-for="opt in field.options" :key="opt.value" :value="opt.value">
-            {{ opt.label }}
-          </el-radio>
-        </el-radio-group>
-
         <span v-else-if="field.kind === 'info'" class="prop-info" :class="{ mono: field.mono }">
           {{ formatInfoValue(unref(field.value)) }}
         </span>
-
-        <el-button
-          v-else-if="field.kind === 'action'"
-          size="small"
-          :type="field.variant === 'danger' ? 'danger' : field.variant === 'primary' ? 'primary' : 'default'"
-          :loading="field.loading ? Boolean(unref(field.loading)) : false"
-          :disabled="isDisabled(field)"
-          @click="field.onClick()"
-        >
-          {{ field.buttonLabel }}
-        </el-button>
-
-        <component :is="field.component" v-else-if="field.kind === 'slot'" v-bind="field.props ?? {}" />
       </td>
     </tr>
   </template>
@@ -176,11 +150,6 @@ function onBoolChange(field: PagePropertyField & { kind: "boolean" }, checked: b
 .prop-info.mono {
   font-family: var(--mono-font, ui-monospace, monospace);
   font-size: 0.68rem;
-}
-
-.prop-radio {
-  flex-wrap: wrap;
-  gap: 4px 8px;
 }
 
 .prop-info {

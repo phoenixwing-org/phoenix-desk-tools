@@ -1,7 +1,7 @@
 # Web 壳层 — 页面属性面板
 
-> [文档索引](../文档索引.md) · 状态：**P1 已落地 · P2 进行中 · 2026-06-21**  
-> **规划**：[Web壳层-页面属性面板-规划.md](Web壳层-页面属性面板-规划.md) · **P1 归档**：[Web壳层-页面属性面板-P1归档.md](Web壳层-页面属性面板-P1归档.md) · 待办：[TODO.md](../TODO.md) §侧栏·页面属性面板
+> [文档索引](../文档索引.md) · 状态：**P2 已归档 · MVC 研讨中 · 2026-06-19**  
+> **规划**：[Web壳层-页面属性面板-规划.md](Web壳层-页面属性面板-规划.md) · **P1 归档**：[Web壳层-页面属性面板-P1归档.md](Web壳层-页面属性面板-P1归档.md) · **P2 归档**：[Web壳层-页面属性面板-P2归档.md](Web壳层-页面属性面板-P2归档.md) · **MVC 研讨**：[Web壳层-页面参数与属性-MVC研讨.md](Web壳层-页面参数与属性-MVC研讨.md)（暂不执行） · 待办：[TODO.md](../TODO.md) §侧栏·页面属性面板
 
 ## 设计原则（对齐 FreeCAD）
 
@@ -12,7 +12,10 @@
 | `App::PropertyBool` 等 | `propBool` / `propEnum` / … |
 | 属性视图按类型选编辑器 | `PagePropertyFieldRow.vue` 按 `kind` |
 | 分组折叠段 | `propGroup` |
-| 左名右值表格 | `<table>` + 名称列拖拽（`shell_layout`） |
+| 左名右值表格 | `<table>` + 分组段；**无**「名称/值」表头（页标题即面板名） |
+| **一名一值** | 一行只绑一个控件；多控件拆 **子分组**（`propGroup` + `hidden`） |
+| 枚举 | 统一 **下拉**（`propEnum`），不用 radio |
+| **无按钮** | 操作放主区 / Ribbon / 页脚；属性区仅 bool / string / number / enum / 只读 |
 
 ## 位置
 
@@ -27,6 +30,8 @@
 | `code_rename` | `useCodeRenamePropertySheet.ts` |
 | `code_uuid` | `useCodeUuidPropertySheet.ts` |
 | `part_dedup` | `usePartDedupPropertySheet.ts` |
+| `fcstd_map` | `useFcstdMapPropertySheet.ts` |
+| `bom_export` | `useBomExportPropertySheet.ts` |
 
 ## 业务页接入
 
@@ -43,7 +48,7 @@ usePagePropertySheet("page_id", () =>
 );
 ```
 
-复杂块：`propSlot` + `WorksetScopePicker`（见 `useCodeRenamePropertySheet.ts`）。
+工作集范围：`useWorksetScopePropertyGroups(pageId)` → 范围模式 + 条件子分组（工作集：**选择**下拉 + **侧栏活动**只读）。打开/管理工作集用 Ribbon 或页脚「工作集」。
 
 ## 生命周期
 
@@ -57,7 +62,7 @@ usePagePropertySheet("page_id", () =>
 | --- | --- |
 | `types/pageProperties.ts` | 类型联合 |
 | `utils/pagePropertySchema.ts` | 描述符工厂 |
-| `composables/usePagePropertySheet.ts` | 注册 hook |
+| `composables/useWorksetScopePropertyGroups.ts` | 扫描范围 1:1 字段 + 条件子分组 |
 | `composables/pagePropertiesHost.ts` | 全局 Map |
 | `composables/use*PropertySheet.ts` | 各页描述符 |
 | `components/PagePropertiesPanel.vue` | 分组表格 |

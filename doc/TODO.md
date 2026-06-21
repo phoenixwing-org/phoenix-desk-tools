@@ -47,7 +47,7 @@
 
 > 示例：**C++ 成员排序**（`usePagePropertySheet` + 工作空间树下方 `PagePropertiesPanel`）。  
 > 类型定义：`web-ui/src/types/pageProperties.ts` · 宿主：`pagePropertiesHost.ts`  
-> **规划**：[Web壳层-页面属性面板-规划.md](platform/Web壳层-页面属性面板-规划.md) · **实现说明**：[Web壳层-页面属性面板.md](platform/Web壳层-页面属性面板.md)
+> **规划**：[Web壳层-页面属性面板-规划.md](platform/Web壳层-页面属性面板-规划.md) · **实现说明**：[Web壳层-页面属性面板.md](platform/Web壳层-页面属性面板.md) · **MVC 研讨**：[Web壳层-页面参数与属性-MVC研讨.md](platform/Web壳层-页面参数与属性-MVC研讨.md)（暂不执行）
 
 - [x] POC：成员排序运行选项 + `KEVIN_SYSTEM_CODE` 模式（工作空间 prefs 持久化）
 - [x] KeepAlive 多页：`setPropertiesActivePage` 随 Tab 切换属性内容
@@ -56,7 +56,8 @@
 - [x] **推广 P1**：`xlink_fix` / `code_rename` / `code_uuid` 属性 sheet；主区留操作与结果表
 - [x] **属性空态**：无 sheet 时显示「当前页无可配置项」
 - [ ] **推广 P2**：`file_rename` / STEP 等（`part_dedup` ✅）
-- [ ] **类型扩展**：`propPath`、分析后动态只读组；与工作集范围字段复用（`propSlot` → 拆行）
+- [ ] **类型扩展**：`propPath`、分析后动态只读组；枚举统一 combo（`propRadio` 已废弃为 `propEnum` 别名）
+- [ ] **架构研讨**：[页面参数与属性 MVC](platform/Web壳层-页面参数与属性-MVC研讨.md) — `PnxXxxParam` + `derivePageProperties`（评审后再定是否替代 composable）
 - [ ] **运行范围**：成员排序「从工作集推导一级目录勾选」
 - [x] **壳层持久化**：属性区高度、名称列宽写入 `shell_layout`
 - [x] **页脚面板切换**：VS Code 式图标（树/属性/日志/工作集/停靠）— 与 Ribbon 壳层区共用 `ShellPanelToggleBar`（全 Tab + 布局联动）

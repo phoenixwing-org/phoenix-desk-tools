@@ -1,12 +1,12 @@
 import { computed } from "vue";
-import WorksetScopePicker from "../components/WorksetScopePicker.vue";
 import { usePagePropertySheet } from "./usePagePropertySheet";
+import { useWorksetScopePropertyGroups } from "./useWorksetScopePropertyGroups";
 import type { RenameLevel } from "../api";
 import {
   CODE_RENAME_LEVEL_OPTIONS,
   useCodeRenamePageStore,
 } from "../stores/codeRenamePage";
-import { propBool, propEnum, propGroup, propSheet, propSlot, propString } from "../utils/pagePropertySchema";
+import { propBool, propEnum, propGroup, propSheet, propString } from "../utils/pagePropertySchema";
 
 export function useCodeRenamePropertySheet(
   pageId: string,
@@ -14,6 +14,7 @@ export function useCodeRenamePropertySheet(
   onValidationError?: (message: string) => void,
 ) {
   const pageStore = useCodeRenamePageStore();
+  const scopeGroups = useWorksetScopePropertyGroups(pageId);
 
   function toggleLevel(id: RenameLevel, checked: boolean) {
     const next = new Set(pageStore.levels);
@@ -50,12 +51,7 @@ export function useCodeRenamePropertySheet(
             },
           }),
         ]),
-        propGroup("scope", "扫描范围", [
-          propSlot("workset_scope", "范围", {
-            component: WorksetScopePicker,
-            props: { pageId },
-          }),
-        ]),
+        ...scopeGroups(),
         propGroup("rules", "规则", [
           ...CODE_RENAME_LEVEL_OPTIONS.map((opt) =>
             propBool(`level_${opt.id}`, opt.label, {
@@ -92,7 +88,7 @@ export function useCodeRenamePropertySheet(
           }),
         ]),
       ],
-      { title: "Code 批量改名", schemaVersion: 1 },
+      { title: "Code 批量改名", schemaVersion: 5 },
     ),
   );
 }

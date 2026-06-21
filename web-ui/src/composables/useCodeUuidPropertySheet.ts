@@ -1,8 +1,8 @@
 import { computed, type Ref } from "vue";
 import type { UuidApplyStrategy } from "../api";
-import WorksetScopePicker from "../components/WorksetScopePicker.vue";
 import { usePagePropertySheet } from "./usePagePropertySheet";
-import { propEnum, propGroup, propSheet, propSlot } from "../utils/pagePropertySchema";
+import { useWorksetScopePropertyGroups } from "./useWorksetScopePropertyGroups";
+import { propEnum, propGroup, propSheet } from "../utils/pagePropertySchema";
 
 const STRATEGY_OPTIONS = [
   {
@@ -18,15 +18,12 @@ const STRATEGY_OPTIONS = [
 ] as const;
 
 export function useCodeUuidPropertySheet(pageId: string, strategy: Ref<UuidApplyStrategy>) {
+  const scopeGroups = useWorksetScopePropertyGroups(pageId);
+
   usePagePropertySheet(pageId, () =>
     propSheet(
       [
-        propGroup("scope", "扫描范围", [
-          propSlot("workset_scope", "范围", {
-            component: WorksetScopePicker,
-            props: { pageId },
-          }),
-        ]),
+        ...scopeGroups(),
         propGroup("replace", "替换", [
           propEnum("strategy", "替换策略", {
             value: computed(() => strategy.value),
@@ -43,7 +40,7 @@ export function useCodeUuidPropertySheet(pageId: string, strategy: Ref<UuidApply
           }),
         ]),
       ],
-      { title: "Code UUID 替换", schemaVersion: 1 },
+      { title: "Code UUID 替换", schemaVersion: 5 },
     ),
   );
 }

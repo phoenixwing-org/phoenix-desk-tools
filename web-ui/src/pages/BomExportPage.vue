@@ -11,6 +11,7 @@ import OnboardingBanner from "../components/OnboardingBanner.vue";
 import PageHelpButton from "../components/PageHelpButton.vue";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
 import { useAppShell } from "../composables/useAppShell";
+import { useBomExportPropertySheet } from "../composables/useBomExportPropertySheet";
 import { useOnboardingStore } from "../stores/onboarding";
 import { usePageSession } from "../composables/usePageSession";
 import type { TableColumnDef } from "../composables/useResizableTable";
@@ -50,6 +51,11 @@ const catalogError = ref("");
 const rebuilding = ref(false);
 
 const hasIndex = computed(() => (meta.value?.edge_count ?? 0) > 0);
+
+useBomExportPropertySheet("bom_export", {
+  meta,
+  catalogCount: computed(() => catalogHosts.value.length),
+});
 
 const catalogFiltered = computed(() => {
   const q = catalogSearch.value.trim().toLowerCase();
@@ -235,14 +241,6 @@ onUnmounted(() => {
       <div class="head-row">
         <div class="head-left">
           <h1 class="page-title">BOM 列表</h1>
-          <p v-if="meta" class="head-meta">
-            <template v-if="catalogHosts.length">
-              总成 {{ catalogHosts.length }} 个
-            </template>
-            <template v-else-if="hasIndex">总成 —</template>
-            · 引用边 {{ meta.edge_count }} · 宿主 {{ meta.host_count }}
-            <span v-if="meta.last_bom_xref_at"> · 更新 {{ meta.last_bom_xref_at }}</span>
-          </p>
         </div>
         <div class="head-trailing">
           <el-button
@@ -374,22 +372,10 @@ onUnmounted(() => {
     </div>
 
     <div v-show="activeSubTab === 'settings'" class="sub-panel settings-panel">
-      <section v-if="shell.workspacePath || meta" class="settings-block project-block">
+      <section v-if="shell.workspacePath" class="settings-block project-block">
         <h2 class="block-title">当前工程</h2>
-        <dl class="project-dl">
-          <dt>工作区</dt>
-          <dd class="mono">{{ shell.workspacePath || "—" }}</dd>
-          <dt>CAD 索引库</dt>
-          <dd class="mono">{{ meta?.database_path_display || "—" }}</dd>
-          <template v-if="meta">
-            <dt>引用边</dt>
-            <dd>{{ meta.edge_count ?? "—" }}</dd>
-            <dt>宿主数</dt>
-            <dd>{{ meta.host_count ?? "—" }}</dd>
-            <dt v-if="meta.last_bom_xref_at">引用表更新</dt>
-            <dd v-if="meta.last_bom_xref_at">{{ meta.last_bom_xref_at }}</dd>
-          </template>
-        </dl>
+        <p class="block-desc mono">工作区：{{ shell.workspacePath }}</p>
+        <p class="hint">引用边、宿主、上次更新等见侧栏<strong>属性</strong>。</p>
       </section>
       <section class="settings-block">
         <h2 class="block-title">总成列表</h2>

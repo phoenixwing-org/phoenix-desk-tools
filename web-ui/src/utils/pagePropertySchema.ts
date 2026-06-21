@@ -1,15 +1,12 @@
 import type { ComputedRef, Ref } from "vue";
 import type {
-  PagePropertyActionField,
   PagePropertyBooleanField,
   PagePropertyField,
   PagePropertyGroup,
   PagePropertyInfoField,
   PagePropertyNumberField,
-  PagePropertyRadioField,
   PagePropertySelectField,
   PagePropertySelectOption,
-  PagePropertySlotField,
   PagePropertyStringField,
   PagePropertiesSheet,
 } from "../types/pageProperties";
@@ -24,7 +21,7 @@ export function propGroup(
   id: string,
   label: string,
   fields: PagePropertyField[],
-  opts?: { defaultCollapsed?: boolean; description?: string },
+  opts?: { defaultCollapsed?: boolean; description?: string; hidden?: MaybeHidden },
 ): PagePropertyGroup {
   return {
     id,
@@ -32,6 +29,7 @@ export function propGroup(
     fields,
     defaultCollapsed: opts?.defaultCollapsed,
     description: opts?.description,
+    hidden: opts?.hidden,
   };
 }
 
@@ -51,7 +49,7 @@ export function propBool(
   return { id, label, kind: "boolean", ...opts };
 }
 
-/** AppPropertyEnum — 枚举下拉 */
+/** AppPropertyEnum — 枚举下拉（含原 radio 场景，统一 combo） */
 export function propEnum(
   id: string,
   label: string,
@@ -68,7 +66,7 @@ export function propEnum(
   return { id, label, kind: "select", ...opts };
 }
 
-/** AppPropertyEnum — 少量选项时用 radio */
+/** @deprecated 请用 propEnum；属性面板不支持 radio，等效为下拉 */
 export function propRadio(
   id: string,
   label: string,
@@ -80,8 +78,8 @@ export function propRadio(
     disabled?: MaybeHidden;
     hidden?: MaybeHidden;
   },
-): PagePropertyRadioField {
-  return { id, label, kind: "radio", ...opts };
+): PagePropertySelectField {
+  return propEnum(id, label, opts);
 }
 
 /** AppPropertyString */
@@ -131,32 +129,6 @@ export function propReadonly(
   },
 ): PagePropertyInfoField {
   return { id, label, kind: "info", ...opts };
-}
-
-/** 单行按钮 */
-export function propAction(
-  id: string,
-  label: string,
-  opts: {
-    buttonLabel: string;
-    onClick: () => void | Promise<void>;
-    variant?: "default" | "primary" | "danger";
-    loading?: ReactiveBool;
-    hint?: string;
-    disabled?: MaybeHidden;
-    hidden?: MaybeHidden;
-  },
-): PagePropertyActionField {
-  return { id, label, kind: "action", ...opts };
-}
-
-/** 嵌入已有组件（复杂块预留） */
-export function propSlot(
-  id: string,
-  label: string,
-  opts: Omit<PagePropertySlotField, "id" | "label" | "kind">,
-): PagePropertySlotField {
-  return { id, label, kind: "slot", ...opts };
 }
 
 /** 组装一页属性表（不含 pageId，供 usePagePropertySheet 使用） */

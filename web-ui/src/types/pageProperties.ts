@@ -1,4 +1,4 @@
-import type { Component, ComputedRef, Ref } from "vue";
+import type { ComputedRef, Ref } from "vue";
 
 /** 属性字段值类型（与 kind 对应） */
 export type PagePropertyScalar = boolean | string | number | null;
@@ -16,7 +16,7 @@ type MaybeDisabled = Ref<boolean> | ComputedRef<boolean> | undefined;
 export type PagePropertyFieldBase = {
   id: string;
   label: string;
-  /** 悬停提示；select/radio 也可作当前选项说明的补充 */
+  /** 悬停提示；select 也可作当前选项说明的补充 */
   hint?: string;
   disabled?: MaybeDisabled;
   /** 为 true 时不渲染（条件显示） */
@@ -48,16 +48,9 @@ export type PagePropertyNumberField = PagePropertyFieldBase & {
   onChange?: (value: number) => void;
 };
 
+/** 枚举 / 互斥选项（统一用下拉，不用 radio） */
 export type PagePropertySelectField = PagePropertyFieldBase & {
   kind: "select";
-  value: ReactiveValue<string>;
-  options: PagePropertySelectOption[];
-  onChange?: (value: string) => void;
-};
-
-/** 少量互斥选项时用 radio 比下拉更直观 */
-export type PagePropertyRadioField = PagePropertyFieldBase & {
-  kind: "radio";
   value: ReactiveValue<string>;
   options: PagePropertySelectOption[];
   onChange?: (value: string) => void;
@@ -70,34 +63,12 @@ export type PagePropertyInfoField = PagePropertyFieldBase & {
   mono?: boolean;
 };
 
-/** 单行操作（如「从工作集填充」）；不持久化值 */
-export type PagePropertyActionField = PagePropertyFieldBase & {
-  kind: "action";
-  buttonLabel: string;
-  variant?: "default" | "primary" | "danger";
-  loading?: ReactiveValue<boolean>;
-  onClick: () => void | Promise<void>;
-};
-
-/**
- * 预留：嵌入已有 Vue 片段（如 WorksetScopePicker）。
- * 业务页传入 component + props，壳层只负责占位。
- */
-export type PagePropertySlotField = PagePropertyFieldBase & {
-  kind: "slot";
-  component: Component;
-  props?: Record<string, unknown>;
-};
-
 export type PagePropertyField =
   | PagePropertyBooleanField
   | PagePropertyStringField
   | PagePropertyNumberField
   | PagePropertySelectField
-  | PagePropertyRadioField
-  | PagePropertyInfoField
-  | PagePropertyActionField
-  | PagePropertySlotField;
+  | PagePropertyInfoField;
 
 /** 分组（类似 FreeCAD 属性面板折叠段） */
 export type PagePropertyGroup = {
@@ -106,6 +77,8 @@ export type PagePropertyGroup = {
   /** 分组下说明，渲染在标题下方 */
   description?: string;
   defaultCollapsed?: boolean;
+  /** 为 true 时不渲染整组（用于条件子分组） */
+  hidden?: MaybeDisabled;
   fields: PagePropertyField[];
 };
 

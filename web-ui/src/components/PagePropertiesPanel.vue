@@ -34,15 +34,21 @@ watch(
 
 const panelTitle = computed(() => activeSheet.value?.title ?? "属性");
 
+function visibleFields(group: { fields: Array<{ hidden?: { value: boolean } }> }) {
+  return group.fields.filter((f) => !(f.hidden && unref(f.hidden)));
+}
+
+const visibleGroups = computed(() =>
+  (activeSheet.value?.groups ?? [])
+    .filter((g) => !(g.hidden && unref(g.hidden)))
+    .filter((g) => visibleFields(g).length > 0),
+);
+
 function toggleGroup(id: string) {
   collapsedGroups.value = {
     ...collapsedGroups.value,
     [id]: !collapsedGroups.value[id],
   };
-}
-
-function visibleFields(group: { fields: Array<{ hidden?: { value: boolean } }> }) {
-  return group.fields.filter((f) => !(f.hidden && unref(f.hidden)));
 }
 
 function onColResizeStart(e: PointerEvent) {
@@ -79,7 +85,7 @@ onUnmounted(() => {
     <header class="page-props-head">
       <span class="page-props-title">{{ panelTitle }}</span>
     </header>
-    <div v-if="activeSheet" ref="tableWrapRef" class="prop-table-wrap">
+    <div v-if="activeSheet && visibleGroups.length" ref="tableWrapRef" class="prop-table-wrap">
       <div
         class="prop-col-resizer"
         :style="{ left: `${nameColWidth}px` }"
@@ -91,14 +97,8 @@ onUnmounted(() => {
           <col :style="{ width: `${nameColWidth}px` }" />
           <col />
         </colgroup>
-        <thead class="prop-table-head">
-          <tr>
-            <th class="prop-head-name">名称</th>
-            <th class="prop-head-value">值</th>
-          </tr>
-        </thead>
         <tbody>
-          <template v-for="group in activeSheet.groups" :key="group.id">
+          <template v-for="group in visibleGroups" :key="group.id">
             <tr class="prop-group-row">
               <td colspan="2">
                 <button type="button" class="prop-group-head" @click="toggleGroup(group.id)">
@@ -120,9 +120,6 @@ onUnmounted(() => {
                 :field="field"
                 :stripe="fi % 2 === 1"
               />
-              <tr v-if="!visibleFields(group).length" class="prop-empty-row">
-                <td colspan="2" class="prop-empty muted small">（无属性）</td>
-              </tr>
             </template>
           </template>
         </tbody>
@@ -183,26 +180,6 @@ onUnmounted(() => {
   table-layout: fixed;
 }
 
-.prop-table-head {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-
-.prop-table-head th {
-  padding: 3px 8px;
-  font-size: 0.66rem;
-  font-weight: 600;
-  color: var(--muted);
-  text-align: left;
-  background: var(--panel-head-bg);
-  border-bottom: 1px solid var(--border);
-}
-
-.prop-head-name {
-  border-right: 1px solid var(--border);
-}
-
 .prop-group-row td {
   padding: 0;
   border-top: 1px solid var(--border);
@@ -241,11 +218,6 @@ onUnmounted(() => {
 }
 
 .prop-table :deep(.prop-field-row td) {
-  border-top: 1px solid var(--border);
-}
-
-.prop-empty-row td {
-  padding: 8px;
   border-top: 1px solid var(--border);
 }
 

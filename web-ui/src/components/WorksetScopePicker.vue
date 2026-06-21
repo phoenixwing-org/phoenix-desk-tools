@@ -71,17 +71,17 @@ async function openWorksetSidebar() {
 <template>
   <div class="workset-scope-picker">
     <span class="picker-label">扫描范围</span>
-    <el-radio-group
+    <el-select
       :model-value="scopeMode"
       size="small"
-      class="mode-group"
+      class="mode-select"
       @update:model-value="onScopeModeChange($event as WorksetScopeMode)"
     >
-      <el-radio value="all">全工作空间</el-radio>
-      <el-radio value="scope">子目录</el-radio>
-      <el-radio v-if="showIndexScope" value="index">Code 索引 present</el-radio>
-      <el-radio value="workset">工作集</el-radio>
-    </el-radio-group>
+      <el-option v-if="showIndexScope" value="index" label="Code 索引 present" />
+      <el-option value="all" label="全工作空间" />
+      <el-option value="scope" label="子目录" />
+      <el-option value="workset" label="工作集" />
+    </el-select>
     <div v-if="scopeMode === 'scope'" class="scope-extra">
       <el-input
         v-model="scope"
@@ -131,8 +131,9 @@ async function openWorksetSidebar() {
   color: var(--muted);
 }
 
-.mode-group {
-  flex-wrap: wrap;
+.mode-select {
+  min-width: 140px;
+  max-width: 220px;
 }
 
 .scope-extra {

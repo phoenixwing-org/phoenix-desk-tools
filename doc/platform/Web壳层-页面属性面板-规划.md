@@ -1,8 +1,9 @@
 # Web 壳层 · 页面属性面板 — 规划
 
-> 状态：**POC 已落地 · P1 已归档 · P2 进行中 · 2026-06-21**  
+> 状态：**P2 已归档 · MVC 研讨（暂不执行）· 2026-06-19**  
 > 实现说明：[Web壳层-页面属性面板.md](Web壳层-页面属性面板.md)  
-> **P1 归档**：[Web壳层-页面属性面板-P1归档.md](Web壳层-页面属性面板-P1归档.md)  
+> **P1 归档**：[Web壳层-页面属性面板-P1归档.md](Web壳层-页面属性面板-P1归档.md) · **P2 归档**：[Web壳层-页面属性面板-P2归档.md](Web壳层-页面属性面板-P2归档.md)  
+> **MVC 研讨（暂不执行）**：[Web壳层-页面参数与属性-MVC研讨.md](Web壳层-页面参数与属性-MVC研讨.md)  
 > 待办跟踪：[TODO.md](../TODO.md) §侧栏·页面属性面板  
 > 关联：[FileWorkset-规划.md](FileWorkset-规划.md) · [Web壳层-Tab与状态持久化-规划讨论.md](Web壳层-Tab与状态持久化-规划讨论.md) · [Web壳层-业务页Element化-梳理.md](Web壳层-业务页Element化-梳理.md)
 
@@ -27,7 +28,6 @@
 WorkspaceTreeSidebar
 ├── 工作空间树 Tab
 ├── PagePropertiesPanel     ← 属性表（可拖拽高度）
-│   ├── sticky 表头：名称 | 值
 │   ├── colgroup + 名称列拖拽（localStorage）
 │   └── 分组折叠段 + PagePropertyFieldRow
 └── ShellLogPanel           ← 运行日志（同侧上下分栏）
@@ -67,7 +67,7 @@ WorkspaceTreeSidebar
 | Custom Define 绿字标签 | `labelTone: "emphasis"` |
 | Link / Base / Custom 折叠段 | `propGroup` + `defaultCollapsed` |
 | 左名右值 PropertyGrid | `<table>` + 统一列宽、可拖名称列 |
-| — | `propAction` 单行按钮（如「从工作集填充」） |
+| — | （已移除）属性内按钮 | 操作放主区 / Ribbon / 页脚 |
 | — | `propSlot` 嵌入 `WorksetScopePicker` 等 |
 
 **与 `settings-card` 的分工**
@@ -82,7 +82,7 @@ WorkspaceTreeSidebar
 **与 `WorksetScopePicker`**
 
 - 短期：`propSlot("scope", "扫描范围", { component: WorksetScopePicker, props: { pageId } })`
-- 中期：拆成 `propRadio`（全空间 / 工作集 / 自定义路径）+ `propEnum`（工作集）+ `propString`（路径）+ `propAction`（同步当前工作集），便于属性表统一行高
+- 中期（已做）：`propEnum`（范围模式 / 工作集）+ `propString`（子目录）+ `propReadonly`（侧栏活动）；**不放** `propAction`
 - 见 [FileWorkset-规划.md](FileWorkset-规划.md)
 
 ---
@@ -131,7 +131,6 @@ WorkspaceTreeSidebar
 | `propEnum` | `select` | `el-select` | 同上 |
 | `propRadio` | `radio` | `el-radio-group` | 同上 |
 | `propReadonly` | `info` | 只读文本 | 无 |
-| `propAction` | `action` | 按钮 | 无 |
 | `propSlot` | `slot` | 嵌入组件 | 由子组件负责 |
 
 **待扩展（TODO）**
@@ -181,14 +180,14 @@ sequenceDiagram
 | --- | --- | --- | --- | --- | --- |
 | ✅ | `reorder_members` | C++ 成员排序 | 已迁 | 运行选项 / KEVIN_SYSTEM_CODE / 忽略规则 | 一级目录勾选暂留主区表格 |
 | ✅ | `xlink_fix` | 链接路径修正 | 已迁 | **扫描** + **分析信息**（只读） | 分析/执行留主区 |
-| ✅ | `code_rename` | 批量改名 | 已迁 | 改名 / 范围(`propSlot`) / 规则 | 预览/执行留主区 |
-| ✅ | `code_uuid` | UUID 替换 | 已迁 | 范围 + 替换策略 | 扫描/写盘留主区 |
+| ✅ | `code_rename` | 批量改名 | 已迁 | 改名 / 范围(子分组) / 规则 | 预览/执行留主区 |
+| ✅ | `code_uuid` | UUID 替换 | 已迁 | 范围(子分组) + 替换策略 | 扫描/写盘留主区 |
 | ✅ | `part_dedup` | 编号查重 | 已迁 | 扫描 / 检查项 | 扫描/导出留主区 |
 | P2 | `file_rename` | 文件改名 | 顶栏/表单区 | **规则** + **写回选项** | 与 CAD 改名文档对齐 |
 | P2 | `sw_step_export` | SW STEP 导出 | 工具栏选项 | **导出选项**（路径、覆盖策略） | Windows 专用 |
 | P2 | `step_batch` | STEP 批量转 FCStd | 表单 | **输入输出目录**、FreeCAD 选项 | |
-| P3 | `fcstd_map` | CAD 索引 | 设置子 Tab | **扫描**：强制更新零件名；**导出** → `propAction` | 大块说明留主区 |
-| P3 | `bom_export` | BOM 导出 | 工具栏/表单 | 导出格式、列选项 | 列表页以结果为主 |
+| P3 | `fcstd_map` | CAD 索引 | 已迁（部分） | **扫描选项** + **索引状态**只读 + **路径** | 列表/导出/工程内搜索留主区 |
+| P3 | `bom_export` | BOM 列表 | 已迁（只读） | **引用表**状态/边/宿主/总成/更新 + **路径** | 列表/重建引用表留主区 |
 | — | `code_index` / `code_ignore` | 索引 / 忽略 | 以表格为主 | 仅全局选项（若有） | 低优先级 |
 | — | `config` / `home` / `welcome` | 配置 / 首页 | 不适用 | 不注册 sheet | |
 | — | `file_detail` / `part_key_detail` | 详情页 | 右侧/内联表单 | 未来：**选中对象属性**（另一路线） | 非工具页 POC 范围 |
@@ -209,7 +208,7 @@ sequenceDiagram
 ### P1 · Code / CAD 高频工具（进行中 → Code 三页已完成）
 
 - [x] `xlink_fix` 属性 sheet + 主区去掉重复表单
-- [x] `code_rename` / `code_uuid`：`WorksetScopePicker` → `propSlot`
+- [x] `code_rename` / `code_uuid`：工作集范围 → `useWorksetScopePropertyGroups`（1:1 + 子分组）
 - [x] 属性区无 sheet 时显示占位（「当前页无可配置项」）
 - [ ] 统一 `onChange` 防抖写 prefs（成员排序 / xlink / 改名已有 `schedulePrefsSave` 模式，可抽共用 helper）
 
@@ -225,7 +224,7 @@ sequenceDiagram
 ### P3 · 壳层持久化与详情页
 
 - [ ] 属性区高度、名称列宽写入 `shell_layout` API
-- [ ] `fcstd_map` 设置子 Tab 部分迁入
+- [x] `fcstd_map` 扫描选项 + 只读状态/路径迁入属性
 - [ ] 选中树节点 / 文件详情 → **对象级属性面板**（独立议题，与本规划「页面级」区分）
 
 ---
