@@ -26,6 +26,7 @@ import BomExportPage from "../pages/BomExportPage.vue";
 import UnitTestsPage from "../pages/UnitTestsPage.vue";
 import PlaceholderPage from "../pages/PlaceholderPage.vue";
 import { sideDockVisibility } from "../utils/sideDockLayout";
+import { bindPointerDrag } from "../utils/pointerDrag";
 import { fetchPhoenixDatabaseStatus, recreatePhoenixDatabase } from "../api";
 import { provideAppShell } from "../composables/useAppShell";
 import { useDocumentTitle } from "../composables/useDocumentTitle";
@@ -111,28 +112,24 @@ function onRibbonOpen(pageId: string) {
   shell.goToPage(pageId);
 }
 
-function onResizeStart(e: MouseEvent, side: "left" | "right") {
-  e.preventDefault();
+function onResizeStart(e: PointerEvent, side: "left" | "right") {
   const widthKey = side === "left" ? "left_panel_width_px" : "right_panel_width_px";
   const startX = e.clientX;
   const startW = shell.shellLayout.value[widthKey];
 
-  function onMove(ev: MouseEvent) {
-    const delta = side === "right" ? startX - ev.clientX : ev.clientX - startX;
-    const next = Math.min(560, Math.max(160, startW + delta));
-    shell.shellLayout.value[widthKey] = next;
-  }
-
-  async function onUp() {
-    window.removeEventListener("mousemove", onMove);
-    window.removeEventListener("mouseup", onUp);
-    await shell.persistShellLayout({
-      [widthKey]: shell.shellLayout.value[widthKey],
-    });
-  }
-
-  window.addEventListener("mousemove", onMove);
-  window.addEventListener("mouseup", onUp);
+  bindPointerDrag(e, {
+    cursor: "col-resize",
+    onMove(ev) {
+      const delta = side === "right" ? startX - ev.clientX : ev.clientX - startX;
+      const next = Math.min(560, Math.max(160, startW + delta));
+      shell.shellLayout.value[widthKey] = next;
+    },
+    onEnd() {
+      void shell.persistShellLayout({
+        [widthKey]: shell.shellLayout.value[widthKey],
+      });
+    },
+  });
 }
 
 async function refreshLegacyDatabaseBanner() {
@@ -242,26 +239,28 @@ onUnmounted(() => {
         class="shell-resizer shell-resizer-left"
         :style="{ left: leftPanelWidth }"
         title="拖拽调节宽度"
-        @mousedown="onResizeStart($event, 'left')"
+        @pointerdown="onResizeStart($event, 'left')"
       />
       <WorkspaceTreeSidebar
         v-if="!isWelcomeFullscreen && dockVis.leftVisible"
         dock-side="left"
         :show-tree="dockVis.leftShowTree"
         :show-log="dockVis.leftShowLog"
+        :show-props="dockVis.leftShowProps"
       />
       <div
         v-if="!isWelcomeFullscreen && dockVis.rightVisible"
         class="shell-resizer shell-resizer-right"
         :style="{ right: rightPanelWidth }"
         title="拖拽调节宽度"
-        @mousedown="onResizeStart($event, 'right')"
+        @pointerdown="onResizeStart($event, 'right')"
       />
       <WorkspaceTreeSidebar
         v-if="!isWelcomeFullscreen && dockVis.rightVisible"
         dock-side="right"
         :show-tree="dockVis.rightShowTree"
         :show-log="dockVis.rightShowLog"
+        :show-props="dockVis.rightShowProps"
       />
     </div>
     <StatusBar v-if="!isWelcomeFullscreen" />

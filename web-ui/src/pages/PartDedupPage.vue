@@ -10,10 +10,9 @@ import {
 } from "../api";
 import PageHelpButton from "../components/PageHelpButton.vue";
 import { useAppShell } from "../composables/useAppShell";
+import { usePartDedupPropertySheet } from "../composables/usePartDedupPropertySheet";
 
 const shell = useAppShell();
-
-const EXT_OPTIONS = [".FCStd", ".SLDPRT", ".SLDASM", ".SLDDRW", ".step", ".stp"];
 
 const extension = ref(".SLDPRT");
 const codeLen = ref(6);
@@ -107,6 +106,26 @@ function pathsOf(group: PartDedupGroup) {
   return group.paths_display ?? group.paths;
 }
 
+let prefsSaveTimer: ReturnType<typeof setTimeout> | null = null;
+function schedulePrefsSave() {
+  if (prefsSaveTimer) clearTimeout(prefsSaveTimer);
+  prefsSaveTimer = setTimeout(() => {
+    prefsSaveTimer = null;
+    void onSave();
+  }, 400);
+}
+
+usePartDedupPropertySheet("part_dedup", {
+  scanDir,
+  extension,
+  codeLen,
+  verLen,
+  checkCode,
+  checkVersion,
+  codeMustBeDigit,
+  onPersist: schedulePrefsSave,
+});
+
 onMounted(async () => {
   try {
     await loadPrefs();
@@ -128,48 +147,13 @@ onMounted(async () => {
       </div>
     </header>
 
-    <section class="card settings-card" data-tour-page-dedup-settings>
-      <div class="settings-form">
-        <div class="form-row">
-          <span class="section-label">扫描设置</span>
-          <label class="inline-field grow" for="scan-dir">
-            <span class="inline-label">目录</span>
-            <el-input
-              id="scan-dir"
-              v-model="scanDir"
-              size="small"
-              class="mono"
-              spellcheck="false"
-              placeholder="相对工作空间，如 ."
-            />
-          </label>
-          <label class="inline-field" for="ext">
-            <span class="inline-label">扩展名</span>
-            <el-select id="ext" v-model="extension" size="small" class="ext-select">
-              <el-option v-for="opt in EXT_OPTIONS" :key="opt" :value="opt" :label="opt" />
-            </el-select>
-          </label>
-          <label class="inline-field tiny">
-            <span class="inline-label">编号</span>
-            <el-input-number v-model="codeLen" size="small" :min="1" :max="20" controls-position="right" />
-          </label>
-          <label class="inline-field tiny">
-            <span class="inline-label">版本</span>
-            <el-input-number v-model="verLen" size="small" :min="1" :max="10" controls-position="right" />
-          </label>
-        </div>
-
-        <div class="form-row form-foot">
-          <div class="option-row">
-            <el-checkbox v-model="checkCode" size="small">查编号</el-checkbox>
-            <el-checkbox v-model="checkVersion" size="small">查版本</el-checkbox>
-            <el-checkbox v-model="codeMustBeDigit" size="small">编号须数字</el-checkbox>
-          </div>
-          <div class="settings-actions" data-tour-page-dedup-scan>
-            <el-button size="small" :loading="saving" @click="onSave">保存偏好</el-button>
-            <el-button type="primary" size="small" :loading="scanning" @click="onScan">开始扫描</el-button>
-            <el-button size="small" :loading="exporting" :disabled="!scanResult" @click="onExport">导出 CSV</el-button>
-          </div>
+    <section class="card action-card" data-tour-page-dedup-scan>
+      <div class="form-foot">
+        <p class="muted small action-hint">扫描与检查项见侧栏「属性」</p>
+        <div class="settings-actions">
+          <el-button size="small" :loading="saving" @click="onSave">保存偏好</el-button>
+          <el-button type="primary" size="small" :loading="scanning" @click="onScan">开始扫描</el-button>
+          <el-button size="small" :loading="exporting" :disabled="!scanResult" @click="onExport">导出 CSV</el-button>
         </div>
       </div>
     </section>

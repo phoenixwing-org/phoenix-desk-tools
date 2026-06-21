@@ -3,7 +3,7 @@
 > 规划总纲：[Web壳层-Ribbon改型-规划.md](Web壳层-Ribbon改型-规划.md) §R4  
 > 原则：**壳层与新改版页优先 Element**；旧页按模块分批，不阻塞功能；保留 `page-shared.css` 布局约定。
 
-最后更新：2026-06-20（P3 首批已验收；**二批排期**见下方 §批次 5）
+最后更新：2026-06-21（P3 二批已实现并归档；**smoke 延后**见 [归档](Web壳层-业务页Element化-归档.md)）
 
 ---
 
@@ -37,18 +37,18 @@
 | Code 批量改名 | `code_rename` | Code | ✅ 已完成 | P1 | 表单 / 表格 / 确认框 |
 | Code UUID 替换 | `code_uuid` | Code | ✅ 已完成 | P1 | 表单/按钮 Element；命中表仍 `ResizableDataTable` |
 | C++ 成员排序 | `reorder_members` | Code | ✅ 已完成 | P2 | 工具栏 + 条目/变更 `el-table` |
-| 单元测试 | `unit_tests` | Code | ⬜ 未迁 | **P3 二批** | 多 Tab + NDJSON；**优先迁按钮/工具栏** |
+| 单元测试 | `unit_tests` | Code | ✅ 已完成 | P3 二批 | 顶栏/Tab/模块列表/关注/筛选 Element；结果大表/用例明细保留 |
 | CAD 索引 | `fcstd_map` | CAD | ✅ 已完成 | P3 | 页头/子 Tab/筛选/分页 Element；表 `ResizableDataTable` |
-| 文件改名分析 | `file_rename` | CAD | 🟡 部分 | **P3 二批** | `RenameAnalysisPanel` 按钮/表单 |
+| 文件改名分析 | `file_rename` | CAD | ✅ 已完成 | P3 二批 | 模式 Tab + `RenameAnalysisPanel` 按钮/勾选 |
 | 链接路径修正 | `xlink_fix` | CAD | ✅ 已完成 | P2 | 设置/筛选/确认 Element；问题表保留原生 |
-| BOM 导出 | `bom_export` | CAD | ⬜ 未迁 | **P3 二批** | 工具栏/按钮 |
-| BOM 应用 | `bom_apply` | CAD | ⬜ 未迁 | **P3 二批** | 工具栏/按钮 |
+| BOM 导出 | `bom_export` | CAD | ✅ 已完成 | P3 二批 | 顶栏/子 Tab/工具栏 Element；总成表 `ResizableDataTable` |
+| BOM 应用 | `bom_apply` | CAD | ✅ 已完成 | P3 二批 | 同 `file_detail`（薄包装） |
 | STEP 批量 | `step_batch` | CAD | ✅ 已完成 | P2 | |
 | SW→STEP 导出 | `sw_step_export` | CAD | ✅ 已完成 | P2 | |
 | 零件去重 | `part_dedup` | CAD | ✅ 已完成 | P2 | 表单/Tab Element；查重表保留原生 |
 | 零件目录 | `part_catalog` | CAD | ✅ 已完成 | P3 | 控件 Element；表 `ResizableDataTable` |
-| 零件键详情 | `part_key_detail` | CAD | ⬜ 未迁 | **P3 二批** | 子 Panel 按钮 |
-| 文件详情 | `file_detail` | CAD | ⬜ 未迁 | **P3 二批** | 多子 Panel；表/树保留 |
+| 零件键详情 | `part_key_detail` | CAD | ✅ 已完成 | P3 二批 | 检索栏/表单/操作列 Element；关联文件表保留 |
+| 文件详情 | `file_detail` | CAD | ✅ 已完成 | P3 二批 | 子 Tab + 各 Panel 工具栏 Element；引用/装配表/树保留 |
 
 ---
 
@@ -71,14 +71,15 @@
 2. **P1 · Code 工具 + 配置**：✅ UUID 替换、成员排序、配置主表单  
 3. **P2 · CAD 中页**：✅ 链接修正、STEP 批量、SW 导出、零件去重、Code 忽略 Panel  
 4. **P3 · 大表页（首批）**：✅ 零件目录、CAD/Code 索引（工具栏）  
-5. **P3 · 大表页（二批 · 计划）**：单元测试、BOM 导出/应用、文件改名 Panel、文件/零件键详情 — **工具栏与按钮 Element 化**，`ResizableDataTable`/树/NDJSON 流保留  
+5. **P3 · 大表页（二批）**：✅ 单元测试、BOM 列表、改名分析、`file_detail`/`part_key_detail` — 工具栏与按钮 Element 化；`ResizableDataTable`/树/NDJSON 流保留  
 
 ---
 
 ## 验收
 
 - [x] P0–P3 首批页 smoke 通过（2026-06-20；清单见 [归档](Web壳层-业务页Element化-归档.md)）  
-- [x] `pnpm build` 通过  
-- [~] 页内无裸 `.btn` / `.input`（大表页、单元测试 / BOM 等待续批次）  
+- [x] P3 二批实现 + `pnpm build`（2026-06-21；范围见 [归档 §P3 二批](Web壳层-业务页Element化-归档.md)）  
+- [ ] **P3 二批 smoke（延后）**：单元测试 · BOM 列表 · 改名分析 · 文件详情各 Tab · 零件详情检索/保存 — 见 [TODO §R4](../TODO.md)  
+- [~] 页内无裸 `.btn` / `.input`（引用/装配/关注等内嵌表仍保留原生）  
 - [~] 危险操作：`promptChoice`（写盘/侧栏）；配置页仍可用 `ElMessageBox`  
 - [x] 本表与 `doc/TODO.md` §R4 同步  

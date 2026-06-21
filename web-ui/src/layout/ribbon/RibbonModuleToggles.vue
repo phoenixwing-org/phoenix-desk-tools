@@ -42,7 +42,6 @@ async function toggleModule(id: string) {
         {{ opt.shortLabel }}
       </button>
     </div>
-    <div v-if="layout !== 'inline'" class="ribbon-module-caption">模块</div>
   </div>
 </template>
 
@@ -52,8 +51,9 @@ async function toggleModule(id: string) {
   flex-direction: column;
   flex-shrink: 0;
   min-width: 0;
-  padding: 0 6px;
+  padding: 0 8px;
   border-right: 1px solid var(--ribbon-group-divider);
+  justify-content: center;
 }
 
 .ribbon-module-toggles.layout-inline {
@@ -66,33 +66,41 @@ async function toggleModule(id: string) {
 
 .ribbon-module-body {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 2px;
   flex: 1;
   min-height: 0;
-  max-height: var(--ribbon-group-body-height, 40px);
-  padding: 2px 0 1px;
+  min-width: 48px;
+  max-height: 66px;
+  padding: 0;
 }
 
 .layout-inline .ribbon-module-body {
+  flex-direction: row;
+  align-items: center;
   max-height: none;
+  min-width: 0;
   padding: 0;
   gap: 2px;
 }
 
 .ribbon-module-btn {
-  height: 22px;
-  min-width: 44px;
-  padding: 0 10px;
+  height: 20px;
+  min-width: 0;
+  width: 100%;
+  padding: 0 8px;
   border: 1px solid transparent;
   border-radius: var(--ribbon-btn-radius, 2px);
   background: transparent;
   color: #64748b;
-  font-size: 0.68rem;
+  font-size: 0.66rem;
   font-weight: 600;
   line-height: 1;
   cursor: pointer;
   white-space: nowrap;
+  text-align: center;
 }
 
 .layout-inline .ribbon-module-btn {
@@ -116,17 +124,5 @@ async function toggleModule(id: string) {
 .ribbon-module-btn.on:hover {
   background: #bfdbfe;
   border-color: #60a5fa;
-}
-
-.ribbon-module-caption {
-  flex-shrink: 0;
-  padding: 1px 0 2px;
-  text-align: center;
-  font-size: 0.62rem;
-  line-height: 1.1;
-  color: var(--muted, #64748b);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 </style>

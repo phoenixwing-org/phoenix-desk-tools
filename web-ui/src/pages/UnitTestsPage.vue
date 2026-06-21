@@ -10,6 +10,7 @@ import {
   type TestModuleCatalogEntry,
   type TestCaseCatalogEntry,
   type UnitTestPlan,
+  type UnitTestPlanModule,
   type UnitTestCaseResult,
   type UnitTestRunOptions,
   type UnitTestRunResult,
@@ -34,6 +35,15 @@ import {
   watchlistTotalFailCount,
   type UnitTestWatchlistEntry,
 } from "../utils/unitTestWatchlist";
+import {
+  hasModuleHistory,
+  loadModuleHistory,
+  moduleLastRunAt,
+  moduleRunCount,
+  recordModuleRuns,
+  sortPlanModules,
+  type ModuleHistoryMap,
+} from "../utils/unitTestModuleHistory";
 
 const shell = useAppShell();
 const pageStore = useUnitTestsPageStore();
@@ -82,6 +92,8 @@ const filterWatchlistOnly = ref(false);
 const lastIgnoredCount = ref(0);
 const runProgressIgnored = ref(0);
 const rerunningWatchlistId = ref<string | null>(null);
+const rerunningModule = ref<string | null>(null);
+const moduleHistory = ref<ModuleHistoryMap>(loadModuleHistory());
 const currentRunId = ref<string | null>(null);
 let runAbortController: AbortController | null = null;
 
@@ -100,6 +112,7 @@ const showRunScopeCases = computed({
   get: () => pageStore.showRunScopeCases,
   set: (value: boolean) => pageStore.setShowRunScopeCases(value),
 });
+const moduleSortBy = computed(() => pageStore.moduleSortBy);
 
 const runPlan = ref<UnitTestPlan | null>(null);
 const runPlanLoading = ref(false);
@@ -127,6 +140,13 @@ const watchlistAllChecked = computed(
 );
 
 const runScopeModuleNames = computed(() => runPlan.value?.modules.map((m) => m.module) ?? []);
+
+const sortedRunPlanModules = computed(() => {
+  const mods = runPlan.value?.modules ?? [];
+  return sortPlanModules(mods, moduleSortBy.value, moduleHistory.value);
+});
+
+const showModuleHistoryColumns = computed(() => hasModuleHistory(moduleHistory.value));
 
 const runScopeModulesAllChecked = computed(
   () =>
@@ -328,6 +348,34 @@ function classifyModule(module: string): string {
     return "cad";
   }
   return "platform";
+}
+
+function onModuleSortChange(sortBy: "plan" | "last_run_at" | "run_count") {
+  pageStore.setModuleSortBy(sortBy);
+}
+
+function formatModuleLastRun(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function runScopeRowClass({ row }: { row: UnitTestPlanModule }) {
+  return runCheckedModules.value.has(row.module) ? "" : "run-scope-row-off";
+}
+
+function recordRunHistoryFromResult(r: UnitTestRunResult | null) {
+  if (!r?.modules.length) return;
+  moduleHistory.value = recordModuleRuns(
+    r.modules.map((m) => m.module),
+    moduleHistory.value,
+  );
 }
 
 function toggleCase(id: string) {
@@ -674,6 +722,7 @@ async function executeRun(args: {
       signal: runAbortController.signal,
     });
     cancelled = !!result.value.summary.cancelled;
+    recordRunHistoryFromResult(result.value);
     lastRunSuites.value = args.lastRunSuiteIds ?? [...runChecked.value];
     lastIgnoredCount.value = result.value.summary.ignored ?? 0;
     void loadModuleCatalog(result.value.modules.map((m) => m.module));
@@ -777,6 +826,21 @@ async function onRerunWatchlistEntry(entry: UnitTestWatchlistEntry) {
   }
 }
 
+async function onRunSingleModule(mod: UnitTestPlanModule) {
+  if (running.value) return;
+  rerunningModule.value = mod.module;
+  try {
+    await executeRun({
+      suiteIds: [mod.suite_id],
+      runOptions: { include_modules: [mod.module] },
+      logLabel: shortModule(mod.module),
+      lastRunSuiteIds: [...runChecked.value],
+    });
+  } finally {
+    rerunningModule.value = null;
+  }
+}
+
 watch(watchlist, () => {
   syncWatchlistChecked();
   void loadCaseCatalog();
@@ -812,6 +876,7 @@ watch(
 
 onMounted(() => {
   pageStore.hydrate();
+  moduleHistory.value = loadModuleHistory();
   void loadSuites();
   void loadModuleCatalog();
   watchlist.value = loadWatchlist();
@@ -840,71 +905,81 @@ onMounted(() => {
     <section class="card run-card" data-tour-page-unit-tests-suites>
       <div class="run-toolbar">
         <h2 class="section-label">运行范围</h2>
-        <div class="option-chips run-chips">
-          <label
+        <div class="run-chips">
+          <el-checkbox
             v-for="suite in runnableSuites"
             :key="suite.id"
-            class="opt-chip suite-chip-inline"
-            :class="{ checked: runChecked.has(suite.id) }"
+            :model-value="runChecked.has(suite.id)"
+            :disabled="running"
+            border
+            size="small"
+            class="suite-chip"
+            @change="toggleRunSuite(suite.id, Boolean($event))"
           >
-            <input
-              type="checkbox"
-              :checked="runChecked.has(suite.id)"
-              :disabled="running"
-              @change="toggleRunSuite(suite.id, ($event.target as HTMLInputElement).checked)"
-            />
-            <span>{{ suite.label }}</span>
+            {{ suite.label }}
             <span class="suite-count">{{ suite.module_count }}</span>
-          </label>
+          </el-checkbox>
         </div>
         <div class="run-toolbar-actions">
-          <button
-            type="button"
-            class="opt-chip scope-list-btn suite-chip-inline"
-            :class="{ checked: showRunScopeList }"
+          <el-checkbox
+            :model-value="showRunScopeList"
             :disabled="running"
-            @click="showRunScopeList = !showRunScopeList"
+            border
+            size="small"
+            class="scope-list-btn"
+            @change="showRunScopeList = Boolean($event)"
           >
-            <span>列出运行范围</span>
+            列出运行范围
             <span v-if="runScopeButtonModuleCount" class="suite-count">{{ runScopeButtonModuleCount }}</span>
-          </button>
-          <button type="button" class="link-btn" :disabled="running" @click="selectAllRun">全选</button>
-          <button type="button" class="link-btn" :disabled="running" @click="clearAllRun">清空</button>
-          <button
+          </el-checkbox>
+          <el-button link size="small" :disabled="running" @click="selectAllRun">全选</el-button>
+          <el-button link size="small" :disabled="running" @click="clearAllRun">清空</el-button>
+          <el-button
             v-if="watchlistCount"
-            type="button"
-            class="link-btn"
+            link
+            size="small"
             :disabled="running"
             @click="onRun('watchlist')"
           >
             全部复测（{{ watchlistCount }}）
-          </button>
-          <button
+          </el-button>
+          <el-button
             v-if="running"
-            type="button"
-            class="btn btn-cancel btn-sm"
+            type="danger"
+            plain
+            size="small"
             data-tour-page-unit-tests-cancel
             @click="cancelRun"
           >
             终止
-          </button>
-          <button
+          </el-button>
+          <el-button
             v-else
-            type="button"
-            class="btn primary btn-sm"
+            type="primary"
+            size="small"
             data-tour-page-unit-tests-run
             :disabled="!canRunFull"
             @click="onRun('full')"
           >
             运行（{{ runCheckedCount }}<template v-if="showRunScopeList && runScopeSelectedSummary && runScopeSelectedSummary.modules < runScopeSelectedSummary.totalModules"> · {{ runScopeSelectedSummary.modules }} 模块</template>）
-          </button>
+          </el-button>
         </div>
       </div>
       <div v-if="showRunScopeList" class="run-scope-controls">
-        <label class="opt-chip scope-toggle">
-          <input v-model="showRunScopeCases" type="checkbox" :disabled="running || runPlanLoading" />
-          <span>展开用例</span>
-        </label>
+        <el-checkbox v-model="showRunScopeCases" :disabled="running || runPlanLoading">
+          展开用例
+        </el-checkbox>
+        <el-radio-group
+          v-if="runPlan?.modules.length"
+          :model-value="moduleSortBy"
+          size="small"
+          :disabled="running"
+          @change="onModuleSortChange($event as 'plan' | 'last_run_at' | 'run_count')"
+        >
+          <el-radio-button value="plan">默认</el-radio-button>
+          <el-radio-button value="last_run_at">最近运行</el-radio-button>
+          <el-radio-button value="run_count">运行次数</el-radio-button>
+        </el-radio-group>
         <span v-if="showRunScopeList && runPlan && !runPlanLoading" class="run-scope-summary muted small">
           {{ runPlan.suite_label }}
           <template v-if="runScopeSelectedSummary && runScopeSelectedSummary.modules < runScopeSelectedSummary.totalModules">
@@ -920,63 +995,90 @@ onMounted(() => {
         <span v-if="runPlanError" class="error-text small">{{ runPlanError }}</span>
       </div>
       <div v-if="showRunScopeList && runPlan?.modules.length" class="run-scope-list">
-        <table class="data-table compact run-scope-table">
-          <colgroup>
-            <col class="col-check" />
-            <col />
-            <col />
-            <col />
-            <col class="col-num" />
-          </colgroup>
-          <thead>
-            <tr>
-              <th class="col-check">
-                <input
-                  type="checkbox"
-                  :checked="runScopeModulesAllChecked"
-                  :disabled="running || !runPlan.modules.length"
-                  @change="toggleAllRunScopeModules(($event.target as HTMLInputElement).checked)"
-                />
-              </th>
-              <th>模块</th>
-              <th>简介</th>
-              <th>套件</th>
-              <th class="col-num">用例</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-for="mod in runPlan.modules" :key="mod.module">
-              <tr :class="{ 'run-scope-row-off': !runCheckedModules.has(mod.module) }">
-                <td class="col-check">
-                  <input
-                    type="checkbox"
-                    :checked="runCheckedModules.has(mod.module)"
-                    :disabled="running"
-                    @change="toggleRunScopeModule(mod.module, ($event.target as HTMLInputElement).checked)"
-                  />
-                </td>
-                <td class="mono">{{ shortModule(mod.module) }}</td>
-                <td class="module-desc" :title="moduleDescription(mod.module)">
-                  {{ moduleDescriptionBrief(mod.module) }}
-                </td>
-                <td>{{ suiteShortLabel(mod.suite_id) }}</td>
-                <td class="col-num">{{ mod.case_count }}</td>
-              </tr>
-              <tr v-if="showRunScopeCases && mod.cases?.length" class="run-scope-cases-row">
-                <td colspan="5">
-                  <ul class="run-scope-cases">
-                    <li v-for="c in mod.cases" :key="c.id" class="mono">
-                      {{ c.class_name }}.{{ c.method }}
-                      <span v-if="caseCatalog[c.id]?.summary" class="case-brief muted">
-                        — {{ caseCatalog[c.id]?.summary }}
-                      </span>
-                    </li>
-                  </ul>
-                </td>
-              </tr>
+        <el-table
+          :data="sortedRunPlanModules"
+          row-key="module"
+          size="small"
+          stripe
+          class="run-scope-table"
+          :row-class-name="runScopeRowClass"
+        >
+          <el-table-column v-if="showRunScopeCases" type="expand" width="36">
+            <template #default="{ row }">
+              <ul v-if="row.cases?.length" class="run-scope-cases">
+                <li v-for="c in row.cases" :key="c.id" class="mono">
+                  {{ c.class_name }}.{{ c.method }}
+                  <span v-if="caseCatalog[c.id]?.summary" class="case-brief muted">
+                    — {{ caseCatalog[c.id]?.summary }}
+                  </span>
+                </li>
+              </ul>
+              <span v-else class="muted small">无用例明细</span>
             </template>
-          </tbody>
-        </table>
+          </el-table-column>
+          <el-table-column width="44" align="center">
+            <template #header>
+              <el-checkbox
+                :model-value="runScopeModulesAllChecked"
+                :disabled="running || !runPlan.modules.length"
+                @change="toggleAllRunScopeModules(Boolean($event))"
+              />
+            </template>
+            <template #default="{ row }">
+              <el-checkbox
+                :model-value="runCheckedModules.has(row.module)"
+                :disabled="running"
+                @change="toggleRunScopeModule(row.module, Boolean($event))"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column label="模块" min-width="168" class-name="mono">
+            <template #default="{ row }">{{ shortModule(row.module) }}</template>
+          </el-table-column>
+          <el-table-column label="简介" min-width="200" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span class="module-desc-cell">{{ moduleDescriptionBrief(row.module) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="套件" width="72" align="center">
+            <template #default="{ row }">
+              <el-tag size="small" effect="plain">{{ suiteShortLabel(row.suite_id) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="用例" width="56" align="center">
+            <template #default="{ row }">{{ row.case_count }}</template>
+          </el-table-column>
+          <el-table-column v-if="showModuleHistoryColumns" label="次数" width="52" align="center">
+            <template #default="{ row }">
+              <span class="run-count-cell">{{ moduleRunCount(row.module, moduleHistory) || "—" }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column v-if="showModuleHistoryColumns" label="最近" width="88" align="center">
+            <template #default="{ row }">
+              <span
+                class="run-time-cell"
+                :title="moduleLastRunAt(row.module, moduleHistory) ?? undefined"
+              >
+                {{ formatModuleLastRun(moduleLastRunAt(row.module, moduleHistory)) }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column label="" width="68" align="center" class-name="col-run">
+            <template #default="{ row }">
+              <el-button
+                size="small"
+                type="primary"
+                plain
+                class="module-run-btn"
+                :loading="rerunningModule === row.module"
+                :disabled="running && rerunningModule !== row.module"
+                @click="onRunSingleModule(row)"
+              >
+                运行
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
       </div>
       <div v-if="running && runProgress" class="run-progress">
         <div class="run-progress-head">
@@ -985,7 +1087,7 @@ onMounted(() => {
             {{ runProgress.completedCases }}/{{ runProgress.totalCases || "?" }}
             · {{ runElapsedMs }} ms
           </span>
-          <button type="button" class="btn btn-cancel btn-sm" @click="cancelRun">终止</button>
+          <el-button type="danger" plain size="small" @click="cancelRun">终止</el-button>
         </div>
         <div class="progress-bar run-progress-bar">
           <div
@@ -1023,25 +1125,18 @@ onMounted(() => {
       </p>
     </section>
 
-    <nav v-if="watchlistCount || result" class="page-tabs">
-      <button
-        type="button"
-        class="page-tab"
-        :class="{ active: activeTab === 'results' }"
-        @click="activeTab = 'results'"
-      >
-        运行结果
-      </button>
-      <button
-        type="button"
-        class="page-tab"
-        :class="{ active: activeTab === 'watchlist' }"
-        @click="activeTab = 'watchlist'"
-      >
+    <el-radio-group
+      v-if="watchlistCount || result"
+      v-model="activeTab"
+      size="small"
+      class="page-tabs"
+    >
+      <el-radio-button value="results">运行结果</el-radio-button>
+      <el-radio-button value="watchlist">
         失败关注
         <span v-if="watchlistCount" class="tab-badge">{{ watchlistCount }}</span>
-      </button>
-    </nav>
+      </el-radio-button>
+    </el-radio-group>
 
     <section v-if="activeTab === 'watchlist'" class="card watchlist-card">
       <div class="watchlist-head">
@@ -1053,50 +1148,33 @@ onMounted(() => {
             {{ watchlistCount }} 条 · 累计失败 {{ watchlistTotalFails }} 次
             <template v-if="watchlistCheckedCount"> · 已勾选 {{ watchlistCheckedCount }}</template>
           </span>
-          <div v-if="watchlistCount" class="watchlist-sort option-chips">
-            <span class="watchlist-sort-label muted small">排序</span>
-            <button
-              type="button"
-              class="opt-chip"
-              :class="{ checked: watchlistPrefs.sort_by === 'last_seen_at' }"
-              @click="onWatchlistSortChange('last_seen_at')"
-            >
-              最近失败
-            </button>
-            <button
-              type="button"
-              class="opt-chip"
-              :class="{ checked: watchlistPrefs.sort_by === 'fail_count' }"
-              @click="onWatchlistSortChange('fail_count')"
-            >
-              失败次数
-            </button>
-          </div>
-          <label class="watchlist-pref">
-            <input
-              type="checkbox"
-              :checked="watchlistPrefs.default_run_on_full"
-              @change="onWatchlistDefaultRunOnFullChange(($event.target as HTMLInputElement).checked)"
-            />
+          <el-radio-group
+            v-if="watchlistCount"
+            :model-value="watchlistPrefs.sort_by"
+            size="small"
+            @change="onWatchlistSortChange($event as 'fail_count' | 'last_seen_at')"
+          >
+            <el-radio-button value="last_seen_at">最近失败</el-radio-button>
+            <el-radio-button value="fail_count">失败次数</el-radio-button>
+          </el-radio-group>
+          <el-checkbox
+            :model-value="watchlistPrefs.default_run_on_full"
+            @change="onWatchlistDefaultRunOnFullChange(Boolean($event))"
+          >
             新失败默认全量时运行
-          </label>
+          </el-checkbox>
           <div class="watchlist-run-actions">
-            <button
-              type="button"
-              class="btn primary btn-sm"
+            <el-button
+              type="primary"
+              size="small"
               :disabled="running || !watchlistCheckedCount"
               @click="onRunWatchlistSelected"
             >
               复测勾选（{{ watchlistCheckedCount }}）
-            </button>
-            <button
-              type="button"
-              class="link-btn"
-              :disabled="running || !watchlistCount"
-              @click="onRun('watchlist')"
-            >
+            </el-button>
+            <el-button link size="small" :disabled="running || !watchlistCount" @click="onRun('watchlist')">
               全部复测
-            </button>
+            </el-button>
           </div>
         </div>
       </div>
@@ -1117,11 +1195,10 @@ onMounted(() => {
           <thead>
             <tr>
               <th class="col-check">
-                <input
-                  type="checkbox"
-                  :checked="watchlistAllChecked"
+                <el-checkbox
+                  :model-value="watchlistAllChecked"
                   :disabled="running || !watchlistCount"
-                  @change="toggleAllWatchlistChecked(($event.target as HTMLInputElement).checked)"
+                  @change="toggleAllWatchlistChecked(Boolean($event))"
                 />
               </th>
               <th class="col-case">用例</th>
@@ -1148,11 +1225,10 @@ onMounted(() => {
               ]"
             >
               <td class="col-check">
-                <input
-                  type="checkbox"
-                  :checked="watchlistChecked.has(entry.id)"
+                <el-checkbox
+                  :model-value="watchlistChecked.has(entry.id)"
                   :disabled="running"
-                  @change="toggleWatchlistChecked(entry.id, ($event.target as HTMLInputElement).checked)"
+                  @change="toggleWatchlistChecked(entry.id, Boolean($event))"
                 />
               </td>
               <td
@@ -1171,32 +1247,28 @@ onMounted(() => {
               <td class="col-num">{{ entry.fail_count }}</td>
               <td class="col-time" :title="entry.last_seen_at">{{ formatWatchlistTime(entry.last_seen_at) }}</td>
               <td class="col-full">
-                <input
-                  type="checkbox"
-                  :checked="entry.run_on_full"
+                <el-checkbox
+                  :model-value="entry.run_on_full"
                   :disabled="running"
-                  @change="onWatchlistRunOnFullChange(entry, ($event.target as HTMLInputElement).checked)"
+                  @change="onWatchlistRunOnFullChange(entry, Boolean($event))"
                 />
               </td>
               <td class="col-run">
-                <button
-                  type="button"
-                  class="watchlist-run-btn"
-                  :disabled="running"
+                <el-button
+                  type="primary"
+                  plain
+                  size="small"
+                  :loading="rerunningWatchlistId === entry.id"
+                  :disabled="running && rerunningWatchlistId !== entry.id"
                   @click="onRerunWatchlistEntry(entry)"
                 >
-                  {{ rerunningWatchlistId === entry.id ? "…" : "复测" }}
-                </button>
+                  复测
+                </el-button>
               </td>
               <td class="col-action">
-                <button
-                  type="button"
-                  class="link-btn mini"
-                  :disabled="running"
-                  @click="removeFromWatchlist(entry)"
-                >
+                <el-button link size="small" :disabled="running" @click="removeFromWatchlist(entry)">
                   移除
-                </button>
+                </el-button>
               </td>
             </tr>
           </tbody>
@@ -1251,48 +1323,37 @@ onMounted(() => {
       <div class="filter-bar">
         <div class="filter-group">
           <span class="filter-label">结果 · 套件</span>
-          <div class="option-chips">
-            <label
+          <div class="filter-chips">
+            <el-checkbox
               v-for="id in lastRunSuites"
               :key="id"
-              class="opt-chip"
-              :class="{ checked: resultSuiteChecked.has(id) }"
+              :model-value="resultSuiteChecked.has(id)"
+              border
+              size="small"
+              @change="toggleResultSuite(id, Boolean($event))"
             >
-              <input
-                type="checkbox"
-                :checked="resultSuiteChecked.has(id)"
-                @change="toggleResultSuite(id, ($event.target as HTMLInputElement).checked)"
-              />
-              <span>{{ suiteLabelById.get(id) ?? id }}</span>
-            </label>
-            <button type="button" class="link-btn mini" @click="selectAllResultSuites">全选</button>
+              {{ suiteLabelById.get(id) ?? id }}
+            </el-checkbox>
+            <el-button link size="small" @click="selectAllResultSuites">全选</el-button>
           </div>
         </div>
         <div class="filter-group">
           <span class="filter-label">结果 · 状态</span>
-          <div class="option-chips">
-            <label
+          <div class="filter-chips">
+            <el-checkbox
               v-for="opt in STATUS_FILTER_OPTIONS"
               :key="opt.id"
-              class="opt-chip"
-              :class="{ checked: resultStatusChecked.has(opt.id) }"
+              :model-value="resultStatusChecked.has(opt.id)"
+              border
+              size="small"
+              @change="toggleResultStatus(opt.id, Boolean($event))"
             >
-              <input
-                type="checkbox"
-                :checked="resultStatusChecked.has(opt.id)"
-                @change="toggleResultStatus(opt.id, ($event.target as HTMLInputElement).checked)"
-              />
-              <span>{{ opt.label }}</span>
-            </label>
-            <button type="button" class="link-btn mini" @click="selectOnlyFailedResults">仅失败</button>
-            <button
-              v-if="watchlistCount"
-              type="button"
-              class="link-btn mini"
-              @click="filterResultsToWatchlist"
-            >
+              {{ opt.label }}
+            </el-checkbox>
+            <el-button link size="small" @click="selectOnlyFailedResults">仅失败</el-button>
+            <el-button v-if="watchlistCount" link size="small" @click="filterResultsToWatchlist">
               仅关注项
-            </button>
+            </el-button>
           </div>
         </div>
         <span class="count">
@@ -1399,6 +1460,22 @@ onMounted(() => {
 .run-chips {
   flex: 1 1 auto;
   min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.suite-chip :deep(.el-checkbox__label) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.scope-list-btn :deep(.el-checkbox__label) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .run-toolbar-actions {
@@ -1443,39 +1520,69 @@ onMounted(() => {
   font: inherit;
 }
 
+.run-scope-sort {
+  gap: 4px;
+}
+
+.run-scope-sort-label {
+  margin-right: 2px;
+}
+
 .run-scope-list {
   margin-top: 8px;
   max-height: min(40vh, 320px);
   overflow: auto;
-  border: 1px solid var(--border);
+  border: 1px solid var(--el-border-color-lighter, var(--border));
   border-radius: 6px;
 }
 
 .run-scope-table {
-  margin: 0;
+  width: 100%;
 }
 
-.run-scope-table col.col-check {
-  width: 36px;
+.run-scope-table :deep(.el-table__header th) {
+  font-size: 0.76rem;
 }
 
-.run-scope-table .col-check {
-  text-align: center;
+.run-scope-table :deep(.mono) {
+  font-family: ui-monospace, monospace;
+  font-size: 0.78rem;
 }
 
-.run-scope-row-off {
+.run-scope-table :deep(.run-scope-row-off) {
   opacity: 0.55;
 }
 
-.run-scope-cases-row td {
-  background: #f8fafc;
-  padding-top: 0;
-  padding-bottom: 8px;
+.run-scope-table :deep(.run-scope-row-off td) {
+  background: transparent;
+}
+
+.module-desc-cell {
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.run-count-cell,
+.run-time-cell {
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.run-scope-table :deep(.col-run .cell) {
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+.module-run-btn {
+  min-width: 44px;
+  padding-left: 10px;
+  padding-right: 10px;
 }
 
 .run-scope-cases {
   margin: 0;
-  padding: 0 0 0 1.2em;
+  padding: 4px 12px 8px 28px;
   font-size: 0.78rem;
   line-height: 1.45;
 }
@@ -1601,63 +1708,21 @@ onMounted(() => {
 }
 
 .page-tabs {
-  display: flex;
-  gap: 0;
   margin: 0 0 0;
-  padding: 0 4px;
-  border-bottom: 1px solid var(--border);
-}
-
-.page-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin: 0;
-  padding: 8px 14px 7px;
-  border: none;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  background: transparent;
-  color: var(--muted);
-  font-size: 0.8rem;
-  font-weight: 500;
-  line-height: 1.2;
-  cursor: pointer;
-  transition: color 0.12s ease, border-color 0.12s ease;
-}
-
-.page-tab:hover:not(.active) {
-  color: #334155;
-}
-
-.page-tab.active {
-  color: #1d4ed8;
-  font-weight: 600;
-  border-bottom-color: #2563eb;
-  background: transparent;
-}
-
-.tab-badge {
-  min-width: 16px;
-  padding: 0 5px;
-  border-radius: 999px;
-  background: #e2e8f0;
-  color: #64748b;
-  font-size: 0.68rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.45;
-}
-
-.page-tab.active .tab-badge {
-  background: #dbeafe;
-  color: #1d4ed8;
+  flex-shrink: 0;
 }
 
 .page-tabs + .card {
-  margin-top: 0;
+  margin-top: 8px;
   border-top-left-radius: 0;
   border-top-right-radius: 0;
+}
+
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
 }
 
 .watchlist-card {
@@ -1710,12 +1775,18 @@ onMounted(() => {
   color: var(--muted);
 }
 
-.watchlist-sort {
-  gap: 4px;
-}
-
-.watchlist-sort-label {
-  margin-right: 2px;
+.tab-badge {
+  margin-left: 4px;
+  min-width: 16px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.45;
+  vertical-align: middle;
 }
 
 .watchlist-table-wrap {

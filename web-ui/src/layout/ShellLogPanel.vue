@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
+import { Close, Delete } from "@element-plus/icons-vue";
 import { useAppShell } from "../composables/useAppShell";
 
 const shell = useAppShell();
@@ -39,8 +40,12 @@ watch(
         <span v-if="sourceLabel" class="log-src">· {{ sourceLabel }}</span>
       </span>
       <div class="log-actions">
-        <button type="button" class="mini" title="清空日志" @click="onClear">清空</button>
-        <button type="button" class="mini" title="收起日志区" @click="onClose">×</button>
+        <el-button text size="small" class="log-icon-btn" title="清空日志" @click="onClear">
+          <el-icon><Delete /></el-icon>
+        </el-button>
+        <el-button text size="small" class="log-icon-btn" title="收起日志区" @click="onClose">
+          <el-icon><Close /></el-icon>
+        </el-button>
       </div>
     </header>
     <pre ref="preRef" class="log-body">{{ shell.logText.value || "（暂无日志）" }}</pre>
@@ -80,17 +85,19 @@ watch(
 
 .log-actions {
   display: flex;
-  gap: 4px;
+  gap: 2px;
+  flex-shrink: 0;
 }
 
-.mini {
-  padding: 1px 7px;
-  border: 1px solid var(--border-strong);
-  border-radius: 4px;
-  background: var(--btn-bg);
-  font-size: 0.72rem;
-  cursor: pointer;
-  line-height: 1.4;
+.log-icon-btn {
+  margin: 0;
+  padding: 4px;
+  min-height: auto;
+  color: var(--muted);
+}
+
+.log-icon-btn:hover {
+  color: var(--text);
 }
 
 .log-body {

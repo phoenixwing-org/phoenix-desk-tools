@@ -580,6 +580,16 @@ def reorder_cpp_file(path: Path, dry_run: bool = False) -> bool | None:
 
 DOXYGEN_GROUP_OPEN_RE = re.compile(r"^\s*///@\{")
 DOXYGEN_GROUP_CLOSE_RE = re.compile(r"^\s*///@\}")
+KEVIN_SYSTEM_CODE_START_RE = re.compile(r"^\s*//\s*KEVIN_SYSTEM_CODE\s+START\b")
+KEVIN_SYSTEM_CODE_END_RE = re.compile(r"^\s*//\s*KEVIN_SYSTEM_CODE\s+END\b")
+KEVIN_SYSTEM_CODE_NOTE_RE = re.compile(r"@note\s+KEVIN_SYSTEM_CODE\b")
+FUNCTIONS_SECTION_LABEL_RE = re.compile(r"\bfunctions\b", re.IGNORECASE)
+KEVIN_SYSTEM_CODE_MODES = frozenset({"merge_strip", "keep_markers", "off"})
+
+
+def normalize_kevin_system_code_mode(mode: str | None) -> str:
+    m = (mode or "merge_strip").strip().lower()
+    return m if m in KEVIN_SYSTEM_CODE_MODES else "merge_strip"
 
 
 @dataclass
@@ -908,7 +918,12 @@ def _collect_blank_pairs(items: List[DeclItem]) -> set:
     return pairs
 
 
-def _split_class_items(body: str, class_name: str = "") -> Tuple[str, List[AccessSection]]:
+def _split_class_items(
+    body: str,
+    class_name: str = "",
+    *,
+    kevin_system_code_mode: str = "merge_strip",
+) -> Tuple[str, List[AccessSection]]:
     """Split class body into preamble (macros) and access sections."""
     m = ACCESS_RE.search(body)
     if not m:
@@ -925,7 +940,7 @@ def _split_class_items(body: str, class_name: str = "") -> Tuple[str, List[Acces
         label = _normalize_access_label(match.group(2).strip())
         indent = match.group(1)
         label_text = match.group(0).rstrip()
-        items = _split_declarations(chunk, class_name)
+        items = _split_declarations(chunk, class_name, kevin_system_code_mode=kevin_system_code_mode)
         blank_pairs = _collect_blank_pairs(items)
         sections.append(
             AccessSection(
@@ -1152,20 +1167,223 @@ def _split_declaration_run(chunk: str, class_name: str) -> List[DeclItem]:
     return items
 
 
-def _split_declarations(chunk: str, class_name: str) -> List[DeclItem]:
+def _starts_with_blank_line(text: str) -> bool:
+    return bool(re.match(r"^[ \t]*\r?\n", text))
+
+
+def _strip_one_leading_blank_line(text: str) -> str:
+    return re.sub(r"^[ \t]*\r?\n", "", text, count=1)
+
+
+def _sort_system_code_items(items: List[DeclItem], class_name: str) -> List[DeclItem]:
+    for it in items:
+        if not it.name:
+            it.kind, it.name = _extract_decl_name(it.text, class_name)
+    specials = [d for d in items if d.kind == "special"]
+    rest = [d for d in items if d.kind != "special"]
+    specials.sort(key=lambda d: _special_header_key(class_name, d.name, d.text))
+    rest.sort(key=_sortable_decl_key)
+    return specials + rest
+
+
+def _is_kevin_system_code_section(sec: AccessSection) -> bool:
+    return "KEVIN_SYSTEM_CODE" in (sec.label_text or "")
+
+
+def _is_functions_section(sec: AccessSection) -> bool:
+    return bool(FUNCTIONS_SECTION_LABEL_RE.search(sec.label_text or ""))
+
+
+def _strip_kevin_system_code_marker_lines(text: str) -> str:
+    out: List[str] = []
+    for line in text.splitlines(keepends=True):
+        if KEVIN_SYSTEM_CODE_START_RE.match(line) or KEVIN_SYSTEM_CODE_END_RE.match(line):
+            continue
+        out.append(line)
+    return "".join(out)
+
+
+def _decl_has_kevin_system_code_note(text: str) -> bool:
+    return bool(KEVIN_SYSTEM_CODE_NOTE_RE.search(text))
+
+
+def _is_static_method_decl(text: str, class_name: str) -> bool:
+    kind, _ = _extract_decl_name(text, class_name)
+    if kind != "method":
+        return False
+    sig = _strip_comment_lines(text)
+    return bool(re.search(r"\bstatic\b", sig))
+
+
+def _decl_items_from_chunk(chunk: str, class_name: str) -> List[DeclItem]:
+    cleaned = _strip_kevin_system_code_marker_lines(chunk)
+    if not cleaned.strip():
+        return []
+    return _split_declaration_run(cleaned, class_name)
+
+
+def _expand_section_decl_pool(sec: AccessSection, class_name: str) -> Tuple[List[DeclItem], List[DeclItem]]:
+    """Return (fixed non-sortable items, declaration pool for system-code merge)."""
+    fixed: List[DeclItem] = []
+    pool: List[DeclItem] = []
+    for it in sec.items:
+        if it.kind == "avoidance":
+            fixed.append(it)
+        elif it.kind == "system_code":
+            pool.extend(_decl_items_from_chunk(it.text, class_name))
+        else:
+            pool.extend(_decl_items_from_chunk(it.text, class_name))
+    return fixed, pool
+
+
+def _normalize_kevin_system_code_sections(sections: List[AccessSection], class_name: str) -> None:
+    """Merge ``public: // KEVIN_SYSTEM_CODE`` + 紧随其后的 ``// functions`` 段内相关声明；清除 START/END 标记。"""
+    i = 0
+    while i < len(sections):
+        sec = sections[i]
+        if not _is_kevin_system_code_section(sec):
+            i += 1
+            continue
+
+        fixed, pool = _expand_section_decl_pool(sec, class_name)
+
+        if i + 1 < len(sections) and _is_functions_section(sections[i + 1]):
+            fn_sec = sections[i + 1]
+            keep: List[DeclItem] = []
+            for it in fn_sec.items:
+                if it.kind == "avoidance":
+                    keep.append(it)
+                    continue
+                if not it.name:
+                    it.kind, it.name = _extract_decl_name(it.text, class_name)
+                if _decl_has_kevin_system_code_note(it.text) or _is_static_method_decl(
+                    it.text, class_name
+                ):
+                    pool.append(it)
+                else:
+                    keep.append(it)
+            fn_sec.items = keep
+            if not keep:
+                sections.pop(i + 1)
+
+        if pool:
+            sorted_pool = _sort_system_code_items(pool, class_name)
+            sec.items = fixed + [
+                DeclItem(
+                    text=_join_decl_items_text(sorted_pool),
+                    name="kevin_system_code",
+                    kind="system_code",
+                )
+            ]
+        else:
+            sec.items = fixed
+        i += 1
+
+
+def _join_decl_items_text(items: List[DeclItem]) -> str:
+    out = ""
+    for idx, it in enumerate(items):
+        trailing = it.trailing_gap if idx < len(items) - 1 else False
+        out += _emit_item_text(it.text, trailing_blank=trailing)
+    return out
+
+
+def _split_doxygen_and_decls(chunk: str, class_name: str) -> List[DeclItem]:
+    items: List[DeclItem] = []
+    for sub in _split_by_doxygen_groups(chunk):
+        if _is_doxygen_group_block(sub):
+            kind, name = _extract_decl_name(sub, class_name)
+            items.append(DeclItem(text=sub, name=name, kind=kind))
+            continue
+        items.extend(_split_declaration_run(sub, class_name))
+    return items
+
+
+def _split_non_avoidance_chunk(
+    chunk: str,
+    class_name: str,
+    *,
+    kevin_system_code_mode: str = "merge_strip",
+) -> List[DeclItem]:
+    """Doxygen groups, KEVIN_SYSTEM_CODE segment, and plain declarations."""
+    if not chunk.strip():
+        return []
+
+    items: List[DeclItem] = []
+    lines = chunk.splitlines(keepends=True)
+    buf: List[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if KEVIN_SYSTEM_CODE_START_RE.match(line):
+            if kevin_system_code_mode == "off":
+                buf.append(line)
+                i += 1
+                continue
+            if buf:
+                items.extend(_split_doxygen_and_decls("".join(buf), class_name))
+                buf = []
+            inner_lines: List[str] = []
+            i += 1
+            end_line = ""
+            while i < len(lines):
+                if KEVIN_SYSTEM_CODE_END_RE.match(lines[i]):
+                    if kevin_system_code_mode == "keep_markers":
+                        end_line = lines[i]
+                    i += 1
+                    break
+                inner_lines.append(lines[i])
+                i += 1
+            inner_chunk = "".join(inner_lines)
+            inner_items = _split_declaration_run(inner_chunk, class_name)
+            if inner_items:
+                inner_items = _sort_system_code_items(inner_items, class_name)
+                inner_text = _join_decl_items_text(inner_items)
+            else:
+                inner_text = inner_chunk
+            if inner_text and not inner_text.endswith("\n"):
+                inner_text += "\n"
+            if kevin_system_code_mode == "keep_markers":
+                block = line + inner_text + end_line
+                items.append(DeclItem(text=block, name="kevin_system_code", kind="system_code"))
+            else:
+                items.append(DeclItem(text=inner_text, name="kevin_system_code", kind="system_code"))
+            continue
+        buf.append(line)
+        i += 1
+    if buf:
+        items.extend(_split_doxygen_and_decls("".join(buf), class_name))
+    return items
+
+
+def _split_declarations(
+    chunk: str,
+    class_name: str,
+    *,
+    kevin_system_code_mode: str = "merge_strip",
+) -> List[DeclItem]:
     """Split section body; P0 locked regions, then Doxygen groups, then declarations."""
     items: List[DeclItem] = []
-    for segment, is_avoidance in split_by_avoidance_rules(chunk):
+    parts = split_by_avoidance_rules(chunk)
+    for idx, (segment, is_avoidance) in enumerate(parts):
         if is_avoidance:
             if segment.strip():
-                items.append(DeclItem(text=segment, name="avoidance", kind="avoidance"))
+                trailing_gap = False
+                if idx + 1 < len(parts):
+                    nxt = parts[idx + 1][0]
+                    trailing_gap = _starts_with_blank_line(nxt)
+                items.append(
+                    DeclItem(text=segment, name="avoidance", kind="avoidance", trailing_gap=trailing_gap)
+                )
             continue
-        for sub in _split_by_doxygen_groups(segment):
-            if _is_doxygen_group_block(sub):
-                kind, name = _extract_decl_name(sub, class_name)
-                items.append(DeclItem(text=sub, name=name, kind=kind))
-                continue
-            items.extend(_split_declaration_run(sub, class_name))
+
+        seg = segment
+        if items and items[-1].kind == "avoidance" and _starts_with_blank_line(seg):
+            items[-1].trailing_gap = True
+            seg = _strip_one_leading_blank_line(seg)
+        items.extend(
+            _split_non_avoidance_chunk(seg, class_name, kevin_system_code_mode=kevin_system_code_mode)
+        )
     return items
 
 
@@ -1220,9 +1438,11 @@ def _sort_section_items(
     if section_type in ("public", "private", "protected"):
         items = section.items
         fixed_indices = [
-            i for i, it in enumerate(items) if it.kind in ("member", "nested", "avoidance")
+            i
+            for i, it in enumerate(items)
+            if it.kind in ("member", "nested", "avoidance", "system_code")
         ]
-        sortable = [it for it in items if it.kind not in ("member", "nested", "avoidance")]
+        sortable = [it for it in items if it.kind not in ("member", "nested", "avoidance", "system_code")]
 
         specials = [d for d in sortable if d.kind == "special"]
         rest = [d for d in sortable if d.kind != "special"]
@@ -1365,6 +1585,7 @@ def _reorder_class_in_header(
     text: str,
     class_name: str,
     sort_members: bool = False,
+    kevin_system_code_mode: str = "merge_strip",
 ) -> Tuple[str, bool, List[str]]:
     start = class_match.end() - 1  # position of {
     brace = 0
@@ -1383,10 +1604,14 @@ def _reorder_class_in_header(
 
     body = text[start + 1 : end]
     has_qobject = "Q_OBJECT" in text[class_match.start() : end]
-    preamble, sections = _split_class_items(body, class_name)
+    preamble, sections = _split_class_items(body, class_name, kevin_system_code_mode=kevin_system_code_mode)
     if not sections:
         # still sort single blob if only methods
         return text, False, []
+
+    mode = normalize_kevin_system_code_mode(kevin_system_code_mode)
+    if mode == "merge_strip":
+        _normalize_kevin_system_code_sections(sections, class_name)
 
     for sec in sections:
         for it in sec.items:
@@ -1409,6 +1634,7 @@ def reorder_header_file(
     path: Path,
     dry_run: bool = False,
     sort_members: bool = False,
+    kevin_system_code_mode: str = "merge_strip",
 ) -> Tuple[bool | None, List[str]]:
     payload = detect_and_read(path)
     if payload is None:
@@ -1421,7 +1647,7 @@ def reorder_header_file(
     for m in list(CLASS_RE.finditer(text)):
         class_name = m.group(1)
         new_text, did, class_warnings = _reorder_class_in_header(
-            m, new_text, class_name, sort_members
+            m, new_text, class_name, sort_members, kevin_system_code_mode=kevin_system_code_mode
         )
         changed = changed or did
         warnings.extend(class_warnings)
@@ -1561,6 +1787,7 @@ def run_reorder_members(
     sort_members: bool = False,
     verbose: bool = False,
     repo_root: Path | None = None,
+    kevin_system_code_mode: str = "merge_strip",
 ) -> ReorderMembersRunResult:
     """对目录或文件列表执行成员排序，返回结构化日志（供 Web / CLI 共用）。"""
     root = root.expanduser().resolve(strict=False)
@@ -1602,7 +1829,9 @@ def run_reorder_members(
                         prefix = "[dry-run] " if dry_run else ""
                         lines.append(f"{prefix}{CHANGED_LOG_MARK} cpp   {rel_s}")
             else:
-                changed, hints = reorder_header_file(path, dry_run, sort_members)
+                changed, hints = reorder_header_file(
+                    path, dry_run, sort_members, kevin_system_code_mode=kevin_system_code_mode
+                )
                 if changed is None:
                     if verbose:
                         lines.append(f"skip  {rel_s}: 无法识别文件编码")

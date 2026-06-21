@@ -421,7 +421,7 @@ def write_report_md(
 
 
 def collect_paths_in_dir(dir_arg: str, *, cwd: Path) -> tuple[Path, list[Path]]:
-    """返回 (目录绝对路径, 该目录下所有 .FCStd 排序列表)。"""
+    """返回 (目录绝对路径, 该目录及子目录下所有 .FCStd 排序列表)。"""
     target_dir = Path(dir_arg).expanduser()
     if not target_dir.is_absolute():
         target_dir = (cwd / target_dir).resolve()
@@ -429,8 +429,8 @@ def collect_paths_in_dir(dir_arg: str, *, cwd: Path) -> tuple[Path, list[Path]]:
         raise SystemExit(f"错误：--all-in-dir 不是目录: {target_dir}")
     fcstd_files = sorted(
         p.resolve()
-        for p in target_dir.glob("*.FCStd")
-        if p.is_file()
+        for p in target_dir.rglob("*")
+        if p.is_file() and p.suffix.lower() == ".fcstd"
     )
     return target_dir, fcstd_files
 
@@ -446,7 +446,7 @@ def main() -> None:
         "--all-in-dir",
         metavar="DIR",
         default=None,
-        help="处理目录下全部 *.FCStd（示例：cad/Asm/FreeCAD）",
+        help="递归处理目录及子目录下全部 *.FCStd（示例：cad/Asm/FreeCAD 或工作空间根）",
     )
     parser.add_argument(
         "--search-root",
@@ -603,6 +603,9 @@ def main() -> None:
         doc_paths.extend(fcstd_list)
 
     if not doc_paths:
+        if args.all_in_dir:
+            shown = all_in_dir if all_in_dir is not None else Path(args.all_in_dir).resolve()
+            parser.error(f"目录内未找到 .FCStd 文件: {shown}（已递归扫描该目录及子目录）")
         parser.error("请指定 Document.xml / .FCStd，或使用 --all-in-dir DIR")
 
     # 去重且保持顺序

@@ -197,25 +197,18 @@ defineExpose({
 <template>
   <section class="assembly-block">
     <div class="section-head">
-      <button
-        type="button"
-        class="btn subtle"
+      <el-button
+        size="small"
         :disabled="treeLoading || !treeNodes.length"
         title="将规则名填入各行链接标签文本框，不写盘"
         @click="onApplyRuleLabelsPreview"
       >
         按规则填入标签
-      </button>
-      <div class="section-controls">
-        <label class="mode-opt">
-          <input v-model="treeMode" type="radio" value="first" />
-          第一级
-        </label>
-        <label class="mode-opt">
-          <input v-model="treeMode" type="radio" value="full" />
-          全部层级
-        </label>
-      </div>
+      </el-button>
+      <el-radio-group v-model="treeMode" size="small" class="section-controls">
+        <el-radio-button value="first">第一级</el-radio-button>
+        <el-radio-button value="full">全部层级</el-radio-button>
+      </el-radio-group>
     </div>
     <p class="asm-hint muted">
       链接标签列仿 FreeCAD 零件树（图标 + 可编辑名）；目标文件单独一列。<strong>缺失</strong>行不可改标签，请用「改链接」；歧义在标签下显示 ⚠。

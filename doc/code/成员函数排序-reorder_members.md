@@ -77,7 +77,9 @@ python -m phoenix.code.reorder_members /path/to/module [options]
 ## 5. 后续可扩展
 
 - [x] **锁定段（P0）**：clang-format off/on、CAA Wizard 段 — 见 [成员排序-锁定段与回归用例.md](成员排序-锁定段与回归用例.md)
-- [ ] 单文件 / 单类预览 diff（Web）
+- [ ] **`#pragma region VirtualFunction`**：待研究；当前不专项处理（见锁定段 doc §待研究）
+- [ ] **PNX Cmd `.cpp` Wizard 段**：fixture `pnx_bom_analysis_cmd_min.cpp` 已摘录，单测待补
+- [ ] 单文件 / 单类预览 diff（Web）— 待研究：[成员排序-变更Diff预览-待研究.md](../platform/成员排序-变更Diff预览-待研究.md)
 - [ ] **成员变量字母序（完整）**：编号重编、`.h`/`.cpp` 构造析构序号一致等 — 见 [成员变量字母序-规则与待实现.md](成员变量字母序-规则与待实现.md)
 - [ ] 与 Git 状态联动（仅排序已修改文件）
 - [ ] `code/` 模块配置：`app_config.modules` 切换 CAD / Code 导航集

@@ -371,62 +371,29 @@ onUnmounted(() => {
       </div>
     </header>
 
-    <div v-if="pageError" class="banner err">{{ pageError }}</div>
+    <el-alert v-if="pageError" type="error" :title="pageError" show-icon :closable="false" class="err-alert" />
 
-    <div v-if="!rel && !loading" class="empty">在右侧工作空间树中选择 .FCStd 文件</div>
+    <div v-if="!rel && !loading" class="empty">在树中选择 .FCStd</div>
     <div v-else-if="loading && !preview" class="empty">载入中…</div>
 
     <template v-else-if="rel && preview">
       <div data-tour-page-filedetail-body>
-      <nav class="sub-tabs" role="tablist" data-tour-page-filedetail-tabs>
-        <button
-          type="button"
-          role="tab"
-          class="sub-tab"
-          :class="{ active: activeSubTab === 'overview' }"
-          @click="switchSubTab('overview')"
-        >
-          属性
-        </button>
-        <button
-          type="button"
-          role="tab"
-          class="sub-tab"
-          :class="{ active: activeSubTab === 'edit' }"
-          @click="switchSubTab('edit')"
-        >
-          编辑属性
-        </button>
-        <button
-          type="button"
-          role="tab"
-          class="sub-tab"
-          :class="{ active: activeSubTab === 'xref' }"
-          @click="switchSubTab('xref')"
-        >
+      <el-radio-group
+        :model-value="activeSubTab"
+        size="small"
+        class="sub-tabs"
+        data-tour-page-filedetail-tabs
+        @change="switchSubTab($event as FileDetailSubTab)"
+      >
+        <el-radio-button value="overview">属性</el-radio-button>
+        <el-radio-button value="edit">编辑属性</el-radio-button>
+        <el-radio-button value="xref">
           引用
           <span v-if="incomingCount + outgoingCount" class="tab-badge">{{ incomingCount + outgoingCount }}</span>
-        </button>
-        <button
-          v-if="showAssemblyTab"
-          type="button"
-          role="tab"
-          class="sub-tab"
-          :class="{ active: activeSubTab === 'assembly' }"
-          @click="switchSubTab('assembly')"
-        >
-          装配结构
-        </button>
-        <button
-          type="button"
-          role="tab"
-          class="sub-tab"
-          :class="{ active: activeSubTab === 'rename' }"
-          @click="switchSubTab('rename')"
-        >
-          改名
-        </button>
-      </nav>
+        </el-radio-button>
+        <el-radio-button v-if="showAssemblyTab" value="assembly">装配结构</el-radio-button>
+        <el-radio-button value="rename">改名</el-radio-button>
+      </el-radio-group>
 
       <div class="sub-panel">
         <FileOverviewPanel v-show="activeSubTab === 'overview'" />
@@ -483,53 +450,28 @@ onUnmounted(() => {
 }
 
 .sub-tabs {
-  display: flex;
-  gap: 4px;
   margin-bottom: 12px;
   flex-shrink: 0;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 0;
-}
-
-.sub-tab {
-  padding: 8px 14px;
-  border: none;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  font-size: 0.85rem;
-  cursor: pointer;
-  color: var(--muted);
-  margin-bottom: -1px;
-}
-
-.sub-tab.active {
-  color: var(--text);
-  border-bottom-color: var(--accent);
-  font-weight: 600;
 }
 
 .tab-badge {
-  margin-left: 6px;
-  padding: 1px 6px;
+  margin-left: 4px;
+  padding: 0 5px;
   border-radius: 999px;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   background: #e0e7ff;
   color: #3730a3;
+  vertical-align: middle;
+}
+
+.err-alert {
+  margin-bottom: 10px;
 }
 
 .sub-panel {
   flex: 1;
   min-height: 0;
   overflow: auto;
-}
-
-.banner.err {
-  padding: 8px 12px;
-  border-radius: 6px;
-  background: #fef2f2;
-  color: #b91c1c;
-  font-size: 0.85rem;
-  margin-bottom: 10px;
 }
 
 .mono {

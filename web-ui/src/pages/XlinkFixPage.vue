@@ -16,6 +16,7 @@ import {
 import ExpandCaret from "../components/ExpandCaret.vue";
 import PageHelpButton from "../components/PageHelpButton.vue";
 import { useAppShell } from "../composables/useAppShell";
+import { useXlinkFixPropertySheet } from "../composables/useXlinkFixPropertySheet";
 
 type FilterTab = "all" | "fixable" | "not_found";
 
@@ -77,6 +78,22 @@ async function onSavePrefs() {
     saving.value = false;
   }
 }
+
+let prefsSaveTimer: ReturnType<typeof setTimeout> | null = null;
+function schedulePrefsSave() {
+  if (prefsSaveTimer) clearTimeout(prefsSaveTimer);
+  prefsSaveTimer = setTimeout(() => {
+    prefsSaveTimer = null;
+    void onSavePrefs();
+  }, 400);
+}
+
+useXlinkFixPropertySheet("xlink_fix", {
+  batchDir,
+  allInDir,
+  analysis,
+  onPersist: schedulePrefsSave,
+});
 
 function issueRowKey(row: XlinkFixIssueRow) {
   return `${row.host_repo_rel}\x00${row.old_path}`;
@@ -324,46 +341,14 @@ onMounted(async () => {
     <header class="page-head">
       <div class="head-row">
         <h1 class="page-title">链接路径修正</h1>
-        <p class="page-desc">扫描失效 XLink，先分析确认再写回</p>
         <div class="head-help">
           <PageHelpButton page-id="xlink_fix" />
         </div>
       </div>
     </header>
 
-    <section class="card settings-card">
-      <div class="scope-line">
-        <label class="scope-label" for="batch-dir">扫描范围</label>
-        <el-input
-          id="batch-dir"
-          v-model="batchDir"
-          size="small"
-          class="dir-input mono"
-          spellcheck="false"
-          placeholder="修正目录，相对工作空间，如 ."
-          title="修正目录（相对工作空间）"
-        />
-        <el-checkbox v-model="allInDir" size="small">扫描目录内全部 FCStd（推荐）</el-checkbox>
-      </div>
-      <div
-        v-if="analysis?.map_path_display || analysis?.batch_dir_display"
-        class="settings-meta"
-      >
-        <el-tag
-          v-if="analysis?.map_path_display"
-          size="small"
-          effect="plain"
-          class="mono meta-tag"
-          :title="analysis.map_path_display"
-        >
-          索引库 {{ analysis.map_path_display }}
-        </el-tag>
-        <el-tag v-if="analysis?.batch_dir_display" size="small" effect="plain" class="mono meta-tag">
-          目录 {{ analysis.batch_dir_display }}
-        </el-tag>
-      </div>
-
-      <div class="settings-foot" data-tour-page-xlink-analyze>
+    <section class="card action-card" data-tour-page-xlink-analyze>
+      <div class="settings-foot">
         <el-button size="small" :loading="saving" @click="onSavePrefs">保存偏好</el-button>
         <div class="settings-actions">
           <el-button type="primary" size="small" :loading="analyzing" :disabled="applying" @click="onAnalyze">

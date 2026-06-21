@@ -17,6 +17,7 @@ from phoenix.code.reorder_avoidance import (
 from phoenix.code.reorder_members import reorder_cpp_file, reorder_header_file
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "reorder_members"
+PNX_BOM_CMD_MIN = FIXTURES / "pnx_bom_analysis_cmd_min.cpp"
 KT_PARAM_H = (
     Path(__file__).resolve().parent
     / "fixtures"
@@ -232,6 +233,68 @@ class TestReorderAvoidanceRules(unittest.TestCase):
             ": WorkTime(2700)",
             after[after.index("PARAM CONSTRUCTOR") : after.index("PARAM DESTRUCTOR")],
         )
+
+    def test_wizard_end_blank_line_before_next_member(self) -> None:
+        """case_id=pnx-bom-param-min-blank — END 控制符与后续成员之间空行保留"""
+        path = FIXTURES / "pnx_bom_analysis_param_min.h"
+        before, after = _reorder_header_copy(path)
+        _assert_avoidance_blocks_unchanged(before, after)
+        end = "// END KEVIN CAA WIZARD SECTION PNXBomAnalysis PARAM DECLARATION"
+        for text in (before, after):
+            idx = text.index(end) + len(end)
+            self.assertTrue(
+                text[idx : idx + 4].startswith("\n\n"),
+                msg=f"expected blank line after wizard END, got {text[idx : idx + 20]!r}",
+            )
+        self.assertLess(after.index("productItems"), after.index("errorMessage"))
+
+    def test_kevin_system_code_segment_sorted_together(self) -> None:
+        """case_id=pnx-bom-param-min-system — 段内字母序，输出不含 START/END 标记"""
+        path = FIXTURES / "pnx_bom_analysis_param_min.h"
+        before, after = _reorder_header_copy(path)
+        self.assertNotIn("// KEVIN_SYSTEM_CODE START", after)
+        self.assertNotIn("// KEVIN_SYSTEM_CODE END", after)
+        sys_pos = after.index("public: // KEVIN_SYSTEM_CODE")
+        err_pos = after.index("ConvertErrorListToString", sys_pos)
+        conv_pos = after.index("convertJson", sys_pos)
+        ver_pos = after.index("GetSoftwareVersion", sys_pos)
+        self.assertLess(err_pos, conv_pos)
+        self.assertLess(conv_pos, ver_pos)
+        self.assertLess(after.index("getApple"), after.index("setZebra"))
+
+    def test_kevin_system_code_merges_functions_section(self) -> None:
+        """case_id=pnx-bom-param-system-split — 合并 // functions 内 @note/static，保留其它方法"""
+        path = FIXTURES / "pnx_bom_param_system_split.h"
+        before, after = _reorder_header_copy(path)
+        self.assertNotIn("// KEVIN_SYSTEM_CODE START", after)
+        block_start = after.index("public: // KEVIN_SYSTEM_CODE\n")
+        fn_start = after.index("public: // functions\n", block_start)
+        block = after[block_start:fn_start]
+        fn_block = after[fn_start:after.index("};")]
+        self.assertLess(block.index("ConvertErrorListToString"), block.index("convertJson"))
+        self.assertLess(block.index("convertJson"), block.index("GetSoftwareVersion"))
+        self.assertIn("CheckoutAxis", fn_block)
+        self.assertNotIn("convertJson", fn_block)
+
+    def test_pnx_bom_analysis_param_min_idempotent(self) -> None:
+        """case_id=pnx-bom-param-min-idempotent"""
+        path = FIXTURES / "pnx_bom_analysis_param_min.h"
+        with tempfile.TemporaryDirectory() as tmp:
+            cp = Path(tmp) / path.name
+            shutil.copy(path, cp)
+            reorder_header_file(cp, dry_run=False, sort_members=False)
+            once = cp.read_text(encoding="utf-8")
+            changed, _ = reorder_header_file(cp, dry_run=True, sort_members=False)
+            self.assertFalse(changed)
+            self.assertEqual(cp.read_text(encoding="utf-8"), once)
+
+    @unittest.skip("待实现：PNXBomAnalysisCmd.cpp Wizard 段 + 可选 #pragma region VirtualFunction")
+    def test_pnx_bom_analysis_cmd_min_pending(self) -> None:
+        """case_id=pnx-bom-cmd-min-pending — fixture 见 pnx_bom_analysis_cmd_min.cpp"""
+        self.assertTrue(PNX_BOM_CMD_MIN.is_file())
+        before = PNX_BOM_CMD_MIN.read_text(encoding="utf-8")
+        self.assertIn("START KEVIN CAA WIZARD SECTION PNXBomAnalysis CMD ACTION FIA", before)
+        self.assertIn("END KEVIN CAA WIZARD SECTION PNXBomAnalysis CMD ACTION FIA", before)
 
 
 if __name__ == "__main__":

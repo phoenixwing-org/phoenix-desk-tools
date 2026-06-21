@@ -230,33 +230,20 @@ async function onRename() {
       <h3 class="block-title">磁盘改名</h3>
       <div class="rename-grid">
         <span class="label">磁盘当前名</span>
-        <input :value="originalFilename" readonly class="readonly mono" />
+        <el-input :model-value="originalFilename" readonly class="mono" />
         <span class="label">目标文件名</span>
-        <input v-model="newFilename" class="mono" :readonly="renamed || busy" spellcheck="false" />
+        <el-input v-model="newFilename" class="mono" :readonly="renamed || busy" spellcheck="false" />
       </div>
       <div class="actions">
-        <button type="button" class="btn primary" :disabled="busy || renamed || !canRename" @click="onRename">
-          {{ busy ? "…" : "执行改名" }}
-        </button>
-        <button
-          type="button"
-          class="btn"
-          :disabled="busy || logsLoading || !rel.trim()"
-          title="从数据库重新加载本文件的改名记录"
-          @click="onRefreshLogs"
-        >
-          {{ logsLoading ? "…" : "刷新记录" }}
-        </button>
-        <button
-          v-if="renamed"
-          type="button"
-          class="btn"
-          :disabled="busy"
-          title="若目标名填错或要继续改新名，解锁后可编辑"
-          @click="resetRenameWorkflow"
-        >
+        <el-button type="primary" size="small" :loading="busy" :disabled="renamed || !canRename" @click="onRename">
+          执行改名
+        </el-button>
+        <el-button size="small" :loading="logsLoading" :disabled="busy || !rel.trim()" title="从数据库重新加载本文件的改名记录" @click="onRefreshLogs">
+          刷新记录
+        </el-button>
+        <el-button v-if="renamed" size="small" :disabled="busy" title="若目标名填错或要继续改新名，解锁后可编辑" @click="resetRenameWorkflow">
           再次改名
-        </button>
+        </el-button>
       </div>
       <p v-if="renamed && newFilename.trim() === originalFilename.trim()" class="rename-warn muted">
         目标名与磁盘当前名相同。若属性里填了新的文件名，请点「再次改名」或回「编辑属性」确认后重新点「去改名」。
@@ -287,14 +274,13 @@ async function onRename() {
               <span class="arrow" aria-hidden="true">→</span>
               <span class="mono new" :title="log.new_repo_rel_path">{{ log.new_basename }}</span>
             </div>
-            <button
-              type="button"
-              class="btn btn-compact"
-              :class="isCurrentRenameLog(log) ? 'primary' : 'accent'"
+            <el-button
+              size="small"
+              :type="isCurrentRenameLog(log) ? 'primary' : undefined"
               @click="openRenameAnalysisForLog(log)"
             >
               {{ isCurrentRenameLog(log) ? "改名分析" : "分析引用" }}
-            </button>
+            </el-button>
           </div>
           <div class="record-row-meta muted">
             #{{ log.id }} · {{ formatLogTime(log.created_at) }}

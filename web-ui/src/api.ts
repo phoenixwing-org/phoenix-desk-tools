@@ -1508,6 +1508,7 @@ export type ReorderMembersPrefs = {
   include_header: boolean;
   sort_members: boolean;
   verbose: boolean;
+  kevin_system_code_mode: "merge_strip" | "keep_markers" | "off";
   last_selected: string[];
   ignore_file: string;
   ignore_file_display: string;

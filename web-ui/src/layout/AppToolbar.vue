@@ -17,7 +17,7 @@ const props = withDefaults(
   }>(),
   {
     ribbonTabs: () => [],
-    ribbonActiveTab: "start",
+    ribbonActiveTab: "system",
     ribbonCollapsed: false,
   },
 );

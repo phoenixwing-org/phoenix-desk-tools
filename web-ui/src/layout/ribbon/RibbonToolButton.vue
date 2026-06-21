@@ -52,19 +52,25 @@ const emit = defineEmits<{
   min-width: 0;
 }
 
-.ribbon-tool-btn.layout-stacked {
+/* WPS 大按钮：图标上、文字下 */
+.ribbon-tool-btn.layout-stacked.size-large {
   flex-direction: column;
-  width: 52px;
-  min-width: 52px;
-  max-width: 64px;
-  min-height: 48px;
-  padding: 4px 2px 3px;
-  gap: 2px;
-  justify-content: center;
+  width: 58px;
+  min-width: 58px;
+  max-width: 68px;
+  min-height: 54px;
+  padding: 5px 4px 3px;
+  gap: 3px;
 }
 
-.layout-stacked .ribbon-tool-label {
-  font-size: 0.6rem;
+.layout-stacked.size-large .ribbon-tool-icon {
+  width: 26px;
+  height: 26px;
+  font-size: 24px;
+}
+
+.layout-stacked.size-large .ribbon-tool-label {
+  font-size: 0.62rem;
   line-height: 1.15;
   text-align: center;
   white-space: normal;
@@ -72,42 +78,68 @@ const emit = defineEmits<{
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  max-width: 50px;
+  max-width: 54px;
 }
 
-.layout-stacked .ribbon-tool-icon {
-  width: 18px;
-  height: 18px;
-  font-size: 17px;
-}
-
-.ribbon-tool-btn.size-large {
+/* WPS 小按钮：图标左、文字右 */
+.ribbon-tool-btn.size-small.layout-inline {
   flex-direction: row;
   width: auto;
-  min-width: 52px;
-  max-width: 88px;
+  min-width: 88px;
+  max-width: 132px;
   min-height: 22px;
-  padding: 2px 6px;
-  gap: 4px;
+  padding: 1px 6px 1px 4px;
+  gap: 5px;
+  justify-content: flex-start;
 }
 
-.ribbon-tool-btn.size-small {
-  flex-direction: row;
-  width: 100%;
-  min-height: 20px;
-  padding: 1px 6px;
-  justify-content: flex-start;
+.size-small.layout-inline .ribbon-tool-icon {
+  width: 14px;
+  height: 14px;
+  font-size: 13px;
+}
+
+.size-small.layout-inline .ribbon-tool-label {
+  font-size: 0.66rem;
+  line-height: 1.1;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 单行模式：横向紧凑 */
+.ribbon-tool-btn.layout-inline:not(.size-small) {
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  min-height: 36px;
+  padding: 0 10px;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.layout-inline:not(.size-small) .ribbon-tool-label {
+  font-size: 0.72rem;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.layout-inline:not(.size-small) .ribbon-tool-icon {
+  width: 15px;
+  height: 15px;
+  font-size: 14px;
 }
 
 .ribbon-tool-btn:hover:not(:disabled) {
   background: var(--ribbon-btn-hover);
-  border-color: var(--border);
+  border-color: transparent;
 }
 
 .ribbon-tool-btn.active {
-  background: #dbeafe;
-  border-color: #93c5fd;
-  color: #1d4ed8;
+  background: rgba(33, 115, 70, 0.1);
+  border-color: rgba(33, 115, 70, 0.25);
+  color: var(--phoenix-wps-accent, #217346);
 }
 
 .ribbon-tool-btn:disabled {
@@ -124,37 +156,6 @@ const emit = defineEmits<{
 }
 
 .ribbon-tool-btn.active .ribbon-tool-icon {
-  color: #1d4ed8;
-}
-
-.size-large .ribbon-tool-icon {
-  width: 16px;
-  height: 16px;
-  font-size: 15px;
-}
-
-.size-small .ribbon-tool-icon {
-  width: 14px;
-  height: 14px;
-  font-size: 13px;
-}
-
-.ribbon-tool-label {
-  font-size: 0.68rem;
-  line-height: 1.1;
-  text-align: left;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.size-large .ribbon-tool-label {
-  font-weight: 600;
-  font-size: 0.7rem;
-}
-
-.size-small .ribbon-tool-label {
-  font-size: 0.68rem;
+  color: var(--phoenix-wps-accent, #217346);
 }
 </style>

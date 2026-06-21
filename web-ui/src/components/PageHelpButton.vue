@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
+import { QuestionFilled } from "@element-plus/icons-vue";
 import { getPageHelp, hasPageTour, type PageHelpContent } from "../content/pageHelp";
 import { startPageTour } from "../composables/usePageTour";
 import { useAppShell } from "../composables/useAppShell";
@@ -85,16 +86,18 @@ onUnmounted(() => {
 
 <template>
   <div ref="rootRef" class="page-help">
-    <button
-      type="button"
+    <el-button
       class="page-help-btn"
+      circle
+      plain
+      size="small"
+      :icon="QuestionFilled"
       :aria-expanded="open"
       aria-haspopup="dialog"
-      title="本页说明与导引"
+      aria-label="本页说明"
+      title="本页说明"
       @click.stop="toggle"
-    >
-      ?
-    </button>
+    />
     <div v-if="open" class="page-help-popover" role="dialog" @click.stop>
       <p class="popover-title">{{ help.title }}</p>
       <ul class="popover-list">
@@ -117,22 +120,13 @@ onUnmounted(() => {
 }
 
 .page-help-btn {
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: 1px solid var(--border-strong);
-  border-radius: 50%;
-  background: var(--btn-bg);
+  flex-shrink: 0;
+  --el-button-size: 26px;
   color: var(--muted);
-  font-size: 0.82rem;
-  font-weight: 600;
-  line-height: 1;
 }
 
 .page-help-btn:hover {
-  border-color: var(--accent);
   color: var(--accent);
-  background: #f0f6ff;
 }
 
 .page-help-popover {

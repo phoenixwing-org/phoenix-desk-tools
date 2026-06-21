@@ -4,10 +4,13 @@ import type { ReorderMembersPrefs } from "../api";
 const STORAGE_KEY = "phoenix-reorder-members-page-v1";
 const DEFAULT_WORKSPACE_KEY = "__default__";
 
+export type KevinSystemCodeMode = "merge_strip" | "keep_markers" | "off";
+
 export type ReorderMembersFormPrefs = {
   includeCpp: boolean;
   includeHeader: boolean;
   verbose: boolean;
+  kevinSystemCodeMode: KevinSystemCodeMode;
   lastSelected: string[];
   entriesExpanded: boolean;
 };
@@ -21,9 +24,15 @@ function defaultForm(): ReorderMembersFormPrefs {
     includeCpp: true,
     includeHeader: true,
     verbose: false,
+    kevinSystemCodeMode: "merge_strip",
     lastSelected: [],
     entriesExpanded: true,
   };
+}
+
+function normalizeKevinSystemCodeMode(raw: unknown): KevinSystemCodeMode {
+  if (raw === "keep_markers" || raw === "off" || raw === "merge_strip") return raw;
+  return "merge_strip";
 }
 
 function readPersisted(): Persisted {
@@ -53,6 +62,7 @@ function normalizeForm(raw: Partial<ReorderMembersFormPrefs> | undefined): Reord
     includeCpp: includeCpp || includeHeader ? includeCpp : true,
     includeHeader: includeCpp || includeHeader ? includeHeader : true,
     verbose: raw.verbose ?? base.verbose,
+    kevinSystemCodeMode: normalizeKevinSystemCodeMode(raw.kevinSystemCodeMode),
     lastSelected: Array.isArray(raw.lastSelected)
       ? raw.lastSelected.filter((name) => typeof name === "string" && name.trim())
       : base.lastSelected,
@@ -68,6 +78,7 @@ export const useReorderMembersPageStore = defineStore("reorderMembersPage", {
   state: () => ({
     hydrated: false,
     activeWorkspaceKey: DEFAULT_WORKSPACE_KEY,
+    ignoreFileDisplay: "",
     ...defaultForm(),
   }),
   getters: {
@@ -83,6 +94,7 @@ export const useReorderMembersPageStore = defineStore("reorderMembersPage", {
         include_header: state.includeHeader,
         sort_members: false,
         verbose: state.verbose,
+        kevin_system_code_mode: state.kevinSystemCodeMode,
         last_selected: [...state.lastSelected],
       };
     },
@@ -93,12 +105,14 @@ export const useReorderMembersPageStore = defineStore("reorderMembersPage", {
         includeCpp: form.includeCpp ?? this.includeCpp,
         includeHeader: form.includeHeader ?? this.includeHeader,
         verbose: form.verbose ?? this.verbose,
+        kevinSystemCodeMode: form.kevinSystemCodeMode ?? this.kevinSystemCodeMode,
         lastSelected: form.lastSelected ?? this.lastSelected,
         entriesExpanded: form.entriesExpanded ?? this.entriesExpanded,
       });
       this.includeCpp = next.includeCpp;
       this.includeHeader = next.includeHeader;
       this.verbose = next.verbose;
+      this.kevinSystemCodeMode = next.kevinSystemCodeMode;
       this.lastSelected = next.lastSelected;
       this.entriesExpanded = next.entriesExpanded;
     },
@@ -116,10 +130,14 @@ export const useReorderMembersPageStore = defineStore("reorderMembersPage", {
         includeCpp: this.includeCpp,
         includeHeader: this.includeHeader,
         verbose: this.verbose,
+        kevinSystemCodeMode: this.kevinSystemCodeMode,
         lastSelected: this.lastSelected,
         entriesExpanded: this.entriesExpanded,
       });
       writePersisted({ byWorkspace });
+    },
+    setIgnoreFileDisplay(display: string) {
+      this.ignoreFileDisplay = display.trim();
     },
     applyFromApi(prefs: ReorderMembersPrefs) {
       if (hasLocalEntry(this.activeWorkspaceKey)) return;
@@ -127,6 +145,7 @@ export const useReorderMembersPageStore = defineStore("reorderMembersPage", {
         includeCpp: prefs.include_cpp ?? true,
         includeHeader: prefs.include_header ?? true,
         verbose: prefs.verbose ?? false,
+        kevinSystemCodeMode: normalizeKevinSystemCodeMode(prefs.kevin_system_code_mode),
         lastSelected: prefs.last_selected ?? [],
       });
       this.persist();
@@ -136,6 +155,7 @@ export const useReorderMembersPageStore = defineStore("reorderMembersPage", {
         includeCpp: prefs.include_cpp ?? true,
         includeHeader: prefs.include_header ?? true,
         verbose: prefs.verbose ?? false,
+        kevinSystemCodeMode: normalizeKevinSystemCodeMode(prefs.kevin_system_code_mode),
         lastSelected: prefs.last_selected ?? [],
       });
       this.persist();
@@ -154,6 +174,10 @@ export const useReorderMembersPageStore = defineStore("reorderMembersPage", {
     },
     setVerbose(checked: boolean) {
       this.verbose = checked;
+      this.persist();
+    },
+    setKevinSystemCodeMode(mode: KevinSystemCodeMode) {
+      this.kevinSystemCodeMode = normalizeKevinSystemCodeMode(mode);
       this.persist();
     },
     setEntriesExpanded(expanded: boolean) {

@@ -114,6 +114,16 @@ def _run_xlink_script(
     if load_fcstd_document(rr) is None:
         raise ValueError("请先在「CAD 索引」页执行工程内搜索")
 
+    prefs_all_in_dir = bool(prefs["all_in_dir"])
+    if prefs_all_in_dir:
+        fcstd_count = sum(
+            1 for p in batch_dir.rglob("*") if p.is_file() and p.suffix.lower() == ".fcstd"
+        )
+        if fcstd_count == 0:
+            raise ValueError(
+                f"修正目录内未找到 .FCStd 文件: {format_resolved_under_workspace(batch_dir, rr)}"
+            )
+
     cmd = [
         sys.executable,
         str(_SCRIPTS_DIR / "fix_fcstd_xlink_paths.py"),
@@ -124,7 +134,7 @@ def _run_xlink_script(
     ]
     if prefs["dry_run"]:
         cmd.append("--dry-run")
-    if prefs["all_in_dir"]:
+    if prefs_all_in_dir:
         cmd += ["--all-in-dir", str(batch_dir)]
     else:
         doc_xml = batch_dir / "Document.xml"

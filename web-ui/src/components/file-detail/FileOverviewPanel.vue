@@ -99,33 +99,17 @@ const summaryRows = computed(() => {
     </section>
 
     <section class="quick-links">
-      <button
-        v-if="canOpenPart"
-        type="button"
-        class="btn part-btn mono"
-        title="打开零件详情"
-        @click="openPartKey"
-      >
+      <el-button v-if="canOpenPart" size="small" class="mono" @click="openPartKey">
         {{ partKey }}
-      </button>
-      <button
-        v-if="bomReadonly && bomSourceRel"
-        type="button"
-        class="btn"
-        @click="openSourceModel"
-      >
+      </el-button>
+      <el-button v-if="bomReadonly && bomSourceRel" size="small" @click="openSourceModel">
         打开模型
-      </button>
-      <button type="button" class="btn" @click="switchSubTab('edit')">编辑属性</button>
-      <button
-        v-if="incomingCount + outgoingCount"
-        type="button"
-        class="btn"
-        @click="switchSubTab('xref')"
-      >
+      </el-button>
+      <el-button size="small" @click="switchSubTab('edit')">编辑属性</el-button>
+      <el-button v-if="incomingCount + outgoingCount" size="small" @click="switchSubTab('xref')">
         查看引用
-      </button>
-      <button type="button" class="btn" @click="switchSubTab('rename')">改名</button>
+      </el-button>
+      <el-button size="small" @click="switchSubTab('rename')">改名</el-button>
     </section>
   </div>
 </template>

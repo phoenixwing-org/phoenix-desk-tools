@@ -4,6 +4,8 @@ import TreeBranch from "../components/TreeBranch.vue";
 import CodeIgnorePanel from "../components/CodeIgnorePanel.vue";
 import FileWorksetPanel from "../components/FileWorksetPanel.vue";
 import ShellLogPanel from "./ShellLogPanel.vue";
+import PagePropertiesPanel from "../components/PagePropertiesPanel.vue";
+import { usePagePropertiesHost, setPropertiesActivePage } from "../composables/pagePropertiesHost";
 import { fetchTree, type TreeNode } from "../api";
 import { useAppShell } from "../composables/useAppShell";
 import { useFileWorksetsStore } from "../stores/fileWorksets";
@@ -16,27 +18,34 @@ import {
   treeFetchOptions,
   type WorkspaceTreeFilterState,
 } from "../utils/workspaceTreeFilters";
+import { bindPointerDrag } from "../utils/pointerDrag";
 
 const LOG_MIN_H = 80;
 const LOG_MAX_RATIO = 0.7;
 const TREE_MIN_H = 120;
 const LOG_RESIZER_H = 6;
+const PROPS_MIN_H = 100;
+const PROPS_MAX_RATIO = 0.45;
+const PROPS_RESIZER_H = 6;
 
 const props = withDefaults(
   defineProps<{
     dockSide?: "left" | "right";
     showTree?: boolean;
     showLog?: boolean;
+    showProps?: boolean;
   }>(),
   {
     dockSide: "right",
     showTree: true,
     showLog: true,
+    showProps: false,
   },
 );
 
 const shell = useAppShell();
 const worksetStore = useFileWorksetsStore();
+const { hasProperties } = usePagePropertiesHost();
 const sidebarRef = ref<HTMLElement | null>(null);
 const sidebarHeight = ref(0);
 
@@ -63,6 +72,13 @@ const filterProfile = computed(() =>
 
 const showCadFilters = computed(() => filterProfile.value === "cad");
 const showCodeFilters = computed(() => filterProfile.value === "code");
+
+watch(
+  () => shell.currentPage.value,
+  (pageId) => setPropertiesActivePage(pageId),
+  { immediate: true },
+);
+
 const sidebarTab = computed({
   get: () => shell.workspaceSidebarTab.value,
   set: (v: "tree" | "workset" | "ignore") => {
@@ -97,32 +113,96 @@ const panelWidth = computed(() => {
       : shellLayout.value.right_panel_width_px;
   return `${px}px`;
 });
+
 const logOpen = computed(() => shellLayout.value.log_panel_open);
-const panelVisible = computed(() => props.showTree || (props.showLog && logOpen.value));
-/** 工作空间树与运行日志同侧且均展开：上树下日志，中间可拖拽 */
-const splitTreeAndLog = computed(() => props.showTree && props.showLog && logOpen.value);
+const propsOpen = computed(() => shellLayout.value.properties_panel_open);
+const showPropsPanel = computed(() => props.showProps && propsOpen.value && hasProperties.value);
+
+const panelVisible = computed(
+  () =>
+    props.showTree ||
+    (props.showLog && logOpen.value) ||
+    showPropsPanel.value,
+);
+
+const splitTreeAndLog = computed(
+  () => props.showTree && props.showLog && logOpen.value && !showPropsPanel.value,
+);
+const splitTreeAndProps = computed(
+  () => props.showTree && showPropsPanel.value && !(props.showLog && logOpen.value),
+);
+const splitAllThree = computed(
+  () => props.showTree && showPropsPanel.value && props.showLog && logOpen.value,
+);
+const splitPropsAndLogOnly = computed(
+  () => !props.showTree && showPropsPanel.value && props.showLog && logOpen.value,
+);
+
+function maxPropsHeightPx(sidebarH: number): number {
+  if (sidebarH <= 0) return shellLayout.value.properties_panel_height_px;
+  const reserved =
+    (props.showTree ? TREE_MIN_H : 0) +
+    (props.showLog && logOpen.value ? displayLogHeightPx.value + LOG_RESIZER_H : 0);
+  const byTree = sidebarH - reserved - PROPS_RESIZER_H;
+  const byRatio = Math.floor(sidebarH * PROPS_MAX_RATIO);
+  return Math.max(PROPS_MIN_H, Math.min(byTree, byRatio));
+}
+
+const displayPropsHeightPx = computed(() => {
+  const stored = shellLayout.value.properties_panel_height_px;
+  if (!showPropsPanel.value) return stored;
+  if (sidebarHeight.value <= 0) return stored;
+  return Math.min(maxPropsHeightPx(sidebarHeight.value), Math.max(PROPS_MIN_H, stored));
+});
+
+const propsPanelStyle = computed(() => {
+  if (!showPropsPanel.value) return undefined;
+  if (props.showTree && (splitTreeAndProps.value || splitAllThree.value)) {
+    return { height: `${displayPropsHeightPx.value}px`, flexShrink: "0" };
+  }
+  if (splitPropsAndLogOnly.value) {
+    return { height: `${displayPropsHeightPx.value}px`, flexShrink: "0" };
+  }
+  return { flex: "1 1 auto", minHeight: "0" };
+});
 
 function maxLogHeightPx(sidebarH: number): number {
   if (sidebarH <= 0) return shellLayout.value.log_panel_height_px;
-  const byTree = sidebarH - TREE_MIN_H - LOG_RESIZER_H;
+  const reserved =
+    (props.showTree ? TREE_MIN_H : 0) +
+    (showPropsPanel.value ? displayPropsHeightPx.value + PROPS_RESIZER_H : 0);
+  const byTree = sidebarH - reserved - LOG_RESIZER_H;
   const byRatio = Math.floor(sidebarH * LOG_MAX_RATIO);
   return Math.max(LOG_MIN_H, Math.min(byTree, byRatio));
 }
 
-/** 展示高度：日志区固定高度；树区占剩余空间 */
 const displayLogHeightPx = computed(() => {
   const stored = shellLayout.value.log_panel_height_px;
-  if (!splitTreeAndLog.value) return stored;
+  if (!props.showLog || !logOpen.value) return stored;
   if (sidebarHeight.value <= 0) return stored;
+  const needsClamp = splitTreeAndLog.value || splitAllThree.value || splitPropsAndLogOnly.value;
+  if (!needsClamp && props.showTree) return stored;
+  if (!needsClamp && !props.showTree) return stored;
   return Math.min(maxLogHeightPx(sidebarHeight.value), Math.max(LOG_MIN_H, stored));
 });
 
 const logPanelStyle = computed(() => {
   if (!logOpen.value || !props.showLog) return undefined;
-  if (!splitTreeAndLog.value) {
+  if (!props.showTree && !showPropsPanel.value) {
     return { flex: "1 1 auto", minHeight: "0" };
   }
-  return { height: `${displayLogHeightPx.value}px`, flexShrink: "0" };
+  if (splitTreeAndLog.value || splitAllThree.value || splitPropsAndLogOnly.value) {
+    return { height: `${displayLogHeightPx.value}px`, flexShrink: "0" };
+  }
+  return { flex: "1 1 auto", minHeight: "0" };
+});
+
+const bodyFlex = computed(() => {
+  if (!props.showTree) return undefined;
+  if (splitTreeAndLog.value || splitTreeAndProps.value || splitAllThree.value) {
+    return { flex: "1 1 auto", minHeight: `${TREE_MIN_H}px` };
+  }
+  return { flex: "1 1 auto", minHeight: "0" };
 });
 
 let resizeObserver: ResizeObserver | null = null;
@@ -181,35 +261,50 @@ function onAddVisibleToWorkset() {
   if (added > 0) sidebarTab.value = "workset";
 }
 
-function onLogResizeStart(e: MouseEvent) {
-  if (!splitTreeAndLog.value) return;
-  e.preventDefault();
-  const startY = e.clientY;
-  const startH = shellLayout.value.log_panel_height_px;
+function onPropsResizeStart(e: PointerEvent) {
+  if (!showPropsPanel.value) return;
   const sidebarEl = sidebarRef.value;
   if (!sidebarEl) return;
-  document.body.style.cursor = "row-resize";
-  document.body.style.userSelect = "none";
+  const startY = e.clientY;
+  const startH = shellLayout.value.properties_panel_height_px;
 
-  function onMove(ev: MouseEvent) {
-    const delta = startY - ev.clientY;
-    const maxH = maxLogHeightPx(sidebarEl.clientHeight);
-    const next = Math.min(maxH, Math.max(LOG_MIN_H, startH + delta));
-    shell.shellLayout.value.log_panel_height_px = next;
-  }
+  bindPointerDrag(e, {
+    cursor: "row-resize",
+    onMove(ev) {
+      const delta = startY - ev.clientY;
+      const maxH = maxPropsHeightPx(sidebarEl.clientHeight);
+      const next = Math.min(maxH, Math.max(PROPS_MIN_H, startH + delta));
+      shell.shellLayout.value.properties_panel_height_px = next;
+    },
+    onEnd() {
+      void shell.persistShellLayout({
+        properties_panel_height_px: shell.shellLayout.value.properties_panel_height_px,
+      });
+    },
+  });
+}
 
-  async function onUp() {
-    window.removeEventListener("mousemove", onMove);
-    window.removeEventListener("mouseup", onUp);
-    document.body.style.cursor = "";
-    document.body.style.userSelect = "";
-    await shell.persistShellLayout({
-      log_panel_height_px: shell.shellLayout.value.log_panel_height_px,
-    });
-  }
+function onLogResizeStart(e: PointerEvent) {
+  if (!props.showLog || !logOpen.value) return;
+  const sidebarEl = sidebarRef.value;
+  if (!sidebarEl) return;
+  const startY = e.clientY;
+  const startH = shellLayout.value.log_panel_height_px;
 
-  window.addEventListener("mousemove", onMove);
-  window.addEventListener("mouseup", onUp);
+  bindPointerDrag(e, {
+    cursor: "row-resize",
+    onMove(ev) {
+      const delta = startY - ev.clientY;
+      const maxH = maxLogHeightPx(sidebarEl.clientHeight);
+      const next = Math.min(maxH, Math.max(LOG_MIN_H, startH + delta));
+      shell.shellLayout.value.log_panel_height_px = next;
+    },
+    onEnd() {
+      void shell.persistShellLayout({
+        log_panel_height_px: shell.shellLayout.value.log_panel_height_px,
+      });
+    },
+  });
 }
 
 watch(sidebarRef, (el) => bindSidebarObserver(el), { flush: "post" });
@@ -258,12 +353,17 @@ onUnmounted(() => {
     class="ws-sidebar"
     :class="[
       `dock-${dockSide}`,
-      { 'log-only': showLog && !showTree, 'has-split': splitTreeAndLog },
+      {
+        'log-only': showLog && !showTree && !showPropsPanel,
+        'props-only': showPropsPanel && !showTree && !(showLog && logOpen),
+        'has-split': splitTreeAndLog || splitTreeAndProps || splitAllThree || splitPropsAndLogOnly,
+        'has-props-split': showPropsPanel && (showTree || (showLog && logOpen)),
+      },
     ]"
     data-tour="workspace-tree"
     :style="{ width: panelWidth }"
   >
-    <div v-if="showTree" class="ws-body">
+    <div v-if="showTree" class="ws-body" :style="bodyFlex">
       <div class="ws-tab-bar" role="tablist">
         <button
           type="button"
@@ -299,91 +399,99 @@ onUnmounted(() => {
       </div>
 
       <div v-show="sidebarTab === 'tree'" class="ws-tree-section">
-      <div class="ws-head">
-        <div class="ws-title-row">
-          <span class="ws-title" :title="treeTitle">{{ treeTitle }}</span>
-          <div class="ws-filters">
-            <template v-if="showCadFilters">
-              <label class="chk">
-                <input v-model="filters.wantFcstd" type="checkbox" @change="onFilterChange" />
-                FCStd
-              </label>
-              <label class="chk">
-                <input v-model="filters.wantSw" type="checkbox" @change="onFilterChange" />
-                .sldprt
-              </label>
-            </template>
-            <template v-else-if="showCodeFilters">
-              <label class="chk">
-                <input v-model="filters.wantCpp" type="checkbox" @change="onFilterChange" />
-                .cpp
-              </label>
-              <label class="chk">
-                <input v-model="filters.wantHeader" type="checkbox" @change="onFilterChange" />
-                .h/.hpp
-              </label>
-            </template>
+        <div class="ws-head">
+          <div class="ws-title-row">
+            <span class="ws-title" :title="treeTitle">{{ treeTitle }}</span>
+            <div class="ws-filters">
+              <template v-if="showCadFilters">
+                <label class="chk">
+                  <input v-model="filters.wantFcstd" type="checkbox" @change="onFilterChange" />
+                  FCStd
+                </label>
+                <label class="chk">
+                  <input v-model="filters.wantSw" type="checkbox" @change="onFilterChange" />
+                  .sldprt
+                </label>
+              </template>
+              <template v-else-if="showCodeFilters">
+                <label class="chk">
+                  <input v-model="filters.wantCpp" type="checkbox" @change="onFilterChange" />
+                  .cpp
+                </label>
+                <label class="chk">
+                  <input v-model="filters.wantHeader" type="checkbox" @change="onFilterChange" />
+                  .h/.hpp
+                </label>
+              </template>
+            </div>
+          </div>
+          <div class="ws-search-row">
+            <input
+              v-model="treeFilterQuery"
+              class="ws-search-input"
+              type="search"
+              spellcheck="false"
+              placeholder="筛选文件名 / 路径…"
+            />
+            <button type="button" class="mini" :disabled="loading" title="重新扫描工作空间树" @click="scan">
+              {{ loading ? "…" : "刷新" }}
+            </button>
+            <button
+              v-if="treeFilterQuery.trim()"
+              type="button"
+              class="mini"
+              title="清除筛选"
+              @click="treeFilterQuery = ''"
+            >
+              清除
+            </button>
+            <button
+              type="button"
+              class="mini"
+              title="将当前可见文件加入活动工作集"
+              :disabled="!displayFileCount"
+              @click="onAddVisibleToWorkset"
+            >
+              +工作集
+            </button>
           </div>
         </div>
-        <div class="ws-search-row">
-          <input
-            v-model="treeFilterQuery"
-            class="ws-search-input"
-            type="search"
-            spellcheck="false"
-            placeholder="筛选文件名 / 路径…"
-          />
-          <button type="button" class="mini" :disabled="loading" title="重新扫描工作空间树" @click="scan">
-            {{ loading ? "…" : "刷新" }}
-          </button>
-          <button
-            v-if="treeFilterQuery.trim()"
-            type="button"
-            class="mini"
-            title="清除筛选"
-            @click="treeFilterQuery = ''"
-          >
-            清除
-          </button>
-          <button
-            type="button"
-            class="mini"
-            title="将当前可见文件加入活动工作集"
-            :disabled="!displayFileCount"
-            @click="onAddVisibleToWorkset"
-          >
-            +工作集
-          </button>
+        <div class="ws-tree">
+          <div v-if="displayTree" class="ws-tree-scroll">
+            <TreeBranch :node="displayTree" :selected="selectedRel" @select-file="onSelect" />
+          </div>
+          <p v-else-if="tree && treeFilterQuery.trim()" class="muted">无匹配文件</p>
+          <p v-else class="muted">{{ loading ? "扫描中…" : "无数据" }}</p>
         </div>
       </div>
-      <div class="ws-tree">
-        <div v-if="displayTree" class="ws-tree-scroll">
-          <TreeBranch
-            :node="displayTree"
-            :selected="selectedRel"
-            @select-file="onSelect"
-          />
-        </div>
-        <p v-else-if="tree && treeFilterQuery.trim()" class="muted">无匹配文件</p>
-        <p v-else class="muted">{{ loading ? "扫描中…" : "无数据" }}</p>
+
+      <div v-show="sidebarTab === 'workset'" class="ws-workset-section">
+        <FileWorksetPanel />
+      </div>
+
+      <div v-show="showCodeFilters && sidebarTab === 'ignore'" class="ws-ignore-section">
+        <CodeIgnorePanel layout="sidebar" />
       </div>
     </div>
 
-    <div v-show="sidebarTab === 'workset'" class="ws-workset-section">
-      <FileWorksetPanel />
-    </div>
-
-    <div v-show="showCodeFilters && sidebarTab === 'ignore'" class="ws-ignore-section">
-      <CodeIgnorePanel layout="sidebar" />
-    </div>
-    </div>
+    <template v-if="showPropsPanel">
+      <div
+        v-if="showTree || (showLog && logOpen)"
+        class="props-resizer panel-resizer"
+        title="拖拽调节属性区高度"
+        @pointerdown="onPropsResizeStart"
+      />
+      <div class="ws-props-wrap" :style="propsPanelStyle">
+        <PagePropertiesPanel />
+      </div>
+    </template>
 
     <template v-if="showLog && logOpen">
       <div
-        v-if="splitTreeAndLog"
-        class="log-resizer"
-        title="拖拽调节日志区高度（上方工作空间树随动伸缩）"
-        @mousedown="onLogResizeStart"
+        v-if="showTree || showPropsPanel"
+        class="log-resizer panel-resizer"
+        title="拖拽调节日志区高度"
+        @pointerdown="onLogResizeStart"
       />
       <div class="ws-log-wrap" :style="logPanelStyle">
         <ShellLogPanel />
@@ -414,7 +522,8 @@ onUnmounted(() => {
   border-right: 1px solid var(--border);
 }
 
-.ws-sidebar.log-only .ws-log-wrap {
+.ws-sidebar.log-only .ws-log-wrap,
+.ws-sidebar.props-only .ws-props-wrap {
   flex: 1;
   min-height: 0;
 }
@@ -422,6 +531,46 @@ onUnmounted(() => {
 .ws-sidebar.has-split .ws-body {
   flex: 1 1 auto;
   min-height: 120px;
+}
+
+.ws-props-wrap {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.panel-resizer {
+  flex-shrink: 0;
+  height: 6px;
+  cursor: row-resize;
+  touch-action: none;
+  background: var(--panel-head-bg, #f1f5f9);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+
+.panel-resizer::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 28px;
+  height: 3px;
+  margin: -1.5px 0 0 -14px;
+  border-radius: 2px;
+  background: rgba(148, 163, 184, 0.55);
+  pointer-events: none;
+}
+
+.panel-resizer:hover {
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.panel-resizer:hover::after {
+  background: rgba(59, 130, 246, 0.55);
 }
 
 .ws-body {
@@ -576,37 +725,5 @@ onUnmounted(() => {
   padding: 12px;
   color: var(--muted);
   font-size: 0.82rem;
-}
-
-.log-resizer {
-  flex-shrink: 0;
-  height: 6px;
-  min-height: 6px;
-  cursor: row-resize;
-  background: var(--panel-head-bg, #f1f5f9);
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  position: relative;
-}
-
-.log-resizer::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 28px;
-  height: 3px;
-  margin: -1.5px 0 0 -14px;
-  border-radius: 2px;
-  background: rgba(148, 163, 184, 0.55);
-  pointer-events: none;
-}
-
-.log-resizer:hover {
-  background: rgba(59, 130, 246, 0.12);
-}
-
-.log-resizer:hover::after {
-  background: rgba(59, 130, 246, 0.55);
 }
 </style>

@@ -1,16 +1,15 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import {
   applyCodeUuids,
-  fetchCodeIgnorePrefs,
   scanCodeUuids,
   type CodeUuidHit,
   type UuidApplyStrategy,
 } from "../api";
 import PageHelpButton from "../components/PageHelpButton.vue";
-import WorksetScopePicker from "../components/WorksetScopePicker.vue";
-import { promptChoice } from "../composables/choiceDialog";
 import { useAppShell } from "../composables/useAppShell";
+import { useCodeUuidPropertySheet } from "../composables/useCodeUuidPropertySheet";
+import { promptChoice } from "../composables/choiceDialog";
 import { useWorksetPageScope } from "../composables/useWorksetPageScope";
 import { useFileWorksetsStore } from "../stores/fileWorksets";
 import { useResizableTable, type TableColumnDef } from "../composables/useResizableTable";
@@ -45,11 +44,12 @@ const worksetStore = useFileWorksetsStore();
 const worksetScope = useWorksetPageScope("code_uuid");
 
 const strategy = ref<UuidApplyStrategy>("map_per_value");
+
+useCodeUuidPropertySheet("code_uuid", strategy);
 const hits = ref<CodeUuidHit[]>([]);
 const selected = ref<Set<string>>(new Set());
 const replacementByHitId = ref<Record<string, string>>({});
 const engineMessage = ref("");
-const ignoreSummary = ref("");
 
 const scanning = ref(false);
 const applying = ref(false);
@@ -145,15 +145,6 @@ function toggleAll(checked: boolean) {
   selected.value = checked ? new Set(hits.value.map((h) => h.hit_id)) : new Set();
 }
 
-async function loadIgnoreSummary() {
-  try {
-    const ig = await fetchCodeIgnorePrefs();
-    ignoreSummary.value = `忽略 ${ig.ignore_patterns.length} 条（文件 ${ig.ignore_file_patterns.length} + 自定义 ${ig.ignore_custom_patterns.length}）`;
-  } catch {
-    ignoreSummary.value = "";
-  }
-}
-
 function replacementText(hitId: string): string {
   return replacementByHitId.value[hitId] ?? "";
 }
@@ -177,7 +168,6 @@ async function onScan() {
     });
     hits.value = out.hits || [];
     engineMessage.value = out.message || "";
-    await loadIgnoreSummary();
     shell.appendLog(out.message || `扫描完成 · 命中 ${hits.value.length}`, { source: "code_uuid" });
     shell.setStatus(out.implemented ? `命中 ${hits.value.length}` : out.message || "引擎尚未接入");
   } catch (e) {
@@ -283,10 +273,6 @@ function thClass(key: string) {
   if (key === "filename") return "sticky-col-left sticky-col-filename filename-cell";
   return "";
 }
-
-onMounted(() => {
-  void loadIgnoreSummary();
-});
 </script>
 
 <template>
@@ -294,25 +280,16 @@ onMounted(() => {
     <header class="page-head">
       <div class="head-row">
         <h1 class="page-title">Code UUID 替换</h1>
-        <p class="page-desc">扫描 UUID 形态字符串，勾选后批量替换；忽略规则在「Code 忽略设定」统一配置</p>
-        <div class="head-help">
+        <div class="head-actions">
+          <el-button size="small" link type="primary" @click="openIgnorePanel">忽略设定</el-button>
           <PageHelpButton page-id="code_uuid" />
         </div>
       </div>
     </header>
 
-    <section class="card settings-card">
-      <WorksetScopePicker page-id="code_uuid" />
+    <section class="card action-card">
       <div class="form-row settings-row2">
-        <el-form-item label="替换策略" class="strategy-field">
-          <el-select v-model="strategy" size="small" class="strategy-select">
-            <el-option
-              value="map_per_value"
-              label="同值一组 → 共用一个新 UUID（按写法分别格式化）"
-            />
-            <el-option value="fresh_per_hit" label="每条命中独立新 UUID" />
-          </el-select>
-        </el-form-item>
+        <p class="muted small action-hint">扫描范围与替换策略见侧栏「属性」</p>
         <div class="actions">
           <el-button size="small" :loading="scanning" @click="onScan">扫描 UUID</el-button>
           <el-button
@@ -342,11 +319,6 @@ onMounted(() => {
           </el-button>
         </div>
       </div>
-    </section>
-
-    <section class="card ignore-banner">
-      <span v-if="ignoreSummary" class="muted small">{{ ignoreSummary }}</span>
-      <el-button size="small" link type="primary" @click="openIgnorePanel">右侧栏 · 忽略</el-button>
     </section>
 
     <section class="card results-card">

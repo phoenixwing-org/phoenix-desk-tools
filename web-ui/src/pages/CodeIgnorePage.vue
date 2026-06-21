@@ -16,9 +16,6 @@ onMounted(() => {
     <header class="page-head">
       <div class="head-row">
         <h1 class="page-title">Code 忽略设定</h1>
-        <p class="page-desc">
-          所有 Code 工具共用；亦可在右侧栏「忽略」Tab 中编辑（Code 模块页面下）
-        </p>
         <div class="head-help">
           <PageHelpButton page-id="code_ignore" />
         </div>

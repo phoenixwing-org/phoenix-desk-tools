@@ -280,26 +280,25 @@ onMounted(() => {
       <template v-else>请在 Link 指向的模型 FCStd 中编辑。</template>
     </p>
     <section class="toolbar">
-      <button type="button" class="btn" :disabled="busy" @click="onReload">重新读取</button>
-      <button
-        type="button"
-        class="btn recommend-all"
-        :disabled="busy || recommendingAll || !isFcstd || bomReadonly"
+      <el-button size="small" :disabled="busy" @click="onReload">重新读取</el-button>
+      <el-button
+        size="small"
+        :loading="recommendingAll"
+        :disabled="busy || !isFcstd || bomReadonly"
         @click="onRecommendAll"
       >
-        {{ recommendingAll ? "推荐中…" : "全部推荐" }}
-      </button>
-      <button type="button" class="btn" :disabled="busy || !isFcstd" @click="onDetectKinds">
-        识别类型
-      </button>
-      <button
-        type="button"
-        class="btn primary"
-        :disabled="busy || !isFcstd || bomReadonly"
+        全部推荐
+      </el-button>
+      <el-button size="small" :disabled="busy || !isFcstd" @click="onDetectKinds">识别类型</el-button>
+      <el-button
+        type="primary"
+        size="small"
+        :loading="busy"
+        :disabled="!isFcstd || bomReadonly"
         @click="onSave"
       >
-        {{ busy ? "…" : "写入文件" }}
-      </button>
+        写入文件
+      </el-button>
     </section>
 
     <section v-if="isFcstd" class="doc-kind-block">
@@ -325,9 +324,9 @@ onMounted(() => {
 
     <section class="kind-row">
       <span class="kind-label">推荐文件名时匹配：</span>
-      <label class="chk"><input v-model="kindFilters.part" type="checkbox" /> 零件</label>
-      <label class="chk"><input v-model="kindFilters.assembly" type="checkbox" /> 装配</label>
-      <label class="chk"><input v-model="kindFilters.drawing" type="checkbox" /> 图纸</label>
+      <el-checkbox v-model="kindFilters.part">零件</el-checkbox>
+      <el-checkbox v-model="kindFilters.assembly">装配</el-checkbox>
+      <el-checkbox v-model="kindFilters.drawing">图纸</el-checkbox>
     </section>
 
     <form class="form" @submit.prevent="onSave">
@@ -357,24 +356,23 @@ onMounted(() => {
               :readonly="!row.editable || bomReadonly"
               :class="{ readonly: !row.editable || bomReadonly }"
             />
-            <button
+            <el-button
               v-if="row.recommend"
-              type="button"
-              class="btn mini"
-              :disabled="busy || recommendingAll || recommendingField === row.key || bomReadonly"
+              size="small"
+              :loading="recommendingField === row.key"
+              :disabled="busy || recommendingAll || bomReadonly"
               @click="onRecommendField(row.key as EditableKey)"
             >
-              {{ recommendingField === row.key ? "…" : "推荐" }}
-            </button>
-            <button
+              推荐
+            </el-button>
+            <el-button
               v-if="row.key === 'filename'"
-              type="button"
-              class="btn mini"
+              size="small"
               :disabled="busy || !isFcstd || bomReadonly"
               @click="onGoRename"
             >
               去改名
-            </button>
+            </el-button>
           </div>
         </div>
       </div>

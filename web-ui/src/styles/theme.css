@@ -95,7 +95,7 @@
   --ribbon-group-divider: var(--phoenix-ribbon-group-divider);
   --ribbon-btn-hover: var(--phoenix-ribbon-btn-hover);
   --ribbon-btn-radius: var(--phoenix-radius-sm);
-  --ribbon-panel-height: 58px;
+  --ribbon-panel-height: 66px;
   --ribbon-group-body-height: 40px;
 
   /* Element Plus 桥接（亮色） */

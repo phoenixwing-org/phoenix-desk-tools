@@ -24,8 +24,9 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
   welcome: {
     title: "欢迎",
     bullets: [
-      "启动后默认页：点击最近工程进入 Ribbon 工作台；左侧可打开配置或新手指南。",
-      "Gitee 链接在欢迎页；完整功能模块与开工清单见主页「功能与模块」或 Ribbon「开始 → 主页」。",
+      "最近工程右侧选择 CAD / Code / 全部，进入对应 Ribbon 工具台；有未关闭文档时优先恢复。",
+      "主页与模块开关仅在 Ribbon「系统 → 主页」或左侧「主页 · 功能清单」打开。",
+      "Gitee 链接在欢迎页；完整开工清单见新手指南。",
     ],
     docPath: "doc/user/快速开始.md",
     tourSteps: [
@@ -84,8 +85,9 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
   file_detail: {
     title: "文件详情",
     bullets: [
+      "在工作空间树中点击 .FCStd 打开；同一路径复用一个 Tab。",
       "子 Tab：概览、编辑属性、引用、改名、装配结构等。",
-      "图纸档属性只读；同一 repo 路径复用一个 Tab。",
+      "图纸档属性只读。",
     ],
     docPath: "doc/cad/文件详情页-整改规划.md",
     tourSteps: [
@@ -138,7 +140,10 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
   },
   part_key_detail: {
     title: "零件详情",
-    bullets: ["查看 PartKey 属性与关联 FCStd。"],
+    bullets: [
+      "输入零件标识后检索；或在本 Tab 激活时点击树中 .FCStd（按文件名解析）。",
+      "查看 PartKey 属性与关联 FCStd 列表。",
+    ],
     tourSteps: [
       tour("[data-tour-page-partkey-body]", "零件信息", "属性与关联文件列表；同 PartKey 复用 Tab。"),
     ],
@@ -167,17 +172,20 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
   reorder_members: {
     title: "C++ 成员排序",
     bullets: [
-      "工作空间下一级目录与 .h/.cpp 文件；忽略规则见「Code 忽略设定」（code.ignore + 自定义）。",
-      "可预检或直接执行排序；结果在运行日志。",
+      "勾选一级目录或源文件；运行选项与 KEVIN_SYSTEM_CODE 在侧栏「属性」面板（随工作空间保存）。",
+      "建议先预检再写盘；变更列表与运行日志见下方。",
+      "忽略：内置 .phoenix / build / node_modules 等；可选 .phoenix/code.ignore；CAA 差异在侧栏「忽略设定」。",
+      "锁定段（P0）：clang-format off/on、KEVIN/CAA Wizard、#pragma region 等成对标记内整段不重排。",
+      "排序摘要：.cpp/.h 各访问段内特殊成员优先，其余字母序；.cpp 补 //--- 分隔符。",
     ],
     docPath: "doc/code/成员函数排序-reorder_members.md",
   },
   code_ignore: {
     title: "Code 忽略设定",
     bullets: [
-      "所有 Code 工具共用：内置 + .phoenix/code.ignore 文件 + 工作空间自定义。",
-      "Code 模块页面下，右侧栏提供「工作空间树 / 忽略设定」Tab；各区块可折叠展开。",
-      "亦可在导航打开本页全屏编辑；CAA 等可选预设后保存。",
+      "所有 Code 工具共用：内置规则 + code.ignore 文件 + 工作空间自定义行。",
+      "Code 模块页可在侧栏「忽略设定」Tab 编辑；本页为全屏编辑入口。",
+      "文件级 / 进程目录 / 自定义区可折叠；磁盘改 code.ignore 后点刷新。",
     ],
     docPath: "doc/code/Code模块-批量改名-规划.md",
   },
@@ -196,17 +204,18 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
   code_rename: {
     title: "Code 批量改名",
     bullets: [
-      "旧名→新名精确匹配；可勾选文件夹 / 文件 / 文本三个级别。",
-      "忽略规则在「Code 忽略设定」统一配置。",
-      "预览列出命中后再执行；引擎接入前 API 与界面可先联调。",
+      "旧名→新名精确匹配；勾选文件夹 / 文件 / 文本三个级别后预览再执行。",
+      "扫描范围见表单内工作集选择器；忽略规则在侧栏「忽略设定」统一配置。",
+      "「包含忽略目录」慎用；完成后可勾选重扫 Code 索引。",
     ],
     docPath: "doc/code/Code模块-批量改名-规划.md",
   },
   code_uuid: {
     title: "Code UUID 替换",
     bullets: [
-      "扫描文本文件中的 UUID 形态字符串，勾选后批量替换。",
-      "忽略规则在「Code 忽略设定」统一配置；同一旧 UUID 可一键全选。",
+      "扫描文本中的 UUID 形态字符串，勾选后预检或写盘替换。",
+      "替换策略：同值一组共用一个新 UUID，或每条命中独立新 UUID。",
+      "忽略规则在侧栏「忽略设定」；可按 UUID 组全选。",
     ],
     docPath: "doc/code/Code模块-批量改名-规划.md",
   },

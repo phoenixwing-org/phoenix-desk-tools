@@ -1,0 +1,98 @@
+import { computed } from "vue";
+import WorksetScopePicker from "../components/WorksetScopePicker.vue";
+import { usePagePropertySheet } from "./usePagePropertySheet";
+import type { RenameLevel } from "../api";
+import {
+  CODE_RENAME_LEVEL_OPTIONS,
+  useCodeRenamePageStore,
+} from "../stores/codeRenamePage";
+import { propBool, propEnum, propGroup, propSheet, propSlot, propString } from "../utils/pagePropertySchema";
+
+export function useCodeRenamePropertySheet(
+  pageId: string,
+  onPersistServer?: () => void,
+  onValidationError?: (message: string) => void,
+) {
+  const pageStore = useCodeRenamePageStore();
+
+  function toggleLevel(id: RenameLevel, checked: boolean) {
+    const next = new Set(pageStore.levels);
+    if (checked) next.add(id);
+    else next.delete(id);
+    if (!next.size) {
+      onValidationError?.("至少勾选一种改名级别");
+      return;
+    }
+    pageStore.levels = [...next];
+    pageStore.persist();
+    onPersistServer?.();
+  }
+
+  usePagePropertySheet(pageId, () =>
+    propSheet(
+      [
+        propGroup("rename", "改名", [
+          propString("old", "旧名", {
+            value: computed(() => pageStore.old),
+            mono: true,
+            placeholder: "精确匹配",
+            onChange: (v) => {
+              pageStore.setOld(v);
+              onPersistServer?.();
+            },
+          }),
+          propString("new", "新名", {
+            value: computed(() => pageStore.new),
+            mono: true,
+            onChange: (v) => {
+              pageStore.setNew(v);
+              onPersistServer?.();
+            },
+          }),
+        ]),
+        propGroup("scope", "扫描范围", [
+          propSlot("workset_scope", "范围", {
+            component: WorksetScopePicker,
+            props: { pageId },
+          }),
+        ]),
+        propGroup("rules", "规则", [
+          ...CODE_RENAME_LEVEL_OPTIONS.map((opt) =>
+            propBool(`level_${opt.id}`, opt.label, {
+              value: computed(() => pageStore.levelSet.has(opt.id)),
+              onChange: (v) => toggleLevel(opt.id, v),
+            }),
+          ),
+          propEnum("target_encoding", "写回编码", {
+            value: computed(() => pageStore.targetEncoding),
+            options: [
+              { value: "utf-8", label: "UTF-8" },
+              { value: "gbk", label: "GBK" },
+            ],
+            onChange: (v) => {
+              pageStore.setTargetEncoding(v as "utf-8" | "gbk");
+              onPersistServer?.();
+            },
+          }),
+          propBool("rescan_index", "完成后重扫 Code 索引", {
+            value: computed(() => pageStore.rescanIndex),
+            onChange: (v) => {
+              pageStore.setRescanIndex(v);
+              onPersistServer?.();
+            },
+          }),
+          propBool("include_ignored", "包含忽略目录", {
+            value: computed(() => pageStore.includeIgnored),
+            labelTone: "emphasis",
+            hint: "包含 code.ignore 忽略目录内的条目，慎用",
+            onChange: (v) => {
+              pageStore.setIncludeIgnored(v);
+              onPersistServer?.();
+            },
+          }),
+        ]),
+      ],
+      { title: "Code 批量改名", schemaVersion: 1 },
+    ),
+  );
+}

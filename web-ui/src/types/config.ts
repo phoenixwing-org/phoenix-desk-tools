@@ -52,6 +52,13 @@ export type ShellLayout = {
   workspace_tree_dock: SideDock;
   /** 运行日志停靠侧 */
   shell_log_dock: SideDock;
+  /** 页面属性面板是否展开 */
+  properties_panel_open: boolean;
+  properties_panel_height_px: number;
+  /** 页面属性面板停靠侧 */
+  properties_panel_dock: SideDock;
+  /** 属性表「名称」列宽（px） */
+  properties_name_col_width_px: number;
 };
 
 export type RecentWorkspaceEntry = {

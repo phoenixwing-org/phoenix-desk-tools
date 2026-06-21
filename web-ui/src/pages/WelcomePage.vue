@@ -55,18 +55,20 @@ function pathParent(absPath: string): string {
   return norm.slice(0, idx);
 }
 
-async function openWorkspace(path: string) {
-  if (path !== workspacePath.value) {
-    if (!window.confirm(`打开工作空间？\n\n${path}`)) return;
+async function openWorkspace(entry: RecentWorkspaceEntry) {
+  if (!entry.exists) return;
+  const scope = entryScope(entry);
+  if (entry.path !== workspacePath.value) {
+    if (!window.confirm(`打开工作空间？\n\n${entry.path}`)) return;
     try {
-      await shell.switchWorkspace(path);
+      await shell.switchWorkspace(entry.path);
     } catch (e) {
       shell.setStatus(String(e));
       return;
     }
   }
   try {
-    await shell.enterWorkbenchFromWelcome();
+    await shell.enterWorkbenchFromWelcome({ scope });
   } catch (e) {
     shell.setStatus(String(e));
   }
@@ -102,6 +104,10 @@ function openGuide() {
 }
 
 function openHome() {
+  if (!workspacePath.value) {
+    shell.openConfig();
+    return;
+  }
   shell.goToPage("home");
 }
 </script>
@@ -122,7 +128,7 @@ function openHome() {
           打开工作空间
         </el-button>
         <el-button class="rail-btn-full" @click="openGuide">新手指南</el-button>
-        <el-button class="rail-btn-full" @click="openHome">功能与模块</el-button>
+        <el-button class="rail-btn-full" @click="openHome">主页 · 功能清单</el-button>
       </div>
 
       <div class="rail-links">
@@ -144,6 +150,9 @@ function openHome() {
     <main class="welcome-main">
       <header class="welcome-head">
         <h1 class="welcome-title">欢迎使用 Phoenix</h1>
+        <p class="welcome-lead">
+          在下方选择工程与模块（CAD / Code / 全部），点击进入对应工具台；若该模块有未关闭的文档，将自动恢复。
+        </p>
         <p v-if="workspacePath" class="welcome-current">
           当前工作空间：
           <span class="mono" :title="workspacePath">{{ workspacePath }}</span>
@@ -173,7 +182,7 @@ function openHome() {
               class="recent-open"
               :disabled="!entry.exists"
               :title="entry.path"
-              @click="openWorkspace(entry.path)"
+              @click="openWorkspace(entry)"
             >
               <span class="recent-open-body">
                 <span class="recent-name-row">
@@ -338,6 +347,14 @@ function openHome() {
   font-size: 2rem;
   font-weight: 600;
   color: #0f172a;
+}
+
+.welcome-lead {
+  margin: 0 0 10px;
+  max-width: 36rem;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: #475569;
 }
 
 .welcome-current {

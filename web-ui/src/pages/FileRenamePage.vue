@@ -494,39 +494,25 @@ onUnmounted(() => {
       </div>
     </header>
 
-    <div v-if="pageError" class="banner err">{{ pageError }}</div>
+    <el-alert v-if="pageError" type="error" :title="pageError" show-icon :closable="false" class="err-alert" />
 
     <section class="source-block">
-      <nav class="mode-tabs" role="tablist" data-tour-page-rename-modes>
-        <button
-          type="button"
-          role="tab"
-          class="mode-tab"
-          :class="{ active: panelMode === 'history' }"
-          @click="panelMode = 'history'"
-        >
-          改名历史
-        </button>
-        <button
-          type="button"
-          role="tab"
-          class="mode-tab"
-          :class="{ active: panelMode === 'manual' }"
-          @click="panelMode = 'manual'"
-        >
-          手填旧名 / 新名
-        </button>
-      </nav>
+      <el-radio-group v-model="panelMode" size="small" class="mode-tabs" data-tour-page-rename-modes>
+        <el-radio-button value="history">改名历史</el-radio-button>
+        <el-radio-button value="manual">手填旧名 / 新名</el-radio-button>
+      </el-radio-group>
 
       <div v-if="panelMode === 'history'" class="mode-body">
         <label class="field">
           <span class="field-label">记录</span>
-          <select v-model.number="renameLogId" class="field-input">
-            <option :value="null">— 选择改名记录 —</option>
-            <option v-for="row in renameLogs" :key="row.id" :value="row.id">
-              #{{ row.id }} · {{ row.old_filename }} → {{ row.new_filename }} · {{ row.created_at }}
-            </option>
-          </select>
+          <el-select v-model="renameLogId" class="field-input" placeholder="— 选择改名记录 —" clearable>
+            <el-option
+              v-for="row in renameLogs"
+              :key="row.id"
+              :label="`#${row.id} · ${row.old_filename} → ${row.new_filename} · ${row.created_at}`"
+              :value="row.id"
+            />
+          </el-select>
         </label>
         <p v-if="!renameLogs.length" class="field-hint">
           尚无记录。请先在文件详情 · 改名 Tab 执行磁盘改名。
@@ -536,7 +522,7 @@ onUnmounted(() => {
       <div v-else class="mode-body manual-grid">
         <label class="field">
           <span class="field-label">旧文件名</span>
-          <input
+          <el-input
             v-model="queryText"
             class="field-input mono"
             spellcheck="false"
@@ -547,7 +533,7 @@ onUnmounted(() => {
         </label>
         <label class="field">
           <span class="field-label">新文件名</span>
-          <input
+          <el-input
             v-model="newBasename"
             class="field-input mono"
             spellcheck="false"
@@ -558,15 +544,12 @@ onUnmounted(() => {
       </div>
 
       <div class="action-bar">
-        <label class="chk-transitive">
-          <input v-model="includeTransitive" type="checkbox" />
-          含间接宿主
-        </label>
+        <el-checkbox v-model="includeTransitive">含间接宿主</el-checkbox>
         <div class="action-btns">
-          <button type="button" class="btn primary" :disabled="busy || !canAnalyze()" @click="onScanRefs">
-            {{ busy ? "…" : "开始分析" }}
-          </button>
-          <button type="button" class="btn" :disabled="busy" @click="loadLogs">刷新历史</button>
+          <el-button type="primary" size="small" :loading="busy" :disabled="!canAnalyze()" @click="onScanRefs">
+            开始分析
+          </el-button>
+          <el-button size="small" :disabled="busy" @click="loadLogs">刷新历史</el-button>
         </div>
       </div>
     </section>
@@ -613,13 +596,8 @@ onUnmounted(() => {
   overflow: auto;
 }
 
-.banner.err {
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 0.85rem;
+.err-alert {
   margin-bottom: 10px;
-  background: #fef2f2;
-  color: #b91c1c;
 }
 
 .source-block {
@@ -631,27 +609,7 @@ onUnmounted(() => {
 }
 
 .mode-tabs {
-  display: flex;
-  gap: 4px;
   margin-bottom: 14px;
-  border-bottom: 1px solid var(--border);
-}
-
-.mode-tab {
-  padding: 8px 14px;
-  border: none;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  font-size: 0.85rem;
-  cursor: pointer;
-  color: var(--muted);
-  margin-bottom: -1px;
-}
-
-.mode-tab.active {
-  color: var(--text);
-  border-bottom-color: var(--accent);
-  font-weight: 600;
 }
 
 .mode-body {
@@ -682,11 +640,10 @@ onUnmounted(() => {
 
 .field-input {
   width: 100%;
-  padding: 7px 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  font-size: 0.85rem;
-  box-sizing: border-box;
+}
+
+.field-input.mono :deep(.el-input__inner) {
+  font-family: ui-monospace, monospace;
 }
 
 .field-hint {
@@ -711,36 +668,9 @@ onUnmounted(() => {
   border-top: 1px solid var(--border);
 }
 
-.chk-transitive {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.82rem;
-  color: var(--muted);
-}
-
 .action-btns {
   display: flex;
   gap: 8px;
-}
-
-.btn {
-  padding: 7px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--border-strong);
-  background: var(--btn-bg);
-  font-size: 0.82rem;
-  cursor: pointer;
-}
-
-.btn.primary {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
-}
-
-.btn:disabled {
-  opacity: 0.5;
 }
 
 .help-panel {

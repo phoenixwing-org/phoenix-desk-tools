@@ -29,45 +29,54 @@ const emit = defineEmits<{
 <style scoped>
 .ribbon-tabs {
   display: inline-flex;
-  align-items: center;
-  align-self: center;
-  gap: 1px;
-  height: 30px;
-  padding: 2px;
-  border-radius: var(--phoenix-radius-md);
-  background: var(--phoenix-ribbon-tab-track);
-  box-shadow: inset 0 1px 2px var(--phoenix-border-subtle);
+  align-items: stretch;
+  align-self: stretch;
+  gap: 0;
+  height: 100%;
+  min-height: 32px;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .ribbon-tab {
+  position: relative;
   border: none;
-  border-radius: calc(var(--phoenix-radius-md) - 2px);
+  border-radius: 0;
   background: transparent;
-  padding: 0 14px;
-  height: 26px;
-  font-size: 0.74rem;
+  padding: 0 18px;
+  margin: 0;
+  height: auto;
+  min-height: 32px;
+  font-size: 0.78rem;
   font-weight: 500;
-  letter-spacing: 0.02em;
-  color: var(--phoenix-text-muted);
+  letter-spacing: 0.01em;
+  color: var(--phoenix-text-secondary, #475569);
   cursor: pointer;
   white-space: nowrap;
-  transition:
-    background 0.15s ease,
-    color 0.15s ease,
-    box-shadow 0.15s ease;
+  transition: color 0.12s ease;
 }
 
 .ribbon-tab:hover:not(.active) {
-  color: var(--phoenix-text-secondary);
-  background: var(--phoenix-ribbon-tab-hover);
+  color: var(--phoenix-text, #1e293b);
+  background: rgba(148, 163, 184, 0.1);
 }
 
 .ribbon-tab.active {
-  color: var(--phoenix-accent-hover);
+  color: var(--phoenix-wps-accent, #217346);
   font-weight: 600;
-  background: var(--phoenix-ribbon-tab-active-bg);
-  box-shadow:
-    var(--phoenix-shadow-sm),
-    inset 0 0 0 1px var(--phoenix-border-subtle);
+  background: transparent;
+  box-shadow: none;
+}
+
+.ribbon-tab.active::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--phoenix-wps-accent, #217346);
 }
 </style>

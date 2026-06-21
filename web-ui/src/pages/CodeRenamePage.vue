@@ -3,16 +3,14 @@ import { computed, onMounted, ref, watch } from "vue";
 import { ElMessageBox } from "element-plus";
 import {
   applyCodeRename,
-  fetchCodeIgnorePrefs,
   fetchCodeRenamePrefs,
   previewCodeRename,
   saveCodeRenamePrefs,
   type CodeRenameHit,
-  type RenameLevel,
 } from "../api";
 import PageHelpButton from "../components/PageHelpButton.vue";
-import WorksetScopePicker from "../components/WorksetScopePicker.vue";
 import { useAppShell } from "../composables/useAppShell";
+import { useCodeRenamePropertySheet } from "../composables/useCodeRenamePropertySheet";
 import { useWorksetPageScope } from "../composables/useWorksetPageScope";
 import {
   CODE_RENAME_LEVEL_OPTIONS,
@@ -23,32 +21,7 @@ const shell = useAppShell();
 const pageStore = useCodeRenamePageStore();
 const worksetScope = useWorksetPageScope("code_rename");
 
-const LEVEL_OPTIONS = CODE_RENAME_LEVEL_OPTIONS;
-
-const oldName = computed({
-  get: () => pageStore.old,
-  set: (value: string) => pageStore.setOld(value),
-});
-const newName = computed({
-  get: () => pageStore.new,
-  set: (value: string) => pageStore.setNew(value),
-});
-const targetEncoding = computed({
-  get: () => pageStore.targetEncoding,
-  set: (value: "utf-8" | "gbk") => pageStore.setTargetEncoding(value),
-});
-const includeIgnored = computed({
-  get: () => pageStore.includeIgnored,
-  set: (value: boolean) => pageStore.setIncludeIgnored(value),
-});
-const rescanIndex = computed({
-  get: () => pageStore.rescanIndex,
-  set: (value: boolean) => pageStore.setRescanIndex(value),
-});
-const levels = computed(() => pageStore.levelSet);
 const canRun = computed(() => pageStore.canRun);
-
-const ignoreSummary = ref("");
 
 const hits = ref<CodeRenameHit[]>([]);
 const previewSummary = ref<{ total_hits: number; text_files: number; dirs?: number; files?: number; skipped: number } | null>(null);
@@ -59,29 +32,12 @@ const saving = ref(false);
 const previewing = ref(false);
 const applying = ref(false);
 
-async function loadIgnoreSummary() {
-  try {
-    const ig = await fetchCodeIgnorePrefs();
-    ignoreSummary.value = `忽略 ${ig.ignore_patterns.length} 条（文件 ${ig.ignore_file_patterns.length} + 自定义 ${ig.ignore_custom_patterns.length}）`;
-  } catch {
-    ignoreSummary.value = "";
-  }
-}
-
 function openIgnorePanel() {
   void shell.openCodeIgnoreSidebar();
 }
 
-function toggleLevel(id: RenameLevel, checked: boolean) {
-  pageStore.toggleLevel(id, checked);
-}
-
-function levelLabel(id: RenameLevel) {
-  return LEVEL_OPTIONS.find((o) => o.id === id)?.label ?? id;
-}
-
 function hitLevelLabel(level: string) {
-  return levelLabel(level as RenameLevel);
+  return CODE_RENAME_LEVEL_OPTIONS.find((o) => o.id === level)?.label ?? level;
 }
 
 async function loadPrefs() {
@@ -96,7 +52,7 @@ async function loadPrefs() {
 }
 
 async function onSavePrefs() {
-  if (!levels.value.size) {
+  if (!pageStore.levels.length) {
     shell.setStatus("至少勾选一种改名级别");
     return;
   }
@@ -150,7 +106,7 @@ async function onApply() {
     return;
   }
   const ok = await ElMessageBox.confirm(
-    `将执行批量改名：\n  ${oldName.value.trim()} → ${newName.value.trim()}\n\n建议先预览。确定写盘？`,
+    `将执行批量改名：\n  ${pageStore.old.trim()} → ${pageStore.new.trim()}\n\n建议先预览。确定写盘？`,
     "执行批量改名",
     {
       type: "warning",
@@ -184,14 +140,23 @@ watch(
   (ws) => {
     pageStore.hydrate(ws);
     void loadPrefs();
-    void loadIgnoreSummary();
   },
 );
+
+let prefsSaveTimer: ReturnType<typeof setTimeout> | null = null;
+function schedulePrefsSave() {
+  if (prefsSaveTimer) clearTimeout(prefsSaveTimer);
+  prefsSaveTimer = setTimeout(() => {
+    prefsSaveTimer = null;
+    void onSavePrefs();
+  }, 400);
+}
+
+useCodeRenamePropertySheet("code_rename", schedulePrefsSave, (msg) => shell.setStatus(msg));
 
 onMounted(async () => {
   pageStore.hydrate(shell.workspacePath.value);
   await loadPrefs();
-  await loadIgnoreSummary();
 });
 </script>
 
@@ -200,63 +165,24 @@ onMounted(async () => {
     <header class="page-head">
       <div class="head-row">
         <h1 class="page-title">Code 批量改名</h1>
-        <p class="page-desc">
-          工作空间内精确匹配改名（文件夹 / 文件 / 文本）；忽略规则在「Code 忽略设定」统一配置
-        </p>
-        <div class="head-help">
+        <div class="head-actions">
+          <el-button size="small" link type="primary" @click="openIgnorePanel">忽略设定</el-button>
           <PageHelpButton page-id="code_rename" />
         </div>
       </div>
     </header>
 
-    <section class="card settings-card">
-      <el-form class="settings-form" label-position="top" @submit.prevent>
-        <div class="form-row name-row">
-          <el-form-item label="旧名" class="name-field">
-            <el-input v-model="oldName" size="small" class="mono" spellcheck="false" placeholder="精确匹配" />
-          </el-form-item>
-          <span class="arrow" aria-hidden="true">→</span>
-          <el-form-item label="新名" class="name-field">
-            <el-input v-model="newName" size="small" class="mono" spellcheck="false" />
-          </el-form-item>
+    <section class="card action-card">
+      <div class="form-foot">
+        <p class="muted small action-hint">改名规则与扫描范围见侧栏「属性」</p>
+        <div class="settings-actions">
+          <el-button size="small" :loading="saving" @click="onSavePrefs">保存偏好</el-button>
+          <el-button size="small" :loading="previewing" :disabled="!canRun" @click="onPreview">预览</el-button>
+          <el-button type="primary" size="small" :loading="applying" :disabled="!canRun" @click="onApply">
+            执行改名
+          </el-button>
         </div>
-
-        <WorksetScopePicker page-id="code_rename" />
-
-        <div class="form-row form-foot">
-          <div class="option-row">
-            <el-checkbox
-              v-for="opt in LEVEL_OPTIONS"
-              :key="opt.id"
-              :model-value="levels.has(opt.id)"
-              size="small"
-              @change="toggleLevel(opt.id, Boolean($event))"
-            >
-              {{ opt.label }}
-            </el-checkbox>
-            <el-select v-model="targetEncoding" size="small" class="encoding-select">
-              <el-option value="utf-8" label="UTF-8 写回" />
-              <el-option value="gbk" label="GBK 写回" />
-            </el-select>
-            <el-checkbox v-model="rescanIndex" size="small">完成后重扫 Code 索引</el-checkbox>
-            <el-checkbox v-model="includeIgnored" size="small" class="danger-opt" title="包含忽略目录内的条目，慎用">
-              包含忽略目录
-            </el-checkbox>
-          </div>
-          <div class="settings-actions">
-            <el-button size="small" :loading="saving" @click="onSavePrefs">保存偏好</el-button>
-            <el-button size="small" :loading="previewing" :disabled="!canRun" @click="onPreview">预览</el-button>
-            <el-button type="primary" size="small" :loading="applying" :disabled="!canRun" @click="onApply">
-              执行改名
-            </el-button>
-          </div>
-        </div>
-      </el-form>
-    </section>
-
-    <section class="card ignore-banner">
-      <span v-if="ignoreSummary" class="muted small">{{ ignoreSummary }}</span>
-      <el-button size="small" link type="primary" @click="openIgnorePanel">右侧栏 · 忽略</el-button>
+      </div>
     </section>
 
     <section class="card results-card">

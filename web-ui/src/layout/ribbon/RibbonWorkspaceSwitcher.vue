@@ -38,16 +38,41 @@ function onManage() {
         popper-class="ribbon-workspace-popover"
       >
         <template #reference>
-          <button
-            type="button"
-            class="ribbon-workspace-trigger"
-            :class="{ open: menuOpen }"
-            :title="workspacePath || '未设置工作空间'"
-          >
-            <FolderOpened class="ribbon-workspace-icon" />
-            <span class="ribbon-workspace-name">{{ workspaceShort }}</span>
-            <ArrowDown class="ribbon-workspace-chevron" />
-          </button>
+          <span class="ribbon-workspace-ref">
+            <button
+              v-if="layout === 'inline'"
+              type="button"
+              class="ribbon-workspace-trigger"
+              :class="{ open: menuOpen }"
+              :title="workspacePath || '未设置工作空间'"
+            >
+              <FolderOpened class="ribbon-workspace-icon" />
+              <span class="ribbon-workspace-name">{{ workspaceShort }}</span>
+              <ArrowDown class="ribbon-workspace-chevron" />
+            </button>
+            <el-tooltip
+              v-else
+              placement="bottom"
+              :content="workspacePath || '未设置工作空间'"
+              :show-after="400"
+              popper-class="shell-panel-toggle-tooltip"
+            >
+              <button
+                type="button"
+                class="ribbon-workspace-stacked"
+                :class="{ open: menuOpen }"
+                :aria-label="`工作空间：${workspaceShort || '未设置'}`"
+              >
+                <el-icon class="ribbon-workspace-big-icon" aria-hidden="true">
+                  <FolderOpened />
+                </el-icon>
+                <span class="ribbon-workspace-combo" aria-hidden="true">
+                  <span class="ribbon-workspace-name">{{ workspaceShort || "选择…" }}</span>
+                  <ArrowDown class="ribbon-workspace-chevron" />
+                </span>
+              </button>
+            </el-tooltip>
+          </span>
         </template>
 
         <div class="ribbon-workspace-menu">
@@ -79,7 +104,6 @@ function onManage() {
         </div>
       </el-popover>
     </div>
-    <div v-if="layout !== 'inline'" class="ribbon-workspace-caption">工作空间</div>
   </div>
 </template>
 
@@ -89,8 +113,9 @@ function onManage() {
   flex-direction: column;
   flex-shrink: 0;
   min-width: 0;
-  padding: 0 6px;
+  padding: 0 8px;
   border-right: 1px solid var(--ribbon-group-divider);
+  justify-content: center;
 }
 
 .ribbon-workspace-switcher.layout-inline {
@@ -106,21 +131,25 @@ function onManage() {
   align-items: center;
   flex: 1;
   min-height: 0;
-  max-height: var(--ribbon-group-body-height, 40px);
-  padding: 2px 0 1px;
-}
-
-.layout-inline .ribbon-workspace-body {
-  max-height: none;
   padding: 0;
 }
 
+.ribbon-workspace-ref {
+  display: inline-flex;
+  line-height: 0;
+}
+
+.ribbon-workspace-ref :deep(.el-tooltip__trigger) {
+  display: inline-flex;
+}
+
+/* 单行模式 */
 .ribbon-workspace-trigger {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   max-width: min(220px, 28vw);
-  height: 28px;
+  height: 32px;
   margin: 0;
   padding: 0 10px;
   border: 1px solid #c8ced8;
@@ -134,8 +163,62 @@ function onManage() {
   overflow: hidden;
 }
 
-.layout-inline .ribbon-workspace-trigger {
-  height: 32px;
+/* 分组模式：大图标 + 下方 comb */
+.ribbon-workspace-stacked {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 76px;
+  min-width: 76px;
+  max-width: 88px;
+  min-height: 54px;
+  margin: 0;
+  padding: 4px 2px 3px;
+  border: 1px solid transparent;
+  border-radius: var(--ribbon-btn-radius, 2px);
+  background: transparent;
+  color: #334155;
+  cursor: pointer;
+}
+
+.ribbon-workspace-stacked:hover,
+.ribbon-workspace-stacked.open {
+  background: var(--ribbon-btn-hover, rgba(148, 163, 184, 0.12));
+}
+
+.ribbon-workspace-big-icon {
+  width: 26px;
+  height: 26px;
+  font-size: 24px;
+  color: #334155;
+}
+
+.ribbon-workspace-stacked:hover .ribbon-workspace-big-icon,
+.ribbon-workspace-stacked.open .ribbon-workspace-big-icon {
+  color: var(--phoenix-wps-accent, #217346);
+}
+
+.ribbon-workspace-combo {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  width: 100%;
+  max-width: 72px;
+  height: 18px;
+  padding: 0 3px 0 5px;
+  border: 1px solid #c8ced8;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #fff 0%, #f4f6f8 100%);
+  box-sizing: border-box;
+}
+
+.ribbon-workspace-stacked:hover .ribbon-workspace-combo,
+.ribbon-workspace-stacked.open .ribbon-workspace-combo {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #1d4ed8;
 }
 
 .ribbon-workspace-trigger:hover,
@@ -158,28 +241,30 @@ function onManage() {
 }
 
 .ribbon-workspace-name {
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
+  font-size: 0.62rem;
+  line-height: 1.1;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.ribbon-workspace-combo .ribbon-workspace-name {
+  text-align: left;
 }
 
 .ribbon-workspace-chevron {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   flex-shrink: 0;
   color: #64748b;
 }
 
-.ribbon-workspace-caption {
-  flex-shrink: 0;
-  padding: 1px 0 2px;
-  text-align: center;
-  font-size: 0.62rem;
-  line-height: 1.1;
-  color: var(--muted, #64748b);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.ribbon-workspace-stacked.open .ribbon-workspace-chevron,
+.ribbon-workspace-stacked:hover .ribbon-workspace-chevron {
+  color: #1d4ed8;
 }
 
 .ribbon-workspace-menu {

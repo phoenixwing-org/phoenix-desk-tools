@@ -2,13 +2,21 @@
 
 > 状态表：[Web壳层-业务页Element化-梳理.md](Web壳层-业务页Element化-梳理.md)  
 > 规划：[Web壳层-Ribbon改型-规划.md](Web壳层-Ribbon改型-规划.md) §R4  
-> 归档日期：2026-06-20 · **人工 smoke 已通过**（2026-06-20）
+> 最后更新：2026-06-21
 
 ---
 
-## 本批已完成（已合入 · 已验收）
+## 验收状态总览
 
-### P2 · CAD / Code 中页（Element）
+| 批次 | 实现 | 人工 smoke |
+| --- | --- | --- |
+| P0–P2 | ✅ | ✅（随 P3 首批一并验收） |
+| P3 首批 | ✅ | ✅ 2026-06-20 通过 |
+| **P3 二批** | ✅ 2026-06-21 | ⬜ **延后**（见 [TODO §R4](../TODO.md)） |
+
+---
+
+## P2 · CAD / Code 中页（Element）
 
 | 项 | 说明 |
 | --- | --- |
@@ -18,7 +26,7 @@
 | Code 忽略 Panel | 按钮、预设、`textarea` |
 | C++ 成员排序 | 工具栏 + 一级条目/变更 `el-table` + `el-pagination` |
 
-### 壳层与其它
+## 壳层与其它（P2 同期）
 
 | 项 | 说明 |
 | --- | --- |
@@ -27,18 +35,15 @@
 | C++ 成员排序 · GBK | `reorder_members.py` 用 `detect_and_read`（UTF-8/GBK），修复预检/写盘 400 |
 | C++ 成员排序 · 写盘确认 | `promptChoice`（与 UUID 页一致） |
 
-### P3 · 首批（已验收）
+## P3 · 首批（2026-06-20 · smoke ✅）
 
-| 页 | 范围 | 状态 |
-| --- | --- | --- |
-| 零件目录 | 搜索/筛选/刷新/空态/状态 tag | ✅ |
-| CAD 索引 | 页头、子 Tab、搜索、筛选、分页、设置区 | ✅ |
-| Code 索引 | 页头、搜索模式、筛选、工作集按钮、分页 | ✅ |
-| 单元测试 / BOM / 文件详情 | — | ⬜ 下一批 |
+| 页 | 范围 |
+| --- | --- |
+| 零件目录 | 搜索/筛选/刷新/空态/状态 tag |
+| CAD 索引 | 页头、子 Tab、搜索、筛选、分页、设置区 |
+| Code 索引 | 页头、搜索模式、筛选、工作集按钮、分页 |
 
----
-
-## 人工验收记录（2026-06-20 · 通过）
+### 人工验收记录（2026-06-20 · 通过）
 
 | 场景 | 结果 |
 | --- | --- |
@@ -51,7 +56,7 @@
 **前置提醒**：改 Python 后端后仍需重启 `python -m phoenix.web --dev`。
 
 <details>
-<summary>完整 smoke 清单（含 P2 / 侧栏）</summary>
+<summary>完整 smoke 清单（P2 / P3 首批 / 侧栏）</summary>
 
 | # | 场景 | 预期 |
 | --- | --- | --- |
@@ -66,7 +71,41 @@
 
 </details>
 
-单测（可选）：`pytest tests/test_reorder_members_cpp.py tests/test_reorder_members_service.py`
+---
+
+## P3 · 二批（2026-06-21 · 实现 ✅ · smoke 延后）
+
+> 范围：**按钮 / 工具栏 / 表单 / 确认** Element 化；大表、装配树、NDJSON 流、复杂内嵌表保留原生。
+
+| 页 / 组件 | 迁移范围 | 保留原生 |
+| --- | --- | --- |
+| `unit_tests` | 运行范围勾选、运行/终止、Tab、模块列表（含行内运行/排序/次数）、失败关注、结果筛选 | 关注表、用例明细、NDJSON 进度条 |
+| `bom_export` | 顶栏重建、子 Tab、搜索/刷新、`el-alert` | `ResizableDataTable` 总成表 |
+| `file_rename` | 模式 Tab、表单、`el-select`、操作栏 | — |
+| `RenameAnalysisPanel` | 修正/Label 按钮、`el-checkbox`、`el-tag` | 宿主列表结构 |
+| `file_detail` / `bom_apply` | 子 Tab；各 Panel 工具栏按钮 | 引用/装配表、装配树 |
+| `part_key_detail` | 检索栏、属性表单、保存、关联文件操作列 | `ResizableDataTable` |
+
+### 单元测试页补充（二批内）
+
+- 模块列表 `el-table` + **行内「运行」**
+- 运行次数 / 最近执行 · `localStorage`（`unitTestModuleHistory`）
+- 排序：默认 / 最近运行 / 运行次数
+
+### 待做 · 人工 smoke（延后）
+
+清单同步 [doc/TODO.md §R4](../TODO.md)。
+
+| # | 场景 | 要点 |
+| --- | --- | --- |
+| 1 | **单元测试** | 套件运行；模块行内运行；失败关注复测/排序 |
+| 2 | **BOM 列表** | 子 Tab、筛选、刷新、仅重建引用表 |
+| 3 | **改名分析** | 历史/手填模式、开始分析、`RenameAnalysisPanel` 写回 |
+| 4 | **文件详情** | 各 Tab：属性/编辑/引用/装配/改名 Panel 按钮 |
+| 5 | **零件详情** | PartKey 检索、属性保存、关联文件操作 |
+
+单测（可选）：`pytest tests/test_reorder_members_cpp.py tests/test_reorder_members_service.py`  
+构建：`cd web-ui && pnpm build`
 
 ---
 
@@ -81,18 +120,10 @@
 
 ---
 
-## 后续批次（P3 二批 · 计划）
-
-> 范围：**按钮 / 工具栏 / 表单 / 确认框** Element 化；大表、装配树、NDJSON 流、复杂 Panel 结构暂保留。
-
-| 优先级 | 页面 / 组件 | 备注 |
-| --- | --- | --- |
-| 1 | `unit_tests` | 体量大；先迁运行/筛选区按钮 |
-| 2 | `bom_export` / `bom_apply` | CAD BOM 工具栏 |
-| 3 | `file_rename` · `RenameAnalysisPanel` | 嵌入 Panel 按钮与下拉 |
-| 4 | `file_detail` / `part_key_detail` | 多 Tab 子 Panel 控件 |
+## 后续（非 Element 批次）
 
 - `OnboardingChecklist` 待查
+- 大表/树全面 Element 化 — 单独排期（见梳理 doc「不迁」项）
 
 ---
 
@@ -101,6 +132,7 @@
 | 主题 | 路径 |
 | --- | --- |
 | Element 状态表 | `doc/platform/Web壳层-业务页Element化-梳理.md` |
+| 单元测试模块历史 | `web-ui/src/utils/unitTestModuleHistory.ts` |
 | 确认框 | `web-ui/src/composables/choiceDialog.ts`、`ChoiceDialogHost.vue` |
 | 成员排序编码 | `phoenix/code/reorder_members.py`、`phoenix/code/rename/encoding.py` |
 | 顶栏 Gitee | `web-ui/src/layout/AppToolbar.vue`、`assets/icons/gitee-logo.svg` |

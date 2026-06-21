@@ -128,21 +128,29 @@ const allPendingSelected = () => {
         <span class="step-label">修正 XLink 路径（<code>file</code> 属性）</span>
       </div>
       <div class="scan-actions">
-        <label v-if="scan.hosts.length" class="chk-all">
-          <input type="checkbox" :checked="allPendingSelected()" @change="emit('toggleAll', ($event.target as HTMLInputElement).checked)" />
+        <el-checkbox
+          v-if="scan.hosts.length"
+          :model-value="allPendingSelected()"
+          @change="emit('toggleAll', Boolean($event))"
+        >
           全选待修正
-        </label>
-        <button
-          type="button"
-          class="btn accent"
+        </el-checkbox>
+        <el-button
+          type="success"
+          size="small"
           :disabled="busy || !canApply || selectedHosts.size === 0"
           @click="emit('apply')"
         >
           修正选中引用
-        </button>
-        <button v-if="showExport" type="button" class="btn" :disabled="busy || !scan.host_count" @click="emit('exportReport')">
+        </el-button>
+        <el-button
+          v-if="showExport"
+          size="small"
+          :disabled="busy || !scan.host_count"
+          @click="emit('exportReport')"
+        >
           导出报告
-        </button>
+        </el-button>
       </div>
     </div>
 
@@ -173,9 +181,10 @@ const allPendingSelected = () => {
         </ul>
       </template>
       <div class="scan-actions">
-        <button
-          type="button"
-          class="btn accent-secondary"
+        <el-button
+          type="success"
+          size="small"
+          plain
           :disabled="busy || !canApplyIncomingLabels || selectedHosts.size === 0"
           title="仅同步勾选宿主内指向本目标文件的引用实例 Label"
           @click="emit('applyIncomingLabels')"
@@ -185,27 +194,25 @@ const allPendingSelected = () => {
               ? "同步勾选装配内对本文件的显示名"
               : "勾选装配内对本文件"
           }}
-        </button>
+        </el-button>
         <template v-if="labelSyncUi === 'full'">
-          <button
+          <el-button
             v-if="showCurrentFileHostAll"
-            type="button"
-            class="btn subtle"
+            size="small"
             :disabled="busy || !canApplyHostAllLabels"
             title="当前打开文件作为装配/图纸宿主，同步其内部全部外部引用 Label"
             @click="emit('applyCurrentFileHostAll')"
           >
             当前文件内全部
-          </button>
-          <button
-            type="button"
-            class="btn subtle"
+          </el-button>
+          <el-button
+            size="small"
             :disabled="busy || !canApplyHostAllLabels || selectedHosts.size === 0"
             title="在每个勾选的装配/图纸内，同步其全部外部引用 Label"
             @click="emit('applyHostAllLabels')"
           >
             勾选装配内全部
-          </button>
+          </el-button>
         </template>
       </div>
     </div>
@@ -215,16 +222,15 @@ const allPendingSelected = () => {
     <ul v-else class="host-list">
       <li v-for="host in scan.hosts" :key="host.host_repo_rel_path" class="host-item">
         <label class="host-row" :class="{ applied: !hostPending(host) }">
-          <input
-            type="checkbox"
+          <el-checkbox
             :disabled="!hostCheckboxEnabled(host)"
-            :checked="selectedHosts.has(host.host_repo_rel_path)"
-            @change="emit('toggleHost', host.host_repo_rel_path, ($event.target as HTMLInputElement).checked)"
+            :model-value="selectedHosts.has(host.host_repo_rel_path)"
+            @change="emit('toggleHost', host.host_repo_rel_path, Boolean($event))"
           />
           <span class="host-name mono">{{ host.host_filename }}</span>
-          <span v-if="host.usage_kind === 'indirect' || (host.depth ?? 0) > 0" class="tag indirect">
+          <el-tag v-if="host.usage_kind === 'indirect' || (host.depth ?? 0) > 0" size="small" type="info" effect="plain">
             {{ hostRelationLabel(host) }}
-          </span>
+          </el-tag>
           <span class="host-meta">
             {{
               host.hit_count ||
@@ -236,10 +242,10 @@ const allPendingSelected = () => {
           <span v-if="hostPending(host)" class="tag warn">
             {{ (host.depth ?? 0) > 0 && !host.hits.some(hitNeedsFix) ? "间接 · 待修正" : "待修正" }}
           </span>
-          <span v-else-if="host.hit_count && host.hits.every((x) => x.status === 'ok')" class="tag ok">
+          <el-tag v-else-if="host.hit_count && host.hits.every((x) => x.status === 'ok')" size="small" type="success" effect="plain">
             路径正确
-          </span>
-          <span v-else-if="!hostPending(host)" class="tag ok">已修正</span>
+          </el-tag>
+          <el-tag v-else-if="!hostPending(host)" size="small" type="success" effect="plain">已修正</el-tag>
         </label>
         <ul class="hit-list">
           <li v-if="host.via_chain?.length" class="mono via-line muted">
@@ -260,7 +266,7 @@ const allPendingSelected = () => {
           </li>
           <li v-for="(hit, idx) in host.hits" :key="idx" class="mono hit-line">
             {{ hit.matched_text }} → {{ hit.proposed_text }}
-            <span v-if="hit.status === 'ok'" class="tag ok">路径正确</span>
+            <el-tag v-if="hit.status === 'ok'" size="small" type="success" effect="plain">路径正确</el-tag>
           </li>
         </ul>
       </li>
@@ -368,56 +374,6 @@ const allPendingSelected = () => {
   margin-bottom: 12px;
 }
 
-.chk-all {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.82rem;
-}
-
-.btn {
-  padding: 6px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--border-strong);
-  background: var(--btn-bg);
-  font-size: 0.82rem;
-}
-
-.btn.accent {
-  background: #047857;
-  color: #fff;
-  border-color: #047857;
-}
-
-.btn.accent-secondary {
-  background: #059669;
-  color: #fff;
-  border-color: #059669;
-}
-
-.btn.subtle {
-  background: transparent;
-  color: var(--muted);
-  border-color: var(--border);
-  font-size: 0.78rem;
-}
-
-.btn:disabled {
-  opacity: 0.5;
-}
-
-.host-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.host-item + .host-item {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
-}
-
 .host-row {
   display: flex;
   align-items: center;
@@ -439,25 +395,24 @@ const allPendingSelected = () => {
   font-size: 0.78rem;
 }
 
-.tag.ok {
-  font-size: 0.72rem;
-  color: #047857;
-}
-
-.tag.indirect {
-  font-size: 0.72rem;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: #dbeafe;
-  color: #1d4ed8;
-}
-
 .tag.warn {
   font-size: 0.72rem;
   padding: 1px 6px;
   border-radius: 4px;
   background: #fef3c7;
   color: #b45309;
+}
+
+.host-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.host-item + .host-item {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
 }
 
 .via-line {

@@ -24,6 +24,10 @@ import { parseShellUrl, replaceShellUrl, type ShellUrlIntent } from "../utils/sh
 import { useOnboardingStore } from "../stores/onboarding";
 import { useFileWorksetsStore } from "../stores/fileWorksets";
 import type { ModuleScope } from "../constants/moduleScope";
+import {
+  defaultPageForModuleScope,
+  resolveTabForModuleScope,
+} from "../utils/moduleScopeNavigation";
 
 /** 返回 false 表示当前 Tab 未接管此次树点击，由 shell 回退打开文件详情 */
 export type TreeSelectHandler = (rel: string) => void | boolean | Promise<void | boolean>;
@@ -67,6 +71,7 @@ export type AppShellContext = {
   appendLog: (text: string, opts?: LogAppendOptions) => void;
   clearLog: () => void;
   setLogOpen: (open: boolean) => void;
+  setPropertiesOpen: (open: boolean) => void;
   /** 全屏配置层（遮住主内容区，不占 Tab 栏） */
   configOverlayOpen: Ref<boolean>;
   openConfig: () => void;
@@ -100,8 +105,8 @@ export type AppShellContext = {
   ) => void;
   openRenameAnalysis: (opts?: PendingRenameAnalysis) => void;
   switchWorkspace: (path: string) => Promise<void>;
-  /** 离开欢迎页，进入 Ribbon 工作台（无 Tab 时打开默认工具页） */
-  enterWorkbenchFromWelcome: () => Promise<void>;
+  /** 离开欢迎页，进入 Ribbon 工作台；按模块范围定位 Tab 或默认工具页 */
+  enterWorkbenchFromWelcome: (opts?: { scope?: ModuleScope }) => Promise<void>;
   persistShellLayout: (patch: Partial<ShellLayout>) => Promise<void>;
   enabledNavModules: Ref<string[]>;
   isNavItemVisible: (item: NavItem) => boolean;
@@ -160,6 +165,10 @@ const DEFAULT_SHELL: ShellLayout = {
   log_auto_open_on_append: true,
   workspace_tree_dock: "right",
   shell_log_dock: "right",
+  properties_panel_open: true,
+  properties_panel_height_px: 220,
+  properties_panel_dock: "left",
+  properties_name_col_width_px: 132,
 };
 
 function clampPanelWidth(px: number): number {
@@ -173,6 +182,20 @@ function normalizeShellLayout(partial?: Partial<ShellLayout>): ShellLayout {
     merged.left_panel_width_px = merged.right_panel_width_px;
   } else {
     merged.left_panel_width_px = clampPanelWidth(merged.left_panel_width_px);
+  }
+  if (typeof merged.properties_panel_height_px !== "number" || merged.properties_panel_height_px < 80) {
+    merged.properties_panel_height_px = DEFAULT_SHELL.properties_panel_height_px;
+  }
+  if (merged.properties_panel_dock !== "left" && merged.properties_panel_dock !== "right") {
+    merged.properties_panel_dock = DEFAULT_SHELL.properties_panel_dock;
+  }
+  if (typeof merged.properties_panel_open !== "boolean") {
+    merged.properties_panel_open = DEFAULT_SHELL.properties_panel_open;
+  }
+  if (typeof merged.properties_name_col_width_px !== "number" || merged.properties_name_col_width_px < 72) {
+    merged.properties_name_col_width_px = readLegacyNameColWidth() ?? DEFAULT_SHELL.properties_name_col_width_px;
+  } else {
+    merged.properties_name_col_width_px = Math.min(240, Math.max(72, merged.properties_name_col_width_px));
   }
   return merged;
 }
@@ -190,6 +213,17 @@ const DEFAULT_NAV_MODULES = ["cad", "code"];
 
 const SIDEBAR_TAB_KEY = "phoenix-workspace-sidebar-tab";
 const LEGACY_SIDEBAR_TAB_KEY = "phoenix-code-right-tab";
+const LEGACY_NAME_COL_KEY = "phoenix-properties-name-col-v1";
+
+function readLegacyNameColWidth(): number | undefined {
+  try {
+    const n = Number(localStorage.getItem(LEGACY_NAME_COL_KEY));
+    if (Number.isFinite(n) && n >= 72) return Math.min(240, n);
+  } catch {
+    /* ignore */
+  }
+  return undefined;
+}
 
 function readWorkspaceSidebarTab(): "tree" | "workset" | "ignore" {
   try {
@@ -418,7 +452,9 @@ export function provideAppShell(): AppShellContext {
   }
 
   const currentPage = computed(() =>
-    showWelcomeScreen.value ? "welcome" : (wb.activeTab()?.pageId ?? "home"),
+    showWelcomeScreen.value
+      ? "welcome"
+      : (wb.activeTab()?.pageId ?? defaultPageForModuleScope("all", enabledNavModules.value)),
   );
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let persistenceReady = false;
@@ -468,6 +504,10 @@ export function provideAppShell(): AppShellContext {
     await persistShellLayout({ log_panel_open: open });
   }
 
+  async function setPropertiesOpen(open: boolean) {
+    await persistShellLayout({ properties_panel_open: open });
+  }
+
   function openOnboardingGuide() {
     goToPage("home");
     scrollToGuideToken.value += 1;
@@ -486,7 +526,7 @@ export function provideAppShell(): AppShellContext {
     leaveWelcomeForWorkbench();
     if (!isPageModuleVisible(id)) {
       setStatus("该功能模块已在主页关闭");
-      wb.navigateToPage("home");
+      wb.navigateToPage(defaultPageForModuleScope("all", enabledNavModules.value));
       navHover.value = null;
       return;
     }
@@ -664,18 +704,31 @@ export function provideAppShell(): AppShellContext {
     applyWorkspaceNavModules(nav);
     await onboarding.refreshStatus();
     await restoreWorkbenchSession();
+    purgeHiddenModuleTabs();
     syncOnboardingFromTabs();
     void useFileWorksetsStore().hydrate(ws.path, true);
     setStatus(`工作空间: ${ws.path}`);
   }
 
   function pickDefaultWorkbenchPage(): string {
-    if (enabledNavModules.value.includes("cad")) return "fcstd_map";
-    if (enabledNavModules.value.includes("code")) return "code_index";
-    return "fcstd_map";
+    return defaultPageForModuleScope("all", enabledNavModules.value);
   }
 
-  async function enterWorkbenchFromWelcome() {
+  function focusWorkbenchForModuleScope(scope: ModuleScope) {
+    const tabId = resolveTabForModuleScope(
+      wb.tabs.value,
+      wb.activeTabId.value,
+      scope,
+      pageModule,
+    );
+    if (tabId) {
+      wb.activateTab(tabId);
+      return;
+    }
+    goToPage(defaultPageForModuleScope(scope, enabledNavModules.value));
+  }
+
+  async function enterWorkbenchFromWelcome(opts?: { scope?: ModuleScope }) {
     if (!workspacePath.value) {
       openConfig();
       return;
@@ -687,9 +740,9 @@ export function provideAppShell(): AppShellContext {
       return;
     }
     leaveWelcomeForWorkbench();
-    if (!wb.tabs.value.length) {
-      goToPage(pickDefaultWorkbenchPage());
-    }
+    purgeHiddenModuleTabs();
+    const scope = opts?.scope ?? "all";
+    focusWorkbenchForModuleScope(scope);
   }
 
   function flushWorkbenchSession(opts?: { force?: boolean }) {
@@ -810,8 +863,8 @@ export function provideAppShell(): AppShellContext {
     const updated = await patchWorkspaceNavModules({ enabled });
     applyWorkspaceNavModules(updated);
     const active = wb.activeTab()?.pageId;
-    if (active && !isPageModuleVisible(active)) {
-      wb.navigateToPage("home");
+    if (active && active !== "home" && !isPageModuleVisible(active)) {
+      wb.navigateToPage(defaultPageForModuleScope("all", enabledNavModules.value));
     }
   }
 
@@ -1044,6 +1097,7 @@ export function provideAppShell(): AppShellContext {
     appendLog,
     clearLog,
     setLogOpen,
+    setPropertiesOpen,
     configOverlayOpen,
     openConfig,
     closeConfig,

@@ -13,18 +13,13 @@ import PageHelpButton from "../components/PageHelpButton.vue";
 import AppModalOverlay from "../components/AppModalOverlay.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useReorderMembersPageStore } from "../stores/reorderMembersPage";
+import { useReorderMembersPropertySheet } from "../composables/useReorderMembersPropertySheet";
 
 const shell = useAppShell();
 const pageStore = useReorderMembersPageStore();
 
 const CHANGED_PAGE_SIZE = 20;
 
-const includeCpp = computed(() => pageStore.includeCpp);
-const includeHeader = computed(() => pageStore.includeHeader);
-const verbose = computed({
-  get: () => pageStore.verbose,
-  set: (value: boolean) => pageStore.setVerbose(value),
-});
 const selected = computed(() => pageStore.selectedSet);
 const entriesExpanded = computed({
   get: () => pageStore.entriesExpanded,
@@ -41,7 +36,7 @@ const changedFiles = ref<string[]>([]);
 const lastRunDryRun = ref(false);
 const lastRunSummary = ref("");
 const changedPage = ref(0);
-const rulesModalOpen = ref(false);
+const ignoredModalOpen = ref(false);
 
 const loading = ref(false);
 const saving = ref(false);
@@ -77,6 +72,10 @@ function prefsPayload() {
   return pageStore.prefsPayload;
 }
 
+function openIgnorePanel() {
+  void shell.openCodeIgnoreSidebar();
+}
+
 function kindLabel(kind: string) {
   return kind === "file" ? "文件" : "目录";
 }
@@ -85,8 +84,20 @@ async function loadPrefsFromApi() {
   const prefs = await fetchReorderMembersPrefs();
   ignoreFileDisplay.value = prefs.ignore_file_display || prefs.ignore_file;
   ignoreFileExists.value = prefs.ignore_file_exists;
+  pageStore.setIgnoreFileDisplay(ignoreFileDisplay.value);
   pageStore.applyFromApi(prefs);
 }
+
+let prefsSaveTimer: ReturnType<typeof setTimeout> | null = null;
+function schedulePrefsSave() {
+  if (prefsSaveTimer) clearTimeout(prefsSaveTimer);
+  prefsSaveTimer = setTimeout(() => {
+    prefsSaveTimer = null;
+    void onSave();
+  }, 400);
+}
+
+useReorderMembersPropertySheet("reorder_members", schedulePrefsSave, (msg) => shell.setStatus(msg));
 
 async function refreshList() {
   loading.value = true;
@@ -104,18 +115,6 @@ async function refreshList() {
     entries.value = [];
   } finally {
     loading.value = false;
-  }
-}
-
-function setIncludeCpp(checked: boolean) {
-  if (!pageStore.setIncludeCpp(checked)) {
-    shell.setStatus("至少勾选一种源文件类型");
-  }
-}
-
-function setIncludeHeader(checked: boolean) {
-  if (!pageStore.setIncludeHeader(checked)) {
-    shell.setStatus("至少勾选一种源文件类型");
   }
 }
 
@@ -197,7 +196,7 @@ async function onRun(dryRun: boolean) {
     changedPage.value = 0;
     lastRunDryRun.value = dryRun;
     lastRunSummary.value = out.summary || "";
-    const logText = verbose.value ? out.log || out.summary : out.summary || out.log;
+    const logText = pageStore.verbose ? out.log || out.summary : out.summary || out.log;
     shell.appendLog(logText || "完成", { source: "reorder_members" });
     shell.setStatus(out.summary || (out.ok ? "完成" : "失败"));
   } catch (e) {
@@ -237,56 +236,32 @@ watch(
     <header class="page-head">
       <div class="head-row">
         <h1 class="page-title">C++ 成员排序</h1>
-        <p class="page-desc">
-          按 cxx-code-style 重排工作空间一级目录下的 .h / .cpp；可先预检，变更文件列在下方表格
-        </p>
-        <div class="head-help">
+        <div class="head-actions">
+          <el-button
+            size="small"
+            :loading="selfTesting"
+            title="跑内置 fixture 锁定段用例，不扫描工作空间"
+            @click="onSelfTest"
+          >
+            回归自检
+          </el-button>
+          <el-button size="small" :loading="saving" @click="onSave">保存偏好</el-button>
+          <el-button size="small" :loading="running" :disabled="!selectedCount" @click="onRun(true)">
+            预检
+          </el-button>
+          <el-button
+            type="primary"
+            size="small"
+            :loading="running"
+            :disabled="!selectedCount"
+            @click="onRun(false)"
+          >
+            执行排序
+          </el-button>
           <PageHelpButton page-id="reorder_members" />
         </div>
       </div>
     </header>
-
-    <section class="card settings-card">
-      <div class="settings-form">
-        <div class="form-row form-foot">
-          <div class="option-row">
-            <el-checkbox :model-value="includeCpp" size="small" @change="setIncludeCpp(Boolean($event))">
-              .cpp
-            </el-checkbox>
-            <el-checkbox :model-value="includeHeader" size="small" @change="setIncludeHeader(Boolean($event))">
-              头文件（含 .h .hpp）
-            </el-checkbox>
-            <el-checkbox disabled size="small" title="规划中：Doxygen 序号重编等">
-              成员变量字母序
-            </el-checkbox>
-            <el-checkbox v-model="verbose" size="small">详细日志</el-checkbox>
-          </div>
-          <div class="settings-actions">
-            <el-button
-              size="small"
-              :loading="selfTesting"
-              title="跑内置 fixture 锁定段用例，不扫描工作空间"
-              @click="onSelfTest"
-            >
-              回归自检
-            </el-button>
-            <el-button size="small" :loading="saving" @click="onSave">保存偏好</el-button>
-            <el-button size="small" :loading="running" :disabled="!selectedCount" @click="onRun(true)">
-              预检
-            </el-button>
-            <el-button
-              type="primary"
-              size="small"
-              :loading="running"
-              :disabled="!selectedCount"
-              @click="onRun(false)"
-            >
-              执行排序
-            </el-button>
-          </div>
-        </div>
-      </div>
-    </section>
 
     <section class="card results-card" :class="{ collapsed: !entriesExpanded }">
       <div class="results-head-row">
@@ -303,7 +278,10 @@ watch(
         <span v-else-if="loading" class="head-meta muted small">加载中…</span>
         <div class="results-head-actions">
           <el-button size="small" :loading="loading" @click="refreshList">刷新列表</el-button>
-          <el-button size="small" @click="rulesModalOpen = true">忽略与规则</el-button>
+          <el-button v-if="ignoredCount" size="small" @click="ignoredModalOpen = true">
+            已忽略 {{ ignoredCount }}
+          </el-button>
+          <el-button size="small" link type="primary" @click="openIgnorePanel">忽略设定</el-button>
         </div>
       </div>
 
@@ -381,76 +359,29 @@ watch(
     </section>
 
     <AppModalOverlay
-      :open="rulesModalOpen"
-      aria-label="忽略规则与排序说明"
-      panel-class="reorder-rules-modal"
-      @close="rulesModalOpen = false"
+      v-if="ignoredEntries.length"
+      :open="ignoredModalOpen"
+      aria-label="已忽略条目"
+      panel-class="reorder-ignored-modal"
+      @close="ignoredModalOpen = false"
     >
       <div class="rules-modal-inner">
         <header class="rules-modal-head">
-          <h2 class="rules-modal-title">忽略规则与排序说明</h2>
-          <el-button size="small" @click="rulesModalOpen = false">关闭</el-button>
+          <h2 class="rules-modal-title">已忽略（{{ ignoredEntries.length }}）</h2>
+          <el-button size="small" @click="ignoredModalOpen = false">关闭</el-button>
         </header>
-
-        <h3 class="help-sub">忽略列表</h3>
-        <ul class="help-list">
-          <li>
-            内置忽略：<code>.phoenix</code>、<code>web-ui</code>、<code>build</code>、<code>node_modules</code> 等；以
-            <code>.</code> 开头的隐藏项始终忽略。
-          </li>
-          <li>
-            可选文件
-            <span class="mono">{{ ignoreFileDisplay || ".phoenix/code.ignore" }}</span>
-            <span v-if="ignoreFileExists">（已加载）</span>
-            <span v-else>（未建则仅内置；可复制 code.ignore.example）</span>。
-          </li>
-          <li>
-            CAA 等工程差异在
-            <el-button
-              link
-              type="primary"
-              @click="
-                shell.openCodeIgnoreSidebar();
-                rulesModalOpen = false;
-              "
-            >
-              右侧栏 · 忽略
-            </el-button>
-            自定义区配置。
-          </li>
-        </ul>
-
-        <div v-if="ignoredEntries.length" class="ignored-table-wrap">
-          <p class="help-sub">当前已忽略（{{ ignoredEntries.length }}）</p>
-          <el-table :data="ignoredEntries" size="small" stripe class="ignored-table">
-            <el-table-column prop="name" label="名称" class-name="mono" />
-            <el-table-column label="类型" width="72">
-              <template #default="{ row }">{{ kindLabel(row.kind) }}</template>
-            </el-table-column>
-            <el-table-column label="原因">
-              <template #default="{ row }">{{ row.reason === "内置" ? "内置" : "ignore 规则" }}</template>
-            </el-table-column>
-          </el-table>
-        </div>
-
-        <h3 class="help-sub">锁定段（P0）</h3>
-        <ul class="help-list">
-          <li>带成对标记的 <strong>locked region</strong>：排序时整段锁定，成员、空行、相对位置均不变。</li>
-          <li>例如 <code>// clang-format off/on</code>、Kevin/CAA2 Wizard 段、<code>#pragma region</code>。</li>
-          <li>详见 <code>doc/code/成员排序-锁定段与回归用例.md</code>。</li>
-        </ul>
-
-        <h3 class="help-sub">排序规则（摘要）</h3>
-        <ul class="help-list">
-          <li>
-            <strong>.cpp</strong>：特殊成员（默认构造 → 其它构造 → 析构 → 拷贝/移动 → <code>operator=</code>）优先，其余按函数名字母序；补全
-            <code>//---</code> 分隔符。
-          </li>
-          <li>
-            <strong>.h</strong>：各访问段内同样优先特殊成员，再按字母序；成员变量字母序 Web 暂未开放。
-          </li>
-          <li>完整规则见 <code>doc/code/成员函数排序-reorder_members.md</code>。</li>
-        </ul>
+        <el-table :data="ignoredEntries" size="small" stripe class="ignored-table">
+          <el-table-column prop="name" label="名称" class-name="mono" />
+          <el-table-column label="类型" width="72">
+            <template #default="{ row }">{{ kindLabel(row.kind) }}</template>
+          </el-table-column>
+          <el-table-column label="原因">
+            <template #default="{ row }">{{ row.reason === "内置" ? "内置" : "ignore 规则" }}</template>
+          </el-table-column>
+        </el-table>
+        <p class="ignored-modal-foot muted small">
+          规则说明见页顶 <strong>?</strong>；编辑忽略请点「忽略设定」。
+        </p>
       </div>
     </AppModalOverlay>
   </div>
@@ -482,50 +413,6 @@ watch(
   color: var(--muted);
   white-space: nowrap;
   line-height: 1.2;
-}
-
-.settings-form {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.form-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-}
-
-.form-foot {
-  justify-content: space-between;
-}
-
-.option-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-}
-
-.settings-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-left: auto;
-}
-
-.collapse-trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0;
-  height: auto;
-}
-
-.collapse-trigger :deep(.section-label) {
-  border-right: 2px solid var(--accent);
-  padding-right: 10px;
 }
 
 .err-alert {
@@ -665,20 +552,12 @@ watch(
   font-weight: 600;
 }
 
-.ignored-table-wrap {
-  margin-bottom: 12px;
-  max-height: 200px;
-  overflow: auto;
+.ignored-modal-foot {
+  margin: 10px 0 0;
 }
 
-.entry-table.compact th,
-.entry-table.compact td {
-  padding: 5px 8px;
-  font-size: 0.76rem;
-}
-
-:global(.reorder-rules-modal) {
-  width: min(640px, 100%);
+:global(.reorder-ignored-modal) {
+  width: min(520px, 100%);
 }
 
 .entry-table {

@@ -1,8 +1,9 @@
 # Web 壳层 · Ribbon 改型规划
 
-> 状态：**R0–R3 已落地 · R4 进行中 · 2026-06**  
+> 状态：**R0–R3++ 已落地 · R4 进行中 · 2026-06-21**  
 > 关联：[Web壳层-Tab与状态持久化-规划讨论.md](Web壳层-Tab与状态持久化-规划讨论.md)、[Phoenix平台-多应用壳层-规划讨论.md](Phoenix平台-多应用壳层-规划讨论.md)  
-> 待办跟踪：[TODO.md](../TODO.md) § Web 壳层 · Ribbon 改型
+> 待办跟踪：[TODO.md](../TODO.md) § Web 壳层 · Ribbon 改型  
+> **WPS 改型归档**：[Web壳层-Ribbon-WPS改型-归档.md](Web壳层-Ribbon-WPS改型-归档.md) · **壳层区补全**：[Web壳层-Ribbon壳层区补全-归档.md](Web壳层-Ribbon壳层区补全-归档.md)
 
 ---
 
@@ -18,20 +19,20 @@
 | 生产交付 | `pnpm build` 后 Python 托管 `web-ui/dist`（用户仍一条命令） |
 | 业务页 | **渐进迁移**；壳层先改，各 `*Page.vue` 不强制一次重写 |
 
-参考视觉：**Chili3D 式 Ribbon** — 顶 Tab → 分组面板 → 方块工具按钮（大/小混排、组间竖线、底部分组标题）。
+参考视觉：**WPS 式 Ribbon**（2026-06-21）— 顶 Tab 下划线 → 分组大图标横排、组间竖线无底标题；**单行模式**仍为紧凑横排备选。早期参考 Chili3D 方块按钮。
 
 ---
 
-## 2. 现状（2026-06 归档后）
+## 2. 现状（2026-06-19 补全后）
 
 ```
-AppToolbar          ← 顶栏：品牌（含工作空间副标题）/ 功能区 Tab / 页面 Tab / ▲
-RibbonShell         ← 分组或单行工具按钮；「开始」Tab 含壳层常用区
+AppToolbar          ← 顶栏：品牌 / 功能区 Tab（WPS 下划线）/ 页面 Tab / ▲
+RibbonShell         ← 分组大图标或单行；「系统」含工作空间 comb + 模块纵排；各 Tab 右侧壳层按钮
 WorkbenchTabBar     ← 顶栏中部 in-header（page 图标 + 标题）
 WelcomePage         ← 启动默认全屏欢迎
 主内容 KeepAlive    ← 各业务页
-WorkspaceTreeSidebar← 左或右停靠：树 + 日志（同侧可上下分栏）
-StatusBar           ← 日志收起时可一键展开
+WorkspaceTreeSidebar← 左或右：树 + 属性 + 日志（同侧可上下分栏）
+StatusBar           ← 状态行 + 右侧 VS Code 式面板切换图标（tooltip）
 ```
 
 - Element Plus 已接入壳层；Ribbon 为唯一功能入口。
@@ -46,9 +47,9 @@ StatusBar           ← 日志收起时可一键展开
 ┌─ AppToolbar（顶栏 40px）─────────────────────────────────────────────┐
 │ Phoenix/工作空间 │ [开始|CAD|Code|系统] │ ← 页面 Tab（图标）→ │ ▲      │
 ├─ Ribbon Panel（可折叠；切功能区 Tab 时自动展开）───────────────────────┤
-│ 工具按钮… │「开始」：工作空间 / 模块 / 树·日志·侧栏                      │
-├─ 主内容 ────────────────────────────────────────│ 树 / 日志（左/右）    │
-└─ StatusBar ───────────────────────────────────────────────────────────┘
+│ 大图标工具… │「系统」：工作空间 comb / 模块纵排 │ 各 Tab 右侧：树·属性·日志·侧栏（分组/单行联动） │
+├─ 主内容 ────────────────────────────────────────│ 树 / 属性 / 日志（左/右） │
+└─ StatusBar（状态 + 右侧面板切换图标）────────────────────────────────────┘
 WelcomePage：全屏，不在上述 Tab 行中。
 ```
 
@@ -63,12 +64,12 @@ web-ui/src/layout/ribbon/
   RibbonShell.vue         # Tab + 可折叠 Panel 容器
   RibbonTabBar.vue        # el-tabs 外壳
   RibbonPanel.vue         # 单 Tab 下 Flex 横排
-  RibbonGroup.vue         # 分组 + 底标题 + 右侧竖线
-  RibbonToolButton.vue    # large | small；icon + label
-  RibbonPanelUtils.vue    # 「开始」Tab：树/日志/侧栏常用操作
-  RibbonModuleToggles.vue # 「开始」Tab：CAD/Code 模块开关
-  RibbonWorkspaceSwitcher.vue
-  RibbonUtilButton.vue
+  RibbonGroup.vue         # 分组竖线；组内大图标横排（无底标题）
+  RibbonToolButton.vue    # stacked large | inline（单行）
+  RibbonPanelUtils.vue    # 全 Tab 右侧 → ShellPanelToggleBar variant=ribbon + layout
+  RibbonModuleToggles.vue # 「开始」：CAD/Code 纵向小钮
+  RibbonWorkspaceSwitcher.vue  # 大图标 + comb
+  ShellPanelToggleBar.vue # Ribbon + 页脚双入口（web-ui/src/components/）
   ribbonConfig.ts         # Tab / Group / Item（初版可静态）
   ribbonIcons.ts          # pageId → Element Plus icon
 ```
@@ -135,6 +136,7 @@ Phase 2（可选）：`app_config.json` 增加 `ribbon` 段或由 API 下发。
 - [x] 左右侧栏独立宽度；同侧树+日志上下分栏拖拽
 - [x] 更新 driver.js `data-tour`（Ribbon Tab / 工具条 / 页面 Tab）
 - [x] [Web壳层-使用说明.md](../user/Web壳层-使用说明.md) 同步 2026-06 布局
+- [x] **WPS 式 Ribbon + 页脚面板切换**（见 [归档](Web壳层-Ribbon-WPS改型-归档.md)）
 - [x] **页面 Tab**：顶栏居中；当前 Tab 尺寸/动画强调（`WorkbenchTabBar.vue`）
 - [ ] 窄屏：Panel 横向滚动
 

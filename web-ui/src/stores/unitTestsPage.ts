@@ -5,6 +5,7 @@ import {
   type UnitTestWatchlistPrefs,
   type WatchlistSortBy,
 } from "../utils/unitTestWatchlist";
+import type { ModuleSortBy } from "../utils/unitTestModuleHistory";
 
 export const UNIT_TEST_RUNNABLE_SUITE_IDS = ["code", "cad", "platform"] as const;
 
@@ -19,6 +20,7 @@ type Persisted = {
   watchlistCheckedIds?: string[];
   showRunScopeList?: boolean;
   showRunScopeCases?: boolean;
+  moduleSortBy?: ModuleSortBy;
 };
 
 function readPersisted(): Persisted {
@@ -58,6 +60,11 @@ function normalizeWatchlistCheckedIds(ids: string[] | undefined): string[] {
   return [...new Set(ids.filter((id) => id.trim()))];
 }
 
+function normalizeModuleSortBy(value: string | undefined): ModuleSortBy {
+  if (value === "last_run_at" || value === "run_count") return value;
+  return "plan";
+}
+
 export const useUnitTestsPageStore = defineStore("unitTestsPage", {
   state: () => {
     const persisted = readPersisted();
@@ -69,6 +76,7 @@ export const useUnitTestsPageStore = defineStore("unitTestsPage", {
       watchlistCheckedIds: normalizeWatchlistCheckedIds(persisted.watchlistCheckedIds),
       showRunScopeList: persisted.showRunScopeList ?? false,
       showRunScopeCases: persisted.showRunScopeCases ?? false,
+      moduleSortBy: normalizeModuleSortBy(persisted.moduleSortBy),
     };
   },
   getters: {
@@ -92,6 +100,7 @@ export const useUnitTestsPageStore = defineStore("unitTestsPage", {
       this.watchlistCheckedIds = normalizeWatchlistCheckedIds(persisted.watchlistCheckedIds);
       this.showRunScopeList = persisted.showRunScopeList ?? false;
       this.showRunScopeCases = persisted.showRunScopeCases ?? false;
+      this.moduleSortBy = normalizeModuleSortBy(persisted.moduleSortBy);
       this.hydrated = true;
     },
     persist() {
@@ -102,6 +111,7 @@ export const useUnitTestsPageStore = defineStore("unitTestsPage", {
         watchlistCheckedIds: this.watchlistCheckedIds,
         showRunScopeList: this.showRunScopeList,
         showRunScopeCases: this.showRunScopeCases,
+        moduleSortBy: this.moduleSortBy,
       });
       saveWatchlistPrefs(this.watchlistPrefs);
     },
@@ -160,6 +170,11 @@ export const useUnitTestsPageStore = defineStore("unitTestsPage", {
     setShowRunScopeCases(checked: boolean) {
       if (this.showRunScopeCases === checked) return;
       this.showRunScopeCases = checked;
+      this.persist();
+    },
+    setModuleSortBy(sortBy: ModuleSortBy) {
+      if (this.moduleSortBy === sortBy) return;
+      this.moduleSortBy = sortBy;
       this.persist();
     },
   },

@@ -383,19 +383,18 @@ onUnmounted(() => {
             <span class="cn">{{ L.partKey }}</span>
             <span class="en">PartKey</span>
           </label>
-          <input
+          <el-input
             id="part-key-input"
             v-model="partKeyInput"
             class="pk-input mono"
-            type="text"
             placeholder="8001.001"
             spellcheck="false"
             :disabled="loading"
             @keydown.enter="onSearchPartKey"
           />
-          <button type="button" class="btn primary pk-btn" :disabled="loading" @click="onSearchPartKey">
-            {{ loading ? "检索中…" : "检索" }}
-          </button>
+          <el-button type="primary" size="small" class="pk-btn" :loading="loading" @click="onSearchPartKey">
+            检索
+          </el-button>
         </div>
         <div class="head-help">
           <PageHelpButton page-id="part_key_detail" />
@@ -403,7 +402,7 @@ onUnmounted(() => {
       </div>
     </header>
 
-    <div v-if="pageError" class="banner err">{{ pageError }}</div>
+    <el-alert v-if="pageError" type="error" :title="pageError" show-icon :closable="false" class="err-alert" />
     <div v-if="loading && !detail" class="empty">载入中…</div>
 
     <template v-else-if="detail">
@@ -424,20 +423,20 @@ onUnmounted(() => {
                 v-model="editForm.TypeCode"
                 :options="TYPE_CODE_OPTIONS"
               />
-              <input
+              <el-input
                 v-else-if="field.kind === 'input'"
                 v-model="editForm[field.key as 'ModelSeries' | 'PartName' | 'label' | 'notes']"
                 spellcheck="false"
               />
-              <select v-else v-model="editForm.status">
-                <option value="active">有效</option>
-                <option value="obsolete">失效</option>
-              </select>
+              <el-select v-else v-model="editForm.status" class="status-select">
+                <el-option label="有效" value="active" />
+                <el-option label="失效" value="obsolete" />
+              </el-select>
             </label>
           </div>
-          <button type="button" class="btn primary" :disabled="saving" @click="savePartMeta">
-            {{ saving ? "保存中…" : "保存零件属性" }}
-          </button>
+          <el-button type="primary" size="small" :loading="saving" @click="savePartMeta">
+            保存零件属性
+          </el-button>
         </section>
 
         <section class="files-block">
@@ -475,22 +474,16 @@ onUnmounted(() => {
                 </td>
                 <td class="mono">{{ relDir(file.repo_rel_path) }}</td>
                 <td class="actions">
-                  <button
-                    v-if="file.file_status === 'present'"
-                    type="button"
-                    class="btn mini"
-                    @click="openFileDetail(file)"
-                  >
+                  <el-button v-if="file.file_status === 'present'" size="small" @click="openFileDetail(file)">
                     详情
-                  </button>
-                  <button
+                  </el-button>
+                  <el-button
                     v-if="file.file_status === 'present' && isAssemblyFile(file)"
-                    type="button"
-                    class="btn mini"
+                    size="small"
                     @click="openAssemblyStructure(file)"
                   >
                     装配结构
-                  </button>
+                  </el-button>
                 </td>
               </tr>
             </tbody>
@@ -502,9 +495,7 @@ onUnmounted(() => {
       </div>
     </template>
 
-    <p v-else-if="!loading" class="empty">
-      输入零件标识后点「检索」；或在<strong>本 Tab 激活</strong>时点击右侧工作空间树中的 .FCStd（按文件名解析零件标识）。
-    </p>
+    <p v-else-if="!loading" class="empty">输入标识检索，或点树中 .FCStd</p>
   </div>
 </template>
 
@@ -530,15 +521,18 @@ onUnmounted(() => {
 
 .pk-input {
   width: 148px;
-  padding: 6px 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  font-size: 0.85rem;
 }
 
-.pk-btn {
-  padding: 6px 14px;
-  font-size: 0.82rem;
+.pk-input.mono :deep(.el-input__inner) {
+  font-family: ui-monospace, monospace;
+}
+
+.err-alert {
+  margin-bottom: 10px;
+}
+
+.status-select {
+  width: 100%;
 }
 
 .head-row .page-sub {

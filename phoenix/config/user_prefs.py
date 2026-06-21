@@ -138,6 +138,10 @@ _LAUNCHER_SHELL_LAYOUT_DEFAULT: dict[str, Any] = {
     "log_auto_open_on_append": True,
     "workspace_tree_dock": "right",  # left | right
     "shell_log_dock": "right",  # left | right
+    "properties_panel_open": True,
+    "properties_panel_height_px": 220,
+    "properties_panel_dock": "left",  # left | right
+    "properties_name_col_width_px": 132,
 }
 
 
@@ -179,6 +183,18 @@ def _normalized_shell_layout(raw: Any) -> dict[str, Any]:
     sld = raw.get("shell_log_dock")
     if sld in ("left", "right"):
         merged["shell_log_dock"] = str(sld)
+    ppo = raw.get("properties_panel_open")
+    if isinstance(ppo, bool):
+        merged["properties_panel_open"] = ppo
+    pph = raw.get("properties_panel_height_px")
+    if isinstance(pph, int) and pph >= 80:
+        merged["properties_panel_height_px"] = int(pph)
+    ppd = raw.get("properties_panel_dock")
+    if ppd in ("left", "right"):
+        merged["properties_panel_dock"] = str(ppd)
+    pnc = raw.get("properties_name_col_width_px")
+    if isinstance(pnc, int) and pnc >= 72:
+        merged["properties_name_col_width_px"] = min(240, int(pnc))
     rm = raw.get("ribbon_mode")
     if rm in (0, 1):
         merged["ribbon_mode"] = int(rm)
@@ -460,6 +476,10 @@ def save_launcher_shell_layout(
     log_auto_open_on_append: bool | None = None,
     workspace_tree_dock: str | None = None,
     shell_log_dock: str | None = None,
+    properties_panel_open: bool | None = None,
+    properties_panel_height_px: int | None = None,
+    properties_panel_dock: str | None = None,
+    properties_name_col_width_px: int | None = None,
 ) -> None:
     """将左侧导航宽窄 / 右栏开合 / 中右分割 sash / 运行日志窗 写入 launcher JSON。"""
     launcher = load_launcher_prefs()
@@ -486,6 +506,14 @@ def save_launcher_shell_layout(
         cur["workspace_tree_dock"] = str(workspace_tree_dock)
     if shell_log_dock in ("left", "right"):
         cur["shell_log_dock"] = str(shell_log_dock)
+    if properties_panel_open is not None:
+        cur["properties_panel_open"] = bool(properties_panel_open)
+    if properties_panel_height_px is not None:
+        cur["properties_panel_height_px"] = max(80, int(properties_panel_height_px))
+    if properties_panel_dock in ("left", "right"):
+        cur["properties_panel_dock"] = str(properties_panel_dock)
+    if properties_name_col_width_px is not None:
+        cur["properties_name_col_width_px"] = max(72, min(240, int(properties_name_col_width_px)))
     launcher["shell_layout"] = cur
     save_launcher_prefs(launcher)
 

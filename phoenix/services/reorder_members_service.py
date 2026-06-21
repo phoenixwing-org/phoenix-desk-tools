@@ -15,6 +15,7 @@ from phoenix.code.reorder_members import (
     format_changed_file_log_line,
     include_flags_to_legacy_filters,
     iter_source_files,
+    normalize_kevin_system_code_mode,
     normalize_reorder_include_flags,
     read_reorder_include_flags,
     resolve_reorder_include_for_run,
@@ -67,6 +68,7 @@ def get_reorder_members_prefs(repo_root: Path) -> dict[str, Any]:
         "include_header": include_header,
         "sort_members": bool(pv.get("sort_members", False)),
         "verbose": bool(pv.get("verbose", False)),
+        "kevin_system_code_mode": normalize_kevin_system_code_mode(pv.get("kevin_system_code_mode")),
         "last_selected": [str(x) for x in last_selected if str(x).strip()],
         **_ignore_fields(rr),
     }
@@ -102,6 +104,10 @@ def save_reorder_members_prefs(repo_root: Path, patch: dict[str, Any]) -> dict[s
     for k in ("sort_members", "verbose"):
         if k in patch:
             stored[k] = bool(patch[k])
+    if "kevin_system_code_mode" in patch:
+        stored["kevin_system_code_mode"] = normalize_kevin_system_code_mode(
+            patch.get("kevin_system_code_mode")
+        )
     if "last_selected" in patch:
         sel = patch.get("last_selected") or []
         if not isinstance(sel, list):
@@ -283,6 +289,7 @@ def _run_on_target(
     header_only: bool,
     sort_members: bool,
     verbose: bool,
+    kevin_system_code_mode: str,
 ) -> ReorderMembersRunResult:
     if target.is_file():
         if not is_listable_source_file(target):
@@ -295,6 +302,7 @@ def _run_on_target(
             header_only=header_only,
             sort_members=sort_members,
             verbose=verbose,
+            kevin_system_code_mode=kevin_system_code_mode,
         )
     if target.is_dir():
         return run_reorder_members(
@@ -305,6 +313,7 @@ def _run_on_target(
             sort_members=sort_members,
             verbose=verbose,
             repo_root=root,
+            kevin_system_code_mode=kevin_system_code_mode,
         )
     raise ValueError(f"路径不存在: {target.name}")
 
@@ -336,6 +345,11 @@ def run_reorder_members_batch(
     verbose = bool(
         save_patch["verbose"] if "verbose" in save_patch else prefs.get("verbose", False)
     )
+    kevin_system_code_mode = normalize_kevin_system_code_mode(
+        save_patch.get("kevin_system_code_mode")
+        if "kevin_system_code_mode" in save_patch
+        else prefs.get("kevin_system_code_mode")
+    )
 
     all_lines: list[str] = []
     total_cpp = total_hdr = total_files = 0
@@ -360,6 +374,7 @@ def run_reorder_members_batch(
             header_only=header_only,
             sort_members=sort_members,
             verbose=verbose,
+            kevin_system_code_mode=kevin_system_code_mode,
         )
         if not result.ok:
             all_lines.extend(result.lines)

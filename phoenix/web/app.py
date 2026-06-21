@@ -250,6 +250,10 @@ class ShellLayoutBody(BaseModel):
     log_auto_open_on_append: bool | None = None
     workspace_tree_dock: str | None = None
     shell_log_dock: str | None = None
+    properties_panel_open: bool | None = None
+    properties_panel_height_px: int | None = None
+    properties_panel_dock: str | None = None
+    properties_name_col_width_px: int | None = None
 
 
 class NavModulesBody(BaseModel):
@@ -416,6 +420,7 @@ class ReorderMembersPrefsBody(BaseModel):
     header_only: bool | None = None
     sort_members: bool | None = None
     verbose: bool | None = None
+    kevin_system_code_mode: str | None = None
     last_selected: list[str] | None = None
 
 

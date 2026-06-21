@@ -1,12 +1,9 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Document } from "@element-plus/icons-vue";
+import ShellPanelToggleBar from "../components/ShellPanelToggleBar.vue";
 import { useAppShell } from "../composables/useAppShell";
 
 const shell = useAppShell();
-
-const logPanelOpen = computed(() => shell.shellLayout.value.log_panel_open);
-const hasLogContent = computed(() => Boolean(shell.logText.value.trim()));
 
 const line = computed(() => {
   const parts: string[] = [];
@@ -19,27 +16,12 @@ const line = computed(() => {
   if (shell.statusText.value) parts.push(shell.statusText.value);
   return parts.join("  |  ");
 });
-
-async function openLogPanel() {
-  await shell.setLogOpen(true);
-  shell.setStatus("已展开运行日志");
-}
 </script>
 
 <template>
   <footer class="status">
     <span class="status-main">{{ line }}</span>
-    <el-button
-      v-if="!logPanelOpen"
-      class="status-log-btn"
-      size="small"
-      title="展开运行日志（扫描、批量任务等输出）"
-      @click="openLogPanel"
-    >
-      <el-icon><Document /></el-icon>
-      运行日志
-      <span v-if="hasLogContent" class="log-pending-dot" aria-label="有未读输出">●</span>
-    </el-button>
+    <ShellPanelToggleBar variant="footer" />
   </footer>
 </template>
 
@@ -63,16 +45,5 @@ async function openLogPanel() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.status-log-btn {
-  flex-shrink: 0;
-}
-
-.log-pending-dot {
-  color: #f59e0b;
-  font-size: 0.55rem;
-  line-height: 1;
-  margin-left: 2px;
 }
 </style>

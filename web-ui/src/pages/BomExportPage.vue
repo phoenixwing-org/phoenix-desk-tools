@@ -245,15 +245,15 @@ onUnmounted(() => {
           </p>
         </div>
         <div class="head-trailing">
-          <button
-            type="button"
-            class="btn head-rebuild"
-            :disabled="rebuilding"
+          <el-button
+            size="small"
+            class="head-rebuild"
+            :loading="rebuilding"
             title="仅重读各 FCStd 的 XLink 并刷新引用表，不重扫 CAD 索引属性。"
             @click="onRebuild"
           >
-            {{ rebuilding ? "重建中…" : "仅重建引用表" }}
-          </button>
+            仅重建引用表
+          </el-button>
           <div class="head-help">
             <PageHelpButton page-id="bom_export" />
           </div>
@@ -272,40 +272,28 @@ onUnmounted(() => {
       引用表为空。请先在「CAD 索引」执行「工程内搜索」（会一并重建引用表）。
     </p>
 
-    <nav class="sub-tabs" role="tablist" data-tour-page-bom-tabs>
-      <button
-        type="button"
-        role="tab"
-        class="sub-tab"
-        :class="{ active: activeSubTab === 'catalog' }"
-        @click="activeSubTab = 'catalog'"
-      >
+    <el-radio-group v-model="activeSubTab" size="small" class="sub-tabs" data-tour-page-bom-tabs>
+      <el-radio-button value="catalog">
         总成列表
         <span v-if="catalogHosts.length" class="tab-badge">{{ catalogHosts.length }}</span>
-      </button>
-      <button
-        type="button"
-        role="tab"
-        class="sub-tab"
-        :class="{ active: activeSubTab === 'settings' }"
-        @click="activeSubTab = 'settings'"
-      >
-        说明
-      </button>
-    </nav>
+      </el-radio-button>
+      <el-radio-button value="settings">说明</el-radio-button>
+    </el-radio-group>
 
     <div v-show="activeSubTab === 'catalog'" class="sub-panel">
       <section class="toolbar">
-        <input
+        <el-input
           v-model="catalogSearch"
-          class="search-input"
+          size="small"
+          clearable
           type="search"
           spellcheck="false"
           placeholder="筛选总成文件名、路径、零件号…"
+          class="search-input"
         />
-        <button type="button" class="btn primary" :disabled="catalogLoading" @click="loadCatalog">
-          {{ catalogLoading ? "加载中…" : "刷新列表" }}
-        </button>
+        <el-button size="small" type="primary" :loading="catalogLoading" @click="loadCatalog">
+          刷新列表
+        </el-button>
         <span v-if="catalogFiltered.length" class="toolbar-hint muted">
           显示 {{ catalogFiltered.length }} / {{ catalogHosts.length }} 个总成 · 点击行打开装配结构
         </span>
@@ -315,7 +303,7 @@ onUnmounted(() => {
         子件明细请在<strong>文件详情 → 装配结构</strong>查看。重建引用表时会写入物化路径表，便于统计各文件在 BOM 树中的出现次数。
       </p>
       <p v-if="pickedRel" class="picked-hint mono">已从树选择：{{ pickedRel }}</p>
-      <div v-if="catalogError" class="banner err">{{ catalogError }}</div>
+      <el-alert v-if="catalogError" type="error" :title="catalogError" show-icon :closable="false" class="err-alert" />
 
       <ResizableDataTable
         v-if="catalogFiltered.length"
@@ -467,37 +455,24 @@ onUnmounted(() => {
 }
 
 .sub-tabs {
-  display: flex;
-  gap: 4px;
   margin-bottom: 12px;
   flex-shrink: 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.sub-tab {
-  padding: 8px 14px;
-  border: none;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  font-size: 0.85rem;
-  cursor: pointer;
-  color: var(--muted);
-  margin-bottom: -1px;
-}
-
-.sub-tab.active {
-  color: var(--text);
-  border-bottom-color: var(--accent);
-  font-weight: 600;
 }
 
 .tab-badge {
-  margin-left: 6px;
-  padding: 1px 6px;
+  margin-left: 4px;
+  padding: 0 5px;
   border-radius: 999px;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
+  font-weight: 600;
   background: #e0e7ff;
   color: #3730a3;
+  vertical-align: middle;
+}
+
+.err-alert {
+  margin-bottom: 8px;
+  flex-shrink: 0;
 }
 
 .sub-panel {
@@ -521,10 +496,6 @@ onUnmounted(() => {
   flex: 1;
   min-width: 12rem;
   max-width: 360px;
-  padding: 6px 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  font-size: 0.85rem;
 }
 
 .picked-hint {

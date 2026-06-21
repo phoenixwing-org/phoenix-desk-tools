@@ -341,27 +341,22 @@ async function onSyncIncomingLabels() {
       引用表尚未构建。请先在「CAD 索引」页执行工程内搜索，或点下方「重建本文件引用索引」。
     </p>
     <div class="toolbar">
-      <button
-        type="button"
-        class="btn primary"
-        :disabled="rebuilding || loading"
+      <el-button
+        type="primary"
+        size="small"
+        :loading="rebuilding"
+        :disabled="loading"
         title="从磁盘重读本文件 XLink 并写入引用表；勾选下级时一并索引子装配 FCStd"
         @click="onRebuildIndex"
       >
-        {{ rebuilding ? "索引中…" : "重建本文件引用索引" }}
-      </button>
-      <label class="chk">
-        <input v-model="rebuildSubtree" type="checkbox" :disabled="rebuilding" />
-        含下级 FCStd
-      </label>
-      <label class="chk">
-        <input v-model="includeTransitive" type="checkbox" />
-        入向含间接宿主
-      </label>
-      <button type="button" class="btn" :disabled="loading || rebuilding" @click="loadTables(true, true)">
-        {{ loading ? "…" : "刷新列表" }}
-      </button>
-      <button type="button" class="btn" @click="ctx.switchSubTab('rename')">改名后修正 XLink…</button>
+        重建本文件引用索引
+      </el-button>
+      <el-checkbox v-model="rebuildSubtree" :disabled="rebuilding">含下级 FCStd</el-checkbox>
+      <el-checkbox v-model="includeTransitive">入向含间接宿主</el-checkbox>
+      <el-button size="small" :loading="loading" :disabled="rebuilding" @click="loadTables(true, true)">
+        刷新列表
+      </el-button>
+      <el-button size="small" @click="ctx.switchSubTab('rename')">改名后修正 XLink…</el-button>
     </div>
     <p v-if="indexSummary" class="index-summary">{{ indexSummary }}</p>
 
@@ -373,10 +368,12 @@ async function onSyncIncomingLabels() {
             · 直接 {{ directCount }} · 间接 {{ incomingCount - directCount }}
           </span>
         </h3>
-        <button
-          type="button"
-          class="btn-label-sync"
-          :disabled="labelSyncing || !canSyncIncomingLabels"
+        <el-button
+          type="success"
+          plain
+          size="small"
+          :loading="labelSyncing"
+          :disabled="!canSyncIncomingLabels"
           :title="
             canSyncIncomingLabels
               ? '将勾选装配树里「引用本文件」那一项的 Label 更新为本文件的规则名'
@@ -387,7 +384,7 @@ async function onSyncIncomingLabels() {
           @click="onSyncIncomingLabels"
         >
           {{ incomingLabelActionLabel }}
-        </button>
+        </el-button>
       </div>
       <p class="section-hint muted">
         下方列出<strong>引用本文件</strong>的装配。勾选后点「更新父装配中本件名」，把这些装配树里本文件的节点名改为<strong>规则名</strong>（改名后常用）。不改 XLink 路径。
@@ -447,14 +444,9 @@ async function onSyncIncomingLabels() {
             <template v-if="outgoingStats.ambiguous"> · 歧义 {{ outgoingStats.ambiguous }}</template>
           </span>
         </h3>
-        <button
-          v-if="showAssemblyLink"
-          type="button"
-          class="btn-assembly-link"
-          @click="goToAssemblyTab"
-        >
+        <el-button v-if="showAssemblyLink" size="small" @click="goToAssemblyTab">
           批量对齐子件名 → 装配结构
-        </button>
+        </el-button>
       </div>
       <p v-if="outgoingRefs.length" class="section-hint muted">
         <strong>链接标签（子件名）</strong> = 装配树里该引用的显示名（Link.Label）。
@@ -462,7 +454,7 @@ async function onSyncIncomingLabels() {
           当前有 <strong>{{ outgoingLabelMismatchCount }}</strong> 处与目标标准名不一致（黄行）。
         </template>
         批量对齐请前往
-        <button type="button" class="inline-link" @click="goToAssemblyTab">装配结构</button>
+        <el-button link size="small" @click="goToAssemblyTab">装配结构</el-button>
         Tab。单条改 XLink 路径请用右侧「改链接」。
       </p>
       <p v-else-if="!loading" class="section-hint muted">

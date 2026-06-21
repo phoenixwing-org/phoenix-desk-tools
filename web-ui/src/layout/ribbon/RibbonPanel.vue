@@ -8,7 +8,7 @@ import RibbonModuleToggles from "./RibbonModuleToggles.vue";
 import RibbonWorkspaceSwitcher from "./RibbonWorkspaceSwitcher.vue";
 import RibbonToolButton from "./RibbonToolButton.vue";
 import RibbonPanelUtils from "./RibbonPanelUtils.vue";
-import type { RibbonGroupDef, RibbonTabDef } from "./ribbonConfig";
+import { RIBBON_SHELL_TAB_ID, type RibbonGroupDef, type RibbonTabDef } from "./ribbonConfig";
 import { ribbonIconFor } from "./ribbonIcons";
 
 const props = defineProps<{
@@ -41,7 +41,6 @@ function resolveGroups(groups: RibbonGroupDef[]) {
         items.push({
           pageId: item.pageId,
           label: item.label || nav.label,
-          size: item.size || "small",
           icon: ribbonIconFor(item.pageId),
           active: props.currentPage === item.pageId,
           disabled,
@@ -56,6 +55,8 @@ function resolveGroups(groups: RibbonGroupDef[]) {
 const visibleGroups = computed(() => resolveGroups(props.tab.groups));
 
 const flatItems = computed(() => visibleGroups.value.flatMap((g) => g.items));
+
+const isShellTab = computed(() => props.tab.id === RIBBON_SHELL_TAB_ID);
 
 function toggleLayout() {
   uiPrefs.toggleRibbonLayoutMode();
@@ -92,11 +93,11 @@ function toggleLayout() {
           @open="emit('open', $event)"
         />
       </template>
-      <RibbonWorkspaceSwitcher v-if="tab.id === 'start'" :layout="isInline ? 'inline' : 'group'" />
-      <RibbonModuleToggles v-if="tab.id === 'start'" :layout="isInline ? 'inline' : 'group'" />
+      <RibbonWorkspaceSwitcher v-if="isShellTab" :layout="isInline ? 'inline' : 'group'" />
+      <RibbonModuleToggles v-if="isShellTab" :layout="isInline ? 'inline' : 'group'" />
       <div class="ribbon-panel-spacer" aria-hidden="true" />
-      <div v-if="tab.id === 'start'" class="ribbon-panel-utils">
-        <RibbonPanelUtils />
+      <div class="ribbon-panel-utils" :class="{ 'layout-inline': isInline }">
+        <RibbonPanelUtils :layout="isInline ? 'inline' : 'group'" />
       </div>
     </div>
     <button
@@ -117,12 +118,12 @@ function toggleLayout() {
   display: flex;
   flex-direction: row;
   align-items: stretch;
-  height: var(--ribbon-panel-height, 58px);
-  min-height: var(--ribbon-panel-height, 58px);
-  max-height: var(--ribbon-panel-height, 58px);
+  height: var(--ribbon-panel-height, 66px);
+  min-height: var(--ribbon-panel-height, 66px);
+  max-height: var(--ribbon-panel-height, 66px);
   overflow: hidden;
   padding: 0;
-  background: #fff;
+  background: var(--ribbon-bg, #fff);
 }
 
 .ribbon-panel-body {
@@ -143,12 +144,13 @@ function toggleLayout() {
 
 .ribbon-panel-utils {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   flex-shrink: 0;
   padding: 0 4px 0 0;
 }
 
-.ribbon-panel-inline .ribbon-panel-utils {
+.ribbon-panel-utils.layout-inline {
+  align-items: center;
   padding-right: 2px;
 }
 

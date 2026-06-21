@@ -9,7 +9,7 @@ const TOUR_STEPS: DriveStep[] = [
     element: "[data-tour='ribbon-tabs']",
     popover: {
       title: "功能 Tab",
-      description: "开始 / CAD / Code / 系统：切换 Tab 后下方 Ribbon 显示对应工具；「开始」Tab 内可开关 CAD / Code 模块。",
+      description: "系统 / CAD / Code：切换 Tab 后下方 Ribbon 显示对应工具；「系统」Tab 含主页、配置、工作空间与模块开关。",
       side: "bottom",
       align: "center",
     },

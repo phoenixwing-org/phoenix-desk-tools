@@ -3,7 +3,7 @@
 > 汇总跨模块待办；细项研究稿见 [文档索引.md](文档索引.md)。  
 > 状态：`[ ]` 未做 · `[~]` 进行中 · `[x]` 已完成
 
-最后更新：2026-06-20
+最后更新：2026-06-19
 
 ---
 
@@ -40,8 +40,26 @@
 - [x] **工作空间树**：Code 模块偏好下默认筛选 `.h/.cpp` 等（见 §导航模块偏好）
 - [ ] 桌面 `fcstd_map_page` 分页，去掉 `load_fcstd_document` 全表
 - [ ] 统一运行日志：长任务进度条 / 取消（见 [统一运行日志窗口-规划讨论.md](platform/统一运行日志窗口-规划讨论.md)）
-- [x] **单元测试 Web 页**：套件勾选运行、**运行范围列表按模块勾选**（默认全选）、NDJSON 流式进度、终止；失败关注 Tab（排序 / 勾选复测 / 简介列）；Pinia 持久化选项与勾选
+- [x] **单元测试 Web 页**：套件勾选运行、**运行范围列表按模块勾选**（默认全选）、NDJSON 流式进度、终止；失败关注 Tab（排序 / 勾选复测 / 简介列）；Pinia 持久化选项与勾选；**模块列表 el-table + 行内运行 + 运行次数/最近执行 localStorage + 排序**
 - [x] **链接路径修正 · 分析**：未建 CAD 索引时明确提示（非 JSON 解析错误）；空脚本输出友好报错
+
+### 侧栏 · 页面属性面板（POC）
+
+> 示例：**C++ 成员排序**（`usePagePropertySheet` + 工作空间树下方 `PagePropertiesPanel`）。  
+> 类型定义：`web-ui/src/types/pageProperties.ts` · 宿主：`pagePropertiesHost.ts`  
+> **规划**：[Web壳层-页面属性面板-规划.md](platform/Web壳层-页面属性面板-规划.md) · **实现说明**：[Web壳层-页面属性面板.md](platform/Web壳层-页面属性面板.md)
+
+- [x] POC：成员排序运行选项 + `KEVIN_SYSTEM_CODE` 模式（工作空间 prefs 持久化）
+- [x] KeepAlive 多页：`setPropertiesActivePage` 随 Tab 切换属性内容
+- [x] 表格布局：左名右值、名称列拖拽、布尔「是/否」、`labelTone` 强调色
+- [x] **文档**：规划 + 数据结构 + 各页适配对照（见规划 doc §4–§6）
+- [x] **推广 P1**：`xlink_fix` / `code_rename` / `code_uuid` 属性 sheet；主区留操作与结果表
+- [x] **属性空态**：无 sheet 时显示「当前页无可配置项」
+- [ ] **推广 P2**：`file_rename` / STEP 等（`part_dedup` ✅）
+- [ ] **类型扩展**：`propPath`、分析后动态只读组；与工作集范围字段复用（`propSlot` → 拆行）
+- [ ] **运行范围**：成员排序「从工作集推导一级目录勾选」
+- [x] **壳层持久化**：属性区高度、名称列宽写入 `shell_layout`
+- [x] **页脚面板切换**：VS Code 式图标（树/属性/日志/工作集/停靠）— 与 Ribbon 壳层区共用 `ShellPanelToggleBar`（全 Tab + 布局联动）
 
 ### Web 壳层 · Ribbon 改型（Element Plus · 循序渐进）
 
@@ -61,7 +79,7 @@
 
 - [x] `web-ui/src/layout/ribbon/*`（Shell / Group / ToolButton / config）
 - [x] 调试入口：`?ribbon=1` 或顶栏 **Ribbon** 按钮
-- [x] 四 Tab：开始 / CAD / Code / 系统；分组 + 竖线 + 方块按钮
+- [x] 三 Tab：**系统**（置首）/ CAD / Code；分组 + 竖线 + 大图标
 
 **R2 · 接入壳层**
 
@@ -78,7 +96,7 @@
 **R3+ · 顶栏收拢与侧栏（2026-06）**
 
 - [x] 顶栏精简：移除 🏠/⚙ 快捷区、Gitee、顶栏工作空间 pill / 模块 chip
-- [x] **开始** Ribbon 集中：工作空间切换、CAD/Code 模块开关、树/日志/侧栏常用操作（其它 Tab 不重复）
+- [x] **系统** Ribbon 集中：工作空间切换、CAD/Code 模块开关、树/日志/侧栏 + 主页/配置/单元测试
 - [x] 页面 Tab：复用 Ribbon 图标；全部关闭改为图标钮；功能区/页面 Tab 视觉分层
 - [x] 切换功能区 Tab 时，若 Ribbon 已折叠则**自动展开**
 - [x] 左右侧栏独立宽度 `left_panel_width_px` / `right_panel_width_px`（launcher 持久化）
@@ -89,6 +107,20 @@
 - [x] **页面 Tab 托盘**：顶栏居中排列；当前 Tab 略放大 + 切换动画（Chili3D 式强调）
 - [x] **浏览器标题**：`Phoenix 桌面工具 - {工作空间} · {当前页}`
 - [x] **欢迎页 · 最近工程**：每条可记 CAD/Code/全部模块范围（launcher + 工作空间 `nav_modules`）
+
+**R3++ · WPS 式 Ribbon 与页脚（2026-06-21）**
+
+> 归档：[Web壳层-Ribbon-WPS改型-归档.md](platform/Web壳层-Ribbon-WPS改型-归档.md)
+
+- [x] 分组 Ribbon：全部 **大图标**（图标上/文字下）；组间竖线、**无**底部分组标题
+- [x] 功能区 Tab：**WPS 下划线**高亮（`RibbonTabBar`）
+- [x] **页脚** VS Code 式面板图标 + `el-tooltip`（`ShellPanelToggleBar` / `shellPanelToggles.ts`）
+- [x] 「系统」：**工作空间** 大图标 + 下方 comb；**模块** CAD/Code **纵向**小钮（≤3 行）
+- [x] CAD/Code `ribbonConfig` 组合并（忽略设定→编辑、改名分析→工具）
+- [x] Popover + Tooltip 嵌套警告修复
+- [x] 单行 Ribbon 布局：**不变**
+- [x] **壳层区补全**：全 Tab 显示树/属性/日志等；分组大图标 / 单行紧凑联动（见 [归档](platform/Web壳层-Ribbon壳层区补全-归档.md)）
+- [x] **`RIBBON_SHELL_TAB_ID` 运行时修复**（`import type` → 值导入）
 
 ### 系统 · FileWorkset（文件工作集）
 
@@ -110,13 +142,19 @@
 
 **R4 · 业务页渐进（按需）**
 
-- [~] 新改版页优先 Element 组件（欢迎页 / 主页 / 配置·界面 已迁移；**梳理见** [Web壳层-业务页Element化-梳理.md](platform/Web壳层-业务页Element化-梳理.md)）
+- [x] 新改版页优先 Element 组件（P0–P3 二批工具栏/按钮已落地；**梳理见** [Web壳层-业务页Element化-梳理.md](platform/Web壳层-业务页Element化-梳理.md)、**归档见** [Web壳层-业务页Element化-归档.md](platform/Web壳层-业务页Element化-归档.md)）
 - [x] P0 批次：占位页、`WorksetScopePicker`、`FileWorksetPanel`、Code 批量改名
 - [x] P1 批次：Code UUID 替换（表单区）、C++ 成员排序、配置主表单
 - [x] P2 批次：链接修正、STEP 批量、SW 导出、零件去重、Code 忽略 Panel（大表/展开表保留原生 table）
 - [x] P3 首批：零件目录、CAD/Code 索引工具栏（表仍 `ResizableDataTable`）；2026-06-20 smoke 通过
-- [x] **验收**：成员排序 GBK 预检、UUID 写盘、索引/目录、顶栏 Gitee（见 [归档](platform/Web壳层-业务页Element化-归档.md)）
-- [ ] **P3 二批 · Element（工具栏/按钮，大表保留）**：单元测试 · BOM 导出/应用 · 文件改名 `RenameAnalysisPanel` · 文件详情/零件键详情（见 [梳理 §批次](platform/Web壳层-业务页Element化-梳理.md)）
+- [x] **验收（P3 首批）**：成员排序 GBK 预检、UUID 写盘、索引/目录、顶栏 Gitee（见 [归档](platform/Web壳层-业务页Element化-归档.md)）
+- [x] **P3 二批 · Element（工具栏/按钮，大表保留）**：单元测试 · BOM 列表 · 改名分析/`RenameAnalysisPanel` · 文件详情/零件键详情（2026-06-21 实现并归档）
+- [ ] **P3 二批 · 人工 smoke（延后）**：
+  - [ ] 单元测试：运行 / 模块行内运行 / 失败关注复测
+  - [ ] BOM 列表（`bom_export`）
+  - [ ] 改名分析（`file_rename` · `RenameAnalysisPanel`）
+  - [ ] 文件详情各 Tab（`file_detail` / `bom_apply`）
+  - [ ] 零件详情：检索 / 保存（`part_key_detail`）
 
 ### 导航模块偏好（主页勾选 → 左侧只显示已选）
 
@@ -216,10 +254,12 @@
   - [x] 与 Code 索引范围联动（`use_index_scope`）；报告 JSON 落 `.phoenix/reports/`
 - [x] **成员排序 · 锁定段（P0）**：`reorder_avoidance.py` + `test_reorder_avoidance_rules.py`；可选 Web 自检 API
 - [x] **成员排序 · 锁定段回归单测**：`tests/test_reorder_avoidance_rules.py`；改规则须全套件通过
+- [ ] **成员排序 · 待研究**：`#pragma region VirtualFunction`（暂不专项处理）；`.cpp` Wizard 段 — `pnx_bom_analysis_cmd_min.cpp` fixture 待补单测
 - [x] **成员排序 · Web 回归自检（可选）**：`POST /api/code/reorder-members/self-test` 或 dev 页按钮，仅跑 fixture 子集
 - [ ] **成员排序 · 可选目录层级**：勾选列表默认 **1 级**（现「一级条目」）；偏好可选 **2–4 级** 展开子目录为可选项（仍受 ignore 规则约束）；`list_reorder_top_level_entries` / `GET top-level` + `ReorderMembersPage` 结果区标题与汇总
 - [ ] **成员变量字母序（完整规则）**：Doxygen 序号重编、`.h`/`.cpp` 构造/析构等序号一致 — 见 [成员变量字母序-规则与待实现.md](code/成员变量字母序-规则与待实现.md)；Web 勾选暂禁用
-- [ ] 成员排序：单文件 diff 预览、Git 脏文件过滤
+- [ ] **成员排序 · 变更 Diff 预览（待研究）**：变更文件表点击路径 → 弹层/新窗对比；方案见 [成员排序-变更Diff预览-待研究.md](platform/成员排序-变更Diff预览-待研究.md)（Monaco Diff / diff2html / 后端 `difflib` 预检 diff + 可选 `git diff`）
+- [ ] 成员排序：Git 脏文件过滤（仅排序已修改文件，与 diff 预览联动）
 - [ ] 其它 Code 工具迁入 `phoenix/code/`（按 skill 拆分）
 
 ---

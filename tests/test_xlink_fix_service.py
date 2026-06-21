@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from phoenix.freecad.phoenix_store import connect
 from phoenix.services.xlink_fix_service import analyze_xlink_fix, apply_xlink_fix_override, part_hints_from_xlink_old_path
 
 
@@ -34,6 +35,17 @@ def test_part_hints_short_number_and_underscore() -> None:
 def test_analyze_requires_cad_index(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="CAD 索引"):
         analyze_xlink_fix(tmp_path)
+
+
+def test_analyze_all_in_dir_requires_fcstd(tmp_path: Path) -> None:
+    with connect(tmp_path) as conn:
+        conn.execute(
+            "INSERT INTO phoenix_cad_file_asset(repo_rel_path, filename, updated_at) "
+            "VALUES (?, ?, ?)",
+            ("./parts/a.FCStd", "a.FCStd", "2026-01-01T00:00:00+00:00"),
+        )
+    with pytest.raises(ValueError, match="未找到 .FCStd"):
+        analyze_xlink_fix(tmp_path, batch_dir_input=".", all_in_dir=True)
 
 
 def test_apply_override_missing_host(tmp_path: Path) -> None:
