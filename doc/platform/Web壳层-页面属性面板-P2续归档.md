@@ -50,6 +50,6 @@
 
 - [ ] `propPath` 推广至 STEP / 零件去重等仍用手填路径的页
 - [ ] P3 二批人工 smoke（单元测试 / BOM / 改名 / 文件详情）
-- [ ] P0：`rebuild_bom_tree_occurrences` 性能、结构感知 BOM 挂载
+- [ ] P0：结构感知 BOM 挂载
 
 **结论**：属性面板 P2 页迁移收尾；壳层页头与 FileWorkset 消费（成员排序）已落地；下一批优先类型小增强或 P0 后端性能。

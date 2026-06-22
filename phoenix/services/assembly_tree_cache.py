@@ -258,6 +258,47 @@ def _count_tree_nodes(nodes: list[dict[str, Any]]) -> int:
     return total
 
 
+def load_bom_xref_adjacency(repo_root: Path) -> dict[str, list[dict[str, Any]]]:
+    """一次查询 enriched 边表并构建 host → edges 邻接表。"""
+    edges, _ = query_all_bom_xref_edges_enriched(repo_root)
+    return _xref_adjacency(edges)
+
+
+def build_assembly_tree_payload_from_adj(
+    repo_root: Path,
+    host_repo_rel: str,
+    adj: Mapping[str, list[dict[str, Any]]],
+    *,
+    full: bool = False,
+    max_depth: int = 16,
+    enrich: bool = True,
+) -> dict[str, Any]:
+    """从已加载邻接表构建装配树（无 SQL）。"""
+    host = normalize_repo_rel_path_for_map(host_repo_rel.strip())
+    if not host:
+        raise ValueError("请提供 host_repo_rel")
+
+    nodes = _build_level(
+        dict(adj),
+        host,
+        depth=0,
+        stack=frozenset(),
+        full=full,
+        max_depth=max_depth,
+        parent_path="",
+    )
+    if enrich:
+        flat = _flatten_nodes(nodes)
+        _batch_enrich_file_roles(repo_root, flat)
+    _assign_tree_node_ids(nodes)
+    return {
+        "host_repo_rel_path": host,
+        "mode": "full" if full else "first",
+        "node_count": _count_tree_nodes(nodes),
+        "nodes": nodes,
+    }
+
+
 def build_assembly_tree_payload(
     repo_root: Path,
     host_repo_rel: str,
@@ -266,30 +307,15 @@ def build_assembly_tree_payload(
     max_depth: int = 16,
 ) -> dict[str, Any]:
     """从预加载邻接表构建装配树（无递归 SQL / 无按层读盘）。"""
-    host = normalize_repo_rel_path_for_map(host_repo_rel.strip())
-    if not host:
-        raise ValueError("请提供 host_repo_rel")
-
-    edges, _ = query_all_bom_xref_edges_enriched(repo_root)
-    adj = _xref_adjacency(edges)
-    nodes = _build_level(
+    adj = load_bom_xref_adjacency(repo_root)
+    return build_assembly_tree_payload_from_adj(
+        repo_root,
+        host_repo_rel,
         adj,
-        host,
-        depth=0,
-        stack=frozenset(),
         full=full,
         max_depth=max_depth,
-        parent_path="",
+        enrich=True,
     )
-    flat = _flatten_nodes(nodes)
-    _batch_enrich_file_roles(repo_root, flat)
-    _assign_tree_node_ids(nodes)
-    return {
-        "host_repo_rel_path": host,
-        "mode": "full" if full else "first",
-        "node_count": _count_tree_nodes(nodes),
-        "nodes": nodes,
-    }
 
 
 def load_assembly_tree_cached(
