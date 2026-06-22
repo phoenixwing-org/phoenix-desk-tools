@@ -11,7 +11,7 @@ import {
   type CodeIndexSearchMode,
 } from "../api";
 import { promptChoice } from "../composables/choiceDialog";
-import PageHelpButton from "../components/PageHelpButton.vue";
+import PageHeader from "../components/PageHeader.vue";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
 import type { TableColumnDef } from "../composables/useResizableTable";
 import { useAppShell } from "../composables/useAppShell";
@@ -422,12 +422,9 @@ onMounted(() => applyInitialTabState());
 
 <template>
   <div class="page code-index-page">
-    <header class="page-head">
-      <div class="head-row head-row-toolbar">
-        <div class="head-left">
-          <h1 class="page-title">Code 索引</h1>
-        </div>
-        <div class="head-actions" data-tour-page-code-scan>
+    <PageHeader title="Code 索引" page-id="code_index">
+      <template #actions>
+        <div data-tour-page-code-scan class="head-actions-inner">
           <el-button type="primary" size="small" :loading="scanning" @click="onScan">工程内搜索</el-button>
           <el-button
             size="small"
@@ -444,11 +441,8 @@ onMounted(() => applyInitialTabState());
           </el-button>
           <el-button size="small" :loading="loading" @click="refresh()">刷新</el-button>
         </div>
-        <div class="head-help">
-          <PageHelpButton page-id="code_index" />
-        </div>
-      </div>
-    </header>
+      </template>
+    </PageHeader>
 
     <div class="index-panel">
       <section class="index-toolbar">

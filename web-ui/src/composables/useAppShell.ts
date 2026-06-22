@@ -183,7 +183,7 @@ const DEFAULT_SHELL: ShellLayout = {
   log_panel_height_px: 180,
   log_auto_open_on_append: true,
   workspace_tree_dock: "right",
-  shell_log_dock: "right",
+  shell_log_dock: "left",
   properties_panel_open: true,
   properties_panel_height_px: 220,
   properties_panel_dock: "left",
@@ -192,6 +192,40 @@ const DEFAULT_SHELL: ShellLayout = {
 
 function clampPanelWidth(px: number): number {
   return Math.min(560, Math.max(160, px));
+}
+
+function clampPxInt(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.round(Math.min(max, Math.max(min, value)));
+}
+
+function sanitizeShellLayoutPatch(patch: Partial<ShellLayout>): Partial<ShellLayout> {
+  const out: Partial<ShellLayout> = { ...patch };
+  if (out.left_panel_width_px != null) {
+    out.left_panel_width_px = clampPxInt(out.left_panel_width_px, 160, 560);
+  }
+  if (out.right_panel_width_px != null) {
+    out.right_panel_width_px = clampPxInt(out.right_panel_width_px, 160, 560);
+  }
+  if (out.log_panel_height_px != null) {
+    out.log_panel_height_px = clampPxInt(out.log_panel_height_px, 80, 4096);
+  }
+  if (out.properties_panel_height_px != null) {
+    out.properties_panel_height_px = clampPxInt(out.properties_panel_height_px, 80, 4096);
+  }
+  if (out.properties_name_col_width_px != null) {
+    out.properties_name_col_width_px = clampPxInt(out.properties_name_col_width_px, 72, 240);
+  }
+  if (out.mid_right_sash_px != null) {
+    out.mid_right_sash_px = clampPxInt(out.mid_right_sash_px, 1, 4096);
+  }
+  if (out.nav_rail_mode != null) {
+    out.nav_rail_mode = clampPxInt(out.nav_rail_mode, 0, 1) as 0 | 1;
+  }
+  if (out.ribbon_mode != null) {
+    out.ribbon_mode = clampPxInt(out.ribbon_mode, 0, 1) as 0 | 1;
+  }
+  return out;
 }
 
 function normalizeShellLayout(partial?: Partial<ShellLayout>): ShellLayout {
@@ -964,8 +998,9 @@ export function provideAppShell(): AppShellContext {
   }
 
   async function persistShellLayout(patch: Partial<ShellLayout>) {
-    shellLayout.value = normalizeShellLayout({ ...shellLayout.value, ...patch });
-    const updated = await patchShellLayout(patch);
+    const safe = sanitizeShellLayoutPatch(patch);
+    shellLayout.value = normalizeShellLayout({ ...shellLayout.value, ...safe });
+    const updated = await patchShellLayout(safe);
     shellLayout.value = normalizeShellLayout({ ...shellLayout.value, ...updated });
   }
 

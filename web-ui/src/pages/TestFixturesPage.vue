@@ -11,7 +11,7 @@ import {
 } from "../api";
 import { useAppShell } from "../composables/useAppShell";
 import { useTestFixturesPropertySheet } from "../composables/useTestFixturesPropertySheet";
-import PageHelpButton from "../components/PageHelpButton.vue";
+import PageHeader from "../components/PageHeader.vue";
 
 const shell = useAppShell();
 const loading = ref(false);
@@ -209,28 +209,20 @@ useTestFixturesPropertySheet("test_fixtures", {
 
 <template>
   <div class="page tool-page test-fixtures-page">
-    <header class="page-head">
-      <div class="head-row head-row-toolbar">
-        <div class="head-left">
-          <h1 class="page-title">引用测试工程</h1>
-        </div>
-        <div class="head-actions">
-          <el-button
-            type="primary"
-            size="small"
-            :loading="syncing && !busyName"
-            :disabled="!enabledCount || (syncing && !!busyName)"
-            @click="syncAndLink"
-          >
-            {{ primaryActionLabel }}
-          </el-button>
-          <el-button size="small" :disabled="loading || syncing" @click="reload">刷新状态</el-button>
-        </div>
-        <div class="head-help">
-          <PageHelpButton page-id="test_fixtures" />
-        </div>
-      </div>
-    </header>
+    <PageHeader title="引用测试工程" page-id="test_fixtures">
+      <template #actions>
+        <el-button
+          type="primary"
+          size="small"
+          :loading="syncing && !busyName"
+          :disabled="!enabledCount || (syncing && !!busyName)"
+          @click="syncAndLink"
+        >
+          {{ primaryActionLabel }}
+        </el-button>
+        <el-button size="small" :disabled="loading || syncing" @click="reload">刷新状态</el-button>
+      </template>
+    </PageHeader>
 
     <section class="section">
       <div class="row checkout-row">

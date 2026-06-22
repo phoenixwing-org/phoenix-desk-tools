@@ -8,16 +8,26 @@ import {
   saveReorderMembersPrefs,
   type ReorderMembersEntry,
 } from "../api";
-import PageHelpButton from "../components/PageHelpButton.vue";
+import PageHeader from "../components/PageHeader.vue";
 import AppModalOverlay from "../components/AppModalOverlay.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useReorderMembersPageStore } from "../stores/reorderMembersPage";
+import { useFileWorksetsStore } from "../stores/fileWorksets";
 import { useReorderMembersPropertySheet } from "../composables/useReorderMembersPropertySheet";
+import { deriveReorderTopLevelFromWorkset } from "../utils/deriveReorderTopLevelFromWorkset";
 
 const shell = useAppShell();
 const pageStore = useReorderMembersPageStore();
+const worksetStore = useFileWorksetsStore();
 
 const CHANGED_PAGE_SIZE = 20;
+
+type ChangedFileStatus = "dry_run" | "written";
+
+type ChangedFileRow = {
+  path: string;
+  status: ChangedFileStatus;
+};
 
 const selected = computed(() => pageStore.selectedSet);
 const entriesExpanded = computed({
@@ -31,7 +41,7 @@ const ignoredEntries = ref<Array<{ name: string; kind: string; reason: string }>
 const entries = ref<ReorderMembersEntry[]>([]);
 const ignoredCount = ref(0);
 
-const changedFiles = ref<string[]>([]);
+const changedFileRows = ref<ChangedFileRow[]>([]);
 const lastRunDryRun = ref(false);
 const lastRunSummary = ref("");
 const changedPage = ref(0);
@@ -48,15 +58,20 @@ const allChecked = computed(
 );
 const dirCount = computed(() => entries.value.filter((e) => e.kind === "dir").length);
 const fileCount = computed(() => entries.value.filter((e) => e.kind === "file").length);
-const changedTotal = computed(() => changedFiles.value.length);
+const changedTotal = computed(() => changedFileRows.value.length);
 const changedPageCount = computed(() => Math.max(1, Math.ceil(changedTotal.value / CHANGED_PAGE_SIZE)));
 const changedPageSafe = computed(() =>
   Math.min(changedPage.value, Math.max(0, changedPageCount.value - 1)),
 );
 const pagedChangedFiles = computed(() => {
   const start = changedPageSafe.value * CHANGED_PAGE_SIZE;
-  return changedFiles.value.slice(start, start + CHANGED_PAGE_SIZE);
+  return changedFileRows.value.slice(start, start + CHANGED_PAGE_SIZE);
 });
+
+const activeWorksetPathCount = computed(() => worksetStore.activeWorkset?.paths.length ?? 0);
+const canSelectFromWorkset = computed(
+  () => activeWorksetPathCount.value > 0 && entries.value.length > 0 && !loading.value,
+);
 
 function fileKindLabel(path: string): string {
   const lower = path.toLowerCase();
@@ -64,6 +79,28 @@ function fileKindLabel(path: string): string {
   if (lower.endsWith(".hpp") || lower.endsWith(".hh")) return ".hpp";
   if (lower.endsWith(".h")) return ".h";
   return "源文件";
+}
+
+function changedStatusLabel(status: ChangedFileStatus): string {
+  return status === "dry_run" ? "预检" : "已写盘";
+}
+
+function changedStatusTagType(status: ChangedFileStatus): "success" | "warning" {
+  return status === "dry_run" ? "warning" : "success";
+}
+
+function changedStatusTitle(status: ChangedFileStatus): string {
+  return status === "dry_run" ? "未写盘，仅分析变更范围" : "已写回磁盘";
+}
+
+function buildChangedRows(paths: string[], dryRun: boolean): ChangedFileRow[] {
+  const status: ChangedFileStatus = dryRun ? "dry_run" : "written";
+  return paths.map((path) => ({ path, status }));
+}
+
+function collectChangedPaths(out: Awaited<ReturnType<typeof runReorderMembers>>): string[] {
+  if (out.changed_files?.length) return out.changed_files;
+  return (out.item_results ?? []).flatMap((item) => item.changed_files ?? []);
 }
 
 function prefsPayload() {
@@ -140,6 +177,24 @@ function toggleAll(checked: boolean) {
   );
 }
 
+function selectFromWorkset() {
+  const ws = worksetStore.activeWorkset;
+  if (!ws?.paths.length) {
+    shell.setStatus("侧栏活动工作集为空，请先在索引/树中归集文件");
+    return;
+  }
+  const derived = deriveReorderTopLevelFromWorkset(
+    ws.paths,
+    entries.value.map((e) => e.name),
+  );
+  if (!derived.length) {
+    shell.setStatus(`工作集「${ws.name}」中的路径与一级条目无交集`);
+    return;
+  }
+  pageStore.toggleAll(derived, true);
+  shell.setStatus(`已从工作集「${ws.name}」勾选 ${derived.length} 项`);
+}
+
 async function onRun(dryRun: boolean) {
   if (!selectedCount.value) {
     shell.setStatus("请至少勾选一项");
@@ -169,7 +224,7 @@ async function onRun(dryRun: boolean) {
       targets: [...selected.value],
       dry_run: dryRun,
     });
-    changedFiles.value = out.changed_files ?? [];
+    changedFileRows.value = buildChangedRows(collectChangedPaths(out), out.dry_run);
     changedPage.value = 0;
     lastRunDryRun.value = dryRun;
     lastRunSummary.value = out.summary || "";
@@ -210,36 +265,28 @@ watch(
 
 <template>
   <div class="page tool-page reorder-page">
-    <header class="page-head">
-      <div class="head-row head-row-toolbar">
-        <div class="head-left">
-          <h1 class="page-title">C++ 成员排序</h1>
+    <PageHeader title="C++ 成员排序" page-id="reorder_members">
+      <template #actions>
+        <div class="toolbar-group">
+          <el-button size="small" :loading="saving" @click="onSave">保存偏好</el-button>
+          <el-button size="small" :loading="running" :disabled="!selectedCount" @click="onRun(true)">
+            预检
+          </el-button>
         </div>
-        <div class="head-actions">
-          <div class="toolbar-group">
-            <el-button size="small" :loading="saving" @click="onSave">保存偏好</el-button>
-            <el-button size="small" :loading="running" :disabled="!selectedCount" @click="onRun(true)">
-              预检
-            </el-button>
-          </div>
-          <span class="toolbar-divider" aria-hidden="true" />
-          <div class="toolbar-group">
-            <el-button
-              type="primary"
-              size="small"
-              :loading="running"
-              :disabled="!selectedCount"
-              @click="onRun(false)"
-            >
-              执行排序
-            </el-button>
-          </div>
+        <span class="toolbar-divider" aria-hidden="true" />
+        <div class="toolbar-group">
+          <el-button
+            type="primary"
+            size="small"
+            :loading="running"
+            :disabled="!selectedCount"
+            @click="onRun(false)"
+          >
+            执行排序
+          </el-button>
         </div>
-        <div class="head-help">
-          <PageHelpButton page-id="reorder_members" />
-        </div>
-      </div>
-    </header>
+      </template>
+    </PageHeader>
 
     <section class="card results-card" :class="{ collapsed: !entriesExpanded }">
       <div class="results-head-row">
@@ -256,6 +303,19 @@ watch(
         <span v-else-if="loading" class="head-meta muted small">加载中…</span>
         <div class="results-head-actions">
           <el-button size="small" :loading="loading" @click="refreshList">刷新列表</el-button>
+          <el-button
+            size="small"
+            plain
+            :disabled="!canSelectFromWorkset"
+            :title="
+              activeWorksetPathCount
+                ? `按侧栏活动工作集「${worksetStore.activeWorkset?.name ?? ''}」路径推导一级目录/文件`
+                : '请先在侧栏选择活动工作集并添加文件'
+            "
+            @click="selectFromWorkset"
+          >
+            从工作集勾选
+          </el-button>
           <el-button v-if="ignoredCount" size="small" @click="ignoredModalOpen = true">
             已忽略 {{ ignoredCount }}
           </el-button>
@@ -296,30 +356,42 @@ watch(
       </div>
     </section>
 
-    <section v-if="changedFiles.length || lastRunSummary" class="card changed-card">
+    <section v-if="changedFileRows.length || lastRunSummary" class="card changed-card">
       <header class="results-head">
         <div class="results-head-row">
           <span class="section-label">变更文件</span>
-          <span v-if="changedFiles.length" class="muted small">
+          <span v-if="changedFileRows.length" class="muted small">
             {{ lastRunDryRun ? "预检" : "已写盘" }} · 共 {{ changedTotal }} 个
           </span>
           <span v-else-if="lastRunSummary" class="muted small">本次无变更</span>
         </div>
-        <p v-if="lastRunSummary && !changedFiles.length" class="run-summary muted">{{ lastRunSummary.split("\n")[0] }}</p>
+        <p v-if="lastRunSummary && !changedFileRows.length" class="run-summary muted">{{ lastRunSummary.split("\n")[0] }}</p>
       </header>
 
-      <el-table v-if="changedFiles.length" :data="pagedChangedFiles" size="small" stripe class="changed-table">
+      <el-table v-if="changedFileRows.length" :data="pagedChangedFiles" size="small" stripe class="changed-table">
         <el-table-column label="#" width="52" align="center">
           <template #default="{ $index }">
             {{ changedPageSafe * CHANGED_PAGE_SIZE + $index + 1 }}
           </template>
         </el-table-column>
         <el-table-column prop="path" label="路径" min-width="200" class-name="mono">
-          <template #default="{ row }">{{ row }}</template>
+          <template #default="{ row }">{{ row.path }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="88" align="center">
+          <template #default="{ row }">
+            <el-tag
+              size="small"
+              effect="plain"
+              :type="changedStatusTagType(row.status)"
+              :title="changedStatusTitle(row.status)"
+            >
+              {{ changedStatusLabel(row.status) }}
+            </el-tag>
+          </template>
         </el-table-column>
         <el-table-column label="类型" width="80" align="center">
           <template #default="{ row }">
-            <el-tag size="small" effect="plain">{{ fileKindLabel(row) }}</el-tag>
+            <el-tag size="small" effect="plain">{{ fileKindLabel(row.path) }}</el-tag>
           </template>
         </el-table-column>
       </el-table>

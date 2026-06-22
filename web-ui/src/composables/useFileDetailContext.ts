@@ -24,7 +24,9 @@ export type FileDetailContext = {
   /** 装配树缓存：key = ``${repo_rel}|first|full`` */
   assemblyCacheByKey: Ref<Record<string, AssemblyTreeNode[]>>;
   invalidateAssemblyCache: (relPath?: string) => void;
-  /** 写入 Document.xml 不更名；缓存表单中的目标文件名，reload/F5 后仍显示 */
+  /** 引用/装配数据变更（改链接、重建索引、Label 同步等）后 bump，联动刷新装配树缓存 */
+  xrefMutationSeq: Ref<number>;
+  notifyXrefMutation: (relPath?: string) => void;
   rememberFilenameDraft: (filename: string, relPath?: string) => void;
 };
 

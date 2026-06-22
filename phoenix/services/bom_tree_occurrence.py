@@ -15,7 +15,10 @@ from phoenix.freecad.phoenix_store import (
     connect,
     query_assembly_bom_hosts,
 )
-from phoenix.services.assembly_tree_cache import build_assembly_tree_payload
+from phoenix.services.assembly_tree_cache import (
+    build_assembly_tree_payload_from_adj,
+    load_bom_xref_adjacency,
+)
 
 
 def flatten_tree_occurrences(
@@ -69,11 +72,18 @@ def rebuild_bom_tree_occurrences(repo_root: Path) -> dict[str, Any]:
     hosts, _, _ = query_assembly_bom_hosts(rr)
     now = _utc_now_iso()
     rows: list[dict[str, Any]] = []
+    adj = load_bom_xref_adjacency(rr)
 
     for host_row in hosts:
         root = str(host_row["host_repo_rel_path"])
         try:
-            payload = build_assembly_tree_payload(rr, root, full=True)
+            payload = build_assembly_tree_payload_from_adj(
+                rr,
+                root,
+                adj,
+                full=True,
+                enrich=False,
+            )
         except (OSError, ValueError):
             continue
         flatten_tree_occurrences(

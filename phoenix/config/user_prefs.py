@@ -173,7 +173,7 @@ _LAUNCHER_SHELL_LAYOUT_DEFAULT: dict[str, Any] = {
     "log_panel_height_px": 180,
     "log_auto_open_on_append": True,
     "workspace_tree_dock": "right",  # left | right
-    "shell_log_dock": "right",  # left | right
+    "shell_log_dock": "left",  # left | right — 默认与 properties 同列：属性左上、日志左下
     "properties_panel_open": True,
     "properties_panel_height_px": 220,
     "properties_panel_dock": "left",  # left | right

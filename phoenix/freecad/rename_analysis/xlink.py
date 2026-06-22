@@ -237,9 +237,13 @@ def resolve_rule_display_label(
             )
             if composed:
                 return composed
+        if fcstd_path is not None and fcstd_path.is_file():
+            return resolve_fcstd_display_label(fcstd_path)
         return basename_label_fallback(rel)
 
     if fcstd_path is not None:
+        if fcstd_path.is_file():
+            return resolve_fcstd_display_label(fcstd_path)
         return basename_label_fallback(fcstd_path.name)
     return ""
 

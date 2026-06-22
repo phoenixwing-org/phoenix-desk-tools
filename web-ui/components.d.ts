@@ -50,6 +50,7 @@ declare module 'vue' {
     GiteeIcon: typeof import('./src/components/icons/GiteeIcon.vue')['default']
     OnboardingBanner: typeof import('./src/components/OnboardingBanner.vue')['default']
     OnboardingChecklist: typeof import('./src/components/OnboardingChecklist.vue')['default']
+    PageHeader: typeof import('./src/components/PageHeader.vue')['default']
     PageHelpButton: typeof import('./src/components/PageHelpButton.vue')['default']
     PagePropertiesPanel: typeof import('./src/components/PagePropertiesPanel.vue')['default']
     PagePropertyFieldRow: typeof import('./src/components/PagePropertyFieldRow.vue')['default']

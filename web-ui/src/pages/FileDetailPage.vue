@@ -2,7 +2,7 @@
 import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from "vue";
 import type { BomFields, BomPreview } from "../api";
 import { fetchBom, fetchBomXrefCounts } from "../api";
-import PageHelpButton from "../components/PageHelpButton.vue";
+import PageHeader from "../components/PageHeader.vue";
 import FileOverviewPanel from "../components/file-detail/FileOverviewPanel.vue";
 import FileAttributesPanel from "../components/file-detail/FileAttributesPanel.vue";
 import FileXrefPanel from "../components/file-detail/FileXrefPanel.vue";
@@ -91,6 +91,14 @@ function invalidateAssemblyCache(relPath?: string) {
     if (k.startsWith(prefix)) delete next[k];
   }
   assemblyCacheByKey.value = next;
+}
+
+const xrefMutationSeq = ref(0);
+
+function notifyXrefMutation(relPath?: string) {
+  invalidateXrefCache(relPath);
+  invalidateAssemblyCache(relPath);
+  xrefMutationSeq.value += 1;
 }
 
 async function refreshXrefCounts() {
@@ -300,6 +308,8 @@ provideFileDetailContext({
   invalidateXrefCache,
   assemblyCacheByKey,
   invalidateAssemblyCache,
+  xrefMutationSeq,
+  notifyXrefMutation,
   rememberFilenameDraft,
 });
 
@@ -361,16 +371,7 @@ onUnmounted(() => {
 
 <template>
   <div class="page file-detail-page">
-    <header class="page-head">
-      <div class="head-row head-row-toolbar">
-        <div class="head-left">
-          <h1 class="page-title">文件详情</h1>
-        </div>
-        <div class="head-help">
-          <PageHelpButton page-id="file_detail" />
-        </div>
-      </div>
-    </header>
+    <PageHeader title="文件详情" page-id="file_detail" />
 
     <el-alert v-if="pageError" type="error" :title="pageError" show-icon :closable="false" class="err-alert" />
 
@@ -407,7 +408,7 @@ onUnmounted(() => {
         <FileRenamePanel
           v-show="activeSubTab === 'rename'"
           :preferred-filename="preferredRenameFilename"
-          @renamed="invalidateXrefCache(); refreshXrefCounts()"
+          @renamed="notifyXrefMutation(); refreshXrefCounts()"
         />
       </div>
       </div>

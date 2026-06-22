@@ -5,8 +5,10 @@ import type {
   PagePropertyGroup,
   PagePropertyInfoField,
   PagePropertyNumberField,
+  PagePropertyPathField,
   PagePropertySelectField,
   PagePropertySelectOption,
+  PagePropertySelectOptionsSource,
   PagePropertyStringField,
   PagePropertiesSheet,
 } from "../types/pageProperties";
@@ -15,6 +17,7 @@ type ReactiveBool = Ref<boolean> | ComputedRef<boolean>;
 type ReactiveStr = Ref<string> | ComputedRef<string>;
 type ReactiveNum = Ref<number> | ComputedRef<number>;
 type MaybeHidden = Ref<boolean> | ComputedRef<boolean> | undefined;
+type MaybeHint = string | ComputedRef<string> | undefined;
 
 /** 折叠分组（FreeCAD 属性段） */
 export function propGroup(
@@ -40,7 +43,7 @@ export function propBool(
   opts: {
     value: ReactiveBool;
     onChange?: (value: boolean) => void;
-    hint?: string;
+    hint?: MaybeHint;
     disabled?: MaybeHidden;
     hidden?: MaybeHidden;
     labelTone?: "default" | "emphasis";
@@ -55,9 +58,9 @@ export function propEnum(
   label: string,
   opts: {
     value: ReactiveStr;
-    options: PagePropertySelectOption[];
+    options: PagePropertySelectOptionsSource;
     onChange?: (value: string) => void;
-    hint?: string;
+    hint?: MaybeHint;
     disabled?: MaybeHidden;
     hidden?: MaybeHidden;
     labelTone?: "default" | "emphasis";
@@ -115,6 +118,23 @@ export function propNumber(
   },
 ): PagePropertyNumberField {
   return { id, label, kind: "number", ...opts };
+}
+
+/** 相对工作空间路径（mono + 可选浏览） */
+export function propPath(
+  id: string,
+  label: string,
+  opts: {
+    value: ReactiveStr;
+    onChange?: (value: string) => void;
+    placeholder?: string;
+    browse?: boolean;
+    hint?: string;
+    disabled?: MaybeHidden;
+    hidden?: MaybeHidden;
+  },
+): PagePropertyPathField {
+  return { id, label, kind: "path", browse: opts.browse ?? true, ...opts };
 }
 
 /** AppPropertyString 只读 */

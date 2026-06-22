@@ -1,7 +1,7 @@
 import { computed, type Ref } from "vue";
 import type { XlinkFixResult } from "../api";
 import { usePagePropertySheet } from "./usePagePropertySheet";
-import { propBool, propGroup, propReadonly, propSheet, propString } from "../utils/pagePropertySchema";
+import { propBool, propGroup, propPath, propReadonly, propSheet } from "../utils/pagePropertySchema";
 
 export function useXlinkFixPropertySheet(
   pageId: string,
@@ -18,7 +18,7 @@ export function useXlinkFixPropertySheet(
     propSheet(
       [
         propGroup("scan", "扫描范围", [
-          propString("batch_dir", "修正目录", {
+          propPath("batch_dir", "修正目录", {
             value: computed(() => batchDir.value),
             mono: true,
             placeholder: "相对工作空间，如 .",

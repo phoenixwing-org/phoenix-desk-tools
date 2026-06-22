@@ -8,7 +8,7 @@ import {
   type StepBatchPreview,
 } from "../api";
 import OnboardingBanner from "../components/OnboardingBanner.vue";
-import PageHelpButton from "../components/PageHelpButton.vue";
+import PageHeader from "../components/PageHeader.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useFreecadTaskGate } from "../composables/useFreecadTaskGate";
 import { useStepBatchPropertySheet } from "../composables/useStepBatchPropertySheet";
@@ -16,13 +16,29 @@ import { useStepBatchPropertySheet } from "../composables/useStepBatchPropertySh
 const shell = useAppShell();
 const { blocked: freecadBlocked, assertFreecadForTask, hint: freecadHint } = useFreecadTaskGate();
 
-useStepBatchPropertySheet("step_batch");
-
 const stepDir = ref("");
 const outDir = ref("");
 const skipExisting = ref(true);
 const viewFit = ref("none");
 const stepRecursive = ref(false);
+
+let prefsSaveTimer: ReturnType<typeof setTimeout> | null = null;
+function schedulePrefsSave() {
+  if (prefsSaveTimer) clearTimeout(prefsSaveTimer);
+  prefsSaveTimer = setTimeout(() => {
+    prefsSaveTimer = null;
+    void onSave();
+  }, 400);
+}
+
+useStepBatchPropertySheet("step_batch", {
+  stepDir,
+  outDir,
+  skipExisting,
+  viewFit,
+  stepRecursive,
+  onPersist: schedulePrefsSave,
+});
 
 const saving = ref(false);
 const previewing = ref(false);
@@ -115,23 +131,17 @@ onMounted(async () => {
 
 <template>
   <div class="page tool-page">
-    <header class="page-head">
-      <div class="head-row head-row-toolbar">
-        <div class="head-left">
-          <h1 class="page-title">STEP 批量</h1>
-        </div>
-        <div class="head-actions" data-tour-page-step-run>
+    <PageHeader title="STEP 批量" page-id="step_batch">
+      <template #actions>
+        <div data-tour-page-step-run class="head-actions-inner">
           <el-button size="small" :loading="saving" @click="onSave">保存偏好</el-button>
           <el-button size="small" :loading="previewing" :disabled="freecadBlocked" @click="onPreview">预览数量</el-button>
           <el-button type="primary" size="small" :loading="running" :disabled="freecadBlocked" @click="onRun">
             开始转换
           </el-button>
         </div>
-        <div class="head-help">
-          <PageHelpButton page-id="step_batch" />
-        </div>
-      </div>
-    </header>
+      </template>
+    </PageHeader>
 
     <OnboardingBanner
       v-if="freecadBlocked"
@@ -140,34 +150,11 @@ onMounted(async () => {
       @action="shell.goToPage('config')"
     />
 
-    <section class="controls card" data-tour-page-step-form>
-      <el-form label-width="11rem" class="step-form" @submit.prevent>
-        <el-form-item label="STEP 目录">
-          <el-input id="step-dir" v-model="stepDir" spellcheck="false" />
-        </el-form-item>
-        <el-form-item label="FCStd 输出目录">
-          <el-input id="out-dir" v-model="outDir" spellcheck="false" />
-        </el-form-item>
-        <el-form-item label="选项">
-          <div class="checks">
-            <el-checkbox v-model="skipExisting">跳过已存在 FCStd</el-checkbox>
-            <el-checkbox v-model="stepRecursive">递归子目录</el-checkbox>
-          </div>
-        </el-form-item>
-        <el-form-item label="视图适应">
-          <el-select v-model="viewFit" class="fit-select">
-            <el-option value="none" label="不调整" />
-            <el-option value="last" label="最后一个" />
-            <el-option value="all" label="全部" />
-          </el-select>
-        </el-form-item>
-        <el-form-item v-if="preview" label="预览结果">
-          <p class="meta-line">
-            {{ preview.step_dir_display }} · 批处理 {{ preview.batch_count }} 个
-            {{ preview.recursive ? "（含子目录）" : "" }}
-          </p>
-        </el-form-item>
-      </el-form>
+    <section v-if="preview" class="controls card" data-tour-page-step-form>
+      <p class="meta-line">
+        {{ preview.step_dir_display }} · 批处理 {{ preview.batch_count }} 个
+        {{ preview.recursive ? "（含子目录）" : "" }}
+      </p>
     </section>
   </div>
 </template>

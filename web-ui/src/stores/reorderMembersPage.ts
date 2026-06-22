@@ -177,7 +177,9 @@ export const useReorderMembersPageStore = defineStore("reorderMembersPage", {
       this.persist();
     },
     setKevinSystemCodeMode(mode: KevinSystemCodeMode) {
-      this.kevinSystemCodeMode = normalizeKevinSystemCodeMode(mode);
+      const next = normalizeKevinSystemCodeMode(mode);
+      if (this.kevinSystemCodeMode === next) return;
+      this.kevinSystemCodeMode = next;
       this.persist();
     },
     setEntriesExpanded(expanded: boolean) {

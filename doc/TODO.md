@@ -13,10 +13,10 @@
 - [x] `bom_xref` 冗余 `rule_label` + 子件 BOM 快照；查询单表、不读盘补 Label
 - [x] 文件详情：引用 Tab 懒加载、分 scope 请求、角标单条 SQL
 - [x] **`phoenix_store.connect()` 同线程同 repo 可重入**（nested `with connect` 复用连接，避免改名/BOM 刷新链 `database is locked`）
-- [ ] `rebuild_bom_tree_occurrences`：邻接表只查一次，消除 per-host 重复全表 SQL
+- [x] `rebuild_bom_tree_occurrences`：邻接表只查一次，消除 per-host 重复全表 SQL（见 [BOM物化路径重建-邻接表单次加载-归档.md](cad/BOM物化路径重建-邻接表单次加载-归档.md)）
 - [x] `query_bom_xrefs_incoming`：合并 `get_file_asset_id` 为单条 SQL
-- [ ] 改名 XLink 修正 + **同步引用 Label**：`apply_host_xlink_corrections(sync_reference_labels=True)` 在目标文件尚未改名、且无 CAD 索引时应仍从磁盘 FCStd 读 rule Label（现会退化为 basename）；补单测：单引用、同 Group 双 XLink 的 `.002` 后缀、跨路径同目标不重复编号（见 [改名引用写回-装配Label同步-需求.md](cad/改名引用写回-装配Label同步-需求.md)）
-- [ ] 内部装配 **结构感知 BOM 挂载**：优先入度 0 的顶 `App::Part`（样例 `PCB` 非 `_6222656233`），见 [samples/内部装配示例-挂载分析.md](cad/samples/内部装配示例-挂载分析.md) + `tests/fixtures/workspaces/minimal/document-xml/`
+- [x] 改名 XLink 修正 + **同步引用 Label**：`apply_host_xlink_corrections(sync_reference_labels=True)` 在目标文件尚未改名、且无 CAD 索引时应仍从磁盘 FCStd 读 rule Label（`resolve_rule_display_label` 无索引时回退 `resolve_fcstd_display_label`）；单测：单引用、同 Group 双 XLink `.002`、跨组不重复编号（见 [改名引用写回-装配Label同步-需求.md](cad/改名引用写回-装配Label同步-需求.md)）
+- [x] 内部装配 **结构感知 BOM 挂载**：优先入度 0 的顶 `App::Part`（样例 `PCB` 非 `_6222656233`），见 [samples/内部装配示例-挂载分析.md](cad/samples/内部装配示例-挂载分析.md) · [归档](cad/内部装配-BOM挂载-结构感知-归档.md)
 
 ---
 
@@ -26,7 +26,7 @@
 - [x] 编辑属性 Tab：显示文档类型（零件/装配/图纸 + 推荐后缀）
 - [x] 属性「全部推荐」：单次 API + 不读 FCStd（文件名/索引/记忆）
 - [x] 改名 Tab：显示改名记录 → 跳转「改名分析」页（不再内嵌引用表）
-- [ ] 引用/装配「改链接」后自动刷新相关 Tab 缓存（部分已有 `invalidate*`）
+- [x] 引用/装配「改链接」后自动刷新相关 Tab 缓存（`notifyXrefMutation` 联动引用+装配，见 [归档](cad/文件详情-引用变更缓存刷新-归档.md)）
 - [ ] 图纸档：编辑属性只读提示与来源模型跳转体验统一
 
 ---
@@ -42,7 +42,7 @@
 - [ ] 统一运行日志：长任务进度条 / 取消（见 [统一运行日志窗口-规划讨论.md](platform/统一运行日志窗口-规划讨论.md)）
 - [x] **单元测试 Web 页**：套件勾选运行、**运行范围列表按模块勾选**（默认全选）、NDJSON 流式进度、终止；失败关注 Tab（排序 / 勾选复测 / 简介列）；Pinia 持久化选项与勾选；**模块列表 el-table + 行内运行 + 运行次数/最近执行 localStorage + 排序**
 - [x] **链接路径修正 · 分析**：未建 CAD 索引时明确提示（非 JSON 解析错误）；空脚本输出友好报错
-- [ ] **工具页页头组件化**：抽 `PageHeader.vue`（或 `ToolPageHeader.vue`），统一 `page-head` / `head-row`·`head-row-toolbar` / `head-left` / `head-actions` / `PageHelpButton`；各 `*Page.vue` 只传 `title`、`page-id`，操作用默认 slot 或 `toolbar-group`+`toolbar-divider` 结构化 props；样式只在组件 + `page-shared.css` 维护，禁止逐页自定义 header 外观（约定见 `.cursor/rules/page-header-style.mdc`）
+- [x] **工具页页头组件化**：`PageHeader.vue` 统一 `page-head` / `head-row-toolbar` / `PageHelpButton`；各 `*Page.vue` 用 `#actions` slot 传工具条（约定见 `.cursor/rules/page-header-style.mdc`）
 
 ### 侧栏 · 页面属性面板（POC）
 
@@ -56,12 +56,13 @@
 - [x] **文档**：规划 + 数据结构 + 各页适配对照（见规划 doc §4–§6）
 - [x] **推广 P1**：`xlink_fix` / `code_rename` / `code_uuid` 属性 sheet；主区留操作与结果表
 - [x] **属性空态**：无 sheet 时显示「当前页无可配置项」
-- [ ] **推广 P2**：`file_rename` / STEP 等（`part_dedup` ✅）
-- [ ] **类型扩展**：`propPath`、分析后动态只读组；枚举统一 combo（`propRadio` 已废弃为 `propEnum` 别名）
-- [ ] **架构研讨**：[页面参数与属性 MVC](platform/Web壳层-页面参数与属性-MVC研讨.md) — `PnxXxxParam` + `derivePageProperties`（评审后再定是否替代 composable）
-- [ ] **运行范围**：成员排序「从工作集推导一级目录勾选」
-- [x] **壳层持久化**：属性区高度、名称列宽写入 `shell_layout`
+- [x] **推广 P2**：`file_rename` / STEP 等（`part_dedup` ✅）
+- [x] **类型扩展**：`propPath`（xlink / 工作集子目录 / part_dedup / step_batch / sw_step_export）；分析后动态只读组；枚举统一 combo
+- [ ] **架构研讨**：[页面参数与属性 MVC](platform/Web壳层-页面参数与属性-MVC研讨.md) — **已搁置**（维持 `useXxxPropertySheet`）
+- [x] **运行范围**：成员排序「从工作集推导一级目录勾选」
+- [x] **壳层持久化**：属性区高度、名称列宽写入 `shell_layout`（列宽拖拽整数化 + 422 友好报错，见 [归档](platform/Web壳层-属性面板与壳层稳定化-归档.md)）
 - [x] **页脚面板切换**：VS Code 式图标（树/属性/日志/工作集/停靠）— 与 Ribbon 壳层区共用 `ShellPanelToggleBar`（全 Tab + 布局联动）
+- [x] **稳定化**：KeepAlive 多页切换递归更新修复；`PageHeader` 样式；默认日志左下停靠；工作集按钮高亮反馈（见 [归档](platform/Web壳层-属性面板与壳层稳定化-归档.md)）
 
 ### Web 壳层 · Ribbon 改型（Element Plus · 循序渐进）
 
@@ -103,6 +104,7 @@
 - [x] 切换功能区 Tab 时，若 Ribbon 已折叠则**自动展开**
 - [x] 左右侧栏独立宽度 `left_panel_width_px` / `right_panel_width_px`（launcher 持久化）
 - [x] 同侧树+日志：中间横条上下拖拽；`log_panel_height_px` 持久化
+- [x] **默认停靠**：属性左上、日志左下、工作空间树/工作集右侧（`shell_log_dock: "left"`，launcher + `user_prefs` 默认）
 - [x] 浏览器标题同步工作空间与当前页；品牌副标题显示工作空间名
 - [x] F5 / sessionStorage 恢复 Tab；地址栏 `?page=` 同步（见 commit 链 45c31dc 等）
 - [x] 文档：[Web壳层-使用说明.md](user/Web壳层-使用说明.md)、[新手指引.md](user/新手指引.md) 同步
@@ -258,6 +260,7 @@
 - [x] **成员排序 · 锁定段回归单测**：`tests/test_reorder_avoidance_rules.py`；改规则须全套件通过
 - [ ] **成员排序 · 待研究**：`#pragma region VirtualFunction`（暂不专项处理）；`.cpp` Wizard 段 — `pnx_bom_analysis_cmd_min.cpp` fixture 待补单测
 - [x] **成员排序 · Web 回归自检（可选）**：`POST /api/code/reorder-members/self-test` 或 dev 页按钮，仅跑 fixture 子集
+- [x] **成员排序 · 变更文件状态列**：预检 `dry_run` / 写盘 `written`（`el-tag`，见 [归档](platform/Web壳层-属性面板与壳层稳定化-归档.md)）
 - [ ] **成员排序 · 可选目录层级**：勾选列表默认 **1 级**（现「一级条目」）；偏好可选 **2–4 级** 展开子目录为可选项（仍受 ignore 规则约束）；`list_reorder_top_level_entries` / `GET top-level` + `ReorderMembersPage` 结果区标题与汇总
 - [ ] **成员变量字母序（完整规则）**：Doxygen 序号重编、`.h`/`.cpp` 构造/析构等序号一致 — 见 [成员变量字母序-规则与待实现.md](code/成员变量字母序-规则与待实现.md)；Web 勾选暂禁用
 - [ ] **成员排序 · 变更 Diff 预览（待研究）**：变更文件表点击路径 → 弹层/新窗对比；方案见 [成员排序-变更Diff预览-待研究.md](platform/成员排序-变更Diff预览-待研究.md)（Monaco Diff / diff2html / 后端 `difflib` 预检 diff + 可选 `git diff`）

@@ -10,8 +10,9 @@ import {
   loadRenameAnalysis,
 } from "../api";
 import RenameAnalysisPanel from "../components/RenameAnalysisPanel.vue";
-import PageHelpButton from "../components/PageHelpButton.vue";
+import PageHeader from "../components/PageHeader.vue";
 import { useAppShell } from "../composables/useAppShell";
+import { useFileRenamePropertySheet } from "../composables/useFileRenamePropertySheet";
 import { useIncomingRefQuery } from "../composables/useIncomingRefQuery";
 import { usePageSession } from "../composables/usePageSession";
 import { logReferenceLabelApply } from "../utils/referenceLabelLog";
@@ -51,6 +52,8 @@ const scan = ref<RefScanPayload | null>(null);
 const selectedHosts = ref<Set<string>>(new Set());
 const busy = ref(false);
 const pageError = ref("");
+
+useFileRenamePropertySheet("file_rename", { includeTransitive, scan });
 
 function canAnalyze() {
   if (panelMode.value === "history") return renameLogId.value != null;
@@ -482,16 +485,14 @@ onUnmounted(() => {
 
 <template>
   <div class="page rename-page">
-    <header class="page-head">
-      <div class="head-row head-row-toolbar">
-        <div class="head-left">
-          <h1 class="page-title">改名分析</h1>
-        </div>
-        <div class="head-help">
-          <PageHelpButton page-id="file_rename" />
-        </div>
-      </div>
-    </header>
+    <PageHeader title="改名分析" page-id="file_rename">
+      <template #actions>
+        <el-button type="primary" size="small" :loading="busy" :disabled="!canAnalyze()" @click="onScanRefs">
+          开始分析
+        </el-button>
+        <el-button size="small" :disabled="busy" @click="loadLogs">刷新历史</el-button>
+      </template>
+    </PageHeader>
 
     <el-alert v-if="pageError" type="error" :title="pageError" show-icon :closable="false" class="err-alert" />
 
@@ -540,16 +541,6 @@ onUnmounted(() => {
           />
         </label>
         <p v-if="pickedRel" class="picked-hint mono field-span">已从树选择：{{ pickedRel }}</p>
-      </div>
-
-      <div class="action-bar">
-        <el-checkbox v-model="includeTransitive">含间接宿主</el-checkbox>
-        <div class="action-btns">
-          <el-button type="primary" size="small" :loading="busy" :disabled="!canAnalyze()" @click="onScanRefs">
-            开始分析
-          </el-button>
-          <el-button size="small" :disabled="busy" @click="loadLogs">刷新历史</el-button>
-        </div>
       </div>
     </section>
 
@@ -612,7 +603,7 @@ onUnmounted(() => {
 }
 
 .mode-body {
-  margin-bottom: 12px;
+  margin-bottom: 0;
 }
 
 .manual-grid {
@@ -655,21 +646,6 @@ onUnmounted(() => {
   margin: 0;
   font-size: 0.78rem;
   color: #1d4ed8;
-}
-
-.action-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
-
-.action-btns {
-  display: flex;
-  gap: 8px;
 }
 
 .help-panel {

@@ -1,4 +1,4 @@
-import { computed, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 import {
   fetchCodeIgnorePrefs,
   saveCodeIgnorePrefs,
@@ -70,7 +70,11 @@ export function useCodeIgnoreForm() {
     legacySources.value.reduce((n, s) => n + s.patterns.length, 0),
   );
 
+  /** 阻止 applyPrefs 写入预设时 el-select @change 再次触发 onApplyPreset */
+  let applyingPrefs = false;
+
   function applyPrefs(data: CodeIgnorePrefs) {
+    applyingPrefs = true;
     ignoreFileDisplay.value = data.ignore_file_display || data.ignore_file;
     ignoreFileExists.value = data.ignore_file_exists;
     ignoreFilePatterns.value = data.ignore_file_patterns || [];
@@ -85,6 +89,9 @@ export function useCodeIgnoreForm() {
     if (processDirsAutoSeeded.value.length) {
       shell.setStatus(autoSeedNotice.value);
     }
+    void nextTick(() => {
+      applyingPrefs = false;
+    });
   }
 
   async function loadPrefs() {
@@ -136,7 +143,7 @@ export function useCodeIgnoreForm() {
   }
 
   function onApplyPreset() {
-    if (!ignorePreset.value) return;
+    if (applyingPrefs || !ignorePreset.value) return;
     const preset = ignorePresets.value.find((p) => p.id === ignorePreset.value);
     if (preset?.patterns?.length) {
       customIgnoreText.value = preset.patterns.join("\n");

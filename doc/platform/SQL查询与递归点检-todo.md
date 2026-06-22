@@ -43,7 +43,7 @@ INFO [phoenix.freecad.phoenix_store] SQL <模块.函数> | <单行 SQL>
 | 优先级 | 问题 | 位置 | 现状 | 建议 |
 |--------|------|------|------|------|
 | **P0** | **出向引用 N+1**（文件详情典型日志） | `search_outgoing_refs` → `resolve_rule_display_label` → `get_file_asset_bom_fields` | 1 条 `bom_xref` + **每条子件 1 条** `file_asset`；前端可能 **重复请求 2 次** outgoing API | 详见 **[出向引用-N+1查库-研究.md](../cad/出向引用-N+1查库-研究.md)**：JOIN + `_rule_label_from_target_index` |
-| P0 | 物化路径重建对每个总成重复全表边查询 | `rebuild_bom_tree_occurrences` | 循环 `hosts`：`build_assembly_tree_payload` → 每次 `query_all_bom_xref_edges_enriched` | **Todo**：重建时只加载一次邻接表，循环内仅内存 `build_assembly_tree_payload_from_adj` |
+| P0 | 物化路径重建对每个总成重复全表边查询 | `rebuild_bom_tree_occurrences` | ~~循环内每次 `query_all_bom_xref_edges_enriched`~~ → **已修复**：`load_bom_xref_adjacency` 一次 + `build_assembly_tree_payload_from_adj` | 见 [BOM物化路径重建-邻接表单次加载-归档.md](../cad/BOM物化路径重建-邻接表单次加载-归档.md) |
 | P1 | 入向查询前多一次 asset id 查找 | `query_bom_xrefs_incoming` | 有 `repo_rel` 时先 `get_file_asset_id` 再主查询 | **Todo**：合并为单条 SQL（子查询或 JOIN `file_asset`） |
 | P1 | 桌面 CAD 索引仍全表加载 | `load_fcstd_document` / `fcstd_map_page._show_map_table` | `SELECT * FROM file_asset` 无分页 | **Todo**：桌面页改分页或复用 `query_file_asset_entries_paged` |
 | P2 | 死代码逐节点查库 | `bom_xref_service._enrich_tree_node` | 每节点 `SELECT ... WHERE repo_rel_path=?`（**当前无调用方**） | **Todo**：删除或改为批量 IN（与 `_batch_enrich_file_roles` 合并） |
@@ -65,7 +65,7 @@ INFO [phoenix.freecad.phoenix_store] SQL <模块.函数> | <单行 SQL>
 
 - [ ] **P0** 出向引用：`query_bom_xrefs_outgoing` JOIN `file_asset`，去掉逐条 `get_file_asset_bom_fields`（见 [出向引用-N+1查库-研究.md](../cad/出向引用-N+1查库-研究.md)）
 - [ ] **P1** 文件详情：`refreshXrefCounts` 与 `FileXrefPanel` 合并 outgoing 请求或提供 count-only API
-- [ ] **P0** `rebuild_bom_tree_occurrences`：邻接表只查一次，消除 per-host 重复 `query_all_bom_xref_edges_enriched`
+- [x] **P0** `rebuild_bom_tree_occurrences`：邻接表只查一次，消除 per-host 重复 `query_all_bom_xref_edges_enriched`
 - [ ] **P1** `query_bom_xrefs_incoming`：去掉 `get_file_asset_id` 前置查询，合并 SQL
 - [ ] **P1** 桌面 `fcstd_map_page`：对齐 Web 分页 API，避免 `load_fcstd_document` 全表
 - [ ] **P2** 删除或收敛 `_enrich_tree_node` 逐条 SELECT

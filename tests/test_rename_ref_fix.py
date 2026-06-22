@@ -9,9 +9,11 @@ from pathlib import Path
 
 from phoenix.freecad.rename_analysis import (
     analyze_workspace_xlink_refs,
+    apply_host_reference_label_corrections,
     apply_host_xlink_corrections,
     replace_basename_in_xlink_attr,
 )
+from phoenix.freecad.rename_analysis.types import XLinkBasenameHit
 from phoenix.services.rename_analysis_service import (
     analyze_rename_references,
     apply_rename_analysis_corrections,
@@ -349,6 +351,166 @@ class TestRenameRefFix(unittest.TestCase):
             xml = zipfile.ZipFile(root / "asm-single.FCStd").read("Document.xml").decode("utf-8")
             self.assertIn('String value="200002.002-规则名"', xml)
             self.assertNotIn('String value="100001.001-子件"', xml)
+
+    def test_sync_labels_reads_fcstd_without_index(self) -> None:
+        """无 CAD 索引时，应从目标 FCStd 磁盘读 Label，而非退化为 basename。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_fcstd(root / "child.FCStd", _CHILD_XML)
+            _write_fcstd(
+                root / "asm-single.FCStd",
+                """<?xml version="1.0"?>
+<Document>
+ <ObjectData Count="1">
+  <Object name="Asm">
+   <Properties Count="2">
+    <Property name="Label" type="App::PropertyString">
+     <String value="child-old"/>
+    </Property>
+    <Property name="Group" type="App::PropertyLinkList">
+     <XLink file="child.FCStd"/>
+    </Property>
+   </Properties>
+  </Object>
+ </ObjectData>
+</Document>""",
+            )
+            hits = [
+                XLinkBasenameHit("asm-single.FCStd", "child.FCStd", "child.FCStd"),
+            ]
+            n, _changes = apply_host_reference_label_corrections(
+                root,
+                "asm-single.FCStd",
+                hits,
+            )
+            self.assertGreaterEqual(n, 1)
+            xml = zipfile.ZipFile(root / "asm-single.FCStd").read("Document.xml").decode("utf-8")
+            self.assertIn('String value="100001.001-子件"', xml)
+            self.assertNotIn('String value="child"', xml)
+
+    def test_sync_labels_dual_xlink_same_group_suffix(self) -> None:
+        """同一第一级 LinkList 内两条 XLink 指向同目标 → .001 / .002。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_fcstd(root / "child.FCStd", _CHILD_XML)
+            _write_fcstd(
+                root / "asm-dual.FCStd",
+                """<?xml version="1.0"?>
+<Document>
+ <ObjectData Count="1">
+  <Object name="Asm">
+   <Properties Count="2">
+    <Property name="Label" type="App::PropertyString">
+     <String value="old-a"/>
+    </Property>
+    <Property name="Group" type="App::PropertyLinkList">
+     <XLink file="child.FCStd"/>
+     <XLink file="../child.FCStd"/>
+    </Property>
+   </Properties>
+  </Object>
+ </ObjectData>
+</Document>""",
+            )
+            hits = [
+                XLinkBasenameHit("asm-dual.FCStd", "child.FCStd", "child.FCStd"),
+                XLinkBasenameHit("asm-dual.FCStd", "../child.FCStd", "../child.FCStd"),
+            ]
+            n, _changes = apply_host_reference_label_corrections(
+                root,
+                "asm-dual.FCStd",
+                hits,
+            )
+            self.assertGreaterEqual(n, 1)
+            xml = zipfile.ZipFile(root / "asm-dual.FCStd").read("Document.xml").decode("utf-8")
+            self.assertIn('String value="100001.001-子件.002"', xml)
+
+    def test_sync_labels_separate_groups_no_cross_numbering(self) -> None:
+        """不同第一级 LinkList 各 1 条同目标 XLink → 均用目标 Label，不跨组编号。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_fcstd(root / "child.FCStd", _CHILD_XML)
+            _write_fcstd(
+                root / "asm-split.FCStd",
+                """<?xml version="1.0"?>
+<Document>
+ <ObjectData Count="2">
+  <Object name="Link1">
+   <Properties Count="2">
+    <Property name="Label" type="App::PropertyString">
+     <String value="old-a"/>
+    </Property>
+    <Property name="Group" type="App::PropertyLinkList">
+     <XLink file="child.FCStd"/>
+    </Property>
+   </Properties>
+  </Object>
+  <Object name="Link2">
+   <Properties Count="2">
+    <Property name="Label" type="App::PropertyString">
+     <String value="old-b"/>
+    </Property>
+    <Property name="Group" type="App::PropertyLinkList">
+     <XLink file="child.FCStd"/>
+    </Property>
+   </Properties>
+  </Object>
+ </ObjectData>
+</Document>""",
+            )
+            hits = [
+                XLinkBasenameHit("asm-split.FCStd", "child.FCStd", "child.FCStd"),
+            ]
+            n, _changes = apply_host_reference_label_corrections(
+                root,
+                "asm-split.FCStd",
+                hits,
+            )
+            self.assertGreaterEqual(n, 2)
+            xml = zipfile.ZipFile(root / "asm-split.FCStd").read("Document.xml").decode("utf-8")
+            self.assertEqual(xml.count('String value="100001.001-子件"'), 2)
+            self.assertNotIn(".001-子件.001", xml)
+
+    def test_sync_labels_with_xlink_correction_without_index(self) -> None:
+        """sync_reference_labels=True 且无索引：写回 XLink 同时从磁盘同步 Label。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_fcstd(root / "child.FCStd", _CHILD_XML)
+            _write_fcstd(
+                root / "asm-single.FCStd",
+                """<?xml version="1.0"?>
+<Document>
+ <ObjectData Count="1">
+  <Object name="Asm">
+   <Properties Count="2">
+    <Property name="Label" type="App::PropertyString">
+     <String value="child-old"/>
+    </Property>
+    <Property name="Group" type="App::PropertyLinkList">
+     <XLink file="child.FCStd"/>
+    </Property>
+   </Properties>
+  </Object>
+ </ObjectData>
+</Document>""",
+            )
+
+            groups = analyze_workspace_xlink_refs(
+                root,
+                old_basename="child.FCStd",
+                new_basename="new.FCStd",
+            )
+            n_x, n_l = apply_host_xlink_corrections(
+                root,
+                groups[0].host_repo_rel_path,
+                list(groups[0].hits),
+                sync_reference_labels=True,
+            )
+            self.assertEqual(n_x, 1)
+            self.assertGreaterEqual(n_l, 1)
+            xml = zipfile.ZipFile(root / "asm-single.FCStd").read("Document.xml").decode("utf-8")
+            self.assertIn('file="new.FCStd"', xml)
+            self.assertIn('String value="100001.001-子件"', xml)
 
     def test_apply_explicit_link_labels(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

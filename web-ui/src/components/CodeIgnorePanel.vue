@@ -56,6 +56,7 @@ watch(
   () => {
     void loadPrefs();
   },
+  { flush: "post" },
 );
 
 defineExpose({ reload: loadPrefs });

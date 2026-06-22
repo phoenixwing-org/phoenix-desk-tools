@@ -11,6 +11,9 @@ export function useShellPanelToggles() {
   const panelOpen = computed(() => shell.shellLayout.value.right_panel_open);
   const logOpen = computed(() => shell.shellLayout.value.log_panel_open);
   const propsOpen = computed(() => shell.shellLayout.value.properties_panel_open);
+  const worksetOpen = computed(
+    () => panelOpen.value && shell.workspaceSidebarTab.value === "workset",
+  );
   const hasLogContent = computed(() => Boolean(shell.logText.value.trim()));
 
   async function togglePanel() {
@@ -38,8 +41,14 @@ export function useShellPanelToggles() {
   }
 
   async function openWorksetPanel() {
-    await shell.openWorksetSidebar();
-    shell.setStatus("已打开侧栏 · 工作集");
+    try {
+      await shell.openWorksetSidebar();
+      const dock = shell.shellLayout.value.workspace_tree_dock;
+      const side = dock === "left" ? "左" : "右";
+      shell.setStatus(`已打开${side}侧栏 · 工作集`);
+    } catch (e) {
+      shell.setStatus(String(e));
+    }
   }
 
   const treeTip = computed(() => shellPanelToggleTip("tree", { open: panelOpen.value }));
@@ -57,6 +66,7 @@ export function useShellPanelToggles() {
     panelOpen,
     logOpen,
     propsOpen,
+    worksetOpen,
     hasProperties,
     hasLogContent,
     treeTip,

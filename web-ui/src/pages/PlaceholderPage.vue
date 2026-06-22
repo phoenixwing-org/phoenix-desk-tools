@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import PageHelpButton from "../components/PageHelpButton.vue";
+import PageHeader from "../components/PageHeader.vue";
 import { useAppShell } from "../composables/useAppShell";
 
 const shell = useAppShell();
@@ -11,16 +11,7 @@ const pageId = computed(() => shell.currentPage.value);
 
 <template>
   <div class="page placeholder">
-    <header class="page-head">
-      <div class="head-row head-row-toolbar">
-        <div class="head-left">
-          <h1 class="page-title">{{ item?.label ?? pageId }}</h1>
-        </div>
-        <div class="head-help">
-          <PageHelpButton :page-id="pageId" />
-        </div>
-      </div>
-    </header>
+    <PageHeader :title="item?.label ?? pageId" :page-id="pageId" />
     <el-empty :image-size="80">
       <template #description>
         <p class="desc">{{ item?.description ?? "功能开发中" }}</p>

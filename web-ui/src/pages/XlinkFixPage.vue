@@ -14,7 +14,7 @@ import {
   type XlinkFixResult,
 } from "../api";
 import ExpandCaret from "../components/ExpandCaret.vue";
-import PageHelpButton from "../components/PageHelpButton.vue";
+import PageHeader from "../components/PageHeader.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useXlinkFixPropertySheet } from "../composables/useXlinkFixPropertySheet";
 
@@ -338,12 +338,9 @@ onMounted(async () => {
 
 <template>
   <div class="page tool-page xlink-page">
-    <header class="page-head">
-      <div class="head-row head-row-toolbar">
-        <div class="head-left">
-          <h1 class="page-title">链接路径修正</h1>
-        </div>
-        <div class="head-actions" data-tour-page-xlink-analyze>
+    <PageHeader title="链接路径修正" page-id="xlink_fix">
+      <template #actions>
+        <div data-tour-page-xlink-analyze class="head-actions-inner">
           <el-button size="small" :loading="saving" @click="onSavePrefs">保存偏好</el-button>
           <el-button type="primary" size="small" :loading="analyzing" :disabled="applying" @click="onAnalyze">
             分析
@@ -359,11 +356,8 @@ onMounted(async () => {
             执行修正
           </el-button>
         </div>
-        <div class="head-help">
-          <PageHelpButton page-id="xlink_fix" />
-        </div>
-      </div>
-    </header>
+      </template>
+    </PageHeader>
 
     <section v-if="analysis" class="card results-card">
       <header class="results-head">

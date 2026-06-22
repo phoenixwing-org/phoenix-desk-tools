@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from phoenix.services.assembly_tree_cache import build_assembly_tree_payload, load_assembly_tree_cached
-from phoenix.services.bom_tree_occurrence import query_target_usage_stats
+from phoenix.services.bom_tree_occurrence import query_target_usage_stats, rebuild_bom_tree_occurrences
 from phoenix.services.bom_xref_service import (
     host_ref_groups_from_db,
     load_assembly_bom_catalog,
@@ -560,6 +560,34 @@ class TestBomXref(unittest.TestCase):
             self.assertGreaterEqual(leaf_stats["bom_occurrence_count"], 1)
             paths = {o["tree_path"] for o in leaf_stats["occurrences"]}
             self.assertTrue(paths)
+
+    def test_rebuild_bom_tree_occurrences_single_adjacency_query(self) -> None:
+        """物化路径重建：N 个总成只查一次 enriched 边表。"""
+        from phoenix.services.assembly_tree_cache import query_all_bom_xref_edges_enriched as _orig_query
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_fcstd(root / "leaf.FCStd", "<Document/>")
+            _write_fcstd(root / "sub/sub-assy.FCStd", _SUB_ASM_XML)
+            _write_fcstd(root / "top-assy.FCStd", _TOP_ASM_XML)
+            run_fcstd_map_scan(root)
+
+            calls = 0
+
+            def counting_query(repo_root: Path):
+                nonlocal calls
+                calls += 1
+                return _orig_query(repo_root)
+
+            with patch(
+                "phoenix.services.assembly_tree_cache.query_all_bom_xref_edges_enriched",
+                side_effect=counting_query,
+            ):
+                stats = rebuild_bom_tree_occurrences(root)
+
+            self.assertGreaterEqual(stats["root_count"], 1)
+            self.assertGreaterEqual(stats["occurrence_count"], 1)
+            self.assertEqual(calls, 1)
 
     def test_assembly_tree_single_query_and_cache(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
