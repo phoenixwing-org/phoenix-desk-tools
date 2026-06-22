@@ -14,7 +14,7 @@
 | `PageHeader.vue` 页头组件化（19 工具页） | ✅ |
 | 改名 XLink · 无索引时从 FCStd 读 rule Label | ✅ + 4 单测 |
 | 成员排序 · 从工作集推导一级目录勾选 | ✅ |
-| `propPath` 类型扩展（xlink / 工作集子目录） | ✅ |
+| `propPath` 类型扩展（xlink / 工作集 / part_dedup / step_batch / sw_step_export） | ✅ |
 | `pnpm build` / 相关单测 | ✅ |
 
 ---
@@ -48,7 +48,6 @@
 
 ## 明确未做（下一批推荐）
 
-- [ ] `propPath` 推广至 STEP / 零件去重等仍用手填路径的页
 - [ ] P3 二批人工 smoke（单元测试 / BOM / 改名 / 文件详情）
 - [ ] P0：结构感知 BOM 挂载
 

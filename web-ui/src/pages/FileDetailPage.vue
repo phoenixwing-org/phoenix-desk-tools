@@ -93,6 +93,14 @@ function invalidateAssemblyCache(relPath?: string) {
   assemblyCacheByKey.value = next;
 }
 
+const xrefMutationSeq = ref(0);
+
+function notifyXrefMutation(relPath?: string) {
+  invalidateXrefCache(relPath);
+  invalidateAssemblyCache(relPath);
+  xrefMutationSeq.value += 1;
+}
+
 async function refreshXrefCounts() {
   if (!rel.value.trim()) {
     incomingCount.value = 0;
@@ -300,6 +308,8 @@ provideFileDetailContext({
   invalidateXrefCache,
   assemblyCacheByKey,
   invalidateAssemblyCache,
+  xrefMutationSeq,
+  notifyXrefMutation,
   rememberFilenameDraft,
 });
 
@@ -398,7 +408,7 @@ onUnmounted(() => {
         <FileRenamePanel
           v-show="activeSubTab === 'rename'"
           :preferred-filename="preferredRenameFilename"
-          @renamed="invalidateXrefCache(); refreshXrefCounts()"
+          @renamed="notifyXrefMutation(); refreshXrefCounts()"
         />
       </div>
       </div>

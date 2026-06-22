@@ -1,6 +1,6 @@
 import { computed, type Ref } from "vue";
 import { usePagePropertySheet } from "./usePagePropertySheet";
-import { propBool, propEnum, propGroup, propNumber, propReadonly, propSheet, propString } from "../utils/pagePropertySchema";
+import { propBool, propEnum, propGroup, propNumber, propPath, propReadonly, propSheet } from "../utils/pagePropertySchema";
 
 const EXT_OPTIONS = [".FCStd", ".SLDPRT", ".SLDASM", ".SLDDRW", ".step", ".stp"];
 
@@ -39,7 +39,7 @@ export function usePartDedupPropertySheet(
           }),
         ]),
         propGroup("scan", "扫描", [
-          propString("scan_dir", "目录", {
+          propPath("scan_dir", "目录", {
             value: computed(() => scanDir.value),
             mono: true,
             placeholder: "相对工作空间，如 .",

@@ -12,7 +12,7 @@ const emit = defineEmits<{
 }>();
 
 const shell = useAppShell();
-const { rel, pageError, activeSubTab, assemblyCacheByKey, invalidateAssemblyCache } =
+const { rel, pageError, activeSubTab, assemblyCacheByKey, invalidateAssemblyCache, xrefMutationSeq } =
   useFileDetailContext();
 
 const treeMode = ref<"first" | "full">(getAssemblyTreeDepth());
@@ -168,6 +168,14 @@ async function onXrefReplaced() {
   invalidateAssemblyCache(rel.value);
   await loadAssemblyTree({ force: true });
 }
+
+watch(
+  () => xrefMutationSeq.value,
+  () => {
+    if (activeSubTab.value !== "assembly" || !rel.value.trim()) return;
+    void loadAssemblyTree({ force: true });
+  },
+);
 
 watch(rel, (host) => {
   if (!host.trim()) treeNodes.value = [];

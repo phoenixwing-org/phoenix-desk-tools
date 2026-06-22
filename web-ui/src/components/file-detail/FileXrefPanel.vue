@@ -56,7 +56,7 @@ function closeReplaceDialog() {
 
 async function onReplaceApplied() {
   closeReplaceDialog();
-  ctx.invalidateXrefCache();
+  ctx.notifyXrefMutation();
   await loadTables(true, true);
   await ctx.refreshXrefCounts();
 }
@@ -262,7 +262,7 @@ async function onRebuildIndex() {
     if (out.log) shell.appendLog(out.log, { source: "file_detail" });
     indexSummary.value = `已索引 ${out.hosts_refreshed} 个宿主 · 出向 ${out.outgoing_count} 条（缺失 ${out.outgoing_missing} · 歧义 ${out.outgoing_ambiguous}）`;
     shell.setStatus(indexSummary.value);
-    ctx.invalidateXrefCache(ctx.rel.value);
+    ctx.notifyXrefMutation(ctx.rel.value);
     await loadTables(false, false);
   } catch (e) {
     ctx.pageError.value = String(e);
@@ -304,7 +304,7 @@ const allIncomingSelected = computed(
 
 function onLabelSyncDone(msg: string) {
   shell.setStatus(msg);
-  ctx.invalidateXrefCache();
+  ctx.notifyXrefMutation();
   void loadTables(true, false);
   void ctx.refreshXrefCounts();
 }

@@ -16,13 +16,29 @@ import { useStepBatchPropertySheet } from "../composables/useStepBatchPropertySh
 const shell = useAppShell();
 const { blocked: freecadBlocked, assertFreecadForTask, hint: freecadHint } = useFreecadTaskGate();
 
-useStepBatchPropertySheet("step_batch");
-
 const stepDir = ref("");
 const outDir = ref("");
 const skipExisting = ref(true);
 const viewFit = ref("none");
 const stepRecursive = ref(false);
+
+let prefsSaveTimer: ReturnType<typeof setTimeout> | null = null;
+function schedulePrefsSave() {
+  if (prefsSaveTimer) clearTimeout(prefsSaveTimer);
+  prefsSaveTimer = setTimeout(() => {
+    prefsSaveTimer = null;
+    void onSave();
+  }, 400);
+}
+
+useStepBatchPropertySheet("step_batch", {
+  stepDir,
+  outDir,
+  skipExisting,
+  viewFit,
+  stepRecursive,
+  onPersist: schedulePrefsSave,
+});
 
 const saving = ref(false);
 const previewing = ref(false);
@@ -134,34 +150,11 @@ onMounted(async () => {
       @action="shell.goToPage('config')"
     />
 
-    <section class="controls card" data-tour-page-step-form>
-      <el-form label-width="11rem" class="step-form" @submit.prevent>
-        <el-form-item label="STEP 目录">
-          <el-input id="step-dir" v-model="stepDir" spellcheck="false" />
-        </el-form-item>
-        <el-form-item label="FCStd 输出目录">
-          <el-input id="out-dir" v-model="outDir" spellcheck="false" />
-        </el-form-item>
-        <el-form-item label="选项">
-          <div class="checks">
-            <el-checkbox v-model="skipExisting">跳过已存在 FCStd</el-checkbox>
-            <el-checkbox v-model="stepRecursive">递归子目录</el-checkbox>
-          </div>
-        </el-form-item>
-        <el-form-item label="视图适应">
-          <el-select v-model="viewFit" class="fit-select">
-            <el-option value="none" label="不调整" />
-            <el-option value="last" label="最后一个" />
-            <el-option value="all" label="全部" />
-          </el-select>
-        </el-form-item>
-        <el-form-item v-if="preview" label="预览结果">
-          <p class="meta-line">
-            {{ preview.step_dir_display }} · 批处理 {{ preview.batch_count }} 个
-            {{ preview.recursive ? "（含子目录）" : "" }}
-          </p>
-        </el-form-item>
-      </el-form>
+    <section v-if="preview" class="controls card" data-tour-page-step-form>
+      <p class="meta-line">
+        {{ preview.step_dir_display }} · 批处理 {{ preview.batch_count }} 个
+        {{ preview.recursive ? "（含子目录）" : "" }}
+      </p>
     </section>
   </div>
 </template>
