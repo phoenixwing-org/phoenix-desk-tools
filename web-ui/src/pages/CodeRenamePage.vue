@@ -8,7 +8,7 @@ import {
   saveCodeRenamePrefs,
   type CodeRenameHit,
 } from "../api";
-import PageHelpButton from "../components/PageHelpButton.vue";
+import PageHeader from "../components/PageHeader.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useCodeRenamePropertySheet } from "../composables/useCodeRenamePropertySheet";
 import { useWorksetPageScope } from "../composables/useWorksetPageScope";
@@ -162,32 +162,24 @@ onMounted(async () => {
 
 <template>
   <div class="page tool-page code-rename-page">
-    <header class="page-head">
-      <div class="head-row head-row-toolbar">
-        <div class="head-left">
-          <h1 class="page-title">Code 批量改名</h1>
+    <PageHeader title="Code 批量改名" page-id="code_rename">
+      <template #actions>
+        <div class="toolbar-group">
+          <el-button size="small" plain @click="openIgnorePanel">忽略设定</el-button>
         </div>
-        <div class="head-actions">
-          <div class="toolbar-group">
-            <el-button size="small" plain @click="openIgnorePanel">忽略设定</el-button>
-          </div>
-          <span class="toolbar-divider" aria-hidden="true" />
-          <div class="toolbar-group">
-            <el-button size="small" :loading="saving" @click="onSavePrefs">保存偏好</el-button>
-            <el-button size="small" :loading="previewing" :disabled="!canRun" @click="onPreview">预览</el-button>
-          </div>
-          <span class="toolbar-divider" aria-hidden="true" />
-          <div class="toolbar-group">
-            <el-button type="primary" size="small" :loading="applying" :disabled="!canRun" @click="onApply">
-              执行改名
-            </el-button>
-          </div>
+        <span class="toolbar-divider" aria-hidden="true" />
+        <div class="toolbar-group">
+          <el-button size="small" :loading="saving" @click="onSavePrefs">保存偏好</el-button>
+          <el-button size="small" :loading="previewing" :disabled="!canRun" @click="onPreview">预览</el-button>
         </div>
-        <div class="head-help">
-          <PageHelpButton page-id="code_rename" />
+        <span class="toolbar-divider" aria-hidden="true" />
+        <div class="toolbar-group">
+          <el-button type="primary" size="small" :loading="applying" :disabled="!canRun" @click="onApply">
+            执行改名
+          </el-button>
         </div>
-      </div>
-    </header>
+      </template>
+    </PageHeader>
 
     <section class="card results-card">
       <header class="results-head">

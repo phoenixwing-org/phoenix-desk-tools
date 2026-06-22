@@ -7,7 +7,7 @@ import {
   saveSwStepPrefs,
   type SwStepPrefs,
 } from "../api";
-import PageHelpButton from "../components/PageHelpButton.vue";
+import PageHeader from "../components/PageHeader.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useSwStepExportPropertySheet } from "../composables/useSwStepExportPropertySheet";
 
@@ -98,12 +98,9 @@ onMounted(async () => {
 
 <template>
   <div class="page tool-page">
-    <header class="page-head">
-      <div class="head-row head-row-toolbar">
-        <div class="head-left">
-          <h1 class="page-title">SW→STEP</h1>
-        </div>
-        <div class="head-actions" data-tour-page-sw-run>
+    <PageHeader title="SW→STEP" page-id="sw_step_export">
+      <template #actions>
+        <div data-tour-page-sw-run class="head-actions-inner">
           <el-button size="small" :loading="saving" @click="onSave">保存偏好</el-button>
           <el-button size="small" :loading="previewing" @click="onPreview">预览数量</el-button>
           <el-button
@@ -116,11 +113,8 @@ onMounted(async () => {
             开始导出
           </el-button>
         </div>
-        <div class="head-help">
-          <PageHelpButton page-id="sw_step_export" />
-        </div>
-      </div>
-    </header>
+      </template>
+    </PageHeader>
 
     <el-alert
       v-if="prefsMeta && !prefsMeta.com_available"

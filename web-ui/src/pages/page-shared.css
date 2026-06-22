@@ -34,6 +34,13 @@
   flex-shrink: 0;
 }
 
+.head-actions-inner {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
 .head-left {
   display: flex;
   flex-wrap: wrap;

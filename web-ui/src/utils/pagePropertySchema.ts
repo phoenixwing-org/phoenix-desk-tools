@@ -5,6 +5,7 @@ import type {
   PagePropertyGroup,
   PagePropertyInfoField,
   PagePropertyNumberField,
+  PagePropertyPathField,
   PagePropertySelectField,
   PagePropertySelectOption,
   PagePropertyStringField,
@@ -115,6 +116,23 @@ export function propNumber(
   },
 ): PagePropertyNumberField {
   return { id, label, kind: "number", ...opts };
+}
+
+/** 相对工作空间路径（mono + 可选浏览） */
+export function propPath(
+  id: string,
+  label: string,
+  opts: {
+    value: ReactiveStr;
+    onChange?: (value: string) => void;
+    placeholder?: string;
+    browse?: boolean;
+    hint?: string;
+    disabled?: MaybeHidden;
+    hidden?: MaybeHidden;
+  },
+): PagePropertyPathField {
+  return { id, label, kind: "path", browse: opts.browse ?? true, ...opts };
 }
 
 /** AppPropertyString 只读 */

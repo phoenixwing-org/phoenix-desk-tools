@@ -183,7 +183,7 @@ sequenceDiagram
 | ✅ | `code_rename` | 批量改名 | 已迁 | 改名 / 范围(子分组) / 规则 | 预览/执行留主区 |
 | ✅ | `code_uuid` | UUID 替换 | 已迁 | 范围(子分组) + 替换策略 | 扫描/写盘留主区 |
 | ✅ | `part_dedup` | 编号查重 | 已迁 | 扫描 / 检查项 | 扫描/导出留主区 |
-| P2 | `file_rename` | 文件改名 | 顶栏/表单区 | **规则** + **写回选项** | 与 CAD 改名文档对齐 |
+| P2 | `file_rename` | 文件改名 | 已迁 | **规则** + **分析信息**只读 | 主区留模式/表单与结果表 |
 | P2 | `sw_step_export` | SW STEP 导出 | 工具栏选项 | **导出选项**（路径、覆盖策略） | Windows 专用 |
 | P2 | `step_batch` | STEP 批量转 FCStd | 表单 | **输入输出目录**、FreeCAD 选项 | |
 | P3 | `fcstd_map` | CAD 索引 | 已迁（部分） | **扫描选项** + **索引状态**只读 + **路径** | 列表/导出/工程内搜索留主区 |
@@ -214,11 +214,11 @@ sequenceDiagram
 
 ### P2 · 类型与体验
 
-- [ ] `propPath`（相对路径 + mono）
-- [ ] 分析后动态组（xlink 扫描 meta → 只读字段）
+- [x] `propPath`（相对路径 + mono + 浏览；xlink / 工作集子目录）
+- [x] 分析后动态组（xlink / file_rename 扫描 meta → 只读字段）
 - [x] `part_dedup` 属性 sheet
-- [ ] `file_rename` / `step_batch` / `sw_step_export` 页迁移
-- [ ] 成员排序：**从工作集推导一级目录勾选**（与 FileWorkset 联动）
+- [x] `file_rename` / `step_batch` / `sw_step_export` 页迁移
+- [x] 成员排序：**从工作集推导一级目录勾选**（与 FileWorkset 联动）
 - [ ] hint 行策略：默认仅 `title` 悬停；长说明保留可选 `description` 行
 
 ### P3 · 壳层持久化与详情页

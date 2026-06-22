@@ -8,7 +8,7 @@ import {
   type BomXrefMeta,
 } from "../api";
 import OnboardingBanner from "../components/OnboardingBanner.vue";
-import PageHelpButton from "../components/PageHelpButton.vue";
+import PageHeader from "../components/PageHeader.vue";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useBomExportPropertySheet } from "../composables/useBomExportPropertySheet";
@@ -237,26 +237,18 @@ onUnmounted(() => {
 
 <template>
   <div class="page bom-list-page">
-    <header class="page-head">
-      <div class="head-row head-row-toolbar">
-        <div class="head-left">
-          <h1 class="page-title">BOM 列表</h1>
-        </div>
-        <div class="head-actions">
-          <el-button
-            size="small"
-            :loading="rebuilding"
-            title="仅重读各 FCStd 的 XLink 并刷新引用表，不重扫 CAD 索引属性。"
-            @click="onRebuild"
-          >
-            仅重建引用表
-          </el-button>
-        </div>
-        <div class="head-help">
-          <PageHelpButton page-id="bom_export" />
-        </div>
-      </div>
-    </header>
+    <PageHeader title="BOM 列表" page-id="bom_export">
+      <template #actions>
+        <el-button
+          size="small"
+          :loading="rebuilding"
+          title="仅重读各 FCStd 的 XLink 并刷新引用表，不重扫 CAD 索引属性。"
+          @click="onRebuild"
+        >
+          仅重建引用表
+        </el-button>
+      </template>
+    </PageHeader>
 
     <OnboardingBanner
       v-if="!onboarding.indexScanned"

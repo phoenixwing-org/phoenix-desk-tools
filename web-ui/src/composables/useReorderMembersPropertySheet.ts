@@ -1,6 +1,7 @@
 import { computed } from "vue";
 import { usePagePropertySheet } from "../composables/usePagePropertySheet";
 import { useReorderMembersPageStore } from "../stores/reorderMembersPage";
+import { useFileWorksetsStore } from "../stores/fileWorksets";
 import type { KevinSystemCodeMode } from "../stores/reorderMembersPage";
 import { propBool, propEnum, propGroup, propReadonly, propSheet } from "../utils/pagePropertySchema";
 
@@ -33,10 +34,23 @@ export function useReorderMembersPropertySheet(
   onValidationError?: (message: string) => void,
 ) {
   const pageStore = useReorderMembersPageStore();
+  const worksetStore = useFileWorksetsStore();
 
   usePagePropertySheet(pageId, () =>
     propSheet(
       [
+      propGroup("scope", "运行范围", [
+        propReadonly("active_workset", "活动工作集", {
+          value: computed(() => worksetStore.activeWorkset?.name || "（未选择）"),
+          hint: "侧栏「工作集」Tab 中当前活动集；主区可用「从工作集勾选」",
+        }),
+        propReadonly("workset_path_count", "工作集文件数", {
+          value: computed(() => {
+            const n = worksetStore.activeWorkset?.paths.length ?? 0;
+            return n ? String(n) : "—";
+          }),
+        }),
+      ]),
       propGroup("run", "运行选项", [
         propBool("include_cpp", ".cpp", {
           value: computed(() => pageStore.includeCpp),

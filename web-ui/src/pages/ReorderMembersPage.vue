@@ -8,14 +8,17 @@ import {
   saveReorderMembersPrefs,
   type ReorderMembersEntry,
 } from "../api";
-import PageHelpButton from "../components/PageHelpButton.vue";
+import PageHeader from "../components/PageHeader.vue";
 import AppModalOverlay from "../components/AppModalOverlay.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useReorderMembersPageStore } from "../stores/reorderMembersPage";
+import { useFileWorksetsStore } from "../stores/fileWorksets";
 import { useReorderMembersPropertySheet } from "../composables/useReorderMembersPropertySheet";
+import { deriveReorderTopLevelFromWorkset } from "../utils/deriveReorderTopLevelFromWorkset";
 
 const shell = useAppShell();
 const pageStore = useReorderMembersPageStore();
+const worksetStore = useFileWorksetsStore();
 
 const CHANGED_PAGE_SIZE = 20;
 
@@ -57,6 +60,11 @@ const pagedChangedFiles = computed(() => {
   const start = changedPageSafe.value * CHANGED_PAGE_SIZE;
   return changedFiles.value.slice(start, start + CHANGED_PAGE_SIZE);
 });
+
+const activeWorksetPathCount = computed(() => worksetStore.activeWorkset?.paths.length ?? 0);
+const canSelectFromWorkset = computed(
+  () => activeWorksetPathCount.value > 0 && entries.value.length > 0 && !loading.value,
+);
 
 function fileKindLabel(path: string): string {
   const lower = path.toLowerCase();
@@ -140,6 +148,24 @@ function toggleAll(checked: boolean) {
   );
 }
 
+function selectFromWorkset() {
+  const ws = worksetStore.activeWorkset;
+  if (!ws?.paths.length) {
+    shell.setStatus("侧栏活动工作集为空，请先在索引/树中归集文件");
+    return;
+  }
+  const derived = deriveReorderTopLevelFromWorkset(
+    ws.paths,
+    entries.value.map((e) => e.name),
+  );
+  if (!derived.length) {
+    shell.setStatus(`工作集「${ws.name}」中的路径与一级条目无交集`);
+    return;
+  }
+  pageStore.toggleAll(derived, true);
+  shell.setStatus(`已从工作集「${ws.name}」勾选 ${derived.length} 项`);
+}
+
 async function onRun(dryRun: boolean) {
   if (!selectedCount.value) {
     shell.setStatus("请至少勾选一项");
@@ -210,36 +236,28 @@ watch(
 
 <template>
   <div class="page tool-page reorder-page">
-    <header class="page-head">
-      <div class="head-row head-row-toolbar">
-        <div class="head-left">
-          <h1 class="page-title">C++ 成员排序</h1>
+    <PageHeader title="C++ 成员排序" page-id="reorder_members">
+      <template #actions>
+        <div class="toolbar-group">
+          <el-button size="small" :loading="saving" @click="onSave">保存偏好</el-button>
+          <el-button size="small" :loading="running" :disabled="!selectedCount" @click="onRun(true)">
+            预检
+          </el-button>
         </div>
-        <div class="head-actions">
-          <div class="toolbar-group">
-            <el-button size="small" :loading="saving" @click="onSave">保存偏好</el-button>
-            <el-button size="small" :loading="running" :disabled="!selectedCount" @click="onRun(true)">
-              预检
-            </el-button>
-          </div>
-          <span class="toolbar-divider" aria-hidden="true" />
-          <div class="toolbar-group">
-            <el-button
-              type="primary"
-              size="small"
-              :loading="running"
-              :disabled="!selectedCount"
-              @click="onRun(false)"
-            >
-              执行排序
-            </el-button>
-          </div>
+        <span class="toolbar-divider" aria-hidden="true" />
+        <div class="toolbar-group">
+          <el-button
+            type="primary"
+            size="small"
+            :loading="running"
+            :disabled="!selectedCount"
+            @click="onRun(false)"
+          >
+            执行排序
+          </el-button>
         </div>
-        <div class="head-help">
-          <PageHelpButton page-id="reorder_members" />
-        </div>
-      </div>
-    </header>
+      </template>
+    </PageHeader>
 
     <section class="card results-card" :class="{ collapsed: !entriesExpanded }">
       <div class="results-head-row">
@@ -256,6 +274,19 @@ watch(
         <span v-else-if="loading" class="head-meta muted small">加载中…</span>
         <div class="results-head-actions">
           <el-button size="small" :loading="loading" @click="refreshList">刷新列表</el-button>
+          <el-button
+            size="small"
+            plain
+            :disabled="!canSelectFromWorkset"
+            :title="
+              activeWorksetPathCount
+                ? `按侧栏活动工作集「${worksetStore.activeWorkset?.name ?? ''}」路径推导一级目录/文件`
+                : '请先在侧栏选择活动工作集并添加文件'
+            "
+            @click="selectFromWorkset"
+          >
+            从工作集勾选
+          </el-button>
           <el-button v-if="ignoredCount" size="small" @click="ignoredModalOpen = true">
             已忽略 {{ ignoredCount }}
           </el-button>

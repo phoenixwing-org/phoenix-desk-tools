@@ -6,7 +6,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from phoenix.code.reorder_ignore import is_ignored_name, load_ignore_patterns
+from phoenix.code.reorder_ignore import load_ignore_patterns
+from phoenix.code.reorder_workset_scope import derive_reorder_top_level_from_workset
+from phoenix.code.ignore import is_ignored_name
 from phoenix.code.reorder_members import (
     format_changed_file_log_line,
     normalize_reorder_file_filters,
@@ -171,6 +173,18 @@ class TestReorderMembersService(unittest.TestCase):
         self.assertTrue(out["ok"])
         self.assertGreater(out["files_scanned"], 0)
         self.assertGreaterEqual(out["hdr_changed"], 0)
+
+    def test_derive_top_level_from_workset_paths(self) -> None:
+        valid = ["ModA", "ModB", "Root.cpp"]
+        paths = [
+            "ModA/src/foo.cpp",
+            "ModA/bar.h",
+            "./ModB/x.cpp",
+            "other/deep.cpp",
+            "Root.cpp",
+        ]
+        out = derive_reorder_top_level_from_workset(paths, valid)
+        self.assertEqual(out, ["ModA", "ModB", "Root.cpp"])
 
 
 if __name__ == "__main__":

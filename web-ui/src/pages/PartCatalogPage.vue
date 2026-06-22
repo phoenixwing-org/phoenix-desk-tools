@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from "vue";
 import { fetchPartKeys, type PartKeyEntry, type PartKeysPayload } from "../api";
 import { BOM_FIELD_LABELS as L } from "../utils/bomFieldLabels";
 import { useAppShell } from "../composables/useAppShell";
-import PageHelpButton from "../components/PageHelpButton.vue";
+import PageHeader from "../components/PageHeader.vue";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
 import type { TableColumnDef } from "../composables/useResizableTable";
 
@@ -85,19 +85,11 @@ onMounted(() => refreshList());
 
 <template>
   <div class="page part-catalog-page">
-    <header class="page-head">
-      <div class="head-row head-row-toolbar">
-        <div class="head-left">
-          <h1 class="page-title">零件目录</h1>
-        </div>
-        <div class="head-actions">
-          <el-button size="small" :loading="loading" @click="refreshList">刷新</el-button>
-        </div>
-        <div class="head-help">
-          <PageHelpButton page-id="part_catalog" />
-        </div>
-      </div>
-    </header>
+    <PageHeader title="零件目录" page-id="part_catalog">
+      <template #actions>
+        <el-button size="small" :loading="loading" @click="refreshList">刷新</el-button>
+      </template>
+    </PageHeader>
 
     <section class="controls" data-tour-page-partcat-search>
       <el-input

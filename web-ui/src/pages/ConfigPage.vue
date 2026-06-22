@@ -4,7 +4,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { pruneRecentWorkspaces, removeRecentWorkspace, saveLauncherFreecad, shutdownWebServer } from "../api";
 import { useAppShell } from "../composables/useAppShell";
 import { useWorkspaceDirectoryPicker } from "../composables/useWorkspaceDirectoryPicker";
-import PageHelpButton from "../components/PageHelpButton.vue";
+import PageHeader from "../components/PageHeader.vue";
 import { useShellTour } from "../composables/useShellTour";
 import { useOnboardingStore } from "../stores/onboarding";
 import { useUiPrefsStore } from "../stores/uiPrefs";
@@ -332,21 +332,13 @@ const navItems = () =>
 
 <template>
   <div class="page config-page">
-    <header class="page-head">
-      <div class="head-row head-row-toolbar">
-        <div class="head-left">
-          <h1 class="page-title">配置</h1>
-        </div>
-        <div v-if="shell.configOverlayOpen.value" class="head-actions">
-          <el-button size="small" @click="shell.closeConfig()">
-            关闭
-          </el-button>
-        </div>
-        <div class="head-help">
-          <PageHelpButton page-id="config" />
-        </div>
-      </div>
-    </header>
+    <PageHeader title="配置" page-id="config">
+      <template v-if="shell.configOverlayOpen.value" #actions>
+        <el-button size="small" @click="shell.closeConfig()">
+          关闭
+        </el-button>
+      </template>
+    </PageHeader>
 
     <section class="section" data-tour-page-config-workspace>
       <label class="field-label">当前工作空间</label>

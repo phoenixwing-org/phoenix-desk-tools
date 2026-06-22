@@ -8,7 +8,7 @@ import {
   type StepBatchPreview,
 } from "../api";
 import OnboardingBanner from "../components/OnboardingBanner.vue";
-import PageHelpButton from "../components/PageHelpButton.vue";
+import PageHeader from "../components/PageHeader.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useFreecadTaskGate } from "../composables/useFreecadTaskGate";
 import { useStepBatchPropertySheet } from "../composables/useStepBatchPropertySheet";
@@ -115,23 +115,17 @@ onMounted(async () => {
 
 <template>
   <div class="page tool-page">
-    <header class="page-head">
-      <div class="head-row head-row-toolbar">
-        <div class="head-left">
-          <h1 class="page-title">STEP 批量</h1>
-        </div>
-        <div class="head-actions" data-tour-page-step-run>
+    <PageHeader title="STEP 批量" page-id="step_batch">
+      <template #actions>
+        <div data-tour-page-step-run class="head-actions-inner">
           <el-button size="small" :loading="saving" @click="onSave">保存偏好</el-button>
           <el-button size="small" :loading="previewing" :disabled="freecadBlocked" @click="onPreview">预览数量</el-button>
           <el-button type="primary" size="small" :loading="running" :disabled="freecadBlocked" @click="onRun">
             开始转换
           </el-button>
         </div>
-        <div class="head-help">
-          <PageHelpButton page-id="step_batch" />
-        </div>
-      </div>
-    </header>
+      </template>
+    </PageHeader>
 
     <OnboardingBanner
       v-if="freecadBlocked"

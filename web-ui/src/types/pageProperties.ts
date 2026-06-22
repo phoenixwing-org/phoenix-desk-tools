@@ -63,12 +63,23 @@ export type PagePropertyInfoField = PagePropertyFieldBase & {
   mono?: boolean;
 };
 
+/** 相对工作空间路径（可编辑 + 浏览） */
+export type PagePropertyPathField = PagePropertyFieldBase & {
+  kind: "path";
+  value: ReactiveValue<string>;
+  placeholder?: string;
+  /** 是否显示浏览按钮，默认 true */
+  browse?: boolean;
+  onChange?: (value: string) => void;
+};
+
 export type PagePropertyField =
   | PagePropertyBooleanField
   | PagePropertyStringField
   | PagePropertyNumberField
   | PagePropertySelectField
-  | PagePropertyInfoField;
+  | PagePropertyInfoField
+  | PagePropertyPathField;
 
 /** 分组（类似 FreeCAD 属性面板折叠段） */
 export type PagePropertyGroup = {

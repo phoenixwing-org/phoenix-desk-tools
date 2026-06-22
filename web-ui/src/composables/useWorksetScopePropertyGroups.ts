@@ -1,7 +1,7 @@
 import { computed } from "vue";
 import { useWorksetPageScope } from "./useWorksetPageScope";
 import { useFileWorksetsStore, type WorksetScopeMode } from "../stores/fileWorksets";
-import { propEnum, propGroup, propReadonly, propString } from "../utils/pagePropertySchema";
+import { propEnum, propGroup, propPath, propReadonly } from "../utils/pagePropertySchema";
 import type { PagePropertyGroup } from "../types/pageProperties";
 
 const SCOPE_MODE_OPTIONS = [
@@ -65,7 +65,7 @@ export function useWorksetScopePropertyGroups(
         }),
       ]),
       propGroup("scope_subdir", "子目录", [
-        propString("scope_path", "相对路径", {
+        propPath("scope_path", "相对路径", {
           value: pageScope.scope,
           placeholder: "相对子目录",
           mono: true,

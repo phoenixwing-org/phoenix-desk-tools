@@ -6,7 +6,7 @@ import {
   type CodeUuidHit,
   type UuidApplyStrategy,
 } from "../api";
-import PageHelpButton from "../components/PageHelpButton.vue";
+import PageHeader from "../components/PageHeader.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useCodeUuidPropertySheet } from "../composables/useCodeUuidPropertySheet";
 import { promptChoice } from "../composables/choiceDialog";
@@ -277,53 +277,45 @@ function thClass(key: string) {
 
 <template>
   <div class="page tool-page code-uuid-page">
-    <header class="page-head">
-      <div class="head-row head-row-toolbar">
-        <div class="head-left">
-          <h1 class="page-title">Code UUID 替换</h1>
+    <PageHeader title="Code UUID 替换" page-id="code_uuid">
+      <template #actions>
+        <div class="toolbar-group">
+          <el-button size="small" plain @click="openIgnorePanel">忽略设定</el-button>
         </div>
-        <div class="head-actions">
-          <div class="toolbar-group">
-            <el-button size="small" plain @click="openIgnorePanel">忽略设定</el-button>
-          </div>
-          <span class="toolbar-divider" aria-hidden="true" />
-          <div class="toolbar-group">
-            <el-button size="small" :loading="scanning" @click="onScan">扫描 UUID</el-button>
-            <el-button
-              size="small"
-              :loading="scanning"
-              :disabled="!worksetStore.activeWorkset?.paths.length"
-              :title="
-                worksetStore.activeWorkset?.paths.length
-                  ? `仅扫描侧栏「${activeWorksetLabel}」内 ${worksetStore.activeWorkset.paths.length} 个文件`
-                  : '侧栏当前工作集为空'
-              "
-              @click="scanFromActiveWorkset"
-            >
-              当前工作集扫描
-            </el-button>
-            <el-button size="small" :loading="applying" :disabled="!selectedCount" @click="onApply(true)">
-              预检
-            </el-button>
-          </div>
-          <span class="toolbar-divider" aria-hidden="true" />
-          <div class="toolbar-group">
-            <el-button
-              type="primary"
-              size="small"
-              :loading="applying"
-              :disabled="!selectedCount"
-              @click="onApply(false)"
-            >
-              执行替换
-            </el-button>
-          </div>
+        <span class="toolbar-divider" aria-hidden="true" />
+        <div class="toolbar-group">
+          <el-button size="small" :loading="scanning" @click="onScan">扫描 UUID</el-button>
+          <el-button
+            size="small"
+            :loading="scanning"
+            :disabled="!worksetStore.activeWorkset?.paths.length"
+            :title="
+              worksetStore.activeWorkset?.paths.length
+                ? `仅扫描侧栏「${activeWorksetLabel}」内 ${worksetStore.activeWorkset.paths.length} 个文件`
+                : '侧栏当前工作集为空'
+            "
+            @click="scanFromActiveWorkset"
+          >
+            当前工作集扫描
+          </el-button>
+          <el-button size="small" :loading="applying" :disabled="!selectedCount" @click="onApply(true)">
+            预检
+          </el-button>
         </div>
-        <div class="head-help">
-          <PageHelpButton page-id="code_uuid" />
+        <span class="toolbar-divider" aria-hidden="true" />
+        <div class="toolbar-group">
+          <el-button
+            type="primary"
+            size="small"
+            :loading="applying"
+            :disabled="!selectedCount"
+            @click="onApply(false)"
+          >
+            执行替换
+          </el-button>
         </div>
-      </div>
-    </header>
+      </template>
+    </PageHeader>
 
     <section class="card results-card">
       <header class="results-head">

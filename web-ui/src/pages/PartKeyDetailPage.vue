@@ -13,7 +13,7 @@ import ComboTextInput from "../components/ComboTextInput.vue";
 import { BOM_FIELD_LABELS as L, PART_KEY_META_FIELDS } from "../utils/bomFieldLabels";
 import { TYPE_CODE_OPTIONS } from "../utils/typeCodeOptions";
 import { parsePartKeyText } from "../utils/partNaming";
-import PageHelpButton from "../components/PageHelpButton.vue";
+import PageHeader from "../components/PageHeader.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { usePageSession } from "../composables/usePageSession";
 import type { TableColumnDef } from "../composables/useResizableTable";
@@ -369,36 +369,28 @@ onUnmounted(() => {
 
 <template>
   <div class="page part-detail-page">
-    <header class="page-head">
-      <div class="head-row head-row-toolbar">
-        <div class="head-left">
-          <h1 class="page-title">零件详情</h1>
+    <PageHeader title="零件详情" page-id="part_key_detail">
+      <template #actions>
+        <div class="part-key-bar">
+          <label class="pk-label" for="part-key-input">
+            <span class="cn">{{ L.partKey }}</span>
+            <span class="en">PartKey</span>
+          </label>
+          <el-input
+            id="part-key-input"
+            v-model="partKeyInput"
+            class="pk-input mono"
+            placeholder="8001.001"
+            spellcheck="false"
+            :disabled="loading"
+            @keydown.enter="onSearchPartKey"
+          />
+          <el-button type="primary" size="small" class="pk-btn" :loading="loading" @click="onSearchPartKey">
+            检索
+          </el-button>
         </div>
-        <div class="head-actions">
-          <div class="part-key-bar">
-            <label class="pk-label" for="part-key-input">
-              <span class="cn">{{ L.partKey }}</span>
-              <span class="en">PartKey</span>
-            </label>
-            <el-input
-              id="part-key-input"
-              v-model="partKeyInput"
-              class="pk-input mono"
-              placeholder="8001.001"
-              spellcheck="false"
-              :disabled="loading"
-              @keydown.enter="onSearchPartKey"
-            />
-            <el-button type="primary" size="small" class="pk-btn" :loading="loading" @click="onSearchPartKey">
-              检索
-            </el-button>
-          </div>
-        </div>
-        <div class="head-help">
-          <PageHelpButton page-id="part_key_detail" />
-        </div>
-      </div>
-    </header>
+      </template>
+    </PageHeader>
 
     <el-alert v-if="pageError" type="error" :title="pageError" show-icon :closable="false" class="err-alert" />
     <div v-if="loading && !detail" class="empty">载入中…</div>

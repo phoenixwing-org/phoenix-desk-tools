@@ -16,7 +16,7 @@ import { useFcstdMapPropertySheet } from "../composables/useFcstdMapPropertyShee
 import { useOnboardingStore } from "../stores/onboarding";
 import { usePageSession } from "../composables/usePageSession";
 import { usePageSummary } from "../composables/usePageSummary";
-import PageHelpButton from "../components/PageHelpButton.vue";
+import PageHeader from "../components/PageHeader.vue";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
 import type { TableColumnDef } from "../composables/useResizableTable";
 import { BOM_FIELD_LABELS as L } from "../utils/bomFieldLabels";
@@ -408,12 +408,9 @@ onMounted(() => applyInitialTabState());
 
 <template>
   <div class="page fcstd-map-page">
-    <header class="page-head">
-      <div class="head-row head-row-toolbar">
-        <div class="head-left">
-          <h1 class="page-title">CAD 索引</h1>
-        </div>
-        <div class="head-actions" data-tour-page-fcstd-scan>
+    <PageHeader title="CAD 索引" page-id="fcstd_map">
+      <template #actions>
+        <div data-tour-page-fcstd-scan class="head-actions-inner">
           <el-button type="primary" size="small" :loading="scanning" @click="onScan">工程内搜索</el-button>
           <el-button size="small" :loading="loading" @click="refresh">刷新</el-button>
           <el-button
@@ -428,11 +425,8 @@ onMounted(() => applyInitialTabState());
             删除缺失{{ stats?.missing ? `（${stats.missing}）` : "" }}
           </el-button>
         </div>
-        <div class="head-help">
-          <PageHelpButton page-id="fcstd_map" />
-        </div>
-      </div>
-    </header>
+      </template>
+    </PageHeader>
 
     <el-radio-group v-model="activeSubTab" size="small" class="sub-tabs">
       <el-radio-button value="index">索引列表</el-radio-button>

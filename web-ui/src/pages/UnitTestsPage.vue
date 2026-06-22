@@ -17,7 +17,7 @@ import {
   type UnitTestStreamEvent,
   type UnitTestSuiteInfo,
 } from "../api";
-import PageHelpButton from "../components/PageHelpButton.vue";
+import PageHeader from "../components/PageHeader.vue";
 import { useUnitTestsPropertySheet } from "../composables/useUnitTestsPropertySheet";
 import { useAppShell } from "../composables/useAppShell";
 import {
@@ -897,63 +897,55 @@ onMounted(() => {
 
 <template>
   <div class="page tool-page unit-tests-page">
-    <header class="page-head">
-      <div class="head-row head-row-toolbar">
-        <div class="head-left">
-          <h1 class="page-title">单元测试</h1>
+    <PageHeader title="单元测试" page-id="unit_tests">
+      <template #actions>
+        <div class="toolbar-group">
+          <el-checkbox
+            :model-value="showRunScopeList"
+            :disabled="running"
+            size="small"
+            class="toolbar-toggle scope-list-btn"
+            @change="showRunScopeList = Boolean($event)"
+          >
+            列出运行范围
+            <span v-if="runScopeButtonModuleCount" class="suite-count">{{ runScopeButtonModuleCount }}</span>
+          </el-checkbox>
         </div>
-        <div class="head-actions">
-          <div class="toolbar-group">
-            <el-checkbox
-              :model-value="showRunScopeList"
-              :disabled="running"
-              size="small"
-              class="toolbar-toggle scope-list-btn"
-              @change="showRunScopeList = Boolean($event)"
-            >
-              列出运行范围
-              <span v-if="runScopeButtonModuleCount" class="suite-count">{{ runScopeButtonModuleCount }}</span>
-            </el-checkbox>
-          </div>
-          <span class="toolbar-divider" aria-hidden="true" />
-          <div class="toolbar-group">
-            <el-button-group size="small">
-              <el-button :disabled="running" @click="selectAllRun">全选</el-button>
-              <el-button :disabled="running" @click="clearAllRun">清空</el-button>
-              <el-button v-if="watchlistCount" :disabled="running" @click="onRun('watchlist')">
-                全部复测（{{ watchlistCount }}）
-              </el-button>
-            </el-button-group>
-          </div>
-          <span class="toolbar-divider" aria-hidden="true" />
-          <div class="toolbar-group toolbar-group-run">
-            <el-button
-              v-if="running"
-              type="danger"
-              plain
-              size="small"
-              data-tour-page-unit-tests-cancel
-              @click="cancelRun"
-            >
-              终止
+        <span class="toolbar-divider" aria-hidden="true" />
+        <div class="toolbar-group">
+          <el-button-group size="small">
+            <el-button :disabled="running" @click="selectAllRun">全选</el-button>
+            <el-button :disabled="running" @click="clearAllRun">清空</el-button>
+            <el-button v-if="watchlistCount" :disabled="running" @click="onRun('watchlist')">
+              全部复测（{{ watchlistCount }}）
             </el-button>
-            <el-button
-              v-else
-              type="primary"
-              size="small"
-              data-tour-page-unit-tests-run
-              :disabled="!canRunFull"
-              @click="onRun('full')"
-            >
-              运行（{{ runCheckedCount }}<template v-if="showRunScopeList && runScopeSelectedSummary && runScopeSelectedSummary.modules < runScopeSelectedSummary.totalModules"> · {{ runScopeSelectedSummary.modules }} 模块</template>）
-            </el-button>
-          </div>
+          </el-button-group>
         </div>
-        <div class="head-help">
-          <PageHelpButton page-id="unit_tests" />
+        <span class="toolbar-divider" aria-hidden="true" />
+        <div class="toolbar-group toolbar-group-run">
+          <el-button
+            v-if="running"
+            type="danger"
+            plain
+            size="small"
+            data-tour-page-unit-tests-cancel
+            @click="cancelRun"
+          >
+            终止
+          </el-button>
+          <el-button
+            v-else
+            type="primary"
+            size="small"
+            data-tour-page-unit-tests-run
+            :disabled="!canRunFull"
+            @click="onRun('full')"
+          >
+            运行（{{ runCheckedCount }}<template v-if="showRunScopeList && runScopeSelectedSummary && runScopeSelectedSummary.modules < runScopeSelectedSummary.totalModules"> · {{ runScopeSelectedSummary.modules }} 模块</template>）
+          </el-button>
         </div>
-      </div>
-    </header>
+      </template>
+    </PageHeader>
 
     <p v-if="loadError" class="error-text">{{ loadError }}</p>
 

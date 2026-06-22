@@ -15,7 +15,7 @@
 - [x] **`phoenix_store.connect()` 同线程同 repo 可重入**（nested `with connect` 复用连接，避免改名/BOM 刷新链 `database is locked`）
 - [ ] `rebuild_bom_tree_occurrences`：邻接表只查一次，消除 per-host 重复全表 SQL
 - [x] `query_bom_xrefs_incoming`：合并 `get_file_asset_id` 为单条 SQL
-- [ ] 改名 XLink 修正 + **同步引用 Label**：`apply_host_xlink_corrections(sync_reference_labels=True)` 在目标文件尚未改名、且无 CAD 索引时应仍从磁盘 FCStd 读 rule Label（现会退化为 basename）；补单测：单引用、同 Group 双 XLink 的 `.002` 后缀、跨路径同目标不重复编号（见 [改名引用写回-装配Label同步-需求.md](cad/改名引用写回-装配Label同步-需求.md)）
+- [x] 改名 XLink 修正 + **同步引用 Label**：`apply_host_xlink_corrections(sync_reference_labels=True)` 在目标文件尚未改名、且无 CAD 索引时应仍从磁盘 FCStd 读 rule Label（`resolve_rule_display_label` 无索引时回退 `resolve_fcstd_display_label`）；单测：单引用、同 Group 双 XLink `.002`、跨组不重复编号（见 [改名引用写回-装配Label同步-需求.md](cad/改名引用写回-装配Label同步-需求.md)）
 - [ ] 内部装配 **结构感知 BOM 挂载**：优先入度 0 的顶 `App::Part`（样例 `PCB` 非 `_6222656233`），见 [samples/内部装配示例-挂载分析.md](cad/samples/内部装配示例-挂载分析.md) + `tests/fixtures/workspaces/minimal/document-xml/`
 
 ---
@@ -42,7 +42,7 @@
 - [ ] 统一运行日志：长任务进度条 / 取消（见 [统一运行日志窗口-规划讨论.md](platform/统一运行日志窗口-规划讨论.md)）
 - [x] **单元测试 Web 页**：套件勾选运行、**运行范围列表按模块勾选**（默认全选）、NDJSON 流式进度、终止；失败关注 Tab（排序 / 勾选复测 / 简介列）；Pinia 持久化选项与勾选；**模块列表 el-table + 行内运行 + 运行次数/最近执行 localStorage + 排序**
 - [x] **链接路径修正 · 分析**：未建 CAD 索引时明确提示（非 JSON 解析错误）；空脚本输出友好报错
-- [ ] **工具页页头组件化**：抽 `PageHeader.vue`（或 `ToolPageHeader.vue`），统一 `page-head` / `head-row`·`head-row-toolbar` / `head-left` / `head-actions` / `PageHelpButton`；各 `*Page.vue` 只传 `title`、`page-id`，操作用默认 slot 或 `toolbar-group`+`toolbar-divider` 结构化 props；样式只在组件 + `page-shared.css` 维护，禁止逐页自定义 header 外观（约定见 `.cursor/rules/page-header-style.mdc`）
+- [x] **工具页页头组件化**：`PageHeader.vue` 统一 `page-head` / `head-row-toolbar` / `PageHelpButton`；各 `*Page.vue` 用 `#actions` slot 传工具条（约定见 `.cursor/rules/page-header-style.mdc`）
 
 ### 侧栏 · 页面属性面板（POC）
 
@@ -56,10 +56,10 @@
 - [x] **文档**：规划 + 数据结构 + 各页适配对照（见规划 doc §4–§6）
 - [x] **推广 P1**：`xlink_fix` / `code_rename` / `code_uuid` 属性 sheet；主区留操作与结果表
 - [x] **属性空态**：无 sheet 时显示「当前页无可配置项」
-- [ ] **推广 P2**：`file_rename` / STEP 等（`part_dedup` ✅）
-- [ ] **类型扩展**：`propPath`、分析后动态只读组；枚举统一 combo（`propRadio` 已废弃为 `propEnum` 别名）
-- [ ] **架构研讨**：[页面参数与属性 MVC](platform/Web壳层-页面参数与属性-MVC研讨.md) — `PnxXxxParam` + `derivePageProperties`（评审后再定是否替代 composable）
-- [ ] **运行范围**：成员排序「从工作集推导一级目录勾选」
+- [x] **推广 P2**：`file_rename` / STEP 等（`part_dedup` ✅）
+- [x] **类型扩展**：`propPath`（xlink 修正目录、工作集子目录）；分析后动态只读组（xlink / file_rename）；枚举统一 combo（`propRadio` 已废弃为 `propEnum` 别名）
+- [ ] **架构研讨**：[页面参数与属性 MVC](platform/Web壳层-页面参数与属性-MVC研讨.md) — **已搁置**（维持 `useXxxPropertySheet`）
+- [x] **运行范围**：成员排序「从工作集推导一级目录勾选」
 - [x] **壳层持久化**：属性区高度、名称列宽写入 `shell_layout`
 - [x] **页脚面板切换**：VS Code 式图标（树/属性/日志/工作集/停靠）— 与 Ribbon 壳层区共用 `ShellPanelToggleBar`（全 Tab + 布局联动）
 
