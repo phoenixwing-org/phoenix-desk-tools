@@ -370,31 +370,29 @@ onUnmounted(() => {
 <template>
   <div class="page part-detail-page">
     <header class="page-head">
-      <div class="head-row">
+      <div class="head-row head-row-toolbar">
         <div class="head-left">
           <h1 class="page-title">零件详情</h1>
-          <p v-if="detail?.PartName || currentPartKey" class="page-sub">
-            <span v-if="currentPartKey" class="mono">{{ currentPartKey }}</span>
-            <span v-if="detail?.PartName">{{ currentPartKey ? " · " : "" }}{{ detail.PartName }}</span>
-          </p>
         </div>
-        <div class="part-key-bar">
-          <label class="pk-label" for="part-key-input">
-            <span class="cn">{{ L.partKey }}</span>
-            <span class="en">PartKey</span>
-          </label>
-          <el-input
-            id="part-key-input"
-            v-model="partKeyInput"
-            class="pk-input mono"
-            placeholder="8001.001"
-            spellcheck="false"
-            :disabled="loading"
-            @keydown.enter="onSearchPartKey"
-          />
-          <el-button type="primary" size="small" class="pk-btn" :loading="loading" @click="onSearchPartKey">
-            检索
-          </el-button>
+        <div class="head-actions">
+          <div class="part-key-bar">
+            <label class="pk-label" for="part-key-input">
+              <span class="cn">{{ L.partKey }}</span>
+              <span class="en">PartKey</span>
+            </label>
+            <el-input
+              id="part-key-input"
+              v-model="partKeyInput"
+              class="pk-input mono"
+              placeholder="8001.001"
+              spellcheck="false"
+              :disabled="loading"
+              @keydown.enter="onSearchPartKey"
+            />
+            <el-button type="primary" size="small" class="pk-btn" :loading="loading" @click="onSearchPartKey">
+              检索
+            </el-button>
+          </div>
         </div>
         <div class="head-help">
           <PageHelpButton page-id="part_key_detail" />
@@ -516,7 +514,6 @@ onUnmounted(() => {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin-left: auto;
 }
 
 .pk-input {
@@ -533,14 +530,6 @@ onUnmounted(() => {
 
 .status-select {
   width: 100%;
-}
-
-.head-row .page-sub {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.82rem;
-  line-height: 1.4;
-  min-width: 0;
 }
 
 .sub-panel {

@@ -40,7 +40,7 @@ DEFAULT_BUILTIN_PATTERNS: tuple[str, ...] = (
     ".venv",
     ".venv-desktop",
     "venv",
-    "phoenix_freecad_desktop.egg-info",
+    "phoenix_desk_tools.egg-info",
     "cmake-build-debug",
     "cmake-build-release",
     "build-*",

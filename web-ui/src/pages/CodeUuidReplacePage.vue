@@ -278,48 +278,52 @@ function thClass(key: string) {
 <template>
   <div class="page tool-page code-uuid-page">
     <header class="page-head">
-      <div class="head-row">
-        <h1 class="page-title">Code UUID 替换</h1>
+      <div class="head-row head-row-toolbar">
+        <div class="head-left">
+          <h1 class="page-title">Code UUID 替换</h1>
+        </div>
         <div class="head-actions">
-          <el-button size="small" link type="primary" @click="openIgnorePanel">忽略设定</el-button>
+          <div class="toolbar-group">
+            <el-button size="small" plain @click="openIgnorePanel">忽略设定</el-button>
+          </div>
+          <span class="toolbar-divider" aria-hidden="true" />
+          <div class="toolbar-group">
+            <el-button size="small" :loading="scanning" @click="onScan">扫描 UUID</el-button>
+            <el-button
+              size="small"
+              :loading="scanning"
+              :disabled="!worksetStore.activeWorkset?.paths.length"
+              :title="
+                worksetStore.activeWorkset?.paths.length
+                  ? `仅扫描侧栏「${activeWorksetLabel}」内 ${worksetStore.activeWorkset.paths.length} 个文件`
+                  : '侧栏当前工作集为空'
+              "
+              @click="scanFromActiveWorkset"
+            >
+              当前工作集扫描
+            </el-button>
+            <el-button size="small" :loading="applying" :disabled="!selectedCount" @click="onApply(true)">
+              预检
+            </el-button>
+          </div>
+          <span class="toolbar-divider" aria-hidden="true" />
+          <div class="toolbar-group">
+            <el-button
+              type="primary"
+              size="small"
+              :loading="applying"
+              :disabled="!selectedCount"
+              @click="onApply(false)"
+            >
+              执行替换
+            </el-button>
+          </div>
+        </div>
+        <div class="head-help">
           <PageHelpButton page-id="code_uuid" />
         </div>
       </div>
     </header>
-
-    <section class="card action-card">
-      <div class="form-row settings-row2">
-        <p class="muted small action-hint">扫描范围与替换策略见侧栏「属性」</p>
-        <div class="actions">
-          <el-button size="small" :loading="scanning" @click="onScan">扫描 UUID</el-button>
-          <el-button
-            size="small"
-            :loading="scanning"
-            :disabled="!worksetStore.activeWorkset?.paths.length"
-            :title="
-              worksetStore.activeWorkset?.paths.length
-                ? `仅扫描侧栏「${activeWorksetLabel}」内 ${worksetStore.activeWorkset.paths.length} 个文件`
-                : '侧栏当前工作集为空'
-            "
-            @click="scanFromActiveWorkset"
-          >
-            当前工作集扫描
-          </el-button>
-          <el-button size="small" :loading="applying" :disabled="!selectedCount" @click="onApply(true)">
-            预检
-          </el-button>
-          <el-button
-            type="primary"
-            size="small"
-            :loading="applying"
-            :disabled="!selectedCount"
-            @click="onApply(false)"
-          >
-            执行替换
-          </el-button>
-        </div>
-      </div>
-    </section>
 
     <section class="card results-card">
       <header class="results-head">
@@ -474,14 +478,6 @@ function thClass(key: string) {
   align-items: flex-end;
 }
 
-.settings-row2 {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-  align-items: center;
-  flex-wrap: wrap;
-}
-
 .field-inline {
   flex-direction: row;
   align-items: center;
@@ -508,15 +504,6 @@ function thClass(key: string) {
   width: 100%;
   min-width: 180px;
   max-width: 420px;
-}
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-left: auto;
-  flex-shrink: 0;
-  align-items: center;
 }
 
 .btn-sm {

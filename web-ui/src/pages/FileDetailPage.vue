@@ -362,9 +362,10 @@ onUnmounted(() => {
 <template>
   <div class="page file-detail-page">
     <header class="page-head">
-      <div class="head-row">
-        <h1 class="page-title">文件详情</h1>
-        <h2 v-if="rel && preview" class="file-name mono">{{ fileName }}</h2>
+      <div class="head-row head-row-toolbar">
+        <div class="head-left">
+          <h1 class="page-title">文件详情</h1>
+        </div>
         <div class="head-help">
           <PageHelpButton page-id="file_detail" />
         </div>
@@ -425,23 +426,6 @@ onUnmounted(() => {
   height: 100%;
   overflow: hidden;
   padding: 16px 20px;
-}
-
-.file-detail-page .head-row {
-  justify-content: space-between;
-  width: 100%;
-}
-
-.file-name {
-  margin: 0;
-  font-size: 0.95rem;
-  font-weight: 600;
-  text-align: right;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .empty {

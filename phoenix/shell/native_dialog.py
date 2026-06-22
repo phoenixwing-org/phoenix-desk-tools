@@ -7,28 +7,39 @@ import tkinter as tk
 import tkinter.filedialog as fd
 from pathlib import Path
 
+from phoenix.config.user_prefs import default_browse_directory
+
 
 def resolve_directory_dialog_initialdir(
-    repo_root: Path | str, *, path_hint: str = ""
+    repo_root: Path | str | None, *, path_hint: str = ""
 ) -> str:
     """选目录对话框的初始位置（与各处「浏览…」、工具条选目录保持一致）。
 
-    - ``path_hint`` 为空或解析后不存在：定为当前 **工作空间根** ``repo_root``（便于去重页等扫描目录空缺时先入工作空间）。
+    - ``path_hint`` 为空且未配置工作空间：定为用户 **文档** 目录。
+    - ``path_hint`` 为空且已有工作空间：定为工作空间根。
     - 若非空且路径存在：若为目录则用该目录；若为文件则用其父目录。
-    - 若工作空间根本身不是有效目录（极少见），退回用户「文档」目录。
     """
-    rr = Path(repo_root).expanduser().resolve()
-    fallback_ws = (
-        str(rr)
-        if rr.is_dir()
-        else str((Path.home() / "Documents").expanduser().resolve())
-    )
+    browse_fallback = str(default_browse_directory())
+    rr: Path | None = None
+    if repo_root is not None and str(repo_root).strip():
+        try:
+            cand_root = Path(repo_root).expanduser().resolve(strict=False)
+            if cand_root.is_dir():
+                rr = cand_root
+        except (OSError, RuntimeError):
+            rr = None
+    fallback_ws = str(rr) if rr is not None else browse_fallback
     raw = (path_hint or "").strip()
     if not raw:
         return fallback_ws
 
     q = Path(raw).expanduser()
-    cand = q.resolve(strict=False) if q.is_absolute() else (rr / q).resolve(strict=False)
+    if q.is_absolute():
+        cand = q.resolve(strict=False)
+    elif rr is not None:
+        cand = (rr / q).resolve(strict=False)
+    else:
+        cand = q.resolve(strict=False)
 
     try:
         if cand.is_dir():
@@ -50,9 +61,13 @@ def _shorten_path_for_dialog_title(path: Path | str, max_len: int = 96) -> str:
     return "…" + s[-(max_len - 1) :]
 
 
-def format_directory_picker_title(stem_title: str, workspace_root: Path | str) -> str:
+def format_directory_picker_title(stem_title: str, workspace_root: Path | str | None) -> str:
     """在选目录对话框标题中标出当前「工作空间」根路径。"""
-    return f"{stem_title} · 工作空间: {_shorten_path_for_dialog_title(workspace_root)}"
+    if workspace_root is None or not str(workspace_root).strip():
+        ws_label = "未设置"
+    else:
+        ws_label = _shorten_path_for_dialog_title(workspace_root)
+    return f"{stem_title} · 工作空间: {ws_label}"
 
 
 def pick_directory(
@@ -179,7 +194,7 @@ def pick_workspace_directory(
     master,
     *,
     title: str,
-    repo_root: Path | str,
+    repo_root: Path | str | None,
     path_hint: str = "",
 ) -> str:
     """选目录的统一入口；标题自动附带 ``工作空间`` 路径（入参 repo_root 即工作空间根）。"""

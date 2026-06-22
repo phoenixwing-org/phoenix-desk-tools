@@ -1,5 +1,6 @@
 import type { ModuleScope } from "../constants/moduleScope";
 import type { WorkbenchTab } from "../types/workbench";
+import { RIBBON_SHELL_TAB_ID } from "../layout/ribbon/ribbonConfig";
 
 const DOCUMENT_PAGES = new Set([
   "file_detail",
@@ -60,4 +61,14 @@ export function defaultPageForModuleScope(
   if (enabledModules.includes("cad")) return "fcstd_map";
   if (enabledModules.includes("code")) return "code_index";
   return "fcstd_map";
+}
+
+/** Ribbon Tab id（cad / code / system），用于无打开页面时高亮模块 */
+export function ribbonTabIdForModuleScope(
+  scope: ModuleScope,
+  enabledModules: readonly string[],
+): string {
+  if (scope === "cad" && enabledModules.includes("cad")) return "cad";
+  if (scope === "code" && enabledModules.includes("code")) return "code";
+  return RIBBON_SHELL_TAB_ID;
 }

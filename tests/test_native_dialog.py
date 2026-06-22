@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 from subprocess import CompletedProcess
 from unittest import mock
 
@@ -10,6 +11,15 @@ from phoenix.shell import native_dialog
 
 
 class TestNativeDialogIsolated(unittest.TestCase):
+    def test_initialdir_unset_workspace_uses_documents(self) -> None:
+        with mock.patch.object(
+            native_dialog,
+            "default_browse_directory",
+            return_value=Path("/Users/me/Documents"),
+        ):
+            initial = native_dialog.resolve_directory_dialog_initialdir(None, path_hint="")
+        self.assertEqual(Path(initial).as_posix(), "/Users/me/Documents")
+
     def test_macos_cancel_returns_empty(self) -> None:
         with mock.patch.object(
             native_dialog.subprocess,

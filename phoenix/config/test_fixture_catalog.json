@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "kind": "builtin_catalog",
+  "description": "产品内置：可选引用的开源 C++ 测试工程（随仓库提交）。本机检出目录、勾选状态保存在 launcher.json → test_fixtures，不提交进 Git。",
+  "projects": [
+    {
+      "name": "KtAlarmClock",
+      "description": "Qt 护眼闹钟 · Kevin CAA Wizard 段（Param.h/.cpp）",
+      "clone_url": "https://gitee.com/PhoenixWing321/KtAlarmClock",
+      "fixture_rel": "tests/fixtures/KtAlarmClock",
+      "candidates": [
+        "../KtAlarmClock",
+        "../../KtAlarmClock"
+      ],
+      "used_by": [
+        "tests/test_reorder_avoidance_rules.py",
+        "tests/test_reorder_members_service.py"
+      ]
+    },
+    {
+      "name": "PNXCaaStudy",
+      "description": "CAA RADE 开源学习工程 · CAA2 Wizard 控件段、GUID 字面量等",
+      "clone_url": "https://gitee.com/PhoenixWing321/PNXCaaStudy.git",
+      "fixture_rel": "tests/fixtures/PNXCaaStudy",
+      "candidates": [
+        "../PNXCaaStudy",
+        "../../PNXCaaStudy"
+      ],
+      "used_by": [
+        "tests/test_reorder_avoidance_rules.py",
+        "tests/test_code_rename_engine.py"
+      ]
+    }
+  ]
+}

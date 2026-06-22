@@ -1,5 +1,5 @@
 /** 无工作空间也可进入的页面 */
-export const ONBOARDING_PAGES_ALWAYS = new Set(["welcome", "home", "config", "unit_tests"]);
+export const ONBOARDING_PAGES_ALWAYS = new Set(["welcome", "home", "config", "unit_tests", "test_fixtures"]);
 
 /** 依赖本机 FreeCAD 目录（仅限制「开始任务」类操作，不拦进入页面） */
 export const ONBOARDING_PAGES_FREECAD_TASKS = new Set(["step_batch", "sw_step_export"]);

@@ -52,6 +52,7 @@ from phoenix.services.launcher_service import (
     pick_workspace_directory_via_dialog,
     remove_recent_workspace_entry,
     prune_recent_workspace_entries,
+    reset_factory_settings,
     update_launcher_freecad,
     update_shell_layout,
     update_nav_modules,
@@ -101,6 +102,11 @@ from phoenix.services.reorder_members_service import (
     list_reorder_top_level_entries,
     run_reorder_members_batch,
     save_reorder_members_prefs,
+)
+from phoenix.services.test_fixtures_service import (
+    sync_test_fixtures,
+    test_fixtures_payload,
+    update_test_fixture_prefs,
 )
 from phoenix.services.step_batch_service import (
     get_step_batch_prefs,
@@ -162,19 +168,40 @@ from phoenix.services.unit_test_service import (
 )
 from phoenix.services.workbench_service import get_workbench_session_payload, save_workbench_session
 
-# 运行时工作空间根（``POST /api/workspace`` 或启动参数设置）
-_active_workspace: Path = Path.cwd().resolve()
+# 运行时工作空间根（``POST /api/workspace`` 或启动参数设置；None = 未配置）
+_active_workspace: Path | None = None
 
 
-def get_workspace() -> Path:
+def get_workspace_or_none() -> Path | None:
+    if _active_workspace is None:
+        return None
     return _active_workspace.expanduser().resolve(strict=False)
 
 
-def set_workspace(path: Path) -> Path:
+def get_workspace() -> Path:
+    ws = get_workspace_or_none()
+    if ws is None:
+        raise HTTPException(
+            status_code=409,
+            detail="未设置工作空间，请先在配置页选择 CAD 项目根目录",
+        )
+    return ws
+
+
+def set_workspace(path: Path | None) -> Path | None:
     global _active_workspace
+    if path is None:
+        _active_workspace = None
+        return None
+    from phoenix.config.user_prefs import is_tool_install_path
+
     p = path.expanduser().resolve(strict=False)
     if not p.is_dir():
         raise ValueError(f"不是有效目录: {p}")
+    if is_tool_install_path(p):
+        raise ValueError(
+            f"不能使用 phoenix-desk-tools 工具目录作为 CAD 工作空间: {p}"
+        )
     _active_workspace = p
     return p
 
@@ -263,6 +290,16 @@ class NavModulesBody(BaseModel):
 class WorkspaceNavModulesBody(BaseModel):
     path: str | None = None
     scope: str | None = None
+    enabled: list[str] | None = None
+
+
+class TestFixturesPrefsBody(BaseModel):
+    checkout_root: str | None = None
+    enabled: list[str] = Field(default_factory=list)
+
+
+class TestFixturesSyncBody(BaseModel):
+    checkout_root: str | None = None
     enabled: list[str] | None = None
 
 
@@ -563,7 +600,7 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
     def api_config_pick_workspace_directory(body: PickDirectoryBody) -> dict:
         try:
             return pick_workspace_directory_via_dialog(
-                current_workspace=get_workspace(),
+                current_workspace=get_workspace_or_none(),
                 path_hint=body.path_hint,
             )
         except ValueError as e:
@@ -577,6 +614,37 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
     @app.post("/api/config/launcher/recent/prune")
     def api_config_launcher_recent_prune() -> dict:
         return prune_recent_workspace_entries()
+
+    @app.post("/api/config/launcher/reset-factory")
+    def api_config_launcher_reset_factory() -> dict:
+        set_workspace(None)
+        return reset_factory_settings()
+
+    @app.get("/api/test-fixtures")
+    def api_test_fixtures_get() -> dict:
+        return test_fixtures_payload()
+
+    @app.put("/api/test-fixtures")
+    def api_test_fixtures_put(body: TestFixturesPrefsBody) -> dict:
+        try:
+            return update_test_fixture_prefs(
+                checkout_root=body.checkout_root,
+                enabled=body.enabled,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post("/api/test-fixtures/sync")
+    def api_test_fixtures_sync(body: TestFixturesSyncBody | None = None) -> dict:
+        b = body or TestFixturesSyncBody()
+        try:
+            return sync_test_fixtures(
+                clone=True,
+                checkout_root=b.checkout_root,
+                enabled=b.enabled,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
     @app.patch("/api/config/launcher/shell-layout")
     def api_config_shell_layout(body: ShellLayoutBody) -> dict:
@@ -648,12 +716,14 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
 
     @app.get("/api/workspace")
     def api_get_workspace() -> dict[str, str]:
-        ws = get_workspace()
+        ws = get_workspace_or_none()
+        if ws is None:
+            return {"path": "", "name": ""}
         return {"path": str(ws), "name": ws.name or str(ws)}
 
     @app.get("/api/onboarding/status")
     def api_onboarding_status() -> dict:
-        return onboarding_status_payload(get_workspace())
+        return onboarding_status_payload(get_workspace_or_none())
 
     @app.get("/api/phoenix/database/status")
     def api_phoenix_database_status() -> dict:
@@ -674,6 +744,11 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         return ws
+
+    @app.delete("/api/workspace")
+    def api_close_workspace() -> dict[str, str]:
+        set_workspace(None)
+        return {"status": "closed"}
 
     @app.get("/api/workbench/session")
     def api_workbench_session_get() -> dict:

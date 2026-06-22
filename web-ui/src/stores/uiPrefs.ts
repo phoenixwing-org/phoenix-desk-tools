@@ -76,5 +76,17 @@ export const useUiPrefsStore = defineStore("uiPrefs", {
       applyColorScheme(scheme);
       this.persist();
     },
+    resetToDefaults() {
+      this.expandControlSizePx = EXPAND_ICON_SIZE_DEFAULT;
+      this.ribbonLayoutMode = "grouped";
+      this.colorScheme = "light";
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
+      applyExpandIconCssVars(this.expandControlSizePx);
+      applyColorScheme(this.colorScheme);
+    },
   },
 });

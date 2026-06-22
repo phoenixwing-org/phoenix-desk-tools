@@ -99,5 +99,14 @@ export const useOnboardingStore = defineStore("onboarding", {
       p.tourVersionSeen = version;
       writePersisted(p);
     },
+    resetLocalState() {
+      this.tourVersionSeen = 0;
+      this.openedFileDetailByWorkspace = {};
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
+    },
   },
 });

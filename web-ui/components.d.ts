@@ -18,6 +18,7 @@ declare module 'vue' {
     ComboTextInput: typeof import('./src/components/ComboTextInput.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']
     ElButton: typeof import('element-plus/es')['ElButton']
+    ElButtonGroup: typeof import('element-plus/es')['ElButtonGroup']
     ElCheckbox: typeof import('element-plus/es')['ElCheckbox']
     ElConfigProvider: typeof import('element-plus/es')['ElConfigProvider']
     ElEmpty: typeof import('element-plus/es')['ElEmpty']
@@ -61,5 +62,8 @@ declare module 'vue' {
     WorksetScopePicker: typeof import('./src/components/WorksetScopePicker.vue')['default']
     XlinkReplaceDialog: typeof import('./src/components/XlinkReplaceDialog.vue')['default']
     XrefQuerySection: typeof import('./src/components/XrefQuerySection.vue')['default']
+  }
+  export interface GlobalDirectives {
+    vLoading: typeof import('element-plus/es')['ElLoadingDirective']
   }
 }

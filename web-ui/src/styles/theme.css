@@ -24,6 +24,10 @@
   --phoenix-bg-toolbar: #ffffff;
   --phoenix-bg-sidebar: #f0f2f6;
   --phoenix-bg-panel-head: #fafbfc;
+  /* 属性面板：组标题深、属性行浅（对齐 FreeCAD） */
+  --phoenix-prop-group-bg: #c5cad3;
+  --phoenix-prop-row-bg: #f5f7fa;
+  --phoenix-prop-row-stripe-bg: #ffffff;
   --phoenix-bg-elevated: #ffffff;
   --phoenix-bg-muted: rgba(15, 23, 42, 0.04);
   --phoenix-bg-welcome-rail: #eceff3;
@@ -82,6 +86,9 @@
   --nav-bg: #e8eaef;
   --sidebar-bg: var(--phoenix-bg-sidebar);
   --panel-head-bg: var(--phoenix-bg-panel-head);
+  --prop-group-bg: var(--phoenix-prop-group-bg);
+  --prop-row-bg: var(--phoenix-prop-row-bg);
+  --prop-row-stripe-bg: var(--phoenix-prop-row-stripe-bg);
   --border: var(--phoenix-border);
   --border-strong: var(--phoenix-border-strong);
   --text: var(--phoenix-text);
@@ -142,6 +149,9 @@
   --phoenix-bg-toolbar: #151b23;
   --phoenix-bg-sidebar: #121820;
   --phoenix-bg-panel-head: #1a222d;
+  --phoenix-prop-group-bg: #0c1016;
+  --phoenix-prop-row-bg: #1a222d;
+  --phoenix-prop-row-stripe-bg: #1e293b;
   --phoenix-bg-elevated: #1a222d;
   --phoenix-bg-muted: rgba(255, 255, 255, 0.04);
   --phoenix-bg-welcome-rail: #121820;

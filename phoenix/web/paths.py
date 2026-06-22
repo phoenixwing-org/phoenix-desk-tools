@@ -60,13 +60,7 @@ def build_web_ui(*, repo: Path | None = None) -> None:
     run_pnpm(["build"], cwd=cwd, check=True)
 
 
-def default_workspace_path() -> Path:
-    try:
-        from phoenix.config.user_prefs import get_recent_workspaces
+def default_workspace_path() -> Path | None:
+    from phoenix.config.user_prefs import resolve_startup_workspace_path
 
-        for p in get_recent_workspaces():
-            if p.is_dir():
-                return p.resolve()
-    except Exception:
-        pass
-    return Path.cwd().resolve()
+    return resolve_startup_workspace_path()

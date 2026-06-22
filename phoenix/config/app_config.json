@@ -139,6 +139,12 @@
       "label": "单元测试",
       "page": "unit_tests",
       "description": "在本机运行 tests/ 下 unittest（Code / CAD / 平台套件）"
+    },
+    {
+      "id": "test_fixtures",
+      "label": "引用测试工程",
+      "page": "test_fixtures",
+      "description": "系统内置开源 C++ 样例；本机 git 检出并链接到 tests/fixtures"
     }
   ],
   "workbench": {
@@ -164,7 +170,8 @@
       "welcome": { "max_tabs": 1 },
       "home": { "max_tabs": 1 },
       "config": { "max_tabs": 1 },
-      "unit_tests": { "max_tabs": 1 }
+      "unit_tests": { "max_tabs": 1 },
+      "test_fixtures": { "max_tabs": 1 }
     }
   }
 }

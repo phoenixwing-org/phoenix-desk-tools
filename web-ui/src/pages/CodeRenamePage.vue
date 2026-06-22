@@ -163,27 +163,31 @@ onMounted(async () => {
 <template>
   <div class="page tool-page code-rename-page">
     <header class="page-head">
-      <div class="head-row">
-        <h1 class="page-title">Code 批量改名</h1>
+      <div class="head-row head-row-toolbar">
+        <div class="head-left">
+          <h1 class="page-title">Code 批量改名</h1>
+        </div>
         <div class="head-actions">
-          <el-button size="small" link type="primary" @click="openIgnorePanel">忽略设定</el-button>
+          <div class="toolbar-group">
+            <el-button size="small" plain @click="openIgnorePanel">忽略设定</el-button>
+          </div>
+          <span class="toolbar-divider" aria-hidden="true" />
+          <div class="toolbar-group">
+            <el-button size="small" :loading="saving" @click="onSavePrefs">保存偏好</el-button>
+            <el-button size="small" :loading="previewing" :disabled="!canRun" @click="onPreview">预览</el-button>
+          </div>
+          <span class="toolbar-divider" aria-hidden="true" />
+          <div class="toolbar-group">
+            <el-button type="primary" size="small" :loading="applying" :disabled="!canRun" @click="onApply">
+              执行改名
+            </el-button>
+          </div>
+        </div>
+        <div class="head-help">
           <PageHelpButton page-id="code_rename" />
         </div>
       </div>
     </header>
-
-    <section class="card action-card">
-      <div class="form-foot">
-        <p class="muted small action-hint">改名规则与扫描范围见侧栏「属性」</p>
-        <div class="settings-actions">
-          <el-button size="small" :loading="saving" @click="onSavePrefs">保存偏好</el-button>
-          <el-button size="small" :loading="previewing" :disabled="!canRun" @click="onPreview">预览</el-button>
-          <el-button type="primary" size="small" :loading="applying" :disabled="!canRun" @click="onApply">
-            执行改名
-          </el-button>
-        </div>
-      </div>
-    </section>
 
     <section class="card results-card">
       <header class="results-head">
@@ -257,11 +261,6 @@ onMounted(async () => {
   gap: 8px 12px;
 }
 
-.form-foot {
-  justify-content: space-between;
-  align-items: center;
-}
-
 .name-row {
   align-items: flex-end;
 }
@@ -297,14 +296,6 @@ onMounted(async () => {
 
 .danger-opt :deep(.el-checkbox__label) {
   color: #b91c1c;
-}
-
-.settings-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-left: auto;
-  flex-shrink: 0;
 }
 
 .ignore-banner {

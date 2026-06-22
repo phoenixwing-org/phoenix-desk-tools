@@ -1,10 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
-import {
-  fetchCodeIgnorePrefs,
-  saveCodeIgnorePrefs,
-  type CodeIgnorePrefs,
-} from "../api";
+import { computed, inject, onMounted, watch } from "vue";
+import { codeIgnoreFormKey } from "../composables/codeIgnoreFormKey";
+import { useCodeIgnoreForm } from "../composables/useCodeIgnoreForm";
 import { useAppShell } from "../composables/useAppShell";
 
 const props = withDefaults(
@@ -16,141 +13,42 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
-  saved: [prefs: CodeIgnorePrefs];
+  saved: [prefs: import("../api").CodeIgnorePrefs];
 }>();
 
 const shell = useAppShell();
 const compact = computed(() => props.layout === "sidebar");
+const injectedForm = inject(codeIgnoreFormKey, null);
+const localForm = injectedForm ? null : useCodeIgnoreForm();
+const form = injectedForm ?? localForm!;
 
-const CONSUMER_LABELS: Record<string, string> = {
-  code_index: "Code 索引",
-  reorder_members: "C++ 成员排序",
-  code_rename: "批量改名",
-  code_uuid: "UUID 替换",
-};
+const {
+  loading,
+  saving,
+  ignoreFileDisplay,
+  ignoreFileExists,
+  ignoreFilePatterns,
+  legacySources,
+  customIgnoreText,
+  ignorePreset,
+  ignorePresets,
+  customLineCount,
+  mergedIgnoreCount,
+  hasProcessSuggestions,
+  processDirSuggestions,
+  loadPrefs,
+  onApplySuggestions,
+  onSave,
+  onApplyPreset,
+} = form;
 
-const loading = ref(false);
-const saving = ref(false);
-
-const ignoreFileDisplay = ref("");
-const ignoreFileExists = ref(false);
-const ignoreFilePatterns = ref<string[]>([]);
-const ignoreBuiltinCount = ref(0);
-const legacySources = ref<Array<{ filename: string; patterns: string[] }>>([]);
-const customIgnoreText = ref("");
-const ignorePreset = ref("");
-const ignorePresets = ref<Array<{ id: string; label: string; patterns: string[] }>>([]);
-const consumers = ref<string[]>([]);
-const processDirSuggestions = ref<
-  Array<{
-    name: string;
-    kind: string;
-    reason: string;
-    repo_rel_path: string;
-    suggested_pattern: string;
-  }>
->([]);
-const processDirsAutoSeeded = ref<string[]>([]);
-
-const hasProcessSuggestions = computed(() => processDirSuggestions.value.length > 0);
-const autoSeedNotice = computed(() => {
-  const seeded = processDirsAutoSeeded.value;
-  if (!seeded.length) return "";
-  return `首次打开已自动加入忽略：${seeded.join("、")}`;
-});
-
-const customLineCount = computed(() =>
-  customIgnoreText.value
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l && !l.startsWith("#")).length,
-);
-const mergedIgnoreCount = computed(
-  () => ignoreBuiltinCount.value + ignoreFilePatterns.value.length + customLineCount.value,
-);
-
-function parseCustomLines(text: string): string[] {
-  return text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l && !l.startsWith("#"));
-}
-
-function applyPrefs(data: CodeIgnorePrefs) {
-  ignoreFileDisplay.value = data.ignore_file_display || data.ignore_file;
-  ignoreFileExists.value = data.ignore_file_exists;
-  ignoreFilePatterns.value = data.ignore_file_patterns || [];
-  ignoreBuiltinCount.value = data.ignore_builtin?.length ?? 0;
-  legacySources.value = data.legacy_ignore_sources || [];
-  customIgnoreText.value = (data.custom_ignore || []).join("\n");
-  ignorePreset.value = data.ignore_preset || "";
-  ignorePresets.value = data.ignore_presets || [];
-  consumers.value = data.consumers || [];
-  processDirSuggestions.value = data.process_dir_suggestions || [];
-  processDirsAutoSeeded.value = data.process_dirs_auto_seeded || [];
-  if (processDirsAutoSeeded.value.length) {
-    shell.setStatus(autoSeedNotice.value);
-  }
-}
-
-async function loadPrefs() {
-  loading.value = true;
-  try {
-    applyPrefs(await fetchCodeIgnorePrefs());
-  } catch (e) {
-    shell.setStatus(String(e));
-  } finally {
-    loading.value = false;
-  }
-}
-
-function onApplySuggestions() {
-  const lines = parseCustomLines(customIgnoreText.value);
-  const seen = new Set(lines.map((l) => l.toLowerCase()));
-  let added = 0;
-  for (const item of processDirSuggestions.value) {
-    const pat = item.suggested_pattern || item.name;
-    if (!pat || seen.has(pat.toLowerCase())) continue;
-    lines.push(pat);
-    seen.add(pat.toLowerCase());
-    added += 1;
-  }
-  if (!added) {
-    shell.setStatus("推荐项已在自定义列表中");
-    return;
-  }
-  customIgnoreText.value = lines.join("\n");
-  shell.setStatus(`已填入 ${added} 条过程目录推荐，保存后生效`);
-}
-
-async function onSave() {
-  saving.value = true;
-  try {
-    const out = await saveCodeIgnorePrefs({
-      custom_ignore: parseCustomLines(customIgnoreText.value),
-      ignore_preset: ignorePreset.value,
-    });
-    applyPrefs(out);
-    shell.setStatus("已保存 Code 忽略配置");
-    emit("saved", out);
-  } catch (e) {
-    shell.setStatus(String(e));
-  } finally {
-    saving.value = false;
-  }
-}
-
-function onApplyPreset() {
-  if (!ignorePreset.value) return;
-  const preset = ignorePresets.value.find((p) => p.id === ignorePreset.value);
-  if (preset?.patterns?.length) {
-    customIgnoreText.value = preset.patterns.join("\n");
-    shell.setStatus(`已填入 ${preset.label} 预设，保存后生效`);
-  }
+async function handleSave() {
+  const out = await onSave();
+  if (out) emit("saved", out);
 }
 
 onMounted(() => {
-  void loadPrefs();
+  if (!injectedForm) void loadPrefs();
 });
 
 watch(
@@ -165,29 +63,13 @@ defineExpose({ reload: loadPrefs });
 
 <template>
   <div class="code-ignore-panel" :class="{ compact }">
-    <header v-if="!compact" class="meta-card card">
-      <p class="meta-line">
-        <span class="section-label">生效范围</span>
-        <span v-for="(id, i) in consumers" :key="id">
-          <span v-if="i"> · </span>{{ CONSUMER_LABELS[id] || id }}
-        </span>
-      </p>
-      <p class="meta-line muted small">
-        合并生效 <strong>{{ mergedIgnoreCount }}</strong> 条（内置 {{ ignoreBuiltinCount }} + 文件
-        {{ ignoreFilePatterns.length }} + 自定义 {{ customLineCount }}）
-        <el-button link type="primary" size="small" :loading="loading" @click="loadPrefs">刷新</el-button>
-      </p>
-    </header>
-
-    <header v-else class="sidebar-head">
-      <span class="sidebar-summary muted small">
-        合并 {{ mergedIgnoreCount }} 条
-      </span>
+    <header v-if="compact" class="sidebar-head">
+      <span class="sidebar-summary muted small"> 合并 {{ mergedIgnoreCount }} 条 </span>
       <div class="sidebar-actions">
         <el-button size="small" :loading="loading" title="重新读取 code.ignore" @click="loadPrefs">
           刷新
         </el-button>
-        <el-button type="primary" size="small" :loading="saving" @click="onSave">保存</el-button>
+        <el-button type="primary" size="small" :loading="saving" @click="handleSave">保存</el-button>
       </div>
     </header>
 
@@ -271,7 +153,7 @@ defineExpose({ reload: loadPrefs });
             placeholder="# 每行一条&#10;ImportedInterfaces"
           />
           <div v-if="!compact" class="panel-actions">
-            <el-button type="primary" size="small" :loading="saving" @click="onSave">保存配置</el-button>
+            <el-button type="primary" size="small" :loading="saving" @click="handleSave">保存配置</el-button>
           </div>
         </div>
       </details>
@@ -306,32 +188,6 @@ defineExpose({ reload: loadPrefs });
   min-height: 0;
   height: 100%;
   font-size: 0.78rem;
-}
-
-.card {
-  padding: 10px 14px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #fff;
-  margin-bottom: 10px;
-}
-
-.section-label {
-  margin-right: 10px;
-  padding-right: 10px;
-  border-right: 2px solid var(--accent);
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--muted);
-}
-
-.meta-line {
-  margin: 0 0 6px;
-  font-size: 0.82rem;
-}
-
-.meta-line:last-child {
-  margin-bottom: 0;
 }
 
 .sidebar-head {

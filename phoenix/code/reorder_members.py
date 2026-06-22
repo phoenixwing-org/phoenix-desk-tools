@@ -34,14 +34,19 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-from dataclasses import dataclass, field, field
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Tuple
 
 from phoenix.code.reorder_avoidance import split_by_avoidance_rules
 from phoenix.code.reorder_ignore import load_ignore_patterns
 from phoenix.code.ignore import is_ignored_name
-from phoenix.code.rename.encoding import choose_write_encoding, detect_and_read, write_text
+from phoenix.code.rename.encoding import (
+    detect_and_read,
+    text_content_equivalent,
+    write_text_if_changed,
+    would_change_on_disk,
+)
 
 # 运行日志 / 摘要中标记「此文件有成员排序变更」（Web 侧栏、CLI 共用）
 CHANGED_LOG_MARK = "✎"
@@ -54,7 +59,7 @@ def format_changed_file_log_line(rel_path: str, *, indent: str = "  ") -> str:
 
 SEP_LINE_RE = re.compile(r"^//-+\s*$", re.MULTILINE)
 ACCESS_RE = re.compile(
-    r"^(\s*)((?:public|private|protected)(?:\s+slots)?|signals)[ \t]*:[ \t]*(?://[^\n]*)?$",
+    r"^(\s*)((?:public|private|protected)(?:\s+slots)?|signals)[ \t]*:[ \t]*(?://[^\r\n]*)?\s*$",
     re.MULTILINE,
 )
 # Optional export / attribute tokens before class name: ExportedByModule ClassName
@@ -566,11 +571,10 @@ def reorder_cpp_file(path: Path, dry_run: bool = False) -> bool | None:
 
     new_body = _rebuild_cpp_blocks(special_blocks, member_blocks)
     new_text = preamble + new_body
-    if new_text == text:
+    if not would_change_on_disk(path, payload, new_text):
         return False
     if not dry_run:
-        out_enc = choose_write_encoding(payload, new_text)
-        write_text(path, new_text, out_enc, had_bom=payload.had_bom)
+        write_text_if_changed(path, payload, new_text)
     return True
 
 
@@ -1467,7 +1471,7 @@ def _sort_section_items(
         result = list(items)
         si = 0
         for i, it in enumerate(items):
-            if it.kind in ("member", "nested"):
+            if it.kind in ("member", "nested", "avoidance", "system_code"):
                 continue
             result[i] = sorted_sortable[si]
             si += 1
@@ -1615,6 +1619,8 @@ def _reorder_class_in_header(
 
     for sec in sections:
         for it in sec.items:
+            if it.kind == "avoidance":
+                continue
             it.kind, it.name = _extract_decl_name(it.text, class_name)
 
     warnings = _collect_doxygen_sort_warnings(sections, class_name)
@@ -1655,14 +1661,15 @@ def reorder_header_file(
     warnings = list(dict.fromkeys(warnings))
 
     collapsed = _collapse_consecutive_blank_lines(new_text)
-    if collapsed != new_text:
-        changed = True
+    if not text_content_equivalent(collapsed, text):
         new_text = collapsed
 
-    if changed and not dry_run:
-        out_enc = choose_write_encoding(payload, new_text)
-        write_text(path, new_text, out_enc, had_bom=payload.had_bom)
-    return changed, warnings
+    if not would_change_on_disk(path, payload, new_text):
+        return False, warnings
+
+    if not dry_run:
+        write_text_if_changed(path, payload, new_text)
+    return True, warnings
 
 
 # ---------------------------------------------------------------------------

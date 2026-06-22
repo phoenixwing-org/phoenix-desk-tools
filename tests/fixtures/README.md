@@ -2,7 +2,7 @@
 
 本目录存放 **pytest 与回归** 用的二进制 / XML 样例，不放说明文档（分析见 [`doc/cad/samples/`](../../doc/cad/samples/)）。
 
-**外链开源 C++ 工程**（KtAlarmClock、PNXCaaStudy）见 **[doc/code/测试工程外链-fixture.md](../../doc/code/测试工程外链-fixture.md)** 与 `external-links.manifest.json`；本机 clone 后运行 `python3 scripts/link_test_fixtures.py` 或启动 Web 时自动尝试链接。
+**外链开源 C++ 工程**（KtAlarmClock、PNXCaaStudy）见 **[doc/code/测试工程外链-fixture.md](../../doc/code/测试工程外链-fixture.md)** 与 [`phoenix/config/test_fixture_catalog.json`](../../phoenix/config/test_fixture_catalog.json)；本机 clone 后运行 `python3 scripts/link_test_fixtures.py` 或 Web 勾选后自动链接。
 
 ## 布局
 

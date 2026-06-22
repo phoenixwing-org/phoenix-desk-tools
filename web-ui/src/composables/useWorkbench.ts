@@ -192,6 +192,21 @@ export function createWorkbench(appConfig: Ref<AppConfig | null>) {
     return true;
   }
 
+  function toolTabDirtyTitles(): string[] {
+    const out: string[] = [];
+    for (const tab of tabs.value) {
+      if (tab.pageId === "home") continue;
+      const api = getPageSession(tab.id);
+      if (api?.isDirty() ?? tab.dirty) out.push(tab.title);
+    }
+    return out;
+  }
+
+  function discardAllToolTabs(): void {
+    tabs.value = [];
+    activeTabId.value = "";
+  }
+
   function ensureInitialTab(pageId: string): void {
     if (!tabs.value.length) {
       openTab({ pageId });
@@ -275,6 +290,8 @@ export function createWorkbench(appConfig: Ref<AppConfig | null>) {
     canOpenNewTab,
     closeTab,
     closeAllTabs,
+    toolTabDirtyTitles,
+    discardAllToolTabs,
     ensureInitialTab,
     consumeTabPageState,
     restoreSession,

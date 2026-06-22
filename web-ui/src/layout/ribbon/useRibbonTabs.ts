@@ -1,11 +1,15 @@
 import { computed, ref, watch, type Ref } from "vue";
 import type { NavItem } from "../../types/config";
+import type { ModuleScope } from "../../constants/moduleScope";
+import { ribbonTabIdForModuleScope } from "../../utils/moduleScopeNavigation";
 import { RIBBON_SHELL_TAB_ID, RIBBON_TABS, type RibbonTabDef } from "./ribbonConfig";
+import { WORKBENCH_IDLE_PAGE } from "../../constants/workbench";
 
 export function useRibbonTabs(options: {
   navigation: Ref<NavItem[]>;
   currentPage: Ref<string>;
   enabledModules: Ref<string[]>;
+  workbenchFocusScope?: Ref<ModuleScope>;
 }) {
   const activeTab = ref(RIBBON_SHELL_TAB_ID);
 
@@ -37,6 +41,16 @@ export function useRibbonTabs(options: {
   watch(
     options.currentPage,
     (page) => {
+      if (page === WORKBENCH_IDLE_PAGE && options.workbenchFocusScope) {
+        const tabId = ribbonTabIdForModuleScope(
+          options.workbenchFocusScope.value,
+          options.enabledModules.value,
+        );
+        if (visibleTabs.value.some((t) => t.id === tabId)) {
+          activeTab.value = tabId;
+        }
+        return;
+      }
       const nav = options.navigation.value.find((n) => n.page === page);
       const mod = nav?.module;
       if (mod) {
@@ -46,12 +60,24 @@ export function useRibbonTabs(options: {
         page === "welcome" ||
         page === "home" ||
         page === "config" ||
-        page === "unit_tests"
+        page === "unit_tests" ||
+        page === "test_fixtures"
       ) {
         activeTab.value = RIBBON_SHELL_TAB_ID;
       }
     },
     { immediate: true },
+  );
+
+  watch(
+    () => options.workbenchFocusScope?.value,
+    (scope) => {
+      if (options.currentPage.value !== WORKBENCH_IDLE_PAGE || !scope) return;
+      const tabId = ribbonTabIdForModuleScope(scope, options.enabledModules.value);
+      if (visibleTabs.value.some((t) => t.id === tabId)) {
+        activeTab.value = tabId;
+      }
+    },
   );
 
   return { activeTab, visibleTabs, activeTabDef };

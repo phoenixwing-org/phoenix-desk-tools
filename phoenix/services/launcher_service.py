@@ -18,6 +18,7 @@ from phoenix.config.user_prefs import (
     prune_recent_workspaces,
     record_recent_workspace,
     remove_recent_workspace,
+    reset_launcher_prefs_to_factory,
     save_launcher_freecad_dir,
     save_launcher_nav_modules,
     save_launcher_shell_layout,
@@ -130,9 +131,15 @@ def update_workspace_nav_modules(
 
 
 def activate_workspace(path: Path) -> dict[str, str]:
+    from phoenix.config.user_prefs import is_tool_install_path
+
     p = path.expanduser().resolve(strict=False)
     if not p.is_dir():
         raise ValueError(f"不是有效目录: {p}")
+    if is_tool_install_path(p):
+        raise ValueError(
+            f"不能使用 phoenix-desk-tools 工具目录作为 CAD 工作空间: {p}"
+        )
     record_recent_workspace(p)
     nav = load_workspace_nav_modules(p)
     return {
@@ -156,7 +163,7 @@ def add_recent_workspace_entry(path: str) -> dict[str, Any]:
 
 def pick_workspace_directory_via_dialog(
     *,
-    current_workspace: Path,
+    current_workspace: Path | None,
     path_hint: str = "",
 ) -> dict[str, Any]:
     """本机原生选目录（配置页「浏览…」）。"""
@@ -165,7 +172,7 @@ def pick_workspace_directory_via_dialog(
         resolve_directory_dialog_initialdir,
     )
 
-    hint = (path_hint or "").strip() or str(current_workspace)
+    hint = (path_hint or "").strip()
     initial = resolve_directory_dialog_initialdir(current_workspace, path_hint=hint)
     sel = pick_directory_isolated(
         title="选择工作空间根目录",
@@ -194,3 +201,9 @@ def prune_recent_workspace_entries() -> dict[str, Any]:
     payload = launcher_prefs_payload()
     payload["pruned_count"] = removed
     return payload
+
+
+def reset_factory_settings() -> dict[str, Any]:
+    """恢复本机 launcher 出厂默认；不删除工作空间磁盘上的 ``.phoenix`` 数据。"""
+    reset_launcher_prefs_to_factory()
+    return launcher_prefs_payload()

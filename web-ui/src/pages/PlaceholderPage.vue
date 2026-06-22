@@ -11,12 +11,16 @@ const pageId = computed(() => shell.currentPage.value);
 
 <template>
   <div class="page placeholder">
-    <div class="title-row">
-      <h1 class="page-title">{{ item?.label ?? pageId }}</h1>
-      <div class="head-help">
-        <PageHelpButton :page-id="pageId" />
+    <header class="page-head">
+      <div class="head-row head-row-toolbar">
+        <div class="head-left">
+          <h1 class="page-title">{{ item?.label ?? pageId }}</h1>
+        </div>
+        <div class="head-help">
+          <PageHelpButton :page-id="pageId" />
+        </div>
       </div>
-    </div>
+    </header>
     <el-empty :image-size="80">
       <template #description>
         <p class="desc">{{ item?.description ?? "功能开发中" }}</p>
@@ -36,10 +40,6 @@ const pageId = computed(() => shell.currentPage.value);
   width: 100%;
   box-sizing: border-box;
   padding: 32px 28px;
-}
-
-.title-row {
-  margin-bottom: 8px;
 }
 
 .page-title {

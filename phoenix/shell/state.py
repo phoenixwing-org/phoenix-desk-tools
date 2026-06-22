@@ -1,4 +1,4 @@
-"""应用级共享状态（路径等）。工作空间根 (`repo_root`) 与 cwd，不使用 Python/包安装路径。"""
+"""应用级共享状态（路径等）。工作空间根与工具安装目录分离。"""
 
 from __future__ import annotations
 
@@ -8,13 +8,15 @@ from pathlib import Path
 
 @dataclass
 class AppState:
-    # 请在工具条中选择工作空间（项目/CAD）根；首轮默认为当前工作目录（运行前可 cd 到项目根）
-    repo_root: Path = field(default_factory=lambda: Path.cwd().resolve())
+    # 用户 CAD 工作空间根；未配置时为 None（浏览对话框默认「文档」）
+    repo_root: Path | None = None
     freecad_dir: Path | None = None
     last_log: str = ""
 
-    def default_freecad_dir(self) -> Path:
-        """仅优先用户已选的 FreeCAD 目录，否则退回仓库根（不做子目录猜测）。"""
+    def default_freecad_dir(self) -> Path | None:
+        """优先用户已选的 FreeCAD 目录，否则 None。"""
         if self.freecad_dir and self.freecad_dir.is_dir():
             return self.freecad_dir
-        return self.repo_root.expanduser().resolve()
+        if self.repo_root and self.repo_root.is_dir():
+            return self.repo_root.expanduser().resolve()
+        return None

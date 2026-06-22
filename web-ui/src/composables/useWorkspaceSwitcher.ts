@@ -26,6 +26,10 @@ export function useWorkspaceSwitcher(shell?: AppShellContext) {
     }
   }
 
+  async function closeCurrentWorkspace() {
+    return ctx.requestCloseWorkspace();
+  }
+
   async function removeRecent(path: string, event: MouseEvent) {
     event.stopPropagation();
     if (!window.confirm(`从最近列表中移除？\n\n${path}`)) return;
@@ -49,5 +53,6 @@ export function useWorkspaceSwitcher(shell?: AppShellContext) {
     pickRecent,
     removeRecent,
     openConfig,
+    closeCurrentWorkspace,
   };
 }

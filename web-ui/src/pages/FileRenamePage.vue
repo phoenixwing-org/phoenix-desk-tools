@@ -483,11 +483,10 @@ onUnmounted(() => {
 <template>
   <div class="page rename-page">
     <header class="page-head">
-      <div class="head-row">
-        <h1 class="page-title">改名分析</h1>
-        <p class="page-desc">
-          针对已发生的改名，分析引用影响并写回 XLink / 引用名。磁盘改名请在<strong>文件详情 · 改名</strong> Tab。
-        </p>
+      <div class="head-row head-row-toolbar">
+        <div class="head-left">
+          <h1 class="page-title">改名分析</h1>
+        </div>
         <div class="head-help">
           <PageHelpButton page-id="file_rename" />
         </div>

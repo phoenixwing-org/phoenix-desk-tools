@@ -238,23 +238,22 @@ onUnmounted(() => {
 <template>
   <div class="page bom-list-page">
     <header class="page-head">
-      <div class="head-row">
+      <div class="head-row head-row-toolbar">
         <div class="head-left">
           <h1 class="page-title">BOM 列表</h1>
         </div>
-        <div class="head-trailing">
+        <div class="head-actions">
           <el-button
             size="small"
-            class="head-rebuild"
             :loading="rebuilding"
             title="仅重读各 FCStd 的 XLink 并刷新引用表，不重扫 CAD 索引属性。"
             @click="onRebuild"
           >
             仅重建引用表
           </el-button>
-          <div class="head-help">
-            <PageHelpButton page-id="bom_export" />
-          </div>
+        </div>
+        <div class="head-help">
+          <PageHelpButton page-id="bom_export" />
         </div>
       </div>
     </header>
@@ -375,7 +374,6 @@ onUnmounted(() => {
       <section v-if="shell.workspacePath" class="settings-block project-block">
         <h2 class="block-title">当前工程</h2>
         <p class="block-desc mono">工作区：{{ shell.workspacePath }}</p>
-        <p class="hint">引用边、宿主、上次更新等见侧栏<strong>属性</strong>。</p>
       </section>
       <section class="settings-block">
         <h2 class="block-title">总成列表</h2>

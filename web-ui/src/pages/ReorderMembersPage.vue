@@ -5,7 +5,6 @@ import {
   fetchReorderMembersPrefs,
   fetchReorderMembersTopLevel,
   runReorderMembers,
-  runReorderMembersSelfTest,
   saveReorderMembersPrefs,
   type ReorderMembersEntry,
 } from "../api";
@@ -41,7 +40,6 @@ const ignoredModalOpen = ref(false);
 const loading = ref(false);
 const saving = ref(false);
 const running = ref(false);
-const selfTesting = ref(false);
 const loadError = ref("");
 
 const selectedCount = computed(() => pageStore.selectedCount);
@@ -130,27 +128,6 @@ async function onSave() {
   }
 }
 
-async function onSelfTest() {
-  selfTesting.value = true;
-  shell.appendLog("[C++ 成员排序] 锁定段回归自检…", { source: "reorder_members", open: true });
-  try {
-    const out = await runReorderMembersSelfTest();
-    shell.appendLog(out.summary, { source: "reorder_members" });
-    for (const c of out.cases) {
-      if (!c.pass) {
-        shell.appendLog(`  ✗ ${c.id}: ${c.message}`, { source: "reorder_members" });
-      } else if (c.skipped) {
-        shell.appendLog(`  ○ ${c.id}: ${c.message}`, { source: "reorder_members" });
-      }
-    }
-    shell.setStatus(out.summary);
-  } catch (e) {
-    shell.appendLog(String(e), { source: "reorder_members" });
-    shell.setStatus(String(e));
-  } finally {
-    selfTesting.value = false;
-  }
-}
 
 function toggleEntry(name: string, checked: boolean) {
   pageStore.toggleSelected(name, checked);
@@ -234,30 +211,31 @@ watch(
 <template>
   <div class="page tool-page reorder-page">
     <header class="page-head">
-      <div class="head-row">
-        <h1 class="page-title">C++ 成员排序</h1>
+      <div class="head-row head-row-toolbar">
+        <div class="head-left">
+          <h1 class="page-title">C++ 成员排序</h1>
+        </div>
         <div class="head-actions">
-          <el-button
-            size="small"
-            :loading="selfTesting"
-            title="跑内置 fixture 锁定段用例，不扫描工作空间"
-            @click="onSelfTest"
-          >
-            回归自检
-          </el-button>
-          <el-button size="small" :loading="saving" @click="onSave">保存偏好</el-button>
-          <el-button size="small" :loading="running" :disabled="!selectedCount" @click="onRun(true)">
-            预检
-          </el-button>
-          <el-button
-            type="primary"
-            size="small"
-            :loading="running"
-            :disabled="!selectedCount"
-            @click="onRun(false)"
-          >
-            执行排序
-          </el-button>
+          <div class="toolbar-group">
+            <el-button size="small" :loading="saving" @click="onSave">保存偏好</el-button>
+            <el-button size="small" :loading="running" :disabled="!selectedCount" @click="onRun(true)">
+              预检
+            </el-button>
+          </div>
+          <span class="toolbar-divider" aria-hidden="true" />
+          <div class="toolbar-group">
+            <el-button
+              type="primary"
+              size="small"
+              :loading="running"
+              :disabled="!selectedCount"
+              @click="onRun(false)"
+            >
+              执行排序
+            </el-button>
+          </div>
+        </div>
+        <div class="head-help">
           <PageHelpButton page-id="reorder_members" />
         </div>
       </div>
@@ -281,7 +259,7 @@ watch(
           <el-button v-if="ignoredCount" size="small" @click="ignoredModalOpen = true">
             已忽略 {{ ignoredCount }}
           </el-button>
-          <el-button size="small" link type="primary" @click="openIgnorePanel">忽略设定</el-button>
+          <el-button size="small" plain @click="openIgnorePanel">忽略设定</el-button>
         </div>
       </div>
 

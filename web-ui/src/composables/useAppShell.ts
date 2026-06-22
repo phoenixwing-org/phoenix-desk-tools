@@ -2,6 +2,7 @@ import { computed, inject, provide, ref, shallowRef, watch, type InjectionKey, t
 import type { BomFields } from "../api";
 import type { AppConfig, LauncherPrefs, NavItem, ShellLayout, WorkspaceNavModules } from "../types/config";
 import {
+  closeWorkspaceApi,
   fetchAppConfig,
   fetchLauncherPrefs,
   fetchShellLog,
@@ -9,6 +10,7 @@ import {
   getWorkspace,
   patchShellLayout,
   patchWorkspaceNavModules,
+  resetLauncherFactory,
   setWorkspace,
 } from "../api";
 import { collectPageStates } from "./usePageSession";
@@ -23,11 +25,17 @@ import {
 import { parseShellUrl, replaceShellUrl, type ShellUrlIntent } from "../utils/shellUrlSync";
 import { useOnboardingStore } from "../stores/onboarding";
 import { useFileWorksetsStore } from "../stores/fileWorksets";
+import { useUiPrefsStore } from "../stores/uiPrefs";
+import { clearPhoenixBrowserStorage } from "../utils/phoenixBrowserStorage";
+import { confirmCloseWorkspace } from "./tabCloseConfirm";
 import type { ModuleScope } from "../constants/moduleScope";
+import { WORKBENCH_IDLE_PAGE } from "../constants/workbench";
+import { runShellTour } from "./useShellTour";
 import {
-  defaultPageForModuleScope,
   resolveTabForModuleScope,
 } from "../utils/moduleScopeNavigation";
+
+export { WORKBENCH_IDLE_PAGE };
 
 /** 返回 false 表示当前 Tab 未接管此次树点击，由 shell 回退打开文件详情 */
 export type TreeSelectHandler = (rel: string) => void | boolean | Promise<void | boolean>;
@@ -59,15 +67,20 @@ export type AppShellContext = {
   appConfig: Ref<AppConfig | null>;
   launcher: Ref<LauncherPrefs | null>;
   workspacePath: Ref<string>;
-  /** 当前激活 Tab 的 pageId */
+  /** 当前激活 Tab 的 pageId；无 Tab 时为 workbench_idle */
   currentPage: Ref<string>;
+  /** 无打开页面时 Ribbon 所聚焦的模块范围 */
+  workbenchFocusScope: Ref<ModuleScope>;
   navHover: Ref<string | null>;
   shellLayout: Ref<ShellLayout>;
   currentNavItem: Ref<NavItem | undefined>;
   statusText: Ref<string>;
+  /** 当前页提供的只读摘要（如索引统计），显示在底栏 */
+  pageSummary: Ref<string>;
   logText: Ref<string>;
   logSource: Ref<string | null>;
   setStatus: (msg: string) => void;
+  setPageSummary: (msg: string) => void;
   appendLog: (text: string, opts?: LogAppendOptions) => void;
   clearLog: () => void;
   setLogOpen: (open: boolean) => void;
@@ -78,7 +91,7 @@ export type AppShellContext = {
   closeConfig: () => void;
   goToPage: (pageId: string) => void;
   canNavigateToPage: (pageId: string) => boolean;
-  /** 打开主页并滚动到新手指南区块 */
+  /** 进入工作台并开始界面巡游（driver.js 逐步介绍壳层） */
   openOnboardingGuide: () => void;
   scrollToGuideToken: Ref<number>;
   openPartKeyDetail: (
@@ -105,7 +118,13 @@ export type AppShellContext = {
   ) => void;
   openRenameAnalysis: (opts?: PendingRenameAnalysis) => void;
   switchWorkspace: (path: string) => Promise<void>;
-  /** 离开欢迎页，进入 Ribbon 工作台；按模块范围定位 Tab 或默认工具页 */
+  openToolTabCount: () => number;
+  toolTabDirtyTitles: () => string[];
+  discardAllToolTabs: () => void;
+  closeWorkspace: (opts?: { skipTabCheck?: boolean }) => Promise<void>;
+  requestCloseWorkspace: () => Promise<boolean>;
+  resetToFactorySettings: () => Promise<void>;
+  /** 离开欢迎页，进入 Ribbon 工作台；按模块范围定位 Ribbon，不自动打开工具页 */
   enterWorkbenchFromWelcome: (opts?: { scope?: ModuleScope }) => Promise<void>;
   persistShellLayout: (patch: Partial<ShellLayout>) => Promise<void>;
   enabledNavModules: Ref<string[]>;
@@ -200,7 +219,7 @@ function normalizeShellLayout(partial?: Partial<ShellLayout>): ShellLayout {
   return merged;
 }
 
-const NAV_ALWAYS_VISIBLE = new Set(["welcome", "home", "config", "unit_tests"]);
+const NAV_ALWAYS_VISIBLE = new Set(["welcome", "home", "config", "unit_tests", "test_fixtures"]);
 
 /** 不在 navigation 中、但属于某模块的 Tab 页 */
 const PAGE_MODULE_FALLBACK: Record<string, string> = {
@@ -243,6 +262,7 @@ export function provideAppShell(): AppShellContext {
   const navHover = ref<string | null>(null);
   const shellLayout = ref<ShellLayout>(normalizeShellLayout());
   const statusText = ref("");
+  const pageSummary = ref("");
   const logText = ref("");
   const logSource = ref<string | null>(null);
   const logAutoOpenSuppressed = ref(false);
@@ -253,6 +273,7 @@ export function provideAppShell(): AppShellContext {
   const scrollToGuideToken = ref(0);
   const configOverlayOpen = ref(false);
   const showWelcomeScreen = ref(true);
+  const workbenchFocusScope = ref<ModuleScope>("all");
 
   function openWelcome() {
     showWelcomeScreen.value = true;
@@ -309,7 +330,7 @@ export function provideAppShell(): AppShellContext {
         wb.activeTabId.value = rest[0]!.id;
         leaveWelcomeForWorkbench();
       } else {
-        openWelcome();
+        stayInWorkbenchIdle();
       }
     }
     syncDetailTabMaps();
@@ -340,8 +361,18 @@ export function provideAppShell(): AppShellContext {
       wb.activeTabId.value = rest[0]?.id ?? "";
     }
     if (!wb.tabs.value.length) {
-      openWelcome();
+      stayInWorkbenchIdle();
     }
+  }
+
+  function stayInWorkbenchIdle() {
+    if (!workspacePath.value || !onboarding.workspaceOk) {
+      openWelcome();
+      return;
+    }
+    leaveWelcomeForWorkbench();
+    wb.activeTabId.value = "";
+    focusWorkbenchForModuleScope(workbenchFocusScope.value);
   }
 
   function openConfig() {
@@ -454,7 +485,7 @@ export function provideAppShell(): AppShellContext {
   const currentPage = computed(() =>
     showWelcomeScreen.value
       ? "welcome"
-      : (wb.activeTab()?.pageId ?? defaultPageForModuleScope("all", enabledNavModules.value)),
+      : (wb.activeTab()?.pageId ?? WORKBENCH_IDLE_PAGE),
   );
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let persistenceReady = false;
@@ -473,6 +504,14 @@ export function provideAppShell(): AppShellContext {
   function setStatus(msg: string) {
     statusText.value = msg;
   }
+
+  function setPageSummary(msg: string) {
+    pageSummary.value = msg;
+  }
+
+  watch(currentPage, () => {
+    pageSummary.value = "";
+  });
 
   function appendLog(text: string, opts?: LogAppendOptions) {
     if (!text) return;
@@ -508,11 +547,6 @@ export function provideAppShell(): AppShellContext {
     await persistShellLayout({ properties_panel_open: open });
   }
 
-  function openOnboardingGuide() {
-    goToPage("home");
-    scrollToGuideToken.value += 1;
-  }
-
   function goToPage(pageId: string) {
     const id = normalizePageId(pageId);
     if (id === "welcome") {
@@ -525,8 +559,7 @@ export function provideAppShell(): AppShellContext {
     }
     leaveWelcomeForWorkbench();
     if (!isPageModuleVisible(id)) {
-      setStatus("该功能模块已在主页关闭");
-      wb.navigateToPage(defaultPageForModuleScope("all", enabledNavModules.value));
+      setStatus("该功能模块已关闭");
       navHover.value = null;
       return;
     }
@@ -710,11 +743,82 @@ export function provideAppShell(): AppShellContext {
     setStatus(`工作空间: ${ws.path}`);
   }
 
-  function pickDefaultWorkbenchPage(): string {
-    return defaultPageForModuleScope("all", enabledNavModules.value);
+  function openToolTabCount(): number {
+    return wb.tabs.value.filter((t) => t.pageId !== "home").length;
+  }
+
+  function clearWorkbenchAfterWorkspaceClose() {
+    wb.tabs.value = [];
+    wb.activeTabId.value = "";
+    treeHandlersByTab.clear();
+    fileDetailTabByRel.clear();
+    partKeyTabByKey.clear();
+    treeSelectHandler.value = null;
+    syncShellUrl();
+  }
+
+  async function closeWorkspace(opts?: { skipTabCheck?: boolean }) {
+    if (!workspacePath.value) {
+      setStatus("当前未打开工作空间");
+      return;
+    }
+    if (!opts?.skipTabCheck) {
+      const n = openToolTabCount();
+      if (n > 0) {
+        throw new Error(`请先关闭 ${n} 个工具 Tab（可保留「主页」）。`);
+      }
+    }
+    flushWorkbenchSession({ force: true });
+    await closeWorkspaceApi();
+    workspacePath.value = "";
+    clearWorkbenchAfterWorkspaceClose();
+    await reloadLauncher();
+    await onboarding.refreshStatus();
+    openWelcome();
+    setStatus("已关闭工作空间");
+  }
+
+  async function requestCloseWorkspace(): Promise<boolean> {
+    if (!workspacePath.value) {
+      setStatus("当前未打开工作空间");
+      return false;
+    }
+    const n = openToolTabCount();
+    const decision = await confirmCloseWorkspace(n, wb.toolTabDirtyTitles());
+    if (!decision) return false;
+    if (decision === "close_all") {
+      wb.discardAllToolTabs();
+    }
+    await closeWorkspace({ skipTabCheck: true });
+    return true;
+  }
+
+  async function resetToFactorySettings() {
+    const n = openToolTabCount();
+    if (n > 0) {
+      throw new Error(`请先关闭 ${n} 个工具 Tab（可保留「主页」），再恢复初始状态。`);
+    }
+    if (workspacePath.value) {
+      await closeWorkspace();
+    } else {
+      await closeWorkspaceApi().catch(() => undefined);
+      workspacePath.value = "";
+      clearWorkbenchAfterWorkspaceClose();
+    }
+    await resetLauncherFactory();
+    clearPhoenixBrowserStorage();
+    onboarding.resetLocalState();
+    useUiPrefsStore().resetToDefaults();
+    await reloadLauncher();
+    shellLayout.value = normalizeShellLayout(launcher.value?.shell_layout);
+    await onboarding.refreshStatus();
+    openWelcome();
+    openConfig();
+    setStatus("已恢复为初始安装状态");
   }
 
   function focusWorkbenchForModuleScope(scope: ModuleScope) {
+    workbenchFocusScope.value = scope;
     const tabId = resolveTabForModuleScope(
       wb.tabs.value,
       wb.activeTabId.value,
@@ -725,7 +829,7 @@ export function provideAppShell(): AppShellContext {
       wb.activateTab(tabId);
       return;
     }
-    goToPage(defaultPageForModuleScope(scope, enabledNavModules.value));
+    wb.activeTabId.value = "";
   }
 
   async function enterWorkbenchFromWelcome(opts?: { scope?: ModuleScope }) {
@@ -771,7 +875,8 @@ export function provideAppShell(): AppShellContext {
     const snap = await loadWorkbenchSession(workspacePath.value);
     if (snap && wb.restoreSession(snap)) {
       if (!wb.tabs.value.length) {
-        openWelcome();
+        leaveWelcomeForWorkbench();
+        focusWorkbenchForModuleScope("all");
         return false;
       }
       leaveWelcomeForWorkbench();
@@ -785,6 +890,11 @@ export function provideAppShell(): AppShellContext {
       wb.ensureInitialTab(page);
       return true;
     }
+    if (workspacePath.value && onboarding.workspaceOk) {
+      leaveWelcomeForWorkbench();
+      focusWorkbenchForModuleScope("all");
+      return false;
+    }
     openWelcome();
     return false;
   }
@@ -792,7 +902,7 @@ export function provideAppShell(): AppShellContext {
   async function closeTab(tabId: string): Promise<boolean> {
     const ok = await wb.closeTab(tabId);
     if (ok && !wb.tabs.value.length) {
-      openWelcome();
+      stayInWorkbenchIdle();
     }
     return ok;
   }
@@ -800,7 +910,7 @@ export function provideAppShell(): AppShellContext {
   async function closeAllTabs(): Promise<boolean> {
     const ok = await wb.closeAllTabs();
     if (ok) {
-      openWelcome();
+      stayInWorkbenchIdle();
     }
     return ok;
   }
@@ -863,8 +973,13 @@ export function provideAppShell(): AppShellContext {
     const updated = await patchWorkspaceNavModules({ enabled });
     applyWorkspaceNavModules(updated);
     const active = wb.activeTab()?.pageId;
-    if (active && active !== "home" && !isPageModuleVisible(active)) {
-      wb.navigateToPage(defaultPageForModuleScope("all", enabledNavModules.value));
+    if (active && !isPageModuleVisible(active)) {
+      wb.tabs.value = wb.tabs.value.filter((t) => isPageModuleVisible(t.pageId));
+      const next = wb.tabs.value.find((t) => t.id === wb.activeTabId.value) ?? wb.tabs.value[0];
+      wb.activeTabId.value = next?.id ?? "";
+      if (!wb.tabs.value.length) {
+        stayInWorkbenchIdle();
+      }
     }
   }
 
@@ -1064,6 +1179,11 @@ export function provideAppShell(): AppShellContext {
       }
     } else if (sessionRestored) {
       leaveWelcomeForWorkbench();
+    } else if (workspacePath.value && onboarding.workspaceOk) {
+      leaveWelcomeForWorkbench();
+      if (!wb.tabs.value.length) {
+        focusWorkbenchForModuleScope("all");
+      }
     }
 
     if (!onboarding.workspaceOk) {
@@ -1087,13 +1207,16 @@ export function provideAppShell(): AppShellContext {
     launcher,
     workspacePath,
     currentPage,
+    workbenchFocusScope,
     navHover,
     shellLayout,
     currentNavItem,
     statusText,
+    pageSummary,
     logText,
     logSource,
     setStatus,
+    setPageSummary,
     appendLog,
     clearLog,
     setLogOpen,
@@ -1103,7 +1226,9 @@ export function provideAppShell(): AppShellContext {
     closeConfig,
     goToPage,
     canNavigateToPage,
-    openOnboardingGuide,
+    openOnboardingGuide: () => {
+      void runShellTour(ctx, true);
+    },
     scrollToGuideToken,
     openPartKeyDetail,
     openBomApplyForRel,
@@ -1112,6 +1237,12 @@ export function provideAppShell(): AppShellContext {
     openFileRenameForRel,
     openRenameAnalysis,
     switchWorkspace,
+    openToolTabCount,
+    toolTabDirtyTitles: () => wb.toolTabDirtyTitles(),
+    discardAllToolTabs: () => wb.discardAllToolTabs(),
+    closeWorkspace,
+    requestCloseWorkspace,
+    resetToFactorySettings,
     enterWorkbenchFromWelcome,
     persistShellLayout,
     enabledNavModules,

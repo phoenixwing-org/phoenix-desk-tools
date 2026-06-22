@@ -172,6 +172,26 @@ class TestUserPrefs(unittest.TestCase):
             self.assertTrue(migrated.is_file())
             self.assertEqual(migrated.name, prefs.WORKSPACE_PREFS_BASENAME)
 
+    def test_reset_launcher_prefs_to_factory(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            launcher = Path(td) / "launcher.json"
+            launcher.write_text(
+                json.dumps(
+                    {
+                        "version": 2,
+                        "recent_workspaces": ["/tmp/ws"],
+                        "freecad_dir": "/Applications/FreeCAD.app",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with _patch_launcher_storage(launcher):
+                prefs.record_recent_workspace(self._mk_test_ws("x"))
+                prefs.reset_launcher_prefs_to_factory()
+                data = prefs.load_launcher_prefs()
+            self.assertEqual(data.get("recent_workspaces"), [])
+            self.assertIsNone(data.get("freecad_dir"))
+
     def test_apply_launcher_sets_recent_repo(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             repo = self._mk_test_ws("apply_proj")
@@ -180,13 +200,68 @@ class TestUserPrefs(unittest.TestCase):
                 json.dumps({"version": 2, "recent_workspaces": [str(repo)]}),
                 encoding="utf-8",
             )
-            state = AppState(repo_root=Path(td))
+            state = AppState()
             try:
                 with _patch_launcher_storage(launcher):
                     prefs.apply_launcher_prefs_to_state(state)
                 self.assertEqual(state.repo_root, repo.resolve())
             finally:
                 repo.rmdir()
+
+    def test_is_tool_install_path(self) -> None:
+        root = prefs.tool_repo_root()
+        self.assertTrue(prefs.is_tool_install_path(root))
+        with tempfile.TemporaryDirectory() as td:
+            self.assertFalse(prefs.is_tool_install_path(Path(td)))
+
+    def test_record_recent_skips_tool_repo(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            launcher = Path(td) / "launcher.json"
+            try:
+                with _patch_launcher_storage(launcher):
+                    prefs.record_recent_workspace(prefs.tool_repo_root())
+                    data = prefs.load_launcher_prefs()
+                self.assertEqual(data.get("recent_workspaces"), [])
+            finally:
+                pass
+
+    def test_resolve_startup_workspace_skips_tool_repo(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            launcher = Path(td) / "launcher.json"
+            launcher.write_text(
+                json.dumps(
+                    {
+                        "version": 2,
+                        "recent_workspaces": [str(prefs.tool_repo_root())],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with _patch_launcher_storage(launcher):
+                self.assertIsNone(prefs.resolve_startup_workspace_path())
+
+    def test_load_launcher_prefs_reads_test_fixtures(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            launcher = Path(td) / "launcher.json"
+            checkout = Path(td) / "checkout"
+            checkout.mkdir()
+            launcher.write_text(
+                json.dumps(
+                    {
+                        "version": 2,
+                        "test_fixtures": {
+                            "checkout_root": str(checkout),
+                            "enabled": ["KtAlarmClock", "PNXCaaStudy"],
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with _patch_launcher_storage(launcher):
+                data = prefs.load_launcher_prefs()
+            block = data.get("test_fixtures") or {}
+            self.assertEqual(block.get("checkout_root"), str(checkout))
+            self.assertEqual(block.get("enabled"), ["KtAlarmClock", "PNXCaaStudy"])
 
 
 class TestLauncherPaths(unittest.TestCase):

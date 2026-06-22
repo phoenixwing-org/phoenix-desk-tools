@@ -229,7 +229,12 @@ class HomePage(BasePage):
 
     def _refresh_recent_menu(self) -> None:
         recent = get_recent_workspaces()
-        current = self.state.repo_root.expanduser().resolve()
+        current = self.state.repo_root
+        if current is not None:
+            try:
+                current = current.expanduser().resolve()
+            except (OSError, RuntimeError):
+                current = None
         self._recent_path_map.clear()
 
         if not recent:
@@ -253,7 +258,7 @@ class HomePage(BasePage):
             return
 
         self._recent_menu.configure(values=labels, state="normal")
-        cur_label = format_absolute_config_path(current)
+        cur_label = format_absolute_config_path(current) if current else ""
         self._recent_var.set(cur_label if cur_label in labels else labels[0])
 
     def _on_recent_picked(self, choice: str) -> None:
@@ -269,7 +274,7 @@ class HomePage(BasePage):
             messagebox.showwarning("工作空间", "目录不存在或不可访问。", parent=self)
             self._refresh_recent_menu()
             return
-        if path == self.state.repo_root.expanduser().resolve():
+        if path == current:
             return
 
         set_active_workspace(path, self.state)
@@ -335,7 +340,11 @@ class HomePage(BasePage):
         if not rp.is_dir():
             messagebox.showerror("保存", "工作空间路径无效。", parent=self)
             return
-        set_active_workspace(rp, self.state)
+        try:
+            set_active_workspace(rp, self.state)
+        except ValueError as exc:
+            messagebox.showerror("保存", str(exc), parent=self)
+            return
 
         if fc_s:
             fp = Path(fc_s).expanduser().resolve()

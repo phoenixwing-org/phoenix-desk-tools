@@ -1,10 +1,19 @@
-# 测试工程外链（fixture symlink）
+# 测试工程外链
 
 Phoenix 的部分 Code 回归（**成员排序**、**UUID 扫描**）依赖真实 C++/CAA 工程片段。完整工程体积大、含构建产物，**不提交进本仓库**；改为在本机 **clone 开源仓库** 后，用 **symlink** 挂到 `tests/fixtures/`。
 
-## 外链清单
+## 两层配置
 
-配置见 [`tests/fixtures/external-links.manifest.json`](../tests/fixtures/external-links.manifest.json)。
+| 层级 | 文件 | 提交 Git | 内容 |
+| --- | --- | --- | --- |
+| **内置清单** | [`phoenix/config/test_fixture_catalog.json`](../phoenix/config/test_fixture_catalog.json) | 是 | 已编码的开源工程：名称、Gitee `clone_url`、fixture 路径、用途说明 |
+| **本机偏好** | `launcher.json` → `test_fixtures` | 否 | 用户检出根目录、`enabled` 勾选列表 |
+
+Web **系统 → 引用测试工程** 读取内置清单展示卡片；勾选与检出目录写入本机 `launcher.json`。
+
+## 内置工程
+
+配置见 [`phoenix/config/test_fixture_catalog.json`](../phoenix/config/test_fixture_catalog.json)。
 
 | 目录名 | 开源仓库 | 用途 |
 | --- | --- | --- |
@@ -22,15 +31,17 @@ Kt/
 └── KtAlarmClock/           ← 可选；也可放在其它路径并用环境变量指定
 ```
 
-## 一键链接
+## 一键链接（Web 推荐）
 
-在仓库根执行：
+**系统 → 引用测试工程**：勾选工程、确认检出根目录（默认同级源码目录），**勾选即自动初始化**（git clone + symlink）。本机偏好写入 `launcher.json` 的 `test_fixtures` 段。
+
+命令行仍可用：
 
 ```bash
-python3 scripts/link_test_fixtures.py
-# 或
-./scripts/link_test_fixtures.sh
+python scripts/link_test_fixtures.py
 ```
+
+需先在 Web 勾选启用，或设置 launcher `test_fixtures.enabled`。
 
 成功后应出现：
 
@@ -84,6 +95,6 @@ FastAPI 启动时会调用 `phoenix.testing.fixture_links.ensure_fixture_links_l
 
 - **不要**把 `build/`、`.git` 等构建/版本目录提交进 `tests/fixtures/`。
 - 若 `tests/fixtures/<名>` 已是**真实目录**（非 symlink），链接脚本**不会覆盖**。
-- 改 manifest 后重新跑 `link_test_fixtures.py`；错误 symlink 会被替换。
+- 改内置清单后重新同步；错误 symlink 会被替换。
 
 详见 [成员排序-锁定段与回归用例.md](成员排序-锁定段与回归用例.md)。

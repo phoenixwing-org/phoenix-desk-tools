@@ -106,13 +106,16 @@ class AppShell(ctk.CTk):
     def _refresh_window_title(self) -> None:
         from phoenix.config.user_prefs import format_absolute_config_path
 
-        self.title(f"{self._app_title_base} — {self.app_state.repo_root.name}")
+        self.title(
+            f"{self._app_title_base} — "
+            f"{self.app_state.repo_root.name if self.app_state.repo_root else '未设置'}"
+        )
 
     def _render_status_bar(self) -> None:
         from phoenix.config.user_prefs import format_absolute_config_path
 
         fc = self.app_state.freecad_dir
-        ws = format_absolute_config_path(self.app_state.repo_root)
+        ws = format_absolute_config_path(self.app_state.repo_root) or "（未设置）"
         if fc and fc.is_dir():
             fc_s = format_absolute_config_path(fc)
             self.status_bar.configure(text=f"{ws}  ·  FreeCAD: {fc_s}")

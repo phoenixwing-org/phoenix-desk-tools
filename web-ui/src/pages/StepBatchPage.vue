@@ -11,9 +11,12 @@ import OnboardingBanner from "../components/OnboardingBanner.vue";
 import PageHelpButton from "../components/PageHelpButton.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useFreecadTaskGate } from "../composables/useFreecadTaskGate";
+import { useStepBatchPropertySheet } from "../composables/useStepBatchPropertySheet";
 
 const shell = useAppShell();
 const { blocked: freecadBlocked, assertFreecadForTask, hint: freecadHint } = useFreecadTaskGate();
+
+useStepBatchPropertySheet("step_batch");
 
 const stepDir = ref("");
 const outDir = ref("");
@@ -113,11 +116,17 @@ onMounted(async () => {
 <template>
   <div class="page tool-page">
     <header class="page-head">
-      <div class="head-row">
-        <h1 class="page-title">STEP 批量</h1>
-        <p class="page-desc">
-          使用 <code>freecadcmd</code> 批量将 STEP 转为 FCStd。请在「配置」页设置 FreeCAD 安装目录。
-        </p>
+      <div class="head-row head-row-toolbar">
+        <div class="head-left">
+          <h1 class="page-title">STEP 批量</h1>
+        </div>
+        <div class="head-actions" data-tour-page-step-run>
+          <el-button size="small" :loading="saving" @click="onSave">保存偏好</el-button>
+          <el-button size="small" :loading="previewing" :disabled="freecadBlocked" @click="onPreview">预览数量</el-button>
+          <el-button type="primary" size="small" :loading="running" :disabled="freecadBlocked" @click="onRun">
+            开始转换
+          </el-button>
+        </div>
         <div class="head-help">
           <PageHelpButton page-id="step_batch" />
         </div>
@@ -151,15 +160,6 @@ onMounted(async () => {
             <el-option value="last" label="最后一个" />
             <el-option value="all" label="全部" />
           </el-select>
-        </el-form-item>
-        <el-form-item label="操作">
-          <div class="row" data-tour-page-step-run>
-            <el-button :loading="saving" @click="onSave">保存偏好</el-button>
-            <el-button :loading="previewing" :disabled="freecadBlocked" @click="onPreview">预览数量</el-button>
-            <el-button type="primary" :loading="running" :disabled="freecadBlocked" @click="onRun">
-              开始转换
-            </el-button>
-          </div>
         </el-form-item>
         <el-form-item v-if="preview" label="预览结果">
           <p class="meta-line">

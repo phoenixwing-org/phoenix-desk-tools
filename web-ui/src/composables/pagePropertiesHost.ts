@@ -31,9 +31,7 @@ export function usePagePropertiesHost() {
   return {
     activeSheet,
     activePageId,
-    hasProperties: computed(
-      () => !!activeSheet.value?.groups.some((g) => g.fields.length > 0),
-    ),
+    hasProperties: computed(() => !!activePageId.value),
     registerPageProperties,
     unregisterPageProperties,
     setPropertiesActivePage,

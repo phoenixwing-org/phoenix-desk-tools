@@ -3,10 +3,12 @@ obsidian/
 .obsidian
 *.FCBak
 __pycache__
+fcdesk/
+_phoenix_desk_tools_pycache__
 # temp/
 .venv-desktop/
 .venv/
-phoenix_freecad_desktop.egg-info/
+phoenix_desk_tools.egg-info/
 # 本机工作台路径（自动生成；可复制 workspace.custom.json.example 或 web-ui/config/launcher.json.example）
 workspace.custom.json
 web-ui/.local/
@@ -16,3 +18,6 @@ web-ui/node_modules/
 node_modules/
 web-ui/dist
 .phoenix
+# 测试工程 symlink（由「引用测试工程」页或 link_test_fixtures.py 生成本机链接）
+tests/fixtures/KtAlarmClock
+tests/fixtures/PNXCaaStudy

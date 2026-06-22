@@ -1,0 +1,55 @@
+---
+description: 工具页 page-head 统一结构；禁止各页自定义页头/工具条外观
+globs: web-ui/src/pages/**/*.vue,web-ui/src/pages/page-shared.css
+alwaysApply: false
+---
+
+# 工具页页头（page-head）统一风格
+
+各功能页的 **header 外观与布局** 以 `web-ui/src/pages/page-shared.css` 为准。**不要**在单页 `<style scoped>` 里为 `.page-head`、`.head-actions`、工具条再加边框、背景条、阴影或独立 class。
+
+## 标准结构
+
+`head-left` 内**仅**保留 `h1.page-title`，不要副标题、说明段或统计行。
+
+**三栏（标题 · 居中操作 · ?）**——有多个分组按钮时用：
+
+```vue
+<header class="page-head">
+  <div class="head-row head-row-toolbar">
+    <div class="head-left">
+      <h1 class="page-title">页面标题</h1>
+    </div>
+    <div class="head-actions">
+      <div class="toolbar-group">…</div>
+      <span class="toolbar-divider" aria-hidden="true" />
+      <div class="toolbar-group">…</div>
+    </div>
+    <div class="head-help">
+      <PageHelpButton page-id="…" />
+    </div>
+  </div>
+</header>
+```
+
+**两栏（标题 · 右操作 + ?）**——按钮较少、不需居中时用 `head-row`（可无 `head-row-toolbar`），操作放 `head-actions`，帮助用 `PageHelpButton`。
+
+页面根节点：`class="page tool-page …"`，并在 scoped 样式中 `@import "./page-shared.css";`。
+
+## 禁止
+
+| 不要做 | 应做 |
+| --- | --- |
+| 页头工具条外框（border / 渐变底 / box-shadow / 胶囊底条） | 裸 `head-actions`，与 CAD 索引等页一致 |
+| 每页新建 `head-toolbar-strip`、`page-head-custom` 等 header 专用 class | 复用 `head-actions` + `toolbar-group` / `toolbar-divider` |
+| 在 `*Page.vue` scoped 里覆盖 `.page-head`、`.head-actions` 布局/装饰 | 需全站调整时只改 `page-shared.css` |
+| 页头放 `page-desc` / `head-summary` / `head-stats` / `page-sub` 等说明或统计 | 说明 → 属性「介绍」或 `pageHelp.ts`；动态统计 → `usePageSummary` 底栏；文档页标题见 Tab 名 |
+
+## 按钮
+
+- 使用 Element Plus 标准按钮：`size="small"`，主操作用 `type="primary"`，次要链式操作用 `plain`，**不要用** `link` 冒充工具条按钮（除非该页已有先例且非页头主操作）。
+- 逻辑分组用 `toolbar-group` + `toolbar-divider`，不要靠额外容器样式区分。
+
+## 改样式时
+
+若多页都需要同一 header 行为，**只扩展** `page-shared.css` 中的 `.head-row` / `.head-actions` 规则，并顺带检查是否影响已有页面，而不是只改当前一页。

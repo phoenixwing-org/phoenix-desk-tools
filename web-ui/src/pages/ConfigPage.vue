@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { addRecentWorkspace, pickWorkspaceDirectory, pruneRecentWorkspaces, removeRecentWorkspace, saveLauncherFreecad, shutdownWebServer } from "../api";
+import { pruneRecentWorkspaces, removeRecentWorkspace, saveLauncherFreecad, shutdownWebServer } from "../api";
 import { useAppShell } from "../composables/useAppShell";
+import { useWorkspaceDirectoryPicker } from "../composables/useWorkspaceDirectoryPicker";
 import PageHelpButton from "../components/PageHelpButton.vue";
 import { useShellTour } from "../composables/useShellTour";
 import { useOnboardingStore } from "../stores/onboarding";
@@ -18,11 +19,12 @@ import {
 const uiPrefs = useUiPrefsStore();
 const onboarding = useOnboardingStore();
 const shell = useAppShell();
+const { picking: pickingWorkspace, pickAndOpenWorkspace, workspaceSwitchBlocked } =
+  useWorkspaceDirectoryPicker();
 const { startShellTour } = useShellTour(shell);
 
 const repoInput = ref("");
 const fcInput = ref("");
-const pickingWorkspace = ref(false);
 const workspaceSwitchHint = ref("");
 
 const workspacePath = computed(() => shell.workspacePath.value);
@@ -52,15 +54,12 @@ function isSameWorkspacePath(a: string, b: string) {
   return Boolean(x && y && x === y);
 }
 
-function workspaceSwitchBlocked(targetPath: string) {
-  return (
-    nonHomeTabCount.value > 0 &&
-    !isSameWorkspacePath(targetPath, workspacePath.value)
-  );
+function workspaceSwitchBlockedForInput(targetPath: string) {
+  return workspaceSwitchBlocked(targetPath);
 }
 
 function setWorkspaceSwitchHint(targetPath: string) {
-  if (!workspaceSwitchBlocked(targetPath)) {
+  if (!workspaceSwitchBlockedForInput(targetPath)) {
     workspaceSwitchHint.value = "";
     return;
   }
@@ -120,7 +119,7 @@ async function savePrefs() {
     ElMessage.warning("请先填写工作空间根目录。");
     return;
   }
-  if (workspaceSwitchBlocked(repo)) {
+  if (workspaceSwitchBlockedForInput(repo)) {
     ElMessage.warning(
       `当前仍有 ${nonHomeTabCount.value} 个工具 Tab 打开。请先全部关闭（可保留「主页」），再保存并切换工作空间。`,
     );
@@ -144,7 +143,7 @@ async function switchRecent(path: string) {
     ElMessage.info("当前已是该工作空间。");
     return;
   }
-  if (workspaceSwitchBlocked(path)) {
+  if (workspaceSwitchBlockedForInput(path)) {
     ElMessage.warning(
       `当前仍有 ${nonHomeTabCount.value} 个工具 Tab 打开。请先全部关闭（可保留「主页」），再从最近列表切换工作空间。`,
     );
@@ -229,34 +228,75 @@ async function removeRecent(path: string, event: MouseEvent) {
 }
 
 async function onBrowseWorkspace() {
-  if (pickingWorkspace.value) return;
-  pickingWorkspace.value = true;
   workspaceSwitchHint.value = "";
+  const result = await pickAndOpenWorkspace({
+    pathHint: repoInput.value.trim() || workspacePath.value,
+    onPicked: (picked) => {
+      repoInput.value = picked;
+    },
+    logSource: "config",
+  });
+  if (result.ok) {
+    workspaceSwitchHint.value = "";
+    await refreshFields();
+    return;
+  }
+  if (result.reason === "tabs_blocked" && result.path) {
+    setWorkspaceSwitchHint(result.path);
+  }
+}
+
+async function closeWorkspaceAction() {
+  if (!workspacePath.value) {
+    ElMessage.info("当前未打开工作空间");
+    return;
+  }
   try {
-    const data = await pickWorkspaceDirectory(repoInput.value.trim() || workspacePath.value);
-    if (data.cancelled || !data.path?.trim()) {
-      shell.setStatus("已取消选择目录");
-      return;
-    }
-    const picked = data.path.trim();
-    repoInput.value = picked;
-    await addRecentWorkspace(picked);
-    await shell.reloadLauncher();
-    setWorkspaceSwitchHint(picked);
-    if (workspaceSwitchBlocked(picked)) {
-      shell.setStatus("已加入最近列表；关闭其它 Tab 后可保存切换");
-      shell.appendLog(
-        `[配置] 已选工作空间 ${picked}（已加入最近列表，未切换）`,
-        { source: "config", open: true },
-      );
-    } else {
-      shell.setStatus(`已选择：${picked}`);
-    }
+    const ok = await shell.requestCloseWorkspace();
+    if (!ok) return;
+    repoInput.value = "";
+    await refreshFields();
+    ElMessage.success("已关闭工作空间");
   } catch (e) {
     ElMessage.error(String(e));
-    shell.appendLog(String(e), { source: "config" });
-  } finally {
-    pickingWorkspace.value = false;
+  }
+}
+
+async function resetFactory() {
+  const n = nonHomeTabCount.value;
+  if (n > 0) {
+    ElMessage.warning(`请先关闭 ${n} 个工具 Tab（可保留「主页」），再恢复初始状态。`);
+    return;
+  }
+  const ok = await ElMessageBox.confirm(
+    "将清除本机 launcher 中的最近工作空间、FreeCAD 路径、壳层布局，以及浏览器内的新手指引与 Tab 缓存。\n\n"
+      + "不会删除 CAD 项目磁盘上的文件或各项目下的 .phoenix 数据。\n\n"
+      + "效果等同于初次安装，请慎用。是否继续？",
+    "恢复初始状态",
+    {
+      type: "warning",
+      confirmButtonText: "恢复",
+      cancelButtonText: "取消",
+      distinguishCancelAndClose: true,
+      confirmButtonClass: "el-button--danger",
+    },
+  ).then(
+    () => true,
+    () => false,
+  );
+  if (!ok) return;
+  shell.appendLog("恢复初始安装状态…", { source: "config", open: true });
+  try {
+    await shell.resetToFactorySettings();
+    repoInput.value = "";
+    fcInput.value = "";
+    await refreshFields();
+    ElMessage.success("已恢复初始状态");
+    shell.appendLog("已恢复初始状态", { source: "config" });
+  } catch (e) {
+    const msg = String(e);
+    shell.appendLog(msg, { source: "config" });
+    ElMessage.error(msg);
   }
 }
 
@@ -292,19 +332,29 @@ const navItems = () =>
 
 <template>
   <div class="page config-page">
-    <div class="title-row">
-      <h1 class="page-title">配置</h1>
-      <div class="head-actions">
-        <el-button v-if="shell.configOverlayOpen.value" size="small" @click="shell.closeConfig()">
-          关闭
-        </el-button>
-        <PageHelpButton page-id="config" />
+    <header class="page-head">
+      <div class="head-row head-row-toolbar">
+        <div class="head-left">
+          <h1 class="page-title">配置</h1>
+        </div>
+        <div v-if="shell.configOverlayOpen.value" class="head-actions">
+          <el-button size="small" @click="shell.closeConfig()">
+            关闭
+          </el-button>
+        </div>
+        <div class="head-help">
+          <PageHelpButton page-id="config" />
+        </div>
       </div>
-    </div>
+    </header>
 
     <section class="section" data-tour-page-config-workspace>
       <label class="field-label">当前工作空间</label>
-      <p class="current-path">{{ workspacePath }}</p>
+      <p class="current-path">{{ workspacePath || "（未打开）" }}</p>
+
+      <div class="btn-row compact">
+        <el-button :disabled="!workspacePath" @click="closeWorkspaceAction">关闭工作空间</el-button>
+      </div>
 
       <label class="field-label" for="repo">工作空间根</label>
       <div class="row">
@@ -430,6 +480,17 @@ const navItems = () =>
     </section>
 
     <section class="section">
+      <h2 class="section-title">高级</h2>
+      <p class="hint">
+        恢复初始状态会清空本机 launcher（最近工作空间、FreeCAD、壳层布局）与浏览器缓存（新手指引、Tab 等），效果类似初次安装。
+        <strong>不会删除</strong> CAD 项目目录或其中的 <code>.phoenix</code> 数据。操作前请先关闭工作空间与所有工具 Tab。
+      </p>
+      <div class="btn-row">
+        <el-button type="danger" plain @click="resetFactory">恢复初始状态…</el-button>
+      </div>
+    </section>
+
+    <section class="section">
       <h2 class="section-title">功能一览</h2>
       <ul class="feature-list">
         <li v-for="item in navItems()" :key="item.page">
@@ -451,21 +512,6 @@ const navItems = () =>
 
 .config-page {
   padding: 0;
-}
-
-.title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 20px;
-}
-
-.head-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
 }
 
 .close-frame {

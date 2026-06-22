@@ -93,9 +93,14 @@ function onBoolChange(field: PagePropertyField & { kind: "boolean" }, checked: b
 </template>
 
 <style scoped>
+.prop-field-row .prop-name,
+.prop-field-row .prop-value {
+  background: var(--prop-row-bg);
+}
+
 .prop-field-row.stripe .prop-name,
 .prop-field-row.stripe .prop-value {
-  background: color-mix(in srgb, var(--panel-head-bg) 30%, var(--sidebar-bg));
+  background: var(--prop-row-stripe-bg);
 }
 
 .prop-name {
@@ -120,6 +125,13 @@ function onBoolChange(field: PagePropertyField & { kind: "boolean" }, checked: b
   vertical-align: middle;
   font-size: 0.72rem;
   line-height: 1.35;
+}
+
+.prop-field-row:has(.prop-info) .prop-name,
+.prop-field-row:has(.prop-info) .prop-value {
+  vertical-align: top;
+  padding-top: 4px;
+  padding-bottom: 4px;
 }
 
 .prop-bool-cell {

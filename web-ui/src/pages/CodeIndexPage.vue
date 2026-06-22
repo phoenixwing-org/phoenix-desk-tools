@@ -15,7 +15,9 @@ import PageHelpButton from "../components/PageHelpButton.vue";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
 import type { TableColumnDef } from "../composables/useResizableTable";
 import { useAppShell } from "../composables/useAppShell";
+import { useCodeIndexPropertySheet } from "../composables/useCodeIndexPropertySheet";
 import { usePageSession } from "../composables/usePageSession";
+import { usePageSummary } from "../composables/usePageSummary";
 import { useFileWorksetsStore } from "../stores/fileWorksets";
 
 const props = defineProps<{
@@ -78,13 +80,14 @@ const pageSize = ref(50);
 const entriesLoading = ref(false);
 const selectedPaths = ref<Set<string>>(new Set());
 
-const stats = computed(() => data.value?.stats);
 const kindLabels = computed(() => data.value?.kind_labels ?? {});
 const missingCount = computed(() => {
   const total = data.value?.file_count ?? 0;
   const present = data.value?.present_count ?? 0;
   return Math.max(0, total - present);
 });
+
+useCodeIndexPropertySheet("code_index", { data, missingCount });
 
 const pageEnd = computed(() => Math.min(pageOffset.value + entries.value.length, entriesTotal.value));
 const hasPrevPage = computed(() => pageOffset.value > 0);
@@ -98,20 +101,17 @@ const searchPlaceholder = computed(() =>
     : "搜索文件名或相对路径…",
 );
 
-const statCards = computed(() => {
-  const s = stats.value;
-  const total = s?.total ?? data.value?.file_count ?? 0;
-  return [
-    { key: "total", label: "总计", value: total, tone: "neutral" as const },
-    { key: "source", label: "源文件", value: s?.source ?? 0, tone: "source" as const },
-    { key: "config", label: "配置", value: s?.config ?? 0, tone: "config" as const },
-    { key: "doc", label: "文档", value: s?.doc ?? 0, tone: "doc" as const },
-    { key: "resource", label: "资源", value: s?.resource ?? 0, tone: "resource" as const },
-    ...(missingCount.value
-      ? [{ key: "missing", label: "缺失", value: missingCount.value, tone: "warn" as const }]
-      : []),
-  ];
+const headSummary = computed(() => {
+  if (!hasScan.value || !data.value) return "";
+  const total = data.value.stats?.total ?? data.value.file_count ?? 0;
+  const present = data.value.present_count ?? 0;
+  if (missingCount.value > 0) {
+    return `共 ${total} 条 · 存在 ${present} · 缺失 ${missingCount.value}`;
+  }
+  return `共 ${total} 条 · 全部存在`;
 });
+
+usePageSummary(headSummary);
 
 const allPageChecked = computed(
   () => entries.value.length > 0 && entries.value.every((r) => selectedPaths.value.has(r.repo_rel_path)),
@@ -192,23 +192,6 @@ function formatSize(n: number) {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function formatScanTime(iso: string | null | undefined) {
-  if (!iso) return "";
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleString("zh-CN", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
 }
 
 async function refresh(logSummary = false) {
@@ -440,52 +423,34 @@ onMounted(() => applyInitialTabState());
 <template>
   <div class="page code-index-page">
     <header class="page-head">
-      <div class="head-row">
+      <div class="head-row head-row-toolbar">
         <div class="head-left">
           <h1 class="page-title">Code 索引</h1>
-          <p v-if="!hasScan" class="page-desc">扫描源文件、配置、文档与资源，写入 phoenix_code_* 索引表</p>
         </div>
-        <div class="head-trailing">
-          <div class="head-actions" data-tour-page-code-scan>
-            <el-button type="primary" size="small" :loading="scanning" @click="onScan">工程内搜索</el-button>
-            <el-button
-              size="small"
-              type="danger"
-              plain
-              :loading="purging"
-              :disabled="!missingCount"
-              @click="onPurgeMissing"
-            >
-              删除缺失{{ missingCount ? `（${missingCount}）` : "" }}
-            </el-button>
-            <el-button size="small" :loading="exporting" :disabled="!hasScan" @click="onExportJson">
-              导出 JSON
-            </el-button>
-            <el-button size="small" :loading="loading" @click="refresh()">刷新</el-button>
-          </div>
-          <div class="head-help">
-            <PageHelpButton page-id="code_index" />
-          </div>
+        <div class="head-actions" data-tour-page-code-scan>
+          <el-button type="primary" size="small" :loading="scanning" @click="onScan">工程内搜索</el-button>
+          <el-button
+            size="small"
+            type="danger"
+            plain
+            :loading="purging"
+            :disabled="!missingCount"
+            @click="onPurgeMissing"
+          >
+            删除缺失{{ missingCount ? `（${missingCount}）` : "" }}
+          </el-button>
+          <el-button size="small" :loading="exporting" :disabled="!hasScan" @click="onExportJson">
+            导出 JSON
+          </el-button>
+          <el-button size="small" :loading="loading" @click="refresh()">刷新</el-button>
+        </div>
+        <div class="head-help">
+          <PageHelpButton page-id="code_index" />
         </div>
       </div>
-      <p v-if="data?.last_scan_at" class="scan-meta mono">
-        上次扫描 {{ formatScanTime(data.last_scan_at) }} · {{ data.workspace_path_display }}
-      </p>
     </header>
 
     <div class="index-panel">
-      <section v-if="hasScan && statCards.length" class="stat-cards">
-        <div
-          v-for="card in statCards"
-          :key="card.key"
-          class="stat-card"
-          :class="`tone-${card.tone}`"
-        >
-          <span class="stat-value">{{ card.value }}</span>
-          <span class="stat-label">{{ card.label }}</span>
-        </div>
-      </section>
-
       <section class="index-toolbar">
         <el-input
           id="code-index-search"
@@ -614,83 +579,12 @@ onMounted(() => applyInitialTabState());
   height: 100%;
 }
 
-.head-stats .ok {
-  color: #15803d;
-}
-
-.head-stats .warn {
-  color: #b45309;
-}
-
-.scan-meta {
-  margin: 4px 0 0;
-  font-size: 0.78rem;
-  color: var(--muted);
-}
-
 .index-panel {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-.stat-cards {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 12px;
-  flex-shrink: 0;
-}
-
-.stat-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  min-width: 72px;
-  padding: 8px 14px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #fff;
-}
-
-.stat-value {
-  font-size: 1.15rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.2;
-}
-
-.stat-label {
-  margin-top: 2px;
-  font-size: 0.72rem;
-  color: var(--muted);
-}
-
-.stat-card.tone-source .stat-value {
-  color: #1d4ed8;
-}
-
-.stat-card.tone-config .stat-value {
-  color: #7c3aed;
-}
-
-.stat-card.tone-doc .stat-value {
-  color: #0d9488;
-}
-
-.stat-card.tone-resource .stat-value {
-  color: #c2410c;
-}
-
-.stat-card.tone-warn {
-  border-color: #fed7aa;
-  background: #fff7ed;
-}
-
-.stat-card.tone-warn .stat-value {
-  color: #c2410c;
 }
 
 .index-toolbar {

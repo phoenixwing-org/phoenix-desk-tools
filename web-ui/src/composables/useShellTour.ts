@@ -27,7 +27,7 @@ const TOUR_STEPS: DriveStep[] = [
     element: "[data-tour='tab-bar']",
     popover: {
       title: "页面 Tab",
-      description: "顶栏中部：已打开的功能页与文件详情；点击 × 关闭，关闭全部后回到欢迎页。",
+      description: "顶栏中部：已打开的功能页与文件详情；点击 × 关闭，全部关闭后回到工作台欢迎区。",
       side: "bottom",
       align: "center",
     },
@@ -61,9 +61,40 @@ const TOUR_STEPS: DriveStep[] = [
   },
 ];
 
-export function useShellTour(shell: AppShellContext) {
+export async function runShellTour(shell: AppShellContext, force = false) {
   const store = useOnboardingStore();
 
+  if (!force && !store.workspaceOk) {
+    shell.setStatus("请先配置工作空间后再开始界面巡游");
+    shell.goToPage("config");
+    return;
+  }
+
+  if (!shell.shellLayout.value.right_panel_open) {
+    await shell.persistShellLayout({ right_panel_open: true });
+  }
+  if (!shell.shellLayout.value.log_panel_open) {
+    await shell.setLogOpen(true);
+  }
+  await shell.enterWorkbenchFromWelcome();
+  await new Promise((r) => setTimeout(r, 280));
+
+  const d = driver({
+    showProgress: true,
+    progressText: "{{current}} / {{total}}",
+    nextBtnText: "下一步",
+    prevBtnText: "上一步",
+    doneBtnText: "完成",
+    showButtons: ["next", "previous", "close"],
+    steps: TOUR_STEPS,
+    onDestroyed: () => {
+      store.markShellTourSeen(SHELL_TOUR_VERSION);
+    },
+  });
+  d.drive();
+}
+
+export function useShellTour(shell: AppShellContext) {
   async function prepareTourUi() {
     if (!shell.shellLayout.value.right_panel_open) {
       await shell.persistShellLayout({ right_panel_open: true });
@@ -71,31 +102,12 @@ export function useShellTour(shell: AppShellContext) {
     if (!shell.shellLayout.value.log_panel_open) {
       await shell.setLogOpen(true);
     }
-    shell.goToPage("home");
+    await shell.enterWorkbenchFromWelcome();
     await new Promise((r) => setTimeout(r, 280));
   }
 
   async function startShellTour(force = false) {
-    if (!force && !store.workspaceOk) {
-      shell.setStatus("请先配置工作空间后再开始界面巡游");
-      shell.goToPage("config");
-      return;
-    }
-    await prepareTourUi();
-
-    const d = driver({
-      showProgress: true,
-      progressText: "{{current}} / {{total}}",
-      nextBtnText: "下一步",
-      prevBtnText: "上一步",
-      doneBtnText: "完成",
-      showButtons: ["next", "previous", "close"],
-      steps: TOUR_STEPS,
-      onDestroyed: () => {
-        store.markShellTourSeen(SHELL_TOUR_VERSION);
-      },
-    });
-    d.drive();
+    await runShellTour(shell, force);
   }
 
   return { startShellTour, prepareTourUi };

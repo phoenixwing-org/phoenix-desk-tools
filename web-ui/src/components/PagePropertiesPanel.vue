@@ -32,16 +32,16 @@ watch(
   { immediate: true },
 );
 
-const panelTitle = computed(() => activeSheet.value?.title ?? "属性");
+const sheetGroups = computed(() => activeSheet.value?.groups ?? []);
 
 function visibleFields(group: { fields: Array<{ hidden?: { value: boolean } }> }) {
   return group.fields.filter((f) => !(f.hidden && unref(f.hidden)));
 }
 
 const visibleGroups = computed(() =>
-  (activeSheet.value?.groups ?? [])
+  sheetGroups.value
     .filter((g) => !(g.hidden && unref(g.hidden)))
-    .filter((g) => visibleFields(g).length > 0),
+    .filter((g) => visibleFields(g).length > 0 || Boolean(g.description?.trim())),
 );
 
 function toggleGroup(id: string) {
@@ -82,10 +82,7 @@ onUnmounted(() => {
 
 <template>
   <section class="page-props">
-    <header class="page-props-head">
-      <span class="page-props-title">{{ panelTitle }}</span>
-    </header>
-    <div v-if="activeSheet && visibleGroups.length" ref="tableWrapRef" class="prop-table-wrap">
+    <div v-if="visibleGroups.length" ref="tableWrapRef" class="prop-table-wrap">
       <div
         class="prop-col-resizer"
         :style="{ left: `${nameColWidth}px` }"
@@ -125,7 +122,7 @@ onUnmounted(() => {
         </tbody>
       </table>
     </div>
-    <p v-else class="prop-placeholder muted small">当前页无可配置项</p>
+    <p v-else class="prop-placeholder muted small">没有属性</p>
   </section>
 </template>
 
@@ -137,18 +134,6 @@ onUnmounted(() => {
   height: 100%;
   background: var(--sidebar-bg);
   border-top: 1px solid var(--border);
-}
-
-.page-props-head {
-  flex-shrink: 0;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--border);
-  background: var(--panel-head-bg);
-}
-
-.page-props-title {
-  font-size: 0.78rem;
-  font-weight: 600;
 }
 
 .prop-table-wrap {
@@ -183,7 +168,7 @@ onUnmounted(() => {
 .prop-group-row td {
   padding: 0;
   border-top: 1px solid var(--border);
-  background: var(--panel-head-bg);
+  background: var(--prop-group-bg);
 }
 
 .prop-group-head {

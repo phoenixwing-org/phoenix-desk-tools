@@ -2,8 +2,9 @@
 
 - **`fcstd_map.py`**：扫描生成映射。默认 **`--json`** 写出 **schema≥2** 结构化文档（`entries[]`：`repo_rel_path`、`filename`、**`PartNumber`、`PartVersion`、`TypeCode`、`ModelSeries`、`label`、`extra`**）；**`--legacy-json`** 仍可写旧扁平字典。推断见 **`phoenix/fcstd_mapping.py`**。
 - **`fix_fcstd_xlink_paths.py`**：按 **`--map-json`** 或 **`--map-sqlite <工作空间根>`**（读 `.phoenix/cad-database.sqlite`）解析映射重写 XLink；**`--map-anchor`** 须与索引相对路径基准一致（桌面壳下即 **工作空间根**）。未提供映射时可 **`--live-scan`**。
-- **`setup_desktop_venv.sh`**（macOS）：一键创建 `.venv-desktop` 并以可编辑方式安装本项目（读取 `pyproject.toml` 依赖）。
-- **`link_test_fixtures.py`** / **`link_test_fixtures.sh`**：按 `tests/fixtures/external-links.manifest.json` 将本机 clone 的 **KtAlarmClock**、**PNXCaaStudy** 等 symlink 到 `tests/fixtures/`；Web 启动时也会自动尝试。见 [doc/code/测试工程外链-fixture.md](../doc/code/测试工程外链-fixture.md)。
+- **`setup_desktop_venv.sh`**（macOS）：一键创建 `.venv-desktop` 并以可编辑方式安装本项目。
+- **`setup_dev.ps1`** / **`setup_dev.bat`**（Windows）：创建 `.venv-desktop`、`pip install -e ".[web]"`、`pnpm install`；见 [doc/user/桌面工具-安装说明.md](../doc/user/桌面工具-安装说明.md)。
+- **`link_test_fixtures.py`** / **`link_test_fixtures.sh`**：按 `phoenix/config/test_fixture_catalog.json` 将本机 clone 的 **KtAlarmClock**、**PNXCaaStudy** 等 symlink 到 `tests/fixtures/`；Web 启动时也会自动尝试。见 [doc/code/测试工程外链-fixture.md](../doc/code/测试工程外链-fixture.md)。
 
 **FreeCADCmd（须在 FreeCAD 安装内执行，不要用系统 Python 跑）：**
 

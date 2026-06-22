@@ -24,11 +24,14 @@ import PartKeyDetailPage from "../pages/PartKeyDetailPage.vue";
 import FileRenamePage from "../pages/FileRenamePage.vue";
 import BomExportPage from "../pages/BomExportPage.vue";
 import UnitTestsPage from "../pages/UnitTestsPage.vue";
+import TestFixturesPage from "../pages/TestFixturesPage.vue";
+import WorkbenchIdlePage from "../pages/WorkbenchIdlePage.vue";
 import PlaceholderPage from "../pages/PlaceholderPage.vue";
 import { sideDockVisibility } from "../utils/sideDockLayout";
 import { bindPointerDrag } from "../utils/pointerDrag";
 import { fetchPhoenixDatabaseStatus, recreatePhoenixDatabase } from "../api";
 import { provideAppShell } from "../composables/useAppShell";
+import { WORKBENCH_IDLE_PAGE } from "../constants/workbench";
 import { useDocumentTitle } from "../composables/useDocumentTitle";
 import { useWorkspaceSwitcher } from "../composables/useWorkspaceSwitcher";
 import ChoiceDialogHost from "../components/ChoiceDialogHost.vue";
@@ -54,7 +57,7 @@ const navigation = computed(() => shell.appConfig.value?.navigation ?? []);
 
 const pageLabel = computed(() => {
   const page = shell.currentPage.value;
-  if (page === "welcome") return "欢迎";
+  if (page === "welcome" || page === WORKBENCH_IDLE_PAGE) return "";
   return navigation.value.find((n) => n.page === page)?.label;
 });
 
@@ -65,10 +68,18 @@ const { activeTab: ribbonActiveTab, visibleTabs: ribbonVisibleTabs, activeTabDef
     navigation,
     currentPage: computed(() => shell.currentPage.value),
     enabledModules: computed(() => shell.enabledNavModules.value),
+    workbenchFocusScope: shell.workbenchFocusScope,
   });
 
 watch(ribbonActiveTab, () => {
   if (ribbonCollapsed.value) ribbonCollapsed.value = false;
+});
+
+watch(ribbonActiveTab, (tabId) => {
+  if (shell.currentPage.value !== WORKBENCH_IDLE_PAGE) return;
+  if (tabId === "cad") shell.workbenchFocusScope.value = "cad";
+  else if (tabId === "code") shell.workbenchFocusScope.value = "code";
+  else shell.workbenchFocusScope.value = "all";
 });
 
 const dockVis = computed(() => sideDockVisibility(shellLayout.value));
@@ -102,6 +113,7 @@ const PAGE_COMPONENTS: Record<string, Component> = {
   code_uuid: CodeUuidReplacePage,
   bom_export: BomExportPage,
   unit_tests: UnitTestsPage,
+  test_fixtures: TestFixturesPage,
 };
 
 function pageComponent(pageId: string): Component {
@@ -231,6 +243,7 @@ onUnmounted(() => {
               :is="pageComponent(activeTab.pageId)"
               :workbench-tab-id="activeTab.id"
             />
+            <WorkbenchIdlePage v-else key="workbench-idle" />
           </KeepAlive>
         </div>
       </main>

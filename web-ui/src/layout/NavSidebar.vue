@@ -31,10 +31,10 @@ function hover(tip: string | null) {
     <button
       type="button"
       class="quick-rail-btn"
-      title="新手指南与界面巡游"
+      title="界面巡游"
       data-tour="nav-guide"
       @click="openGuide"
-      @mouseenter="hover('新手指引：四步开工清单')"
+      @mouseenter="hover('进入工作台并逐步介绍 Ribbon、Tab 与工作区树')"
       @mouseleave="hover(null)"
     >
       ?

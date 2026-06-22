@@ -1,0 +1,43 @@
+---
+description: 禁止把个人本机路径、用户名等写入 Git 仓库
+alwaysApply: true
+---
+
+# 禁止归档个人本机信息
+
+提交进仓库的内容必须是**可跨机器、跨用户复用**的；不得包含当前开发者机器上的私有信息。
+
+## 禁止提交
+
+- **绝对路径**：Windows（`C:\Users\…`、`D:\phoenix\…`）、macOS/Linux（`/Users/…`、`/home/…`）
+- **本机用户名**、主机名、内网 IP、邮箱（非项目公开联系方式）
+- **指向本机目录的 symlink**（如 `tests/fixtures/KtAlarmClock` → `E:\…`）
+- **本机 launcher / 偏好**：`launcher.json`、`workspace.custom.json`、`.env`、含最近工作空间的截图/日志
+- **构建产物、依赖目录**：`.venv*`、`node_modules/`、`*.egg-info/`（应已在 `.gitignore`）
+
+## 正确做法
+
+| 场景 | 做法 |
+| --- | --- |
+| 测试工程外链 | `phoenix/config/test_fixture_catalog.json`（内置） + 本机 `launcher.json` / Web「引用测试工程」 |
+| 工作空间默认路径 | 运行时解析；未配置时为空或「文档」目录，**不用** `Path.cwd()` / 工具仓库根 |
+| 文档示例路径 | 占位符：`/path/to/CAD/workspace`、`…/phoenix-wing/phoenix/` |
+| 配置默认值 | 相对仓库或平台标准目录（`%LOCALAPPDATA%`、`~/Library/…` 仅写在**文档说明**里，不写死具体用户名） |
+
+## 示例
+
+```text
+# BAD — 勿提交
+tests/fixtures/KtAlarmClock → C:\Users\sam\phoenix\KtAlarmClock
+"recent_workspaces": ["E:\\phoenix\\KtAlarmClock"]
+
+# GOOD
+.gitignore 忽略 tests/fixtures/KtAlarmClock
+catalog（phoenix/config/test_fixture_catalog.json）里写 clone_url；用户本机勾选后 git clone + symlink
+```
+
+## 改代码 / 文档时
+
+- 新增持久化配置：放**本机 launcher** 或**工作空间 `.phoenix/`**，不要写进仓库 JSON 示例的真实路径
+- 新增 `.gitignore` 条目时，优先考虑「本机生成、含路径」的目录
+- PR / 提交前：检查 diff 是否含 `Users\`、`/Users/`、盘符路径、真实工程名（若非公开 fixture）

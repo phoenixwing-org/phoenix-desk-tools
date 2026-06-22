@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
+import { computed, onMounted, ref } from "vue";
+import { Setting } from "@element-plus/icons-vue";
 import { removeRecentWorkspace } from "../api";
 import {
   PROJECT_GITEE_HOME,
-  PROJECT_GITEE_REPO,
   PROJECT_INSTALL_DOC,
   PROJECT_QUICKSTART_DOC,
 } from "../constants/projectLinks";
@@ -14,10 +14,16 @@ import {
   type ModuleScope,
 } from "../constants/moduleScope";
 import { useAppShell } from "../composables/useAppShell";
+import { useShellTour } from "../composables/useShellTour";
+import { useWorkspaceDirectoryPicker } from "../composables/useWorkspaceDirectoryPicker";
+import { confirmCloseTabsBeforeWorkspacePick } from "../composables/tabCloseConfirm";
 import { DEFAULT_APP_TITLE } from "../types/config";
 import type { RecentWorkspaceEntry } from "../types/config";
 
 const shell = useAppShell();
+const { startShellTour } = useShellTour(shell);
+const { picking, pickAndOpenWorkspace } = useWorkspaceDirectoryPicker();
+const touring = ref(false);
 
 const appTitle = computed(() => shell.appConfig.value?.title ?? DEFAULT_APP_TITLE);
 const workspacePath = computed(() => shell.workspacePath.value);
@@ -59,7 +65,15 @@ async function openWorkspace(entry: RecentWorkspaceEntry) {
   if (!entry.exists) return;
   const scope = entryScope(entry);
   if (entry.path !== workspacePath.value) {
-    if (!window.confirm(`打开工作空间？\n\n${entry.path}`)) return;
+    const tabTitles = shell.tabs.value.map((t) => t.title);
+    if (tabTitles.length) {
+      const ok = await confirmCloseTabsBeforeWorkspacePick(tabTitles, shell.toolTabDirtyTitles());
+      if (!ok) {
+        shell.setStatus("已取消打开工作空间");
+        return;
+      }
+      shell.discardAllToolTabs();
+    }
     try {
       await shell.switchWorkspace(entry.path);
     } catch (e) {
@@ -95,20 +109,37 @@ async function onScopeChange(path: string, scope: ModuleScope) {
   }
 }
 
+function openWorkspacePicker() {
+  void pickAndOpenWorkspace();
+}
+
 function openConfig() {
   shell.openConfig();
 }
 
-function openGuide() {
-  shell.openOnboardingGuide();
+async function enterAndStartTour() {
+  if (touring.value || picking.value) return;
+  touring.value = true;
+  try {
+    if (!workspacePath.value) {
+      const result = await pickAndOpenWorkspace({
+        enterWorkbench: true,
+        logSource: "welcome",
+      });
+      if (!result.ok) return;
+    }
+    await startShellTour(true);
+  } finally {
+    touring.value = false;
+  }
 }
 
-function openHome() {
+function returnToWorkspace() {
   if (!workspacePath.value) {
-    shell.openConfig();
+    shell.setStatus("请先打开工作空间");
     return;
   }
-  shell.goToPage("home");
+  void shell.enterWorkbenchFromWelcome();
 }
 </script>
 
@@ -124,19 +155,34 @@ function openHome() {
       </header>
 
       <div class="rail-actions">
-        <el-button type="primary" class="rail-btn-full" @click="openConfig">
+        <el-button
+          type="primary"
+          class="rail-btn-full"
+          :loading="picking"
+          @click="openWorkspacePicker"
+        >
           打开工作空间
         </el-button>
-        <el-button class="rail-btn-full" @click="openGuide">新手指南</el-button>
-        <el-button class="rail-btn-full" @click="openHome">主页 · 功能清单</el-button>
+        <el-button
+          class="rail-btn-full"
+          :loading="touring || picking"
+          title="进入工作空间并逐步介绍 Ribbon、页面 Tab 与工作区树"
+          @click="enterAndStartTour"
+        >
+          界面巡游
+        </el-button>
+        <el-button
+          class="rail-btn-full"
+          :disabled="!workspacePath"
+          @click="returnToWorkspace"
+        >
+          返回工作空间
+        </el-button>
       </div>
 
       <div class="rail-links">
         <el-link :href="PROJECT_GITEE_HOME" target="_blank" rel="noopener noreferrer">
           Gitee 主页
-        </el-link>
-        <el-link :href="PROJECT_GITEE_REPO" target="_blank" rel="noopener noreferrer">
-          克隆地址
         </el-link>
         <el-link :href="PROJECT_INSTALL_DOC" target="_blank" rel="noopener noreferrer">
           安装说明
@@ -149,7 +195,13 @@ function openHome() {
 
     <main class="welcome-main">
       <header class="welcome-head">
-        <h1 class="welcome-title">欢迎使用 Phoenix</h1>
+        <div class="welcome-head-top">
+          <h1 class="welcome-title">欢迎使用 Phoenix</h1>
+          <el-button class="welcome-settings-btn" title="工作空间、FreeCAD 与界面偏好" @click="openConfig">
+            <el-icon aria-hidden="true"><Setting /></el-icon>
+            设置
+          </el-button>
+        </div>
         <p class="welcome-lead">
           在下方选择工程与模块（CAD / Code / 全部），点击进入对应工具台；若该模块有未关闭的文档，将自动恢复。
         </p>
@@ -164,7 +216,7 @@ function openHome() {
 
         <el-empty
           v-if="!recentEntries.length"
-          description="尚无最近工程。点击左侧「打开工作空间」在配置中填写工程根目录并保存。"
+          description="尚无最近工程。点击左侧「打开工作空间」选择工程根目录。"
           :image-size="72"
         />
 
@@ -342,11 +394,24 @@ function openHome() {
   margin-bottom: 40px;
 }
 
+.welcome-head-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
 .welcome-title {
-  margin: 0 0 12px;
+  margin: 0;
   font-size: 2rem;
   font-weight: 600;
   color: #0f172a;
+}
+
+.welcome-settings-btn {
+  flex-shrink: 0;
+  margin: 4px 0 0;
 }
 
 .welcome-lead {

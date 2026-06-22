@@ -1,6 +1,7 @@
 import type { Component } from "vue";
 import {
   Box,
+  Connection,
   Document,
   DocumentCopy,
   Files,
@@ -43,6 +44,7 @@ export const RIBBON_PAGE_ICONS: Record<string, Component> = {
   code_rename: Refresh,
   code_uuid: MagicStick,
   unit_tests: Monitor,
+  test_fixtures: Connection,
 };
 
 export function ribbonIconFor(pageId: string): Component {

@@ -31,7 +31,22 @@ def _workspace_configured(ws: Path) -> bool:
     return False
 
 
-def onboarding_status_payload(workspace: Path) -> dict[str, Any]:
+def onboarding_status_payload(workspace: Path | None) -> dict[str, Any]:
+    if workspace is None:
+        launcher = load_launcher_prefs()
+        fd = launcher.get("freecad_dir")
+        freecad_ok = False
+        if fd:
+            fp = Path(str(fd)).expanduser()
+            freecad_ok = fp.is_dir()
+        return {
+            "workspace_ok": False,
+            "workspace_path": "",
+            "freecad_ok": freecad_ok,
+            "index_scanned": False,
+            "last_scan_at": "",
+        }
+
     ws = workspace.expanduser().resolve(strict=False)
     workspace_ok = (
         ws.is_dir()

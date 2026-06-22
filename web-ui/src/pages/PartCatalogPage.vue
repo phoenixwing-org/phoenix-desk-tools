@@ -86,11 +86,13 @@ onMounted(() => refreshList());
 <template>
   <div class="page part-catalog-page">
     <header class="page-head">
-      <div class="head-row">
-        <h1 class="page-title">零件目录</h1>
-        <p class="page-desc">
-          以 <code>零件号.版本</code> 为唯一键聚合关联文件。点击<strong>标签</strong>或<strong>零件标识</strong>打开零件详情（同键复用 Tab，不重复开）。
-        </p>
+      <div class="head-row head-row-toolbar">
+        <div class="head-left">
+          <h1 class="page-title">零件目录</h1>
+        </div>
+        <div class="head-actions">
+          <el-button size="small" :loading="loading" @click="refreshList">刷新</el-button>
+        </div>
         <div class="head-help">
           <PageHelpButton page-id="part_catalog" />
         </div>
@@ -106,7 +108,6 @@ onMounted(() => refreshList());
         spellcheck="false"
         class="search-input"
       />
-      <el-button size="small" :loading="loading" @click="refreshList">刷新</el-button>
     </section>
 
     <section class="filters">

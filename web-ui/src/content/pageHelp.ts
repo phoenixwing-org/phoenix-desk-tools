@@ -131,7 +131,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
   part_catalog: {
     title: "零件目录",
     bullets: [
-      "按 PartKey 聚合；点标签或零件标识打开零件详情。",
+      "以「零件号.版本」为唯一键聚合关联文件；点标签或零件标识打开零件详情（同键复用 Tab）。",
     ],
     tourSteps: [
       tour("[data-tour-page-partcat-search]", "搜索与筛选", "按零件号、状态筛选列表。"),
@@ -194,6 +194,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
     bullets: [
       "「工程内搜索」递归扫描源文件、配置、文档与资源，写入 phoenix_code_* 表（与 CAD 索引同库）。",
       "跳过 build、node_modules、.git 等目录；再次扫描会将磁盘上已删除的文件标为「缺失」。",
+      "上次扫描时间与分类统计（源文件 / 配置 / 文档 / 资源）见侧栏「属性」。",
     ],
     docPath: "doc/code/Code模块-工作空间索引.md",
     tourSteps: [
@@ -222,13 +223,21 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
   unit_tests: {
     title: "单元测试",
     bullets: [
-      "在本机 Python 进程内运行仓库 tests/ 下 unittest，不依赖工作空间。",
+      "在本机运行仓库 tests/ 下的 unittest；勾选套件后运行，无需工作空间。",
       "运行范围：勾选 Code / CAD / 平台 套件；展开「列出运行范围」可再按模块勾选（默认全选）。",
       "有结果后，用「结果 · 套件 / 状态」勾选筛选明细，与运行范围分开。",
     ],
     tourSteps: [
       tour("[data-tour-page-unit-tests-suites]", "运行范围", "勾选要跑的套件，再点运行测试。"),
       tour("[data-tour-page-unit-tests-run]", "运行", "执行后查看统计；下方勾选仅筛选结果展示。"),
+    ],
+  },
+  test_fixtures: {
+    title: "引用测试工程",
+    bullets: [
+      "可引用的测试工程为系统内置（test_fixture_catalog.json），如 KtAlarmClock、PNXCaaStudy；随仓库提交，本页不可增删。",
+      "本机偏好（launcher.json → test_fixtures）：检出根目录、勾选列表，不提交进 Git。",
+      "勾选或点「检出并链接」：git clone + 链到 tests/fixtures/<名>；Windows 先删旧链接再建（同 PowerShell 脚本）。",
     ],
   },
 };

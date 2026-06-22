@@ -138,25 +138,20 @@ onMounted(async () => {
 <template>
   <div class="page tool-page dedup-page">
     <header class="page-head">
-      <div class="head-row">
-        <h1 class="page-title">编号查重</h1>
-        <p class="page-desc">按扩展名扫描目录，检测文件名、编号、编号+版本三类重复</p>
+      <div class="head-row head-row-toolbar">
+        <div class="head-left">
+          <h1 class="page-title">编号查重</h1>
+        </div>
+        <div class="head-actions" data-tour-page-dedup-scan>
+          <el-button size="small" :loading="saving" @click="onSave">保存偏好</el-button>
+          <el-button type="primary" size="small" :loading="scanning" @click="onScan">开始扫描</el-button>
+          <el-button size="small" :loading="exporting" :disabled="!scanResult" @click="onExport">导出 CSV</el-button>
+        </div>
         <div class="head-help">
           <PageHelpButton page-id="part_dedup" />
         </div>
       </div>
     </header>
-
-    <section class="card action-card" data-tour-page-dedup-scan>
-      <div class="form-foot">
-        <p class="muted small action-hint">扫描与检查项见侧栏「属性」</p>
-        <div class="settings-actions">
-          <el-button size="small" :loading="saving" @click="onSave">保存偏好</el-button>
-          <el-button type="primary" size="small" :loading="scanning" @click="onScan">开始扫描</el-button>
-          <el-button size="small" :loading="exporting" :disabled="!scanResult" @click="onExport">导出 CSV</el-button>
-        </div>
-      </div>
-    </section>
 
     <section class="card results-card">
       <header class="results-head">
@@ -251,23 +246,6 @@ onMounted(async () => {
   color: var(--muted);
   white-space: nowrap;
   line-height: 1.2;
-}
-
-.settings-form {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.form-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-}
-
-.form-foot {
-  justify-content: space-between;
 }
 
 .inline-field {
@@ -431,22 +409,5 @@ onMounted(async () => {
 
 .dup-row:not(.group-alt):hover td {
   background: #f8fafc;
-}
-
-@media (max-width: 720px) {
-  .form-foot {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .settings-actions {
-    width: 100%;
-    margin-left: 0;
-    justify-content: flex-end;
-  }
-
-  .inline-field.grow :deep(.el-input) {
-    max-width: none;
-  }
 }
 </style>

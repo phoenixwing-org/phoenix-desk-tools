@@ -29,6 +29,16 @@ def test_workspace_configured_matches_recent(tmp_path: Path) -> None:
         assert _workspace_configured(ws) is False
 
 
+def test_onboarding_status_payload_unset() -> None:
+    with patch(
+        "phoenix.services.onboarding_service.load_launcher_prefs",
+        return_value={"freecad_dir": None},
+    ):
+        out = onboarding_status_payload(None)
+    assert out["workspace_ok"] is False
+    assert out["workspace_path"] == ""
+
+
 def test_onboarding_status_payload_minimal(tmp_path: Path) -> None:
     ws = tmp_path / "w"
     ws.mkdir()

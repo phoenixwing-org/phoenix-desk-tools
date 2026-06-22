@@ -2,15 +2,27 @@
 import { ref } from "vue";
 import { ArrowDown, FolderOpened } from "@element-plus/icons-vue";
 import { useWorkspaceSwitcher } from "../../composables/useWorkspaceSwitcher";
+import { useAppShell } from "../../composables/useAppShell";
 
 defineProps<{
   layout?: "group" | "inline";
 }>();
 
 const menuOpen = ref(false);
+const shell = useAppShell();
 
 const { workspacePath, workspaceShort, recent, pickRecent, removeRecent, openConfig } =
   useWorkspaceSwitcher();
+
+async function onCloseWorkspace() {
+  menuOpen.value = false;
+  if (!workspacePath.value) return;
+  try {
+    await shell.requestCloseWorkspace();
+  } catch {
+    /* status set in composable */
+  }
+}
 
 async function onPick(path: string) {
   menuOpen.value = false;
@@ -95,6 +107,14 @@ function onManage() {
             </button>
           </div>
           <p v-if="!recent.length" class="recent-empty">尚无记录</p>
+          <button
+            v-if="workspacePath"
+            type="button"
+            class="recent-manage recent-close-ws"
+            @click="onCloseWorkspace"
+          >
+            关闭当前工作空间…
+          </button>
           <button v-if="recent.length" type="button" class="recent-manage" @click="onManage">
             管理最近列表…
           </button>

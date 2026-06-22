@@ -3,7 +3,7 @@
 > 汇总跨模块待办；细项研究稿见 [文档索引.md](文档索引.md)。  
 > 状态：`[ ]` 未做 · `[~]` 进行中 · `[x]` 已完成
 
-最后更新：2026-06-19
+最后更新：2026-06-22
 
 ---
 
@@ -42,6 +42,7 @@
 - [ ] 统一运行日志：长任务进度条 / 取消（见 [统一运行日志窗口-规划讨论.md](platform/统一运行日志窗口-规划讨论.md)）
 - [x] **单元测试 Web 页**：套件勾选运行、**运行范围列表按模块勾选**（默认全选）、NDJSON 流式进度、终止；失败关注 Tab（排序 / 勾选复测 / 简介列）；Pinia 持久化选项与勾选；**模块列表 el-table + 行内运行 + 运行次数/最近执行 localStorage + 排序**
 - [x] **链接路径修正 · 分析**：未建 CAD 索引时明确提示（非 JSON 解析错误）；空脚本输出友好报错
+- [ ] **工具页页头组件化**：抽 `PageHeader.vue`（或 `ToolPageHeader.vue`），统一 `page-head` / `head-row`·`head-row-toolbar` / `head-left` / `head-actions` / `PageHelpButton`；各 `*Page.vue` 只传 `title`、`page-id`，操作用默认 slot 或 `toolbar-group`+`toolbar-divider` 结构化 props；样式只在组件 + `page-shared.css` 维护，禁止逐页自定义 header 外观（约定见 `.cursor/rules/page-header-style.mdc`）
 
 ### 侧栏 · 页面属性面板（POC）
 

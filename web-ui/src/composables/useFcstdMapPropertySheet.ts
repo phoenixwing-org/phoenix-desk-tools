@@ -20,6 +20,9 @@ function formatScanTime(iso: string | null | undefined): string {
   }
 }
 
+const PAGE_INTRO =
+  "「工程内搜索」写入工作空间索引库并重建 BOM 引用表；条目 / 存在 / 缺失统计见侧栏「索引状态」与底栏。";
+
 export function useFcstdMapPropertySheet(
   pageId: string,
   opts: {
@@ -35,6 +38,11 @@ export function useFcstdMapPropertySheet(
   usePagePropertySheet(pageId, () =>
     propSheet(
       [
+        propGroup("intro", "介绍", [
+          propReadonly("intro", "说明", {
+            value: computed(() => PAGE_INTRO),
+          }),
+        ]),
         propGroup("scan_opts", "扫描选项", [
           propBool("force_update_part_name", "强制更新零件名", {
             value: forceUpdatePartName,

@@ -1,8 +1,10 @@
 import { computed, type Ref } from "vue";
 import { usePagePropertySheet } from "./usePagePropertySheet";
-import { propBool, propEnum, propGroup, propNumber, propSheet, propString } from "../utils/pagePropertySchema";
+import { propBool, propEnum, propGroup, propNumber, propReadonly, propSheet, propString } from "../utils/pagePropertySchema";
 
 const EXT_OPTIONS = [".FCStd", ".SLDPRT", ".SLDASM", ".SLDDRW", ".step", ".stp"];
+
+const PAGE_INTRO = "按扩展名扫描目录，检测文件名、编号、编号+版本三类重复。";
 
 export function usePartDedupPropertySheet(
   pageId: string,
@@ -31,6 +33,11 @@ export function usePartDedupPropertySheet(
   usePagePropertySheet(pageId, () =>
     propSheet(
       [
+        propGroup("intro", "介绍", [
+          propReadonly("intro", "说明", {
+            value: computed(() => PAGE_INTRO),
+          }),
+        ]),
         propGroup("scan", "扫描", [
           propString("scan_dir", "目录", {
             value: computed(() => scanDir.value),

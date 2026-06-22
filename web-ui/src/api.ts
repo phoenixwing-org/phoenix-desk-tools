@@ -194,6 +194,58 @@ export function pruneRecentWorkspaces() {
   );
 }
 
+export type TestFixtureItem = {
+  name: string;
+  description: string;
+  clone_url: string;
+  enabled: boolean;
+  checkout_path: string;
+  checkout_exists: boolean;
+  link_status: string;
+  link_detail: string;
+  symlink_path: string;
+  target_path: string;
+};
+
+export type TestFixturesPayload = {
+  checkout_root: string;
+  default_checkout_root: string;
+  enabled: string[];
+  repo_root: string;
+  /** 仓库内置清单 JSON（随代码提交） */
+  catalog_path?: string;
+  catalog_kind?: string;
+  user_prefs_path_hint?: string;
+  items: TestFixtureItem[];
+  sync_results?: Array<{ name: string; status: string; detail: string }>;
+};
+
+export function fetchTestFixtures() {
+  return jsonFetch<TestFixturesPayload>("/api/test-fixtures");
+}
+
+export function updateTestFixturesPrefs(body: { checkout_root?: string; enabled: string[] }) {
+  return jsonFetch<TestFixturesPayload>("/api/test-fixtures", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function syncTestFixtures(body?: { checkout_root?: string; enabled?: string[] }) {
+  return jsonFetch<TestFixturesPayload>("/api/test-fixtures/sync", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body ?? {}),
+  });
+}
+
+export function resetLauncherFactory() {
+  return jsonFetch<LauncherPrefs>("/api/config/launcher/reset-factory", {
+    method: "POST",
+  });
+}
+
 export function patchShellLayout(patch: Partial<ShellLayout>) {
   return jsonFetch<ShellLayout>("/api/config/launcher/shell-layout", {
     method: "PATCH",
@@ -247,6 +299,10 @@ export function setWorkspace(path: string) {
       body: JSON.stringify({ path }),
     },
   );
+}
+
+export function closeWorkspaceApi() {
+  return jsonFetch<{ status: string }>("/api/workspace", { method: "DELETE" });
 }
 
 export function fetchWorkspaceNavModules(path?: string) {

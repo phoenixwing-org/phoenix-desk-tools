@@ -34,7 +34,43 @@ def resolve_workspace_prefs_basename() -> str:
     """工作空间偏好 JSON 文件名；可用 ``PHOENIX_WORKSPACE_PREFS`` 覆盖。"""
     env = os.environ.get(_ENV_WORKSPACE_PREFS_BASENAME, "").strip()
     return env or WORKSPACE_PREFS_BASENAME
+
 MAX_RECENT_WORKSPACES = 10
+
+# phoenix-desk-tools 源码/安装根（≠ 用户 CAD 工作空间）
+_TOOL_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def tool_repo_root() -> Path:
+    """本工具仓库根目录（``phoenix-desk-tools``，非 CAD 工作空间）。"""
+    return _TOOL_REPO_ROOT
+
+
+def default_browse_directory() -> Path:
+    """选目录对话框默认位置：用户「文档」目录。"""
+    docs = Path.home() / "Documents"
+    if docs.is_dir():
+        return docs.expanduser().resolve(strict=False)
+    return Path.home().expanduser().resolve(strict=False)
+
+
+def is_tool_install_path(path: Path) -> bool:
+    """工具源码/安装目录，不能作为 CAD 工作空间根。"""
+    try:
+        p = path.expanduser().resolve(strict=False)
+        root = tool_repo_root().resolve(strict=False)
+    except (OSError, RuntimeError):
+        return False
+    return p == root
+
+
+def resolve_startup_workspace_path() -> Path | None:
+    """启动时工作空间：launcher 最近项；无记录时不退回 cwd/工具目录。"""
+    prune_recent_workspaces(persist=True)
+    for p in get_recent_workspaces():
+        if p.is_dir():
+            return p.resolve()
+    return None
 
 # 临时 / 测试目录名片段：不应进入「最近工作空间」
 _EPHEMERAL_DIR_NAME_MARKERS = (
@@ -201,6 +237,31 @@ def _normalized_shell_layout(raw: Any) -> dict[str, Any]:
     return merged
 
 
+def _normalized_test_fixtures(raw: Any) -> dict[str, Any]:
+    """launcher.json → test_fixtures（检出根目录、勾选列表）。"""
+    base: dict[str, Any] = {
+        "checkout_root": None,
+        "enabled": [],
+    }
+    if not isinstance(raw, dict):
+        return base
+    cr = raw.get("checkout_root")
+    if cr is not None:
+        s = str(cr).strip()
+        base["checkout_root"] = s if s else None
+    en = raw.get("enabled")
+    if isinstance(en, list):
+        seen: set[str] = set()
+        out: list[str] = []
+        for item in en:
+            name = str(item).strip()
+            if name and name not in seen:
+                seen.add(name)
+                out.append(name)
+        base["enabled"] = out
+    return base
+
+
 _LAUNCHER_DEFAULT: dict[str, Any] = {
     "version": 2,
     "recent_workspaces": [],
@@ -208,6 +269,10 @@ _LAUNCHER_DEFAULT: dict[str, Any] = {
     "window_geometry": None,
     "shell_layout": dict(_LAUNCHER_SHELL_LAYOUT_DEFAULT),
     "nav_modules": {"enabled": list(DEFAULT_NAV_MODULES_ENABLED)},
+    "test_fixtures": {
+        "checkout_root": None,
+        "enabled": [],
+    },
 }
 
 
@@ -453,6 +518,7 @@ def load_launcher_prefs() -> dict[str, Any]:
         data["window_geometry"] = wg.strip()
     data["shell_layout"] = _normalized_shell_layout(raw.get("shell_layout"))
     data["nav_modules"] = normalized_nav_modules(raw.get("nav_modules"))
+    data["test_fixtures"] = _normalized_test_fixtures(raw.get("test_fixtures"))
     return data
 
 
@@ -530,6 +596,13 @@ def save_launcher_prefs(data: dict[str, Any]) -> None:
     _write_json(_launcher_prefs_write_path(), data)
 
 
+def reset_launcher_prefs_to_factory() -> dict[str, Any]:
+    """将本机 launcher.json 恢复为出厂默认（最近工作空间、FreeCAD、壳层布局等）。"""
+    data = deepcopy(_LAUNCHER_DEFAULT)
+    save_launcher_prefs(data)
+    return data
+
+
 def get_recent_workspaces() -> list[Path]:
     out: list[Path] = []
     seen: set[str] = set()
@@ -565,6 +638,8 @@ def is_ephemeral_workspace_path(path: Path) -> bool:
     if len(parts) >= 3 and parts[1] == "var" and parts[2] == "folders":
         return True
     if len(parts) >= 2 and parts[1] == "tmp":
+        return True
+    if is_tool_install_path(p):
         return True
     return False
 
@@ -742,6 +817,10 @@ def set_active_workspace(repo_root: Path, state: Any) -> None:
     rp = repo_root.expanduser().resolve()
     if not rp.is_dir():
         raise ValueError(f"不是有效目录: {rp}")
+    if is_tool_install_path(rp):
+        raise ValueError(
+            f"不能使用 phoenix-desk-tools 工具目录作为 CAD 工作空间: {rp}"
+        )
     state.repo_root = rp
     record_recent_workspace(rp)
 

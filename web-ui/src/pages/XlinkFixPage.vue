@@ -339,18 +339,12 @@ onMounted(async () => {
 <template>
   <div class="page tool-page xlink-page">
     <header class="page-head">
-      <div class="head-row">
-        <h1 class="page-title">链接路径修正</h1>
-        <div class="head-help">
-          <PageHelpButton page-id="xlink_fix" />
+      <div class="head-row head-row-toolbar">
+        <div class="head-left">
+          <h1 class="page-title">链接路径修正</h1>
         </div>
-      </div>
-    </header>
-
-    <section class="card action-card" data-tour-page-xlink-analyze>
-      <div class="settings-foot">
-        <el-button size="small" :loading="saving" @click="onSavePrefs">保存偏好</el-button>
-        <div class="settings-actions">
+        <div class="head-actions" data-tour-page-xlink-analyze>
+          <el-button size="small" :loading="saving" @click="onSavePrefs">保存偏好</el-button>
           <el-button type="primary" size="small" :loading="analyzing" :disabled="applying" @click="onAnalyze">
             分析
           </el-button>
@@ -365,8 +359,11 @@ onMounted(async () => {
             执行修正
           </el-button>
         </div>
+        <div class="head-help">
+          <PageHelpButton page-id="xlink_fix" />
+        </div>
       </div>
-    </section>
+    </header>
 
     <section v-if="analysis" class="card results-card">
       <header class="results-head">

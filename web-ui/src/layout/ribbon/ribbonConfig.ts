@@ -42,7 +42,10 @@ export const RIBBON_TABS: RibbonTabDef[] = [
       {
         id: "system-dev",
         label: "开发",
-        items: [{ pageId: "unit_tests" }],
+        items: [
+          { pageId: "test_fixtures", label: "引用测试工程" },
+          { pageId: "unit_tests" },
+        ],
       },
     ],
   },

@@ -9,8 +9,11 @@ import {
 } from "../api";
 import PageHelpButton from "../components/PageHelpButton.vue";
 import { useAppShell } from "../composables/useAppShell";
+import { useSwStepExportPropertySheet } from "../composables/useSwStepExportPropertySheet";
 
 const shell = useAppShell();
+
+useSwStepExportPropertySheet("sw_step_export");
 
 const sourceDir = ref("");
 const outStepDir = ref("");
@@ -96,11 +99,23 @@ onMounted(async () => {
 <template>
   <div class="page tool-page">
     <header class="page-head">
-      <div class="head-row">
-        <h1 class="page-title">SW→STEP</h1>
-        <p class="page-desc">
-          SolidWorks 三维模型批量导出 STEP（Windows COM）。非 Windows 可保存偏好与预览模型数量。
-        </p>
+      <div class="head-row head-row-toolbar">
+        <div class="head-left">
+          <h1 class="page-title">SW→STEP</h1>
+        </div>
+        <div class="head-actions" data-tour-page-sw-run>
+          <el-button size="small" :loading="saving" @click="onSave">保存偏好</el-button>
+          <el-button size="small" :loading="previewing" @click="onPreview">预览数量</el-button>
+          <el-button
+            type="primary"
+            size="small"
+            :loading="running"
+            :disabled="!prefsMeta?.com_available"
+            @click="onRun"
+          >
+            开始导出
+          </el-button>
+        </div>
         <div class="head-help">
           <PageHelpButton page-id="sw_step_export" />
         </div>
@@ -126,20 +141,6 @@ onMounted(async () => {
         </el-form-item>
         <el-form-item label="选项">
           <el-checkbox v-model="recursiveScan">递归扫描子目录</el-checkbox>
-        </el-form-item>
-        <el-form-item label="操作">
-          <div class="row" data-tour-page-sw-run>
-            <el-button :loading="saving" @click="onSave">保存偏好</el-button>
-            <el-button :loading="previewing" @click="onPreview">预览数量</el-button>
-            <el-button
-              type="primary"
-              :loading="running"
-              :disabled="!prefsMeta?.com_available"
-              @click="onRun"
-            >
-              开始导出
-            </el-button>
-          </div>
         </el-form-item>
         <el-form-item v-if="modelCount !== null" label="预览结果">
           <p class="meta-line">发现 {{ modelCount }} 个 .sldprt / .sldasm</p>

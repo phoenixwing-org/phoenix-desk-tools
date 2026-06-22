@@ -59,15 +59,22 @@ def _schedule_open_browser(url: str, *, use_system: bool = False, delay_s: float
     threading.Timer(delay_s, _open).start()
 
 
-def _resolve_workspace_path(raw: str) -> Path:
+def _resolve_workspace_path(raw: str) -> Path | None:
     if raw.strip():
         return Path(raw)
     return default_workspace_path()
 
 
+def _print_workspace_banner(ws_path: Path | None) -> None:
+    if ws_path is None:
+        print("工作空间: （未配置，请在 Web 配置页选择 CAD 项目根目录）")
+        return
+    print(f"工作空间: {ws_path}")
+
+
 def _run_dev_mode(
     *,
-    ws_path: Path,
+    ws_path: Path | None,
     host: str,
     api_port: int,
     vite_port: int,
@@ -81,7 +88,14 @@ def _run_dev_mode(
         sys.exit(1)
     pnpm_cwd = root if (root / "package.json").is_file() else ui_dir
 
-    ws = set_workspace(ws_path)
+    if ws_path is not None:
+        try:
+            ws = set_workspace(ws_path)
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            sys.exit(2)
+    else:
+        ws = None
     app = create_app(static_dir=None)
     api_url = f"http://{host}:{api_port}"
     vite_url = f"http://{host}:{vite_port}"
@@ -101,7 +115,7 @@ def _run_dev_mode(
         print(f"API 启动失败: {api_error[0]}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"开发模式 · 工作空间: {ws}")
+    _print_workspace_banner(ws)
     print(f"API:  {api_url}/api/health")
     print(f"Vite: {vite_url} （热更新，/api 代理到 {api_port}）")
     print("改 Vue/TS 即时刷新，无需 pnpm build。Ctrl+C 退出。")
@@ -132,7 +146,7 @@ def main() -> None:
         "--workspace",
         "-w",
         default="",
-        help="工作空间根（默认：launcher 最近工作空间，否则当前目录）",
+        help="工作空间根（默认：launcher 最近记录；无记录时不使用当前目录）",
     )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=default_web_port())
@@ -207,11 +221,18 @@ def main() -> None:
             print("请运行: python -m phoenix.web --build", file=sys.stderr)
             sys.exit(1)
 
-    ws = set_workspace(ws_path)
+    if ws_path is not None:
+        try:
+            ws = set_workspace(ws_path)
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            sys.exit(2)
+    else:
+        ws = None
     app = create_app(static_dir=static_dir)
 
     url = f"http://{args.host}:{args.port}"
-    print(f"工作空间: {ws}")
+    _print_workspace_banner(ws)
     auto_open = not args.no_open and not args.api_only
     if auto_open:
         _schedule_open_browser(url, use_system=args.open_system)

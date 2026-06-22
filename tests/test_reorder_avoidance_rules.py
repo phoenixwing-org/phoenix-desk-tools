@@ -209,6 +209,27 @@ class TestReorderAvoidanceRules(unittest.TestCase):
         self.assertEqual(order_before, order_after)
 
     @unittest.skipUnless(KT_PARAM_H.is_file(), "KtAlarmClockParam.h fixture missing")
+    def test_kt_param_h_crlf_preserves_public_sections(self) -> None:
+        """case_id=kt-param-h-crlf — CRLF 行尾仍须识别全部 public: 段，函数在 Wizard 成员之前"""
+        before = KT_PARAM_H.read_text(encoding="utf-8")
+        crlf = before.replace("\r\n", "\n").replace("\n", "\r\n")
+        with tempfile.TemporaryDirectory() as tmp:
+            cp = Path(tmp) / "KtAlarmClockParam.h"
+            cp.write_bytes(crlf.encode("utf-8"))
+            reorder_header_file(cp, dry_run=False, sort_members=False)
+            after = cp.read_text(encoding="utf-8")
+        _assert_avoidance_blocks_unchanged(before.replace("\r\n", "\n"), after.replace("\r\n", "\n"))
+        public_lines = [ln.strip() for ln in after.splitlines() if ln.strip().startswith("public")]
+        self.assertEqual(
+            public_lines,
+            ["public:", "public: // functions", "public:"],
+            "须保留 ctor / functions / Wizard 三个 public 段",
+        )
+        clear_pos = after.index("void clear();")
+        work_time_pos = after.index("int WorkTime;")
+        self.assertLess(clear_pos, work_time_pos, "函数须在 Wizard 成员变量之前")
+
+    @unittest.skipUnless(KT_PARAM_H.is_file(), "KtAlarmClockParam.h fixture missing")
     def test_reorder_idempotent_kt_param_h(self) -> None:
         """case_id=kt-param-h-idempotent"""
         with tempfile.TemporaryDirectory() as tmp:

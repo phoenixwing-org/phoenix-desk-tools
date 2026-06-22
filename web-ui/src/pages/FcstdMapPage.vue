@@ -15,6 +15,7 @@ import { useAppShell } from "../composables/useAppShell";
 import { useFcstdMapPropertySheet } from "../composables/useFcstdMapPropertySheet";
 import { useOnboardingStore } from "../stores/onboarding";
 import { usePageSession } from "../composables/usePageSession";
+import { usePageSummary } from "../composables/usePageSummary";
 import PageHelpButton from "../components/PageHelpButton.vue";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
 import type { TableColumnDef } from "../composables/useResizableTable";
@@ -77,6 +78,14 @@ const entriesLoading = ref(false);
 const debugSql = ref("");
 
 const stats = computed(() => data.value?.stats);
+
+const pageSummary = computed(() => {
+  const s = stats.value;
+  if (!s) return "";
+  return `条目 ${s.total_entries} · 存在 ${s.present} · 缺失 ${s.missing}`;
+});
+
+usePageSummary(pageSummary);
 
 useFcstdMapPropertySheet("fcstd_map", {
   data,
@@ -400,14 +409,10 @@ onMounted(() => applyInitialTabState());
 <template>
   <div class="page fcstd-map-page">
     <header class="page-head">
-      <div class="head-row">
-        <h1 class="page-title">CAD 索引</h1>
-        <p v-if="stats" class="head-stats">
-          条目 {{ stats.total_entries }} ·
-          <span class="ok">存在 {{ stats.present }}</span> ·
-          <span class="warn">缺失 {{ stats.missing }}</span>
-        </p>
-        <div class="head-trailing">
+      <div class="head-row head-row-toolbar">
+        <div class="head-left">
+          <h1 class="page-title">CAD 索引</h1>
+        </div>
         <div class="head-actions" data-tour-page-fcstd-scan>
           <el-button type="primary" size="small" :loading="scanning" @click="onScan">工程内搜索</el-button>
           <el-button size="small" :loading="loading" @click="refresh">刷新</el-button>
@@ -425,7 +430,6 @@ onMounted(() => applyInitialTabState());
         </div>
         <div class="head-help">
           <PageHelpButton page-id="fcstd_map" />
-        </div>
         </div>
       </div>
     </header>
@@ -565,7 +569,7 @@ onMounted(() => applyInitialTabState());
         </p>
         <p v-if="shell.workspacePath" class="meta-line mono">工作空间：{{ shell.workspacePath }}</p>
         <p class="hint">
-          「强制更新零件名」等选项在侧栏<strong>属性</strong>；变更后自动保存。重新扫描会覆盖索引中已有零件名（不写回 FCStd）。
+          「强制更新零件名」变更后自动保存。重新扫描会覆盖索引中已有零件名（不写回 FCStd）。
         </p>
       </section>
 
@@ -597,14 +601,6 @@ onMounted(() => applyInitialTabState());
   overflow: hidden;
   padding: 16px 20px;
   height: 100%;
-}
-
-.head-stats .ok {
-  color: #15803d;
-}
-
-.head-stats .warn {
-  color: #b45309;
 }
 
 .sub-tabs {
