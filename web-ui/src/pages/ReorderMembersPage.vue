@@ -22,6 +22,13 @@ const worksetStore = useFileWorksetsStore();
 
 const CHANGED_PAGE_SIZE = 20;
 
+type ChangedFileStatus = "dry_run" | "written";
+
+type ChangedFileRow = {
+  path: string;
+  status: ChangedFileStatus;
+};
+
 const selected = computed(() => pageStore.selectedSet);
 const entriesExpanded = computed({
   get: () => pageStore.entriesExpanded,
@@ -34,7 +41,7 @@ const ignoredEntries = ref<Array<{ name: string; kind: string; reason: string }>
 const entries = ref<ReorderMembersEntry[]>([]);
 const ignoredCount = ref(0);
 
-const changedFiles = ref<string[]>([]);
+const changedFileRows = ref<ChangedFileRow[]>([]);
 const lastRunDryRun = ref(false);
 const lastRunSummary = ref("");
 const changedPage = ref(0);
@@ -51,14 +58,14 @@ const allChecked = computed(
 );
 const dirCount = computed(() => entries.value.filter((e) => e.kind === "dir").length);
 const fileCount = computed(() => entries.value.filter((e) => e.kind === "file").length);
-const changedTotal = computed(() => changedFiles.value.length);
+const changedTotal = computed(() => changedFileRows.value.length);
 const changedPageCount = computed(() => Math.max(1, Math.ceil(changedTotal.value / CHANGED_PAGE_SIZE)));
 const changedPageSafe = computed(() =>
   Math.min(changedPage.value, Math.max(0, changedPageCount.value - 1)),
 );
 const pagedChangedFiles = computed(() => {
   const start = changedPageSafe.value * CHANGED_PAGE_SIZE;
-  return changedFiles.value.slice(start, start + CHANGED_PAGE_SIZE);
+  return changedFileRows.value.slice(start, start + CHANGED_PAGE_SIZE);
 });
 
 const activeWorksetPathCount = computed(() => worksetStore.activeWorkset?.paths.length ?? 0);
@@ -72,6 +79,28 @@ function fileKindLabel(path: string): string {
   if (lower.endsWith(".hpp") || lower.endsWith(".hh")) return ".hpp";
   if (lower.endsWith(".h")) return ".h";
   return "源文件";
+}
+
+function changedStatusLabel(status: ChangedFileStatus): string {
+  return status === "dry_run" ? "预检" : "已写盘";
+}
+
+function changedStatusTagType(status: ChangedFileStatus): "success" | "warning" {
+  return status === "dry_run" ? "warning" : "success";
+}
+
+function changedStatusTitle(status: ChangedFileStatus): string {
+  return status === "dry_run" ? "未写盘，仅分析变更范围" : "已写回磁盘";
+}
+
+function buildChangedRows(paths: string[], dryRun: boolean): ChangedFileRow[] {
+  const status: ChangedFileStatus = dryRun ? "dry_run" : "written";
+  return paths.map((path) => ({ path, status }));
+}
+
+function collectChangedPaths(out: Awaited<ReturnType<typeof runReorderMembers>>): string[] {
+  if (out.changed_files?.length) return out.changed_files;
+  return (out.item_results ?? []).flatMap((item) => item.changed_files ?? []);
 }
 
 function prefsPayload() {
@@ -195,7 +224,7 @@ async function onRun(dryRun: boolean) {
       targets: [...selected.value],
       dry_run: dryRun,
     });
-    changedFiles.value = out.changed_files ?? [];
+    changedFileRows.value = buildChangedRows(collectChangedPaths(out), out.dry_run);
     changedPage.value = 0;
     lastRunDryRun.value = dryRun;
     lastRunSummary.value = out.summary || "";
@@ -327,30 +356,42 @@ watch(
       </div>
     </section>
 
-    <section v-if="changedFiles.length || lastRunSummary" class="card changed-card">
+    <section v-if="changedFileRows.length || lastRunSummary" class="card changed-card">
       <header class="results-head">
         <div class="results-head-row">
           <span class="section-label">变更文件</span>
-          <span v-if="changedFiles.length" class="muted small">
+          <span v-if="changedFileRows.length" class="muted small">
             {{ lastRunDryRun ? "预检" : "已写盘" }} · 共 {{ changedTotal }} 个
           </span>
           <span v-else-if="lastRunSummary" class="muted small">本次无变更</span>
         </div>
-        <p v-if="lastRunSummary && !changedFiles.length" class="run-summary muted">{{ lastRunSummary.split("\n")[0] }}</p>
+        <p v-if="lastRunSummary && !changedFileRows.length" class="run-summary muted">{{ lastRunSummary.split("\n")[0] }}</p>
       </header>
 
-      <el-table v-if="changedFiles.length" :data="pagedChangedFiles" size="small" stripe class="changed-table">
+      <el-table v-if="changedFileRows.length" :data="pagedChangedFiles" size="small" stripe class="changed-table">
         <el-table-column label="#" width="52" align="center">
           <template #default="{ $index }">
             {{ changedPageSafe * CHANGED_PAGE_SIZE + $index + 1 }}
           </template>
         </el-table-column>
         <el-table-column prop="path" label="路径" min-width="200" class-name="mono">
-          <template #default="{ row }">{{ row }}</template>
+          <template #default="{ row }">{{ row.path }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="88" align="center">
+          <template #default="{ row }">
+            <el-tag
+              size="small"
+              effect="plain"
+              :type="changedStatusTagType(row.status)"
+              :title="changedStatusTitle(row.status)"
+            >
+              {{ changedStatusLabel(row.status) }}
+            </el-tag>
+          </template>
         </el-table-column>
         <el-table-column label="类型" width="80" align="center">
           <template #default="{ row }">
-            <el-tag size="small" effect="plain">{{ fileKindLabel(row) }}</el-tag>
+            <el-tag size="small" effect="plain">{{ fileKindLabel(row.path) }}</el-tag>
           </template>
         </el-table-column>
       </el-table>

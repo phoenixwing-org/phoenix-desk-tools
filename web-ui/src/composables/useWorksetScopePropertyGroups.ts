@@ -49,6 +49,7 @@ export function useWorksetScopePropertyGroups(
 
   function onScopeModeChange(value: string) {
     const mode = value as WorksetScopeMode;
+    if (pageScope.scopeMode.value === mode) return;
     pageScope.scopeMode.value = mode;
     if (mode === "workset" && !pageScope.worksetId.value && store.activeId) {
       pageScope.worksetId.value = store.activeId;
@@ -60,7 +61,7 @@ export function useWorksetScopePropertyGroups(
       propGroup("scope", "扫描范围", [
         propEnum("scope_mode", "范围模式", {
           value: computed(() => pageScope.scopeMode.value),
-          options: scopeModeOptions.value,
+          options: scopeModeOptions,
           onChange: onScopeModeChange,
         }),
       ]),
@@ -74,7 +75,7 @@ export function useWorksetScopePropertyGroups(
       propGroup("scope_workset", "工作集", [
         propEnum("workset_id", "选择", {
           value: worksetIdValue,
-          options: worksetSelectOptions.value,
+          options: worksetSelectOptions,
           hint: "选「侧栏当前工作集」即跟随侧栏活动项；管理列表请用 Ribbon/页脚「工作集」",
         }),
         propReadonly("active_workset", "侧栏活动", {

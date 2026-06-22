@@ -11,13 +11,17 @@ export type PagePropertySelectOption = {
 
 type ReactiveValue<T extends PagePropertyScalar> = Ref<T> | ComputedRef<T>;
 type MaybeDisabled = Ref<boolean> | ComputedRef<boolean> | undefined;
+type MaybeHint = string | ComputedRef<string> | undefined;
+export type PagePropertySelectOptionsSource =
+  | PagePropertySelectOption[]
+  | ComputedRef<PagePropertySelectOption[]>;
 
 /** 各字段共有元数据 */
 export type PagePropertyFieldBase = {
   id: string;
   label: string;
   /** 悬停提示；select 也可作当前选项说明的补充 */
-  hint?: string;
+  hint?: MaybeHint;
   disabled?: MaybeDisabled;
   /** 为 true 时不渲染（条件显示） */
   hidden?: MaybeDisabled;
@@ -52,7 +56,7 @@ export type PagePropertyNumberField = PagePropertyFieldBase & {
 export type PagePropertySelectField = PagePropertyFieldBase & {
   kind: "select";
   value: ReactiveValue<string>;
-  options: PagePropertySelectOption[];
+  options: PagePropertySelectOptionsSource;
   onChange?: (value: string) => void;
 };
 

@@ -1,7 +1,7 @@
 # Web 壳层 — 页面属性面板
 
-> [文档索引](../文档索引.md) · 状态：**P2 已归档 · MVC 研讨中 · 2026-06-19**  
-> **规划**：[Web壳层-页面属性面板-规划.md](Web壳层-页面属性面板-规划.md) · **P1 归档**：[Web壳层-页面属性面板-P1归档.md](Web壳层-页面属性面板-P1归档.md) · **P2 归档**：[Web壳层-页面属性面板-P2归档.md](Web壳层-页面属性面板-P2归档.md) · **MVC 研讨**：[Web壳层-页面参数与属性-MVC研讨.md](Web壳层-页面参数与属性-MVC研讨.md)（暂不执行） · 待办：[TODO.md](../TODO.md) §侧栏·页面属性面板
+> [文档索引](../文档索引.md) · 状态：**P3 稳定化已归档 · MVC 研讨搁置 · 2026-06-22**  
+> **规划**：[Web壳层-页面属性面板-规划.md](Web壳层-页面属性面板-规划.md) · **P1**：[Web壳层-页面属性面板-P1归档.md](Web壳层-页面属性面板-P1归档.md) · **P2**：[Web壳层-页面属性面板-P2归档.md](Web壳层-页面属性面板-P2归档.md) · **P2 续**：[Web壳层-页面属性面板-P2续归档.md](Web壳层-页面属性面板-P2续归档.md) · **稳定化**：[Web壳层-属性面板与壳层稳定化-归档.md](Web壳层-属性面板与壳层稳定化-归档.md) · 待办：[TODO.md](../TODO.md) §侧栏·页面属性面板
 
 ## 设计原则（对齐 FreeCAD）
 
@@ -52,9 +52,11 @@ usePagePropertySheet("page_id", () =>
 
 ## 生命周期
 
-1. `usePagePropertySheet` → `registerPageProperties`
-2. `AppShell` 切页 → `setPropertiesActivePage`
-3. 无 sheet → 「当前页无可配置项」
+1. `usePagePropertySheet(pageId, build)`：`build` **只执行一次**，`onMounted` 注册 sheet（勿在 `watchEffect` 里反复 register）
+2. `pagePropertiesHost`：用 **reactive Map** 存各页 sheet，避免无关页注册触发 `activeSheet` 重算
+3. `AppShell` 切页 → `setPropertiesActivePage`
+4. 无 sheet → 「当前页无可配置项」
+5. 字段 `onChange` / 枚举 `options` / `hint`：同值跳过或 `computed`，防止 KeepAlive 多页递归更新
 
 ## 文件索引
 

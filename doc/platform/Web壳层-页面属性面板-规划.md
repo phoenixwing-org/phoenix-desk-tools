@@ -168,7 +168,7 @@ sequenceDiagram
 | 名称列宽 | `localStorage` `phoenix-properties-name-col-v1` | POC |
 | 属性区高度 | `localStorage`（侧栏内） | POC |
 | 分组折叠 | 内存；`schemaVersion` 变更时重置 | 已实现 |
-| 名称列宽 / 面板高度 | `shell_layout`（`properties_panel_*`）+ 名称列 localStorage | 高度/停靠已实现 |
+| 名称列宽 / 面板高度 | `shell_layout`（`properties_panel_*`） | ✅ 已实现；拖拽整数化避免 PATCH 422 |
 
 ---
 
@@ -223,7 +223,8 @@ sequenceDiagram
 
 ### P3 · 壳层持久化与详情页
 
-- [ ] 属性区高度、名称列宽写入 `shell_layout` API
+- [x] 属性区高度、名称列宽写入 `shell_layout` API（含列宽整数化，见 [稳定化归档](Web壳层-属性面板与壳层稳定化-归档.md)）
+- [x] KeepAlive 多页切换递归更新修复（`usePagePropertySheet` 一次注册 + 宿主 reactive Map）
 - [x] `fcstd_map` 扫描选项 + 只读状态/路径迁入属性
 - [ ] 选中树节点 / 文件详情 → **对象级属性面板**（独立议题，与本规划「页面级」区分）
 

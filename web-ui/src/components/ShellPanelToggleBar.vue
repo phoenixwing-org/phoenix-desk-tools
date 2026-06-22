@@ -21,6 +21,7 @@ const {
   panelOpen,
   logOpen,
   propsOpen,
+  worksetOpen,
   hasProperties,
   hasLogContent,
   treeTip,
@@ -91,7 +92,9 @@ const footerTipProps = {
         <button
           type="button"
           class="status-toggle"
+          :class="{ active: worksetOpen }"
           :aria-label="worksetTip"
+          :aria-pressed="worksetOpen"
           @click="openWorksetPanel"
         >
           <el-icon><Collection /></el-icon>
@@ -135,7 +138,13 @@ const footerTipProps = {
         <span class="ribbon-util-icon"><el-icon><FolderOpened /></el-icon></span>
         <span class="ribbon-util-label">工作空间树</span>
       </button>
-      <button type="button" class="ribbon-util-btn" :title="worksetTip" @click="openWorksetPanel">
+      <button
+        type="button"
+        class="ribbon-util-btn"
+        :class="{ active: worksetOpen }"
+        :title="worksetTip"
+        @click="openWorksetPanel"
+      >
         <span class="ribbon-util-icon"><el-icon><Collection /></el-icon></span>
         <span class="ribbon-util-label">工作集</span>
       </button>
@@ -198,6 +207,7 @@ const footerTipProps = {
         :icon="Collection"
         size="large"
         layout="stacked"
+        :active="worksetOpen"
         :title="worksetTip"
         @click="openWorksetPanel"
       />

@@ -17,19 +17,21 @@ const tableWrapRef = ref<HTMLElement | null>(null);
 const nameColWidth = computed(() => shell.shellLayout.value.properties_name_col_width_px);
 
 watch(
-  () => [activeSheet.value?.pageId, activeSheet.value?.schemaVersion] as const,
-  ([pageId]) => {
+  () => activeSheet.value?.pageId ?? null,
+  (pageId) => {
     if (!pageId) {
       collapsedGroups.value = {};
       return;
     }
+    const sheet = activeSheet.value;
+    if (!sheet) return;
     const next: Record<string, boolean> = {};
-    for (const group of activeSheet.value?.groups ?? []) {
+    for (const group of sheet.groups) {
       next[group.id] = Boolean(group.defaultCollapsed);
     }
     collapsedGroups.value = next;
   },
-  { immediate: true },
+  { immediate: true, flush: "post" },
 );
 
 const sheetGroups = computed(() => activeSheet.value?.groups ?? []);
@@ -51,6 +53,15 @@ function toggleGroup(id: string) {
   };
 }
 
+function clampNameColWidth(raw: number): number {
+  const wrap = tableWrapRef.value;
+  const maxByPanel = wrap
+    ? Math.min(NAME_COL_MAX, Math.max(NAME_COL_MIN, wrap.clientWidth - 80))
+    : NAME_COL_MAX;
+  if (!Number.isFinite(raw)) return NAME_COL_MIN;
+  return Math.round(Math.min(maxByPanel, Math.max(NAME_COL_MIN, raw)));
+}
+
 function onColResizeStart(e: PointerEvent) {
   const startX = e.clientX;
   const startW = nameColWidth.value;
@@ -58,17 +69,20 @@ function onColResizeStart(e: PointerEvent) {
   bindPointerDrag(e, {
     cursor: "col-resize",
     onMove(ev) {
-      const wrap = tableWrapRef.value;
-      const maxByPanel = wrap ? Math.min(NAME_COL_MAX, wrap.clientWidth - 80) : NAME_COL_MAX;
-      const next = Math.min(maxByPanel, Math.max(NAME_COL_MIN, startW + (ev.clientX - startX)));
+      const next = clampNameColWidth(startW + (ev.clientX - startX));
       shell.shellLayout.value = {
         ...shell.shellLayout.value,
         properties_name_col_width_px: next,
       };
     },
     onEnd() {
-      void shell.persistShellLayout({
-        properties_name_col_width_px: shell.shellLayout.value.properties_name_col_width_px,
+      const w = clampNameColWidth(shell.shellLayout.value.properties_name_col_width_px);
+      shell.shellLayout.value = {
+        ...shell.shellLayout.value,
+        properties_name_col_width_px: w,
+      };
+      void shell.persistShellLayout({ properties_name_col_width_px: w }).catch((err) => {
+        shell.setStatus(String(err));
       });
     },
   });
@@ -82,14 +96,15 @@ onUnmounted(() => {
 
 <template>
   <section class="page-props">
-    <div v-if="visibleGroups.length" ref="tableWrapRef" class="prop-table-wrap">
-      <div
-        class="prop-col-resizer"
-        :style="{ left: `${nameColWidth}px` }"
-        title="拖拽调整名称列宽"
-        @pointerdown="onColResizeStart"
-      />
-      <table class="prop-table">
+    <div ref="tableWrapRef" class="prop-table-wrap">
+      <template v-if="visibleGroups.length">
+        <div
+          class="prop-col-resizer"
+          :style="{ left: `${nameColWidth}px` }"
+          title="拖拽调整名称列宽"
+          @pointerdown="onColResizeStart"
+        />
+        <table class="prop-table">
         <colgroup>
           <col :style="{ width: `${nameColWidth}px` }" />
           <col />
@@ -120,9 +135,10 @@ onUnmounted(() => {
             </template>
           </template>
         </tbody>
-      </table>
+        </table>
+      </template>
+      <p v-else class="prop-placeholder muted small">没有属性</p>
     </div>
-    <p v-else class="prop-placeholder muted small">没有属性</p>
   </section>
 </template>
 

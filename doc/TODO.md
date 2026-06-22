@@ -60,8 +60,9 @@
 - [x] **类型扩展**：`propPath`（xlink / 工作集子目录 / part_dedup / step_batch / sw_step_export）；分析后动态只读组；枚举统一 combo
 - [ ] **架构研讨**：[页面参数与属性 MVC](platform/Web壳层-页面参数与属性-MVC研讨.md) — **已搁置**（维持 `useXxxPropertySheet`）
 - [x] **运行范围**：成员排序「从工作集推导一级目录勾选」
-- [x] **壳层持久化**：属性区高度、名称列宽写入 `shell_layout`
+- [x] **壳层持久化**：属性区高度、名称列宽写入 `shell_layout`（列宽拖拽整数化 + 422 友好报错，见 [归档](platform/Web壳层-属性面板与壳层稳定化-归档.md)）
 - [x] **页脚面板切换**：VS Code 式图标（树/属性/日志/工作集/停靠）— 与 Ribbon 壳层区共用 `ShellPanelToggleBar`（全 Tab + 布局联动）
+- [x] **稳定化**：KeepAlive 多页切换递归更新修复；`PageHeader` 样式；默认日志左下停靠；工作集按钮高亮反馈（见 [归档](platform/Web壳层-属性面板与壳层稳定化-归档.md)）
 
 ### Web 壳层 · Ribbon 改型（Element Plus · 循序渐进）
 
@@ -103,6 +104,7 @@
 - [x] 切换功能区 Tab 时，若 Ribbon 已折叠则**自动展开**
 - [x] 左右侧栏独立宽度 `left_panel_width_px` / `right_panel_width_px`（launcher 持久化）
 - [x] 同侧树+日志：中间横条上下拖拽；`log_panel_height_px` 持久化
+- [x] **默认停靠**：属性左上、日志左下、工作空间树/工作集右侧（`shell_log_dock: "left"`，launcher + `user_prefs` 默认）
 - [x] 浏览器标题同步工作空间与当前页；品牌副标题显示工作空间名
 - [x] F5 / sessionStorage 恢复 Tab；地址栏 `?page=` 同步（见 commit 链 45c31dc 等）
 - [x] 文档：[Web壳层-使用说明.md](user/Web壳层-使用说明.md)、[新手指引.md](user/新手指引.md) 同步
@@ -258,6 +260,7 @@
 - [x] **成员排序 · 锁定段回归单测**：`tests/test_reorder_avoidance_rules.py`；改规则须全套件通过
 - [ ] **成员排序 · 待研究**：`#pragma region VirtualFunction`（暂不专项处理）；`.cpp` Wizard 段 — `pnx_bom_analysis_cmd_min.cpp` fixture 待补单测
 - [x] **成员排序 · Web 回归自检（可选）**：`POST /api/code/reorder-members/self-test` 或 dev 页按钮，仅跑 fixture 子集
+- [x] **成员排序 · 变更文件状态列**：预检 `dry_run` / 写盘 `written`（`el-tag`，见 [归档](platform/Web壳层-属性面板与壳层稳定化-归档.md)）
 - [ ] **成员排序 · 可选目录层级**：勾选列表默认 **1 级**（现「一级条目」）；偏好可选 **2–4 级** 展开子目录为可选项（仍受 ignore 规则约束）；`list_reorder_top_level_entries` / `GET top-level` + `ReorderMembersPage` 结果区标题与汇总
 - [ ] **成员变量字母序（完整规则）**：Doxygen 序号重编、`.h`/`.cpp` 构造/析构等序号一致 — 见 [成员变量字母序-规则与待实现.md](code/成员变量字母序-规则与待实现.md)；Web 勾选暂禁用
 - [ ] **成员排序 · 变更 Diff 预览（待研究）**：变更文件表点击路径 → 弹层/新窗对比；方案见 [成员排序-变更Diff预览-待研究.md](platform/成员排序-变更Diff预览-待研究.md)（Monaco Diff / diff2html / 后端 `difflib` 预检 diff + 可选 `git diff`）

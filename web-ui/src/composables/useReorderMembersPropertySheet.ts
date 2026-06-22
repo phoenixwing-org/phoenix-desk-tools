@@ -89,9 +89,11 @@ export function useReorderMembersPropertySheet(
             label: o.label,
             description: o.description,
           })),
-          hint:
-            KEVIN_SYSTEM_CODE_OPTIONS.find((o) => o.value === pageStore.kevinSystemCodeMode)
-              ?.description ?? "",
+          hint: computed(
+            () =>
+              KEVIN_SYSTEM_CODE_OPTIONS.find((o) => o.value === pageStore.kevinSystemCodeMode)
+                ?.description ?? "",
+          ),
           onChange: (v) => {
             pageStore.setKevinSystemCodeMode(v as KevinSystemCodeMode);
             onPersistServer?.();

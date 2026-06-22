@@ -24,3 +24,8 @@ defineProps<{
     </div>
   </header>
 </template>
+
+<!-- 页头样式须在组件内非 scoped 引入，否则父页 scoped @import 无法作用到子组件 DOM -->
+<style>
+@import "../pages/page-shared.css";
+</style>

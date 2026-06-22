@@ -22,6 +22,14 @@ function isDisabled(field: PagePropertyField) {
   return field.disabled ? Boolean(unref(field.disabled)) : false;
 }
 
+function fieldHint(field: PagePropertyField): string {
+  return field.hint ? String(unref(field.hint)) : "";
+}
+
+function selectOptions(field: PagePropertyField & { kind: "select" }) {
+  return unref(field.options);
+}
+
 function formatInfoValue(raw: unknown): string {
   if (raw === null || raw === undefined || raw === "") return "—";
   if (typeof raw === "boolean") return raw ? "是" : "否";
@@ -29,7 +37,20 @@ function formatInfoValue(raw: unknown): string {
 }
 
 function onBoolChange(field: PagePropertyField & { kind: "boolean" }, checked: boolean) {
+  if (Boolean(unref(field.value)) === checked) return;
   field.onChange?.(checked);
+}
+
+function onStringChange(field: PagePropertyField & { kind: "string" | "path" }, value: string) {
+  const next = String(value);
+  if (String(unref(field.value)) === next) return;
+  field.onChange?.(next);
+}
+
+function onNumberChange(field: PagePropertyField & { kind: "number" }, value: number) {
+  const next = Number(value);
+  if (Number(unref(field.value)) === next) return;
+  field.onChange?.(next);
 }
 
 async function onBrowsePath(field: PagePropertyPathField) {
@@ -61,7 +82,11 @@ async function onBrowsePath(field: PagePropertyPathField) {
 <template>
   <template v-if="!isHidden(field)">
     <tr class="prop-field-row" :class="{ stripe, 'label-emphasis': field.labelTone === 'emphasis' }">
-      <td class="prop-name" :class="{ emphasis: field.labelTone === 'emphasis' }" :title="field.hint || field.label">
+      <td
+        class="prop-name"
+        :class="{ emphasis: field.labelTone === 'emphasis' }"
+        :title="fieldHint(field) || field.label"
+      >
         {{ field.label }}
       </td>
       <td class="prop-value">
@@ -83,7 +108,7 @@ async function onBrowsePath(field: PagePropertyPathField) {
           size="small"
           class="prop-input"
           :class="{ mono: field.mono }"
-          @update:model-value="field.onChange?.(String($event))"
+          @update:model-value="onStringChange(field, String($event))"
         />
 
         <el-input-number
@@ -96,7 +121,7 @@ async function onBrowsePath(field: PagePropertyPathField) {
           size="small"
           controls-position="right"
           class="prop-number"
-          @update:model-value="field.onChange?.(Number($event))"
+          @update:model-value="onNumberChange(field, Number($event))"
         />
 
         <el-select
@@ -105,11 +130,17 @@ async function onBrowsePath(field: PagePropertyPathField) {
           :disabled="isDisabled(field)"
           size="small"
           class="prop-select"
-          :title="field.hint"
-          @update:model-value="field.onChange?.(String($event))"
+          :title="fieldHint(field) || undefined"
+          @update:model-value="
+            (v) => {
+              const next = String(v);
+              if (String(unref(field.value)) === next) return;
+              field.onChange?.(next);
+            }
+          "
         >
           <el-option
-            v-for="opt in field.options"
+            v-for="opt in selectOptions(field)"
             :key="opt.value"
             :label="opt.label"
             :value="opt.value"
@@ -123,7 +154,7 @@ async function onBrowsePath(field: PagePropertyPathField) {
             :placeholder="field.placeholder"
             size="small"
             class="prop-input mono"
-            @update:model-value="field.onChange?.(String($event))"
+            @update:model-value="onStringChange(field, String($event))"
           />
           <el-button
             v-if="field.browse !== false"

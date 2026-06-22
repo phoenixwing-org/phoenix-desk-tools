@@ -76,6 +76,32 @@ export type BomPreview = {
   xref_index_pending?: boolean;
 };
 
+function formatApiErrorDetail(detail: unknown): string {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (typeof item === "object" && item !== null && "msg" in item) {
+          const loc =
+            "loc" in item && Array.isArray((item as { loc: unknown }).loc)
+              ? (item as { loc: unknown[] }).loc.join(".")
+              : "";
+          return loc ? `${loc}: ${String((item as { msg: unknown }).msg)}` : String((item as { msg: unknown }).msg);
+        }
+        return String(item);
+      })
+      .join("; ");
+  }
+  if (typeof detail === "object" && detail !== null) {
+    try {
+      return JSON.stringify(detail);
+    } catch {
+      return String(detail);
+    }
+  }
+  return String(detail);
+}
+
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   const text = await res.text();
@@ -88,10 +114,11 @@ async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
     }
   }
   if (!res.ok) {
-    const detail =
+    const rawDetail =
       typeof data === "object" && data !== null && "detail" in data
-        ? String((data as { detail: unknown }).detail)
+        ? (data as { detail: unknown }).detail
         : res.statusText;
+    const detail = formatApiErrorDetail(rawDetail);
     throw new Error(detail || `HTTP ${res.status}`);
   }
   return data as T;

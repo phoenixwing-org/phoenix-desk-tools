@@ -32,8 +32,9 @@ export function useCodeUuidPropertySheet(pageId: string, strategy: Ref<UuidApply
               label: o.label,
               description: o.description,
             })),
-            hint:
-              STRATEGY_OPTIONS.find((o) => o.value === strategy.value)?.description ?? "",
+            hint: computed(
+              () => STRATEGY_OPTIONS.find((o) => o.value === strategy.value)?.description ?? "",
+            ),
             onChange: (v) => {
               strategy.value = v as UuidApplyStrategy;
             },
