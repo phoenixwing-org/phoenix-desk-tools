@@ -4,6 +4,7 @@
   "description": "Phoenix 桌面辅助工具 — 根目录 pnpm 命令转发至 web-ui",
   "scripts": {
     "dev": "pnpm -C web-ui dev",
+    "dev:caa": "pnpm -C server/caa dev",
     "build": "pnpm -C web-ui build",
     "preview": "pnpm -C web-ui preview"
   }

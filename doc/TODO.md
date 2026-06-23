@@ -271,10 +271,13 @@
 | 里程碑 | 状态 |
 | --- | --- |
 | C0 · 文档与架构拍板 | [x] |
-| C0b · server/caa + core + Vite 双代理 | [ ] |
-| C1–C2 · 解析 + web-ui 预览 | [ ] |
+| C0b · server/caa + core + Vite 双代理 | [x] |
+| C1–C2 · 解析 + web-ui 预览（P0） | [x] |
+| C2b–C2c · 索引 + 多 Tab | [ ] |
 | C3–C4 · 写回 + Wizard | [ ] |
 | C5 · VS Code 封装（后期） | [ ] |
+
+归档：[caa/CAA对话框-P0快速原型-归档.md](caa/CAA对话框-P0快速原型-归档.md)
 
 ---
 

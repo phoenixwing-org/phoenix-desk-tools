@@ -13,6 +13,10 @@ declare module 'vue' {
   export interface GlobalComponents {
     AppModalOverlay: typeof import('./src/components/AppModalOverlay.vue')['default']
     AssemblyTreeTable: typeof import('./src/components/AssemblyTreeTable.vue')['default']
+    CaaDialogCanvas: typeof import('./src/components/caa/CaaDialogCanvas.vue')['default']
+    CaaDialogGrid: typeof import('./src/components/caa/CaaDialogGrid.vue')['default']
+    CaaDialogNodeView: typeof import('./src/components/caa/CaaDialogNodeView.vue')['default']
+    CaaDialogTreePanel: typeof import('./src/components/caa/CaaDialogTreePanel.vue')['default']
     ChoiceDialogHost: typeof import('./src/components/ChoiceDialogHost.vue')['default']
     CodeIgnorePanel: typeof import('./src/components/CodeIgnorePanel.vue')['default']
     ComboTextInput: typeof import('./src/components/ComboTextInput.vue')['default']
@@ -44,6 +48,7 @@ declare module 'vue' {
     ElTableColumn: typeof import('element-plus/es')['ElTableColumn']
     ElTag: typeof import('element-plus/es')['ElTag']
     ElTooltip: typeof import('element-plus/es')['ElTooltip']
+    ElTree: typeof import('element-plus/es')['ElTree']
     ExpandCaret: typeof import('./src/components/ExpandCaret.vue')['default']
     FileAssemblyPanel: typeof import('./src/components/file-detail/FileAssemblyPanel.vue')['default']
     FileAttributesPanel: typeof import('./src/components/file-detail/FileAttributesPanel.vue')['default']

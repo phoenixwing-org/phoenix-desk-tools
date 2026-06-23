@@ -4,8 +4,9 @@ import AutoImport from "unplugin-auto-import/vite";
 import Components from "unplugin-vue-components/vite";
 import { ElementPlusResolver } from "unplugin-vue-components/resolvers";
 
-/** 双进程开发：Vite 5173，API 由 ``python -m phoenix.web --dev`` 监听此端口。 */
+/** 双进程开发：Vite 5173，API 由 ``python -m phoenix.web --dev`` 监听此端口。CAA Node 默认 5180。 */
 const apiPort = Number(process.env.PHOENIX_API_PORT || 8765);
+const caaPort = Number(process.env.CAA_SERVER_PORT || 5180);
 
 export default defineConfig({
   plugins: [
@@ -23,6 +24,10 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: {
+      "/api/caa": {
+        target: `http://127.0.0.1:${caaPort}`,
+        changeOrigin: true,
+      },
       "/api": {
         target: `http://127.0.0.1:${apiPort}`,
         changeOrigin: true,

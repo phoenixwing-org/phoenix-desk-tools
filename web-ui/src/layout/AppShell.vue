@@ -26,6 +26,7 @@ import BomExportPage from "../pages/BomExportPage.vue";
 import UnitTestsPage from "../pages/UnitTestsPage.vue";
 import TestFixturesPage from "../pages/TestFixturesPage.vue";
 import GitPage from "../pages/GitPage.vue";
+import CaaDialogEditorPage from "../pages/CaaDialogEditorPage.vue";
 import WorkbenchIdlePage from "../pages/WorkbenchIdlePage.vue";
 import PlaceholderPage from "../pages/PlaceholderPage.vue";
 import { sideDockVisibility } from "../utils/sideDockLayout";
@@ -85,7 +86,10 @@ watch(ribbonActiveTab, (tabId) => {
 });
 
 const dockVis = computed(() =>
-  sideDockVisibility(shellLayout.value, { onGitPage: shell.currentPage.value === "git" }),
+  sideDockVisibility(shellLayout.value, {
+    onGitPage: shell.currentPage.value === "git",
+    onCaaPage: shell.currentPage.value === "caa_dialog",
+  }),
 );
 
 const leftPanelWidth = computed(() => `${shellLayout.value.left_panel_width_px}px`);
@@ -119,6 +123,7 @@ const PAGE_COMPONENTS: Record<string, Component> = {
   bom_export: BomExportPage,
   unit_tests: UnitTestsPage,
   test_fixtures: TestFixturesPage,
+  caa_dialog: CaaDialogEditorPage,
 };
 
 function pageComponent(pageId: string): Component {
@@ -263,6 +268,7 @@ onUnmounted(() => {
         v-if="!isWelcomeFullscreen && dockVis.leftVisible"
         dock-side="left"
         :show-tree="dockVis.leftShowTree"
+        :show-caa-tree="dockVis.leftShowCaaTree"
         :show-log="dockVis.leftShowLog"
         :show-props="dockVis.leftShowProps"
         :show-git-commit="dockVis.leftShowGitCommit"

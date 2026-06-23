@@ -1,8 +1,8 @@
 # CAA 对话框 · Web 解析 / 预览 / 编辑器 — 规划
 
 > [文档索引](../文档索引.md)  
-> 状态：**研讨稿 · 待快速原型验证**（2026-06-23）  
-> 模块：[CAA模块-概览.md](CAA模块-概览.md) · 待办：[TODO-CAA.md](../TODO-CAA.md)  
+> 状态：**P0 已归档** · C2b 索引 / C2c 多 Tab 规划中（2026-06-23）  
+> 模块：[CAA模块-概览.md](CAA模块-概览.md) · 待办：[TODO-CAA.md](../TODO-CAA.md) · 归档：[CAA对话框-P0快速原型-归档.md](CAA对话框-P0快速原型-归档.md)  
 > 样例 fixture：`tests/fixtures/PNXCaaStudy` → `PNXBomAnalysisDlg`（主对话框 + `PNXBomAnalysisParamDlg` 子面板）  
 > 关联：[Web壳层-页面参数与属性-MVC研讨.md](../platform/Web壳层-页面参数与属性-MVC研讨.md)（MVC 分层思路可复用）
 

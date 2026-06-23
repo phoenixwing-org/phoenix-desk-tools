@@ -1,6 +1,6 @@
 # CAA 模块 · 概览
 
-> [文档索引](../文档索引.md) · 待办：**[TODO-CAA.md](../TODO-CAA.md)**  
+> [文档索引](../文档索引.md) · 待办：**[TODO-CAA.md](../TODO-CAA.md)** · P0 归档：**[CAA对话框-P0快速原型-归档.md](CAA对话框-P0快速原型-归档.md)**  
 > 架构：**一个前端 `web-ui` + 双后端**（Python `phoenix/web` + Node `server/caa`）
 
 ---
@@ -41,6 +41,8 @@ phoenix/web/               # Python（无 CAA 业务）
 | 文档 | 说明 |
 | --- | --- |
 | [CAA对话框-Web编辑器-规划.md](CAA对话框-Web编辑器-规划.md) | 主规划 |
+| [CAA对话框-P0快速原型-归档.md](CAA对话框-P0快速原型-归档.md) | **P0 已落地**（解析 + 预览 + 壳层侧栏） |
+| [CAA对话框索引与多Tab-规划.md](CAA对话框索引与多Tab-规划.md) | 索引库 `phoenix_caa_*`、检索侧栏、多 Tab |
 | [../code/测试工程外链-fixture.md](../code/测试工程外链-fixture.md) | `PNXCaaStudy` |
 
 ---

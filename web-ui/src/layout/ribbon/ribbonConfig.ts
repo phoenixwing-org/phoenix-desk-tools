@@ -97,6 +97,11 @@ export const RIBBON_TABS: RibbonTabDef[] = [
           { pageId: "code_ignore", label: "忽略设定" },
         ],
       },
+      {
+        id: "code-caa",
+        label: "CAA",
+        items: [{ pageId: "caa_dialog", label: "CAA 对话框" }],
+      },
     ],
   },
 ];

@@ -4,6 +4,7 @@ import { RIBBON_TABS } from "../layout/ribbon/ribbonConfig";
 const EXTRA_LABELS: Record<string, string> = {
   welcome: "欢迎",
   config: "配置",
+  caa_dialog: "CAA 对话框",
   part_key_detail: "零件详情",
   rename_analysis: "文件改名",
 };

@@ -1,0 +1,19 @@
+{
+  "name": "@phoenix/caa-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.8",
+    "@phoenix/catdlg-core": "workspace:*",
+    "hono": "^4.7.4"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.3",
+    "typescript": "~5.7.2"
+  }
+}
