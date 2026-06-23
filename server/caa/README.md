@@ -22,4 +22,5 @@ Web 打开 **Code → CAA 对话框**。
 ## API
 
 - `GET /api/caa/health`
+- `POST /api/caa/dialog/list` — body `{ "workspaceRoot": "…", "includeDemo": true }`
 - `POST /api/caa/dialog/parse` — body `{ "demo": true }` 或 `{ "workspaceRoot", "catDlgRel", "catNlsRel?" }`

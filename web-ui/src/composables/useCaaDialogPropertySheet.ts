@@ -1,4 +1,5 @@
 import { computed } from "vue";
+import { caaServicePropertyGroup } from "./caaServicePropertyGroup";
 import { usePagePropertySheet } from "./usePagePropertySheet";
 import { useCaaDialogPageStore } from "../stores/caaDialogPage";
 import {
@@ -6,6 +7,7 @@ import {
   formatIntList,
   resolveSelectedNode,
 } from "../utils/caaDialogTree";
+import { catDlgDirRel } from "../utils/caaDialogDisplay";
 import { propGroup, propReadonly, propSheet } from "../utils/pagePropertySchema";
 
 function dash(value: string | number | boolean | null | undefined): string {
@@ -42,19 +44,48 @@ export function useCaaDialogPropertySheet(pageId: string) {
           propReadonly("dialog_title", "标题", {
             value: computed(() => dash(store.ir?.title)),
           }),
+          propReadonly("catdlg_dir", ".CATDlg 目录", {
+            value: computed(() => {
+              const rel = store.ir?.sources.catDlg;
+              if (!rel) return "—";
+              return catDlgDirRel(rel) || "—";
+            }),
+            mono: true,
+            hidden: computed(() => !store.ir?.sources.catDlg),
+          }),
           propReadonly("catdlg_source", ".CATDlg", {
             value: computed(() => dash(store.ir?.sources.catDlg)),
             mono: true,
           }),
-          propReadonly("caa_service", "CAA 服务", {
+          propReadonly("catnls_source", ".CATNls", {
+            value: computed(() => dash(store.ir?.sources.catNls)),
+            mono: true,
+            hidden: computed(() => !store.ir?.sources.catNls),
+          }),
+          propReadonly("catrsc_source", ".CATRsc", {
+            value: computed(() => dash(store.ir?.sources.catRsc)),
+            mono: true,
+            hidden: computed(() => !store.ir?.sources.catRsc),
+          }),
+          propReadonly("nls_locales", "NLS 语言", {
             value: computed(() => {
-              if (store.caaOnline === true) return "在线";
-              if (store.caaOnline === false) return "离线";
-              return "—";
+              const locales = store.ir?.parseMeta?.locales;
+              if (!locales?.length) return "—";
+              return locales.map((l) => `${l.id} (${l.keyCount})`).join(" · ");
             }),
-            hint: "需运行 pnpm dev:caa",
+            hidden: computed(() => !store.ir?.parseMeta?.locales.length),
+          }),
+          propReadonly("bitmap_dirs", "位图目录", {
+            value: computed(() => {
+              const dirs = store.ir?.parseMeta?.bitmapDirs;
+              if (!dirs?.length) return "—";
+              const n = store.ir?.parseMeta?.bitmapFileCount ?? 0;
+              return `${dirs.length} 个目录 · ${n} 个文件`;
+            }),
+            hidden: computed(() => !store.ir?.parseMeta?.bitmapDirs.length),
           }),
         ]),
+        caaServicePropertyGroup(),
         propGroup("selection", "选中控件", [
           propReadonly("ctrl_id", "ID", {
             value: computed(() => dash(selectedNode.value?.id)),

@@ -31,9 +31,9 @@ import { confirmCloseWorkspace } from "./tabCloseConfirm";
 import type { ModuleScope } from "../constants/moduleScope";
 import { WORKBENCH_IDLE_PAGE } from "../constants/workbench";
 import { runShellTour } from "./useShellTour";
-import {
-  resolveTabForModuleScope,
-} from "../utils/moduleScopeNavigation";
+import { CAA_EDITOR_PAGE_ID, CAA_HOME_PAGE_ID, CAA_NAV_MODULE } from "../constants/caaPages";
+import { dialogNameFromCatDlgRel, shortCatDlgPath } from "../utils/caaDialogDisplay";
+import { resolveTabForModuleScope } from "../utils/moduleScopeNavigation";
 
 export { WORKBENCH_IDLE_PAGE };
 
@@ -109,6 +109,11 @@ export type AppShellContext = {
       baseline?: Partial<BomFields>;
     },
   ) => void;
+  openCaaDialogForRel: (opts: {
+    catDlgRel: string;
+    dialogName?: string;
+    isDemo?: boolean;
+  }) => void;
   /** 磁盘改名后更新文件详情 Tab 路由（避免同文件占两个 Tab） */
   rerouteFileDetailTab: (oldRel: string, newRel: string, tabId: string) => void;
   openFileRenameForRel: (
@@ -279,6 +284,8 @@ const PAGE_MODULE_FALLBACK: Record<string, string> = {
   file_detail: "cad",
   bom_apply: "cad",
   rename_analysis: "cad",
+  [CAA_EDITOR_PAGE_ID]: CAA_NAV_MODULE,
+  [CAA_HOME_PAGE_ID]: CAA_NAV_MODULE,
 };
 
 const DEFAULT_NAV_MODULES = ["cad", "code"];
@@ -357,6 +364,18 @@ export function provideAppShell(): AppShellContext {
     const nav = appConfig.value?.navigation.find((n) => n.page === id);
     if (nav?.module) return nav.module;
     return PAGE_MODULE_FALLBACK[id];
+  }
+
+  /** 激活页 / 关闭 Tab 后 idle：Ribbon 模块范围与当前或刚关闭的页一致 */
+  function applyModuleScopeForPage(pageId: string): void {
+    const mod = pageModule(pageId);
+    if (mod === "cad" || mod === "code") {
+      workbenchFocusScope.value = mod;
+      return;
+    }
+    if (pageId === "git" || pageId === "unit_tests" || pageId === "test_fixtures") {
+      workbenchFocusScope.value = "all";
+    }
   }
 
   function isPageModuleVisible(pageId: string): boolean {
@@ -474,10 +493,17 @@ export function provideAppShell(): AppShellContext {
   const fileDetailTabByRel = new Map<string, string>();
   /** part_number.part_version → Tab id */
   const partKeyTabByKey = new Map<string, string>();
+  /** catDlgRel（规范化）→ CAA 编辑 Tab id */
+  const caaDialogTabByRel = new Map<string, string>();
+
+  function normalizeCaaDlgRel(rel: string): string {
+    return rel.replace(/\\/g, "/").trim();
+  }
 
   function syncDetailTabMaps() {
     fileDetailTabByRel.clear();
     partKeyTabByKey.clear();
+    caaDialogTabByRel.clear();
     for (const t of wb.tabs.value) {
       if ((t.pageId === "file_detail" || t.pageId === "bom_apply") && t.contextKey) {
         const k = normalizeDetailTabRel(t.contextKey);
@@ -485,6 +511,9 @@ export function provideAppShell(): AppShellContext {
       }
       if (t.pageId === "part_key_detail" && t.contextKey?.trim()) {
         partKeyTabByKey.set(t.contextKey.trim(), t.id);
+      }
+      if (t.pageId === CAA_EDITOR_PAGE_ID && t.contextKey?.trim()) {
+        caaDialogTabByRel.set(normalizeCaaDlgRel(t.contextKey), t.id);
       }
     }
   }
@@ -520,6 +549,22 @@ export function provideAppShell(): AppShellContext {
       (t) => t.pageId === "part_key_detail" && (t.contextKey ?? "").trim() === key,
     );
     if (found) partKeyTabByKey.set(key, found.id);
+    return found;
+  }
+
+  function findCaaDialogTab(catDlgRel: string): WorkbenchTab | undefined {
+    const key = normalizeCaaDlgRel(catDlgRel);
+    if (!key) return undefined;
+    const mappedId = caaDialogTabByRel.get(key);
+    if (mappedId) {
+      const tab = wb.getTab(mappedId);
+      if (tab?.pageId === CAA_EDITOR_PAGE_ID) return tab;
+      caaDialogTabByRel.delete(key);
+    }
+    const found = wb.tabs.value.find(
+      (t) => t.pageId === CAA_EDITOR_PAGE_ID && normalizeCaaDlgRel(t.contextKey ?? "") === key,
+    );
+    if (found) caaDialogTabByRel.set(key, found.id);
     return found;
   }
 
@@ -729,6 +774,55 @@ export function provideAppShell(): AppShellContext {
       fileDetailTabByRel.set(normalizeDetailTabRel(rel), tabId);
       onboarding.markFileDetailOpened(workspacePath.value);
       syncOnboardingFromTabs();
+    } catch (e) {
+      setStatus(String(e));
+    }
+  }
+
+  function openCaaDialogForRel(opts: {
+    catDlgRel: string;
+    dialogName?: string;
+    isDemo?: boolean;
+  }) {
+    const rel = normalizeCaaDlgRel(opts.catDlgRel);
+    if (!rel) return;
+    if (!opts.isDemo && !requireWorkspace()) return;
+
+    const title = dialogNameFromCatDlgRel(rel) || opts.dialogName?.trim() || "CAA 对话框";
+
+    const existing = findCaaDialogTab(rel);
+    if (existing) {
+      existing.title = title;
+      existing.contextKey = rel;
+      existing.payload = {
+        caaDialog: {
+          catDlgRel: rel,
+          dialogName: opts.dialogName,
+          isDemo: opts.isDemo,
+        },
+      };
+      existing.payloadConsumed = false;
+      caaDialogTabByRel.set(rel, existing.id);
+      shellActivateTab(existing.id);
+      return;
+    }
+
+    try {
+      const tabId = shellOpenTab({
+        pageId: CAA_EDITOR_PAGE_ID,
+        title,
+        subtitle: shortCatDlgPath(rel),
+        contextKey: rel,
+        payload: {
+          caaDialog: {
+            catDlgRel: rel,
+            dialogName: opts.dialogName,
+            isDemo: opts.isDemo,
+          },
+        },
+        forceNew: true,
+      });
+      caaDialogTabByRel.set(rel, tabId);
     } catch (e) {
       setStatus(String(e));
     }
@@ -953,16 +1047,20 @@ export function provideAppShell(): AppShellContext {
   }
 
   async function closeTab(tabId: string): Promise<boolean> {
+    const closing = wb.getTab(tabId);
     const ok = await wb.closeTab(tabId);
     if (ok && !wb.tabs.value.length) {
+      if (closing?.pageId) applyModuleScopeForPage(closing.pageId);
       stayInWorkbenchIdle();
     }
     return ok;
   }
 
   async function closeAllTabs(): Promise<boolean> {
+    const lastPageId = wb.activeTab()?.pageId;
     const ok = await wb.closeAllTabs();
     if (ok) {
+      if (lastPageId) applyModuleScopeForPage(lastPageId);
       stayInWorkbenchIdle();
     }
     return ok;
@@ -980,6 +1078,8 @@ export function provideAppShell(): AppShellContext {
       syncActiveTreeHandler();
       scheduleWorkbenchSave();
       syncShellUrl();
+      const pageId = wb.activeTab()?.pageId;
+      if (pageId) applyModuleScopeForPage(pageId);
     }, { immediate: true });
     watch(showWelcomeScreen, () => {
       syncShellUrl();
@@ -1084,6 +1184,11 @@ export function provideAppShell(): AppShellContext {
 
     if (/\.fcstd$/i.test(basenameFromRel(norm))) {
       openFileDetailForRel(norm);
+      return;
+    }
+
+    if (/\.catdlg$/i.test(basenameFromRel(norm))) {
+      openCaaDialogForRel({ catDlgRel: norm });
     }
   }
 
@@ -1288,6 +1393,7 @@ export function provideAppShell(): AppShellContext {
     openPartKeyDetail,
     openBomApplyForRel,
     openFileDetailForRel,
+    openCaaDialogForRel,
     rerouteFileDetailTab,
     openFileRenameForRel,
     openRenameAnalysis,

@@ -100,7 +100,7 @@ export const RIBBON_TABS: RibbonTabDef[] = [
       {
         id: "code-caa",
         label: "CAA",
-        items: [{ pageId: "caa_dialog", label: "CAA 对话框" }],
+        items: [{ pageId: "caa_dialog_home", label: "CAA 对话框" }],
       },
     ],
   },

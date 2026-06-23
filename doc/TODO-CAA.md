@@ -63,8 +63,11 @@ Vite：`/api/caa` → Node；`/api` → Python（**caa 规则在上**）。
 - [x] 左栏 `CaaDialogTreePanel` + `useCaaDialogPropertySheet`
 - [x] Ribbon Code · **CAA** 独立分组
 - [x] 对话框固定宽 500px、内部铺满；属性单行省略
+- [x] 编辑页画布下方「关联文件」表（文件名 + 相对路径）
+- [x] 预览控件：TabContainer / TabPage / Radio / Check / Combo / Spinner / Separator / Container
 - [ ] 工作空间任意 `.CATDlg` 打开（非 demo）
 - [ ] 画布点击选中控件高亮
+- [x] 关联文件表 · 点击行弹窗预览（文本 / 位图）
 
 ## C2b · 对话框索引（`phoenix_caa_*`）
 

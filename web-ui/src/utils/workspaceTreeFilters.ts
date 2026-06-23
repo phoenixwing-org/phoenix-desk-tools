@@ -7,6 +7,8 @@ const PAGE_MODULE_FALLBACK: Record<string, string> = {
   file_detail: "cad",
   bom_apply: "cad",
   rename_analysis: "cad",
+  caa_dialog: "code",
+  caa_dialog_home: "code",
 };
 
 function pageModule(

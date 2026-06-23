@@ -24,6 +24,11 @@ export type WorkbenchTabPayload = {
     excludeRepoRel?: string;
     autoAnalyze?: boolean;
   };
+  caaDialog?: {
+    catDlgRel: string;
+    dialogName?: string;
+    isDemo?: boolean;
+  };
 };
 
 export type WorkbenchTab = {

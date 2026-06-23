@@ -15,12 +15,15 @@ from phoenix.code.store import (
     FILE_STATUS_MISSING,
     FILE_STATUS_PRESENT,
     load_code_index_meta,
+    query_catdlg_index_files,
     query_code_files,
     save_code_index,
 )
 from phoenix.freecad.phoenix_store import cad_database_path
 from phoenix.services.code_index_service import (
+    discover_code_index_extensions,
     export_code_index_to_json,
+    load_code_index_catdlg_list,
     load_code_index_payload,
     purge_missing_code_index_entries,
     run_code_index_scan,
@@ -35,6 +38,8 @@ class TestCodeKinds(unittest.TestCase):
         self.assertEqual(code_asset_kind(Path("readme.md")), "doc")
         self.assertEqual(code_asset_kind(Path("app.json")), "config")
         self.assertEqual(code_asset_kind(Path("icon.png")), "resource")
+        self.assertEqual(code_asset_kind(Path("dialog.CATDlg")), "resource")
+        self.assertEqual(code_asset_kind(Path("strings.CATNls")), "resource")
         self.assertIsNone(code_asset_kind(Path("binary.exe")))
 
 
@@ -148,6 +153,51 @@ class TestCodeIndexService(unittest.TestCase):
             self.assertEqual(meta["present_count"], 0)
             entries, _ = query_code_files(td, status=FILE_STATUS_PRESENT)
             self.assertEqual(len(entries), 0)
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
+    def test_catdlg_index_sql_query(self) -> None:
+        td = Path(tempfile.mkdtemp(prefix="code_index_catdlg_"))
+        try:
+            ui = td / "FooUI.m" / "LocalInterfaces"
+            ui.mkdir(parents=True)
+            (ui / "Dialog.CATDlg").write_text("CATDlgDialog Foo {}", encoding="utf-8")
+            (td / "other.cpp").write_text("", encoding="utf-8")
+            run_code_index_scan(td)
+
+            payload = load_code_index_catdlg_list(td)
+            self.assertTrue(payload["indexed"])
+            self.assertEqual(payload["count"], 1)
+            self.assertEqual(payload["entries"][0]["filename"], "Dialog.CATDlg")
+
+            entries, total = query_catdlg_index_files(td)
+            self.assertEqual(total, 1)
+            self.assertEqual(entries[0]["repo_rel_path"], "FooUI.m/LocalInterfaces/Dialog.CATDlg")
+        finally:
+            shutil.rmtree(td, ignore_errors=True)
+
+    def test_extra_extensions_discovery_and_adopt(self) -> None:
+        td = Path(tempfile.mkdtemp(prefix="code_index_extra_"))
+        try:
+            (td / "known.cpp").write_text("", encoding="utf-8")
+            (td / "asset.custom").write_text("", encoding="utf-8")
+            (td / "other.unknown").write_text("", encoding="utf-8")
+
+            first = run_code_index_scan(td)
+            self.assertEqual(first["stats"]["total"], 1)
+
+            discovery = discover_code_index_extensions(td)
+            exts = {c["ext"] for c in discovery["candidates"]}
+            self.assertIn(".custom", exts)
+            self.assertIn(".unknown", exts)
+
+            second = run_code_index_scan(td, adopt_extensions=[".custom"])
+            self.assertEqual(second["stats"]["total"], 2)
+            self.assertIn(".custom", second["extra_extensions"])
+            self.assertNotIn(".unknown", second["extra_extensions"])
+
+            third = run_code_index_scan(td)
+            self.assertEqual(third["stats"]["total"], 2)
         finally:
             shutil.rmtree(td, ignore_errors=True)
 

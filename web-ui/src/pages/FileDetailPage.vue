@@ -216,7 +216,7 @@ async function confirmSwitchFile(targetRel: string): Promise<boolean> {
       { id: "cancel", label: "取消切换" },
     ],
   });
-  return choice === "discard";
+  return choice.choiceId === "discard";
 }
 
 function onAssemblyEditsChange(dirty: boolean) {

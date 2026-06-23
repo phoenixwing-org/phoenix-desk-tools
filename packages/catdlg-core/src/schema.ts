@@ -38,6 +38,49 @@ export type CaaDialogSources = {
   catDlg: string;
   catNls?: string;
   catRsc?: string;
+  /** locale id → `.CATNls` 相对路径 */
+  nlsLocales?: Record<string, string>;
+};
+
+export type CaaDialogParseLocale = {
+  id: string;
+  catNlsRel: string;
+  keyCount: number;
+  /** 磁盘上的原始文本（写回时保留结构） */
+  sourceText?: string;
+};
+
+export type CaaDialogBitmapFile = {
+  repoRelPath: string;
+  filename: string;
+  sizeBytes?: number;
+};
+
+export type CaaDialogParseMeta = {
+  locales: CaaDialogParseLocale[];
+  primaryLocale: string;
+  catRscRel?: string;
+  rscKeyCount: number;
+  bitmapDirs: string[];
+  bitmapFileCount: number;
+  /** graphic / bitmaps / icons 等目录下的具体图片文件 */
+  bitmapFiles?: CaaDialogBitmapFile[];
+  imageRefs: string[];
+  warnings: string[];
+  /** 默认语言 `.CATNls` 原始文本（写回时保留 WIZARD 区与注释） */
+  catNlsSourceText?: string;
+  /** 其它语言 `.CATNls` 原始文本（locale id → 文件内容） */
+  localeNlsSourceTexts?: Record<string, string>;
+  /** 解析过程诊断（终端与 Web 壳层日志） */
+  logs?: string[];
+  /** 磁盘上实际探测的绝对路径 */
+  resolvedAbs?: {
+    workspaceRoot?: string;
+    catDlg?: string;
+    catNls?: string;
+    catRsc?: string;
+    msgCatalogDir?: string;
+  };
 };
 
 export type CaaDialogIr = {
@@ -46,6 +89,10 @@ export type CaaDialogIr = {
   title?: string;
   root: CaaDialogNode;
   sources: CaaDialogSources;
+  /** 非主语言 NLS 扁平键（locale → key → value） */
+  localeNls?: Record<string, Record<string, string>>;
+  rsc?: Record<string, string>;
+  parseMeta?: CaaDialogParseMeta;
 };
 
 export type CatDlgFlatNode = {

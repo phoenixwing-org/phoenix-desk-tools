@@ -34,6 +34,9 @@ importers:
       '@element-plus/icons-vue':
         specifier: ^2.3.2
         version: 2.3.2(vue@3.5.35(typescript@5.7.3))
+      '@phoenix/catdlg-core':
+        specifier: workspace:*
+        version: link:../packages/catdlg-core
       diff2html:
         specifier: ^3.4.56
         version: 3.4.56

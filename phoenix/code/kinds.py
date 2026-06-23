@@ -26,6 +26,11 @@ _RESOURCE_EXTS = (
     ".qrc",
     ".ui",
     ".qml",
+    ".catdlg",
+    ".catnls",
+    ".catrsc",
+    ".bmp",
+    ".xpm",
     ".png",
     ".jpg",
     ".jpeg",
@@ -69,12 +74,29 @@ KIND_LABELS: dict[str, str] = {
 }
 
 
-def code_asset_kind(path: Path) -> str | None:
+def normalize_index_extension(ext: str) -> str | None:
+    raw = (ext or "").strip().casefold()
+    if not raw:
+        return None
+    if not raw.startswith("."):
+        raw = f".{raw}"
+    if len(raw) < 2 or len(raw) > 16:
+        return None
+    return raw
+
+
+def builtin_index_extensions() -> frozenset[str]:
+    return frozenset(_EXT_KIND.keys())
+
+
+def code_asset_kind(path: Path, extra_exts: frozenset[str] = frozenset()) -> str | None:
     """返回 ``source`` / ``config`` / ``doc`` / ``resource``，非索引类型返回 ``None``。"""
     name_cf = path.name.casefold()
     if name_cf in _BASENAME_KIND:
         return _BASENAME_KIND[name_cf]
     ext = path.suffix.casefold()
+    if ext in extra_exts:
+        return "resource"
     if ext in _EXT_KIND:
         kind = _EXT_KIND[ext]
         if ext in (".h", ".hpp", ".hh", ".hxx"):
@@ -83,5 +105,5 @@ def code_asset_kind(path: Path) -> str | None:
     return None
 
 
-def is_code_index_filename(path: Path) -> bool:
-    return code_asset_kind(path) is not None
+def is_code_index_filename(path: Path, extra_exts: frozenset[str] = frozenset()) -> bool:
+    return code_asset_kind(path, extra_exts) is not None

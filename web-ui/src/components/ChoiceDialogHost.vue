@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, watch } from "vue";
+import { computed, onUnmounted, ref, watch } from "vue";
 import {
   choiceDialogOpen,
   choiceDialogRequest,
@@ -10,7 +10,13 @@ import {
 const open = choiceDialogOpen;
 const request = choiceDialogRequest;
 
+const checkedIds = ref<string[]>([]);
+
 const choices = computed(() => request.value?.choices ?? []);
+
+const checkboxItems = computed(() => request.value?.checkboxes?.items ?? []);
+
+const hasCheckboxes = computed(() => checkboxItems.value.length > 0);
 
 const messageLines = computed(() => {
   const msg = request.value?.message ?? "";
@@ -37,12 +43,47 @@ const defaultChoiceId = computed(
     request.value?.choices[0]?.id,
 );
 
+const allCheckboxIds = computed(() => checkboxItems.value.map((item) => item.id));
+
+const allChecked = computed({
+  get: () =>
+    allCheckboxIds.value.length > 0 && checkedIds.value.length === allCheckboxIds.value.length,
+  set: (on: boolean) => {
+    checkedIds.value = on ? [...allCheckboxIds.value] : [];
+  },
+});
+
+const someChecked = computed(
+  () => checkedIds.value.length > 0 && checkedIds.value.length < allCheckboxIds.value.length,
+);
+
+function initCheckedIds() {
+  const req = request.value;
+  if (!req?.checkboxes?.items.length) {
+    checkedIds.value = [];
+    return;
+  }
+  const all = req.checkboxes.items.map((item) => item.id);
+  const defaults = req.checkboxes.defaultSelectedIds;
+  checkedIds.value =
+    defaults?.length ? defaults.filter((id) => all.includes(id)) : [...all];
+}
+
+function isChoiceDisabled(opt: ChoiceDialogOption): boolean {
+  if (opt.disabled) return true;
+  if (hasCheckboxes.value && opt.id === "adopt-selected" && checkedIds.value.length === 0) {
+    return true;
+  }
+  return false;
+}
+
 function onChoose(opt: ChoiceDialogOption) {
-  resolveChoice(opt.id);
+  if (isChoiceDisabled(opt)) return;
+  resolveChoice(opt.id, [...checkedIds.value]);
 }
 
 function onCancel() {
-  resolveChoice(null);
+  resolveChoice(null, [...checkedIds.value]);
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -54,6 +95,7 @@ function onKeydown(e: KeyboardEvent) {
 
 watch(open, (isOpen) => {
   if (isOpen) {
+    initCheckedIds();
     window.addEventListener("keydown", onKeydown);
   } else {
     window.removeEventListener("keydown", onKeydown);
@@ -79,6 +121,32 @@ onUnmounted(() => {
             <p v-else-if="line" class="choice-message-line">{{ line }}</p>
           </template>
         </div>
+
+        <div v-if="hasCheckboxes" class="choice-checkboxes">
+          <div class="choice-check-toolbar">
+            <el-checkbox
+              v-model="allChecked"
+              :indeterminate="someChecked"
+              size="small"
+            >
+              全选
+            </el-checkbox>
+            <span class="choice-check-count muted small">
+              已选 {{ checkedIds.length }} / {{ allCheckboxIds.length }}
+            </span>
+          </div>
+          <el-checkbox-group v-model="checkedIds" class="choice-check-list">
+            <el-checkbox
+              v-for="item in checkboxItems"
+              :key="item.id"
+              :value="item.id"
+              class="choice-check-item"
+            >
+              <span class="choice-check-label">{{ item.label }}</span>
+            </el-checkbox>
+          </el-checkbox-group>
+        </div>
+
         <div class="choice-actions">
           <button
             v-for="opt in choices"
@@ -89,6 +157,7 @@ onUnmounted(() => {
               primary: opt.variant === 'primary',
               danger: opt.variant === 'danger',
             }"
+            :disabled="isChoiceDisabled(opt)"
             :autofocus="opt.id === defaultChoiceId"
             @click="onChoose(opt)"
           >
@@ -128,7 +197,7 @@ onUnmounted(() => {
 }
 
 .choice-message {
-  margin: 0 0 18px;
+  margin: 0 0 14px;
   font-size: 0.88rem;
   line-height: 1.55;
   color: var(--text, #0f172a);
@@ -140,6 +209,53 @@ onUnmounted(() => {
 
 .choice-message-line:last-child {
   margin-bottom: 0;
+}
+
+.choice-checkboxes {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  background: var(--el-fill-color-lighter, #f8fafc);
+}
+
+.choice-check-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border, #e2e8f0);
+}
+
+.choice-check-count {
+  font-size: 0.75rem;
+}
+
+.choice-check-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: min(240px, 40vh);
+  overflow-y: auto;
+}
+
+.choice-check-item {
+  margin-right: 0;
+  height: auto;
+  align-items: flex-start;
+}
+
+.choice-check-item :deep(.el-checkbox__label) {
+  line-height: 1.4;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.choice-check-label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.82rem;
 }
 
 .choice-path-fold {
@@ -191,13 +307,18 @@ onUnmounted(() => {
   padding: 10px 14px;
 }
 
+.choice-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .choice-btn.danger {
   background: #fef2f2;
   border-color: #fecaca;
   color: #b91c1c;
 }
 
-.choice-btn.danger:hover {
+.choice-btn.danger:hover:not(:disabled) {
   background: #fee2e2;
 }
 </style>

@@ -170,8 +170,8 @@ async function onBrowsePath(field: PagePropertyPathField) {
         <span
           v-else-if="field.kind === 'info'"
           class="prop-info"
-          :class="{ mono: field.mono }"
-          :title="formatInfoValue(unref(field.value))"
+          :class="{ mono: field.mono, multiline: field.multiline }"
+          :title="field.multiline ? undefined : formatInfoValue(unref(field.value))"
         >
           {{ formatInfoValue(unref(field.value)) }}
         </span>
@@ -271,5 +271,14 @@ async function onBrowsePath(field: PagePropertyPathField) {
   white-space: nowrap;
   font-size: 0.72rem;
   line-height: 1.35;
+}
+
+.prop-info.multiline {
+  white-space: pre-wrap;
+  text-overflow: unset;
+  overflow: visible;
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: var(--muted);
 }
 </style>

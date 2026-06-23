@@ -28,10 +28,55 @@ export type CaaDialogNode = {
   children: CaaDialogNode[];
 };
 
+export type CaaDialogSources = {
+  catDlg: string;
+  catNls?: string;
+  catRsc?: string;
+  nlsLocales?: Record<string, string>;
+};
+
+export type CaaDialogParseLocale = {
+  id: string;
+  catNlsRel: string;
+  keyCount: number;
+  sourceText?: string;
+};
+
+export type CaaDialogBitmapFile = {
+  repoRelPath: string;
+  filename: string;
+  sizeBytes?: number;
+};
+
+export type CaaDialogParseMeta = {
+  locales: CaaDialogParseLocale[];
+  primaryLocale: string;
+  catRscRel?: string;
+  rscKeyCount: number;
+  bitmapDirs: string[];
+  bitmapFileCount: number;
+  bitmapFiles?: CaaDialogBitmapFile[];
+  imageRefs: string[];
+  warnings: string[];
+  logs?: string[];
+  catNlsSourceText?: string;
+  localeNlsSourceTexts?: Record<string, string>;
+  resolvedAbs?: {
+    workspaceRoot?: string;
+    catDlg?: string;
+    catNls?: string;
+    catRsc?: string;
+    msgCatalogDir?: string;
+  };
+};
+
 export type CaaDialogIr = {
   schemaVersion: 1;
   dialogName: string;
   title?: string;
   root: CaaDialogNode;
-  sources: { catDlg: string; catNls?: string; catRsc?: string };
+  sources: CaaDialogSources;
+  localeNls?: Record<string, Record<string, string>>;
+  rsc?: Record<string, string>;
+  parseMeta?: CaaDialogParseMeta;
 };

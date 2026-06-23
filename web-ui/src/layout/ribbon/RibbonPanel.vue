@@ -10,6 +10,7 @@ import RibbonToolButton from "./RibbonToolButton.vue";
 import RibbonPanelUtils from "./RibbonPanelUtils.vue";
 import { RIBBON_SHELL_TAB_ID, type RibbonGroupDef, type RibbonTabDef } from "./ribbonConfig";
 import { ribbonIconFor } from "./ribbonIcons";
+import { CAA_EDITOR_PAGE_ID, CAA_HOME_PAGE_ID } from "../../constants/caaPages";
 
 const props = defineProps<{
   tab: RibbonTabDef;
@@ -42,7 +43,9 @@ function resolveGroups(groups: RibbonGroupDef[]) {
           pageId: item.pageId,
           label: item.label || nav.label,
           icon: ribbonIconFor(item.pageId),
-          active: props.currentPage === item.pageId,
+          active:
+            props.currentPage === item.pageId ||
+            (item.pageId === CAA_HOME_PAGE_ID && props.currentPage === CAA_EDITOR_PAGE_ID),
           disabled,
           title: disabled ? WORKSPACE_GATE_MSG : nav.description || nav.label,
         });

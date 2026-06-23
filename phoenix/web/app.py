@@ -6,7 +6,7 @@ import json
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query, Request, Request
+from fastapi import Body, FastAPI, HTTPException, Query, Request, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -74,10 +74,13 @@ from phoenix.services.part_dedup_service import (
 )
 from phoenix.code.reorder_self_test import run_reorder_avoidance_self_test
 from phoenix.services.code_index_service import (
+    discover_code_index_extensions,
     export_code_index_to_json,
+    load_code_index_catdlg_list,
     load_code_index_payload,
     purge_missing_code_index_entries,
     run_code_index_scan,
+    save_code_index_extra_extensions,
     search_code_index_entries,
 )
 from phoenix.services.code_ignore_service import (
@@ -309,6 +312,14 @@ class TestFixturesSyncBody(BaseModel):
 class ShellLogBody(BaseModel):
     text: str = ""
     source: str = "server"
+
+
+class CodeIndexScanBody(BaseModel):
+    adopt_extensions: list[str] | None = None
+
+
+class CodeIndexExtraExtensionsBody(BaseModel):
+    extensions: list[str] = Field(default_factory=list)
 
 
 _SHELL_LOG: list[dict[str, str]] = []
@@ -1574,6 +1585,10 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
     def api_code_index_get() -> dict:
         return load_code_index_payload(get_workspace())
 
+    @app.get("/api/code/index/catdlg")
+    def api_code_index_catdlg() -> dict:
+        return load_code_index_catdlg_list(get_workspace())
+
     @app.get("/api/code/index/entries")
     def api_code_index_entries(
         offset: int = Query(0, ge=0),
@@ -1593,11 +1608,22 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
             search_mode=search_mode,
         )
 
+    @app.get("/api/code/index/extension-discovery")
+    def api_code_index_extension_discovery() -> dict:
+        return discover_code_index_extensions(get_workspace())
+
+    @app.put("/api/code/index/extra-extensions")
+    def api_code_index_extra_extensions(body: CodeIndexExtraExtensionsBody) -> dict:
+        try:
+            return save_code_index_extra_extensions(get_workspace(), body.extensions)
+        except OSError as e:
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
     @app.post("/api/code/index/scan")
-    def api_code_index_scan() -> dict:
+    def api_code_index_scan(body: CodeIndexScanBody = Body(default_factory=CodeIndexScanBody)) -> dict:
         ws = get_workspace()
         try:
-            return run_code_index_scan(ws)
+            return run_code_index_scan(ws, adopt_extensions=body.adopt_extensions)
         except OSError as e:
             raise HTTPException(status_code=500, detail=str(e)) from e
 

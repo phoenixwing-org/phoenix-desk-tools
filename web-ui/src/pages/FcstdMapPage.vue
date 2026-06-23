@@ -132,7 +132,7 @@ async function onPurgeMissing() {
       { id: "confirm", label: `删除 ${n} 条`, variant: "danger" },
     ],
   });
-  if (choice !== "confirm") return;
+  if (choice.choiceId !== "confirm") return;
   purging.value = true;
   shell.appendLog(`[CAD 索引] 删除缺失记录 ${n} 条…`, { source: "fcstd_map", open: true });
   try {

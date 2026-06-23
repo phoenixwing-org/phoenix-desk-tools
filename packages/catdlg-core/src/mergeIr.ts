@@ -5,6 +5,7 @@ import {
   styleFlags,
 } from "./parseCatDlg.js";
 import { parseCatNls } from "./parseCatNls.js";
+import { parseCatRsc } from "./parseCatRsc.js";
 import type { CaaDialogIr, CaaDialogNode, CatDlgFlatNode, ControlNls } from "./schema.js";
 
 function flatToNode(flat: CatDlgFlatNode): CaaDialogNode {
@@ -99,7 +100,8 @@ function findNodeBySegments(root: CaaDialogNode, segments: string[]): CaaDialogN
   return current;
 }
 
-function applyNlsKey(root: CaaDialogNode, key: string, value: string) {
+/** 将单条 `.CATNls` 扁平键写回控件树（与 mergeIr 一致）。 */
+export function applyNlsKeyToRoot(root: CaaDialogNode, key: string, value: string) {
   const segments = key.split(".");
   for (let i = segments.length; i >= 1; i--) {
     const prop = segments[i - 1];
@@ -143,14 +145,17 @@ function mergeNls(root: CaaDialogNode, nls: Record<string, string>, dialogTitle?
       root.nls.title = value;
       continue;
     }
-    applyNlsKey(root, key, value);
+    applyNlsKeyToRoot(root, key, value);
   }
 }
 
 export function mergeDialogIr(opts: {
   catDlgText: string;
   catNlsText?: string;
+  localeNlsTexts?: Record<string, string>;
+  catRscText?: string;
   sources: CaaDialogIr["sources"];
+  parseMeta?: CaaDialogIr["parseMeta"];
 }): CaaDialogIr {
   const flat = parseCatDlg(opts.catDlgText);
   const nodes = flat.map(flatToNode);
@@ -162,13 +167,26 @@ export function mergeDialogIr(opts: {
     mergeNls(root, parseCatNls(opts.catNlsText), { ref: titleRef });
   }
 
-  return {
+  const localeNls: Record<string, Record<string, string>> = {};
+  if (opts.localeNlsTexts) {
+    for (const [locale, text] of Object.entries(opts.localeNlsTexts)) {
+      localeNls[locale] = parseCatNls(text);
+    }
+  }
+
+  const ir: CaaDialogIr = {
     schemaVersion: 1,
     dialogName,
     title: titleRef.title ?? root.nls?.title,
     root,
     sources: opts.sources,
   };
+
+  if (Object.keys(localeNls).length) ir.localeNls = localeNls;
+  if (opts.catRscText) ir.rsc = parseCatRsc(opts.catRscText);
+  if (opts.parseMeta) ir.parseMeta = opts.parseMeta;
+
+  return ir;
 }
 
 export type { ControlNls };

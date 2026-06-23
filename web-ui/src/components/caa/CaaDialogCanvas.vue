@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { CaaDialogIr } from "../../types/caaDialogIr";
 import CaaDialogNodeView from "./CaaDialogNodeView.vue";
+import CaaDialogRelatedFilesTable from "./CaaDialogRelatedFilesTable.vue";
 
 defineProps<{
   ir: CaaDialogIr | null;
@@ -12,27 +13,24 @@ defineProps<{
   <div class="caa-editor-main">
     <div class="caa-canvas-wrap">
       <div v-if="!ir" class="caa-canvas-empty muted">加载对话框后在此预览</div>
-      <CaaDialogNodeView
-        v-else
-        :node="ir.root"
-      />
+      <CaaDialogNodeView v-else :node="ir.root" />
     </div>
+    <CaaDialogRelatedFilesTable v-if="ir" :ir="ir" />
   </div>
 </template>
 
 <style scoped>
 .caa-editor-main {
   display: flex;
-  flex: 1;
+  flex-direction: column;
+  flex: 0 0 auto;
   min-width: 0;
-  min-height: 0;
-  height: 100%;
+  gap: 10px;
 }
 
 .caa-canvas-wrap {
-  flex: 1;
+  flex: 0 0 auto;
   min-width: 0;
-  overflow: auto;
   padding: 12px;
   background: #e8ecf1;
   border-radius: 6px;

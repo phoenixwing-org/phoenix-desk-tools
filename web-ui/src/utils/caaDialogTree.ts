@@ -43,3 +43,14 @@ export function formatIntList(values: number[] | undefined): string {
   if (!values?.length) return "—";
   return values.join(", ");
 }
+
+export function nlsFlatMapsEqual(a: Record<string, string>, b: Record<string, string>): boolean {
+  const keysA = Object.keys(a).sort();
+  const keysB = Object.keys(b).sort();
+  if (keysA.length !== keysB.length) return false;
+  for (let i = 0; i < keysA.length; i++) {
+    if (keysA[i] !== keysB[i]) return false;
+    if (a[keysA[i]] !== b[keysB[i]]) return false;
+  }
+  return true;
+}

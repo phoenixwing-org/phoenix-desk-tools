@@ -9,6 +9,7 @@ const props = withDefaults(
     node: CaaDialogNode;
     /** 铺满对话框固定宽度；COLRES/ROWRES 列行用 fr */
     fillParent?: boolean;
+    dialogRoot?: CaaDialogNode;
   }>(),
   { fillParent: false },
 );
@@ -67,7 +68,7 @@ function itemStyle(child: CaaDialogNode): Record<string, string> {
       class="caa-grid-cell"
       :style="itemStyle(child)"
     >
-      <CaaDialogNodeView :node="child" :fill-parent="fillParent" />
+      <CaaDialogNodeView :node="child" :fill-parent="fillParent" :dialog-root="dialogRoot" />
     </div>
   </div>
 </template>
