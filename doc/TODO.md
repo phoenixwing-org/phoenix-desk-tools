@@ -1,9 +1,10 @@
 # Phoenix Web / 后端 — 总待办
 
 > 汇总跨模块待办；细项研究稿见 [文档索引.md](文档索引.md)。  
+> **Git 插件**细项见 **[TODO-GIT.md](TODO-GIT.md)**。  
 > 状态：`[ ]` 未做 · `[~]` 进行中 · `[x]` 已完成
 
-最后更新：2026-06-22
+最后更新：2026-06-23
 
 ---
 
@@ -27,7 +28,7 @@
 - [x] 属性「全部推荐」：单次 API + 不读 FCStd（文件名/索引/记忆）
 - [x] 改名 Tab：显示改名记录 → 跳转「改名分析」页（不再内嵌引用表）
 - [x] 引用/装配「改链接」后自动刷新相关 Tab 缓存（`notifyXrefMutation` 联动引用+装配，见 [归档](cad/文件详情-引用变更缓存刷新-归档.md)）
-- [ ] 图纸档：编辑属性只读提示与来源模型跳转体验统一
+- [x] 图纸档：编辑属性只读提示与来源模型跳转体验统一（见 [归档](platform/图纸档-编辑属性只读体验-归档.md)）
 
 ---
 
@@ -126,6 +127,10 @@
 - [x] **壳层区补全**：全 Tab 显示树/属性/日志等；分组大图标 / 单行紧凑联动（见 [归档](platform/Web壳层-Ribbon壳层区补全-归档.md)）
 - [x] **`RIBBON_SHELL_TAB_ID` 运行时修复**（`import type` → 值导入）
 
+- [x] **侧栏高度调节**：顶区弹性 + 下方固定块 · `sidebarStackLayout` — [规划](platform/Web壳层-侧栏高度调节-规划.md)（2026-06-23）
+- [ ] **侧栏 block 组布局**：标签页 / 分割堆叠 · 标题右键或 `⋮` — [规划](platform/Web壳层-侧栏Block布局模式-规划.md)（见 [TODO-GIT](TODO-GIT.md) 技术债）
+- [ ] **工作集 / 忽略设定独立配置**：与「工作空间树」Tab 解耦，各自可配置显示、停靠、布局模式（标签页 vs 堆叠）；**可能涉及壳层侧栏架构调整**，先研讨后立项 — 关联 [FileWorkset-规划](platform/FileWorkset-规划.md) · [Code忽略](code/Code模块-批量改名-规划.md) §5 · 上条 `workspace_primary` 拆分
+
 ### 系统 · FileWorkset（文件工作集）
 
 > 规划：[FileWorkset-规划.md](platform/FileWorkset-规划.md) — **壳层系统能力**，为 CAD/Code 各模块提供 path 集合归集与跨页执行。
@@ -153,7 +158,7 @@
 - [x] P3 首批：零件目录、CAD/Code 索引工具栏（表仍 `ResizableDataTable`）；2026-06-20 smoke 通过
 - [x] **验收（P3 首批）**：成员排序 GBK 预检、UUID 写盘、索引/目录、顶栏 Gitee（见 [归档](platform/Web壳层-业务页Element化-归档.md)）
 - [x] **P3 二批 · Element（工具栏/按钮，大表保留）**：单元测试 · BOM 列表 · 改名分析/`RenameAnalysisPanel` · 文件详情/零件键详情（2026-06-21 实现并归档）
-- [ ] **P3 二批 · 人工 smoke（延后）**：
+- [~] **P3 二批 · 人工 smoke（等待人工验证）** — 实现与 `pnpm build` 已完成（2026-06-21）；清单见 [归档 §P3 二批 smoke](platform/Web壳层-业务页Element化-归档.md)
   - [ ] 单元测试：运行 / 模块行内运行 / 失败关注复测
   - [ ] BOM 列表（`bom_export`）
   - [ ] 改名分析（`file_rename` · `RenameAnalysisPanel`）
@@ -239,6 +244,22 @@
 - [~] **`app_config` 模块字段 + 主页导航偏好**（见 P1 §导航模块偏好；与下方原项合并实现）
 - [x] 工作空间偏好迁入 SQLite（`phoenix_workspace_pref`）；JSON 首次打开自动导入，日常读写不再写 JSON
 
+### 壳层 · Git 工作区插件
+
+> **Git 细项待办**：[TODO-GIT.md](TODO-GIT.md)（`TODO-GIT`）  
+> 规划：[Web壳层-Git工作区插件-规划.md](platform/Web壳层-Git工作区插件-规划.md) · 点检：[G1点检清单](platform/Web壳层-Git工作区插件-G1点检清单.md)
+
+| 里程碑 | 状态 |
+| --- | --- |
+| G1 · API + Git 页 + 侧栏提交 | [x] |
+| G1 · 框选批量 · `SidebarBlock` · 侧栏 layout 修复 | [x] |
+| G1 · diff API · 成员排序迁壳层（过渡弹层） | [~] |
+| G1 · `GitFilePage` / Tab · 删 spike | [~] |
+| G1 · 人工点检（G1点检清单 §1–7） | [ ] |
+| G2 · diff2html · `status-paths` | [ ] |
+
+**下一步（详见 [TODO-GIT.md §G1 收尾](TODO-GIT.md#g1-收尾)**：`GitFilePage` · 删 spike · G1 点检
+
 ---
 
 ## P3 — Code 工具（已起步）
@@ -263,8 +284,8 @@
 - [x] **成员排序 · 变更文件状态列**：预检 `dry_run` / 写盘 `written`（`el-tag`，见 [归档](platform/Web壳层-属性面板与壳层稳定化-归档.md)）
 - [ ] **成员排序 · 可选目录层级**：勾选列表默认 **1 级**（现「一级条目」）；偏好可选 **2–4 级** 展开子目录为可选项（仍受 ignore 规则约束）；`list_reorder_top_level_entries` / `GET top-level` + `ReorderMembersPage` 结果区标题与汇总
 - [ ] **成员变量字母序（完整规则）**：Doxygen 序号重编、`.h`/`.cpp` 构造/析构等序号一致 — 见 [成员变量字母序-规则与待实现.md](code/成员变量字母序-规则与待实现.md)；Web 勾选暂禁用
-- [ ] **成员排序 · 变更 Diff 预览（待研究）**：变更文件表点击路径 → 弹层/新窗对比；方案见 [成员排序-变更Diff预览-待研究.md](platform/成员排序-变更Diff预览-待研究.md)（Monaco Diff / diff2html / 后端 `difflib` 预检 diff + 可选 `git diff`）
-- [ ] 成员排序：Git 脏文件过滤（仅排序已修改文件，与 diff 预览联动）
+- [~] **成员排序 · Git 预览 / Revert**：表内 👁 已接壳层 `/api/git/diff` + **过渡弹层**；Revert/init 已迁壳层 — **[TODO-GIT](TODO-GIT.md)** · [G1续归档](platform/Web壳层-Git工作区插件-G1续归档.md) · `GitFilePage` 待做
+- [ ] 成员排序：Git 脏文件过滤（**TODO-GIT · G2** `status-paths`，暂缓）
 - [ ] 其它 Code 工具迁入 `phoenix/code/`（按 skill 拆分）
 
 ---

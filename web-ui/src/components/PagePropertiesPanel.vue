@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, unref, watch } from "vue";
 import PagePropertyFieldRow from "./PagePropertyFieldRow.vue";
+import SidebarBlock from "./shell/SidebarBlock.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { usePagePropertiesHost } from "../composables/pagePropertiesHost";
 import { bindPointerDrag } from "../utils/pointerDrag";
@@ -95,7 +96,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section class="page-props">
+  <SidebarBlock title="属性" variant="card" body-scroll class="page-props">
     <div ref="tableWrapRef" class="prop-table-wrap">
       <template v-if="visibleGroups.length">
         <div
@@ -139,24 +140,23 @@ onUnmounted(() => {
       </template>
       <p v-else class="prop-placeholder muted small">没有属性</p>
     </div>
-  </section>
+  </SidebarBlock>
 </template>
 
 <style scoped>
-.page-props {
-  display: flex;
-  flex-direction: column;
+.page-props:not(.sidebar-block--collapsed) {
+  flex: 1 1 auto;
   min-height: 0;
-  height: 100%;
-  background: var(--sidebar-bg);
-  border-top: 1px solid var(--border);
 }
 
 .prop-table-wrap {
   position: relative;
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
-  overflow: auto;
+}
+
+.prop-table tbody > tr:first-child.prop-group-row td {
+  border-top: none;
 }
 
 .prop-col-resizer {
@@ -224,7 +224,8 @@ onUnmounted(() => {
 
 .prop-placeholder {
   margin: 0;
-  padding: 12px 10px;
+  padding: 16px 12px;
   line-height: 1.4;
+  text-align: center;
 }
 </style>

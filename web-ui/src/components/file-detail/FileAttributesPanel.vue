@@ -9,6 +9,7 @@ import {
   saveBom,
 } from "../../api";
 import { useFileDetailContext } from "../../composables/useFileDetailContext";
+import { useDrawingBomReadonly } from "../../composables/useDrawingBomReadonly";
 import { useAppShell } from "../../composables/useAppShell";
 import ComboTextInput from "../ComboTextInput.vue";
 import { TYPE_CODE_OPTIONS } from "../../utils/typeCodeOptions";
@@ -46,20 +47,12 @@ const {
   rememberFilenameDraft,
 } = useFileDetailContext();
 const shell = useAppShell();
-const bomPrefs = ref<BomApplyPrefs | null>(null);
-const initialFields = ref<Partial<BomFields>>({});
-const busy = ref(false);
-const recommendingField = ref<string | null>(null);
-const recommendingAll = ref(false);
-const kindFilters = ref<BomKindFilters>({
-  part: true,
-  assembly: true,
-  drawing: true,
-});
-
-const isFcstd = computed(() => preview.value?.is_fcstd ?? false);
-const bomReadonly = computed(() => preview.value?.bom_readonly ?? false);
-const bomSourceRel = computed(() => preview.value?.bom_source_rel ?? null);
+const {
+  bomReadonly,
+  attrsPanelTitle,
+  canOpenSourceModel,
+  openSourceModel,
+} = useDrawingBomReadonly(preview);
 const documentKindsDisplay = computed(
   () => preview.value?.document_kinds?.display?.trim() || "",
 );
@@ -92,11 +85,18 @@ const docKindTags = computed((): DocKindTag[] => {
   });
 });
 
-function openSourceModel() {
-  const src = bomSourceRel.value;
-  if (!src) return;
-  shell.openFileDetailForRel(src, { subTab: "edit" });
-}
+const bomPrefs = ref<BomApplyPrefs | null>(null);
+const initialFields = ref<Partial<BomFields>>({});
+const busy = ref(false);
+const recommendingField = ref<string | null>(null);
+const recommendingAll = ref(false);
+const kindFilters = ref<BomKindFilters>({
+  part: true,
+  assembly: true,
+  drawing: true,
+});
+
+const isFcstd = computed(() => preview.value?.is_fcstd ?? false);
 
 const recommendedFillLine = () => {
   const r = bomPrefs.value?.recommended_fill;
@@ -116,6 +116,7 @@ function displayInitial(key: string) {
 }
 
 function isDirty(key: string) {
+  if (bomReadonly.value) return false;
   return (
     String(form.value[key as keyof BomFields] ?? "").trim() !==
     String(baseline.value[key as keyof BomFields] ?? "").trim()
@@ -270,16 +271,11 @@ onMounted(() => {
 
 <template>
   <div v-if="preview" class="attrs-panel">
-    <h3 class="panel-title">编辑属性</h3>
-    <p v-if="bomReadonly" class="readonly-banner">
-      图纸文件 BOM 只读（属性挂载于 App::Link）。
-      <template v-if="bomSourceRel">
-        来源模型：
-        <button type="button" class="link-btn mono" @click="openSourceModel">{{ bomSourceRel }}</button>
-      </template>
-      <template v-else>请在 Link 指向的模型 FCStd 中编辑。</template>
-    </p>
+    <h3 class="panel-title">{{ attrsPanelTitle }}</h3>
     <section class="toolbar">
+      <el-button v-if="canOpenSourceModel" type="primary" size="small" @click="openSourceModel">
+        打开模型
+      </el-button>
       <el-button size="small" :disabled="busy" @click="onReload">重新读取</el-button>
       <el-button
         size="small"
@@ -390,26 +386,6 @@ onMounted(() => {
   margin: 0 0 10px;
   font-size: 0.92rem;
   font-weight: 600;
-}
-.readonly-banner {
-  margin: 0 0 10px;
-  padding: 10px 12px;
-  border-radius: 6px;
-  border: 1px solid #bfdbfe;
-  background: #eff6ff;
-  font-size: 0.82rem;
-  color: #1e40af;
-}
-.link-btn {
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--accent, #2563eb);
-  cursor: pointer;
-  font: inherit;
-}
-.link-btn:hover {
-  text-decoration: underline;
 }
 .toolbar {
   display: flex;

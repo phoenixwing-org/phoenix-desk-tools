@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Document, Folder, FolderOpened } from "@element-plus/icons-vue";
 import { computed, ref } from "vue";
 import TreeBranch from "./TreeBranch.vue";
 import type { TreeNode } from "../api";
@@ -37,7 +38,11 @@ function treeKindTag(kind?: string) {
 <template>
   <div v-if="node.type === 'file'" class="tree-row tree-file" :class="{ active: selected === node.path }" @click="emit('selectFile', node.path)">
     <span class="tree-twistie tree-twistie-leaf" aria-hidden="true">·</span>
-    <span class="tree-kind">[{{ treeKindTag(node.kind) }}]</span>
+    <el-tooltip :content="treeKindTag(node.kind)" placement="top" :show-after="400">
+      <el-icon class="tree-kind-icon tree-file-icon" aria-hidden="true">
+        <Document />
+      </el-icon>
+    </el-tooltip>
     <span class="tree-label" :title="node.path">{{ node.name }}</span>
   </div>
   <div v-else class="tree-dir">
@@ -50,7 +55,10 @@ function treeKindTag(kind?: string) {
     >
       <span v-if="hasChildren" class="tree-twistie" aria-hidden="true">{{ expanded ? "▼" : "▶" }}</span>
       <span v-else class="tree-twistie tree-twistie-leaf" aria-hidden="true">·</span>
-      <span class="tree-dir-badge" aria-hidden="true">目录</span>
+      <el-icon class="tree-kind-icon tree-dir-icon" aria-hidden="true">
+        <FolderOpened v-if="hasChildren && expanded" />
+        <Folder v-else />
+      </el-icon>
       <span class="tree-label tree-dir-name" :title="node.path || node.name">{{ node.name || "/" }}</span>
       <span v-if="hasChildren" class="tree-dir-count">{{ childCount }}</span>
     </button>
@@ -95,24 +103,17 @@ function treeKindTag(kind?: string) {
   color: #cbd5e1;
 }
 
-.tree-kind {
+.tree-kind-icon {
   flex-shrink: 0;
-  min-width: 2.5em;
-  font-size: 0.68rem;
-  font-weight: 600;
-  color: #64748b;
-  letter-spacing: -0.02em;
+  font-size: 16px;
 }
 
-.tree-dir-badge {
-  flex-shrink: 0;
-  padding: 0 4px;
-  border-radius: 3px;
-  font-size: 0.62rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: #475569;
-  background: #e2e8f0;
+.tree-dir-icon {
+  color: var(--el-color-info);
+}
+
+.tree-file-icon {
+  color: var(--el-text-color-secondary);
 }
 
 .tree-label {

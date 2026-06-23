@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
 import { Close, Delete } from "@element-plus/icons-vue";
+import SidebarBlock from "../components/shell/SidebarBlock.vue";
 import { useAppShell } from "../composables/useAppShell";
 
 const shell = useAppShell();
@@ -33,49 +34,37 @@ watch(
 </script>
 
 <template>
-  <section class="log-panel" data-tour="shell-log">
-    <header class="log-head">
-      <span class="log-title">
-        运行日志
-        <span v-if="sourceLabel" class="log-src">· {{ sourceLabel }}</span>
-      </span>
-      <div class="log-actions">
-        <el-button text size="small" class="log-icon-btn" title="清空日志" @click="onClear">
-          <el-icon><Delete /></el-icon>
-        </el-button>
-        <el-button text size="small" class="log-icon-btn" title="收起日志区" @click="onClose">
-          <el-icon><Close /></el-icon>
-        </el-button>
-      </div>
-    </header>
+  <SidebarBlock
+    class="log-panel"
+    title="运行日志"
+    variant="strip"
+    body-scroll
+    data-tour="shell-log"
+    aria-label="运行日志"
+  >
+    <template #title>
+      运行日志
+      <span v-if="sourceLabel" class="log-src">· {{ sourceLabel }}</span>
+    </template>
+    <template #actions>
+      <el-button text size="small" class="log-icon-btn" title="清空日志" @click="onClear">
+        <el-icon><Delete /></el-icon>
+      </el-button>
+      <el-button text size="small" class="log-icon-btn" title="收起日志区" @click="onClose">
+        <el-icon><Close /></el-icon>
+      </el-button>
+    </template>
     <pre ref="preRef" class="log-body">{{ shell.logText.value || "（暂无日志）" }}</pre>
-  </section>
+  </SidebarBlock>
 </template>
 
 <style scoped>
 .log-panel {
-  min-height: 0;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
   border-top: 1px solid var(--border);
-  background: var(--sidebar-bg);
-  overflow: hidden;
 }
 
-.log-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 4px 8px;
-  border-bottom: 1px solid var(--border);
-  background: var(--panel-head-bg);
-}
-
-.log-title {
-  font-weight: 600;
-  font-size: 0.78rem;
+.log-panel :deep(.sidebar-block-body) {
+  padding: 0;
 }
 
 .log-src {
@@ -83,33 +72,23 @@ watch(
   color: var(--muted);
 }
 
-.log-actions {
-  display: flex;
-  gap: 2px;
-  flex-shrink: 0;
-}
-
 .log-icon-btn {
-  margin: 0;
-  padding: 4px;
-  min-height: auto;
-  color: var(--muted);
-}
-
-.log-icon-btn:hover {
-  color: var(--text);
+  padding: 2px 4px;
+  min-height: 0;
 }
 
 .log-body {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   margin: 0;
-  padding: 6px 8px 10px;
+  padding: 6px 8px;
   overflow: auto;
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 0.72rem;
-  line-height: 1.35;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
   color: var(--text);
+  background: transparent;
 }
 </style>

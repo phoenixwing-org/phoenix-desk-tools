@@ -5,13 +5,9 @@ import { useSideDockPrefs } from "../composables/useSideDockPrefs";
 withDefaults(
   defineProps<{
     compact?: boolean;
-    showLogSwitch?: boolean;
-    showPropsSwitch?: boolean;
   }>(),
   {
     compact: false,
-    showLogSwitch: true,
-    showPropsSwitch: true,
   },
 );
 
@@ -19,91 +15,163 @@ const {
   treeDock,
   logDock,
   propsDock,
+  treePanelOpen,
   logPanelOpen,
   propsPanelOpen,
   setTreeDock,
   setLogDock,
   setPropsDock,
+  setTreePanelOpen,
   setLogPanelOpen,
   setPropsPanelOpen,
 } = useSideDockPrefs();
 
-function onTreeChange(v: SideDock | string | number | boolean | undefined) {
-  if (v === "left" || v === "right") void setTreeDock(v);
+function onDockChange(
+  setter: (side: SideDock) => void | Promise<void>,
+  v: SideDock | string | number | boolean | undefined,
+) {
+  if (v === "left" || v === "right") void setter(v);
 }
 
-function onLogChange(v: SideDock | string | number | boolean | undefined) {
-  if (v === "left" || v === "right") void setLogDock(v);
-}
-
-function onPropsChange(v: SideDock | string | number | boolean | undefined) {
-  if (v === "left" || v === "right") void setPropsDock(v);
-}
-
-function onLogOpenChange(open: string | number | boolean) {
-  void setLogPanelOpen(Boolean(open));
-}
-
-function onPropsOpenChange(open: string | number | boolean) {
-  void setPropsPanelOpen(Boolean(open));
+function onOpenChange(setter: (open: boolean) => void | Promise<void>, v: string | number | boolean) {
+  void setter(Boolean(v));
 }
 </script>
 
 <template>
   <div class="side-dock-panel" :class="{ compact }">
     <el-form label-position="top" class="dock-form">
-      <el-form-item label="工作空间树停靠">
-        <el-radio-group :model-value="treeDock" @update:model-value="onTreeChange">
-          <el-radio-button value="left">左侧</el-radio-button>
-          <el-radio-button value="right">右侧</el-radio-button>
-        </el-radio-group>
-      </el-form-item>
-      <el-form-item label="页面属性停靠">
-        <el-radio-group :model-value="propsDock" @update:model-value="onPropsChange">
-          <el-radio-button value="left">左侧</el-radio-button>
-          <el-radio-button value="right">右侧</el-radio-button>
-        </el-radio-group>
-      </el-form-item>
-      <el-form-item label="运行日志停靠">
-        <el-radio-group :model-value="logDock" @update:model-value="onLogChange">
-          <el-radio-button value="left">左侧</el-radio-button>
-          <el-radio-button value="right">右侧</el-radio-button>
-        </el-radio-group>
-      </el-form-item>
-      <el-form-item v-if="showPropsSwitch" label="显示页面属性">
-        <el-switch :model-value="propsPanelOpen" @update:model-value="onPropsOpenChange" />
-      </el-form-item>
-      <el-form-item v-if="showLogSwitch" label="显示运行日志">
-        <el-switch :model-value="logPanelOpen" @update:model-value="onLogOpenChange" />
-      </el-form-item>
+      <div class="dock-block-list" role="list">
+        <div class="dock-block-row" role="listitem">
+          <span class="dock-block-label">工作空间树</span>
+          <el-radio-group
+            :model-value="treeDock"
+            size="small"
+            class="dock-side-group"
+            @update:model-value="(v) => onDockChange(setTreeDock, v)"
+          >
+            <el-radio-button value="left">左</el-radio-button>
+            <el-radio-button value="right">右</el-radio-button>
+          </el-radio-group>
+          <div class="dock-block-show">
+            <span class="dock-show-label">显示</span>
+            <el-switch
+              :model-value="treePanelOpen"
+              size="small"
+              @update:model-value="(v) => onOpenChange(setTreePanelOpen, v)"
+            />
+          </div>
+        </div>
+
+        <div class="dock-block-row" role="listitem">
+          <span class="dock-block-label">页面属性</span>
+          <el-radio-group
+            :model-value="propsDock"
+            size="small"
+            class="dock-side-group"
+            @update:model-value="(v) => onDockChange(setPropsDock, v)"
+          >
+            <el-radio-button value="left">左</el-radio-button>
+            <el-radio-button value="right">右</el-radio-button>
+          </el-radio-group>
+          <div class="dock-block-show">
+            <span class="dock-show-label">显示</span>
+            <el-switch
+              :model-value="propsPanelOpen"
+              size="small"
+              @update:model-value="(v) => onOpenChange(setPropsPanelOpen, v)"
+            />
+          </div>
+        </div>
+
+        <div class="dock-block-row" role="listitem">
+          <span class="dock-block-label">运行日志</span>
+          <el-radio-group
+            :model-value="logDock"
+            size="small"
+            class="dock-side-group"
+            @update:model-value="(v) => onDockChange(setLogDock, v)"
+          >
+            <el-radio-button value="left">左</el-radio-button>
+            <el-radio-button value="right">右</el-radio-button>
+          </el-radio-group>
+          <div class="dock-block-show">
+            <span class="dock-show-label">显示</span>
+            <el-switch
+              :model-value="logPanelOpen"
+              size="small"
+              @update:model-value="(v) => onOpenChange(setLogPanelOpen, v)"
+            />
+          </div>
+        </div>
+      </div>
     </el-form>
     <p v-if="!compact" class="dock-hint">
-      树、属性、日志可分别选左/右；改停靠时会自动展开侧栏。
+      每块可独立选左/右停靠与是否显示。页脚 <strong>左栏 / 右栏</strong> 图标可收起整侧（类似 VS Code）。
     </p>
   </div>
 </template>
 
 <style scoped>
 .side-dock-panel.compact {
-  min-width: 240px;
+  min-width: 268px;
 }
 
-.dock-form :deep(.el-radio-group) {
+.dock-block-list {
   display: flex;
+  flex-direction: column;
+  gap: 0;
   width: 100%;
 }
 
-.dock-form :deep(.el-radio-button) {
-  flex: 1;
+.dock-block-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px 10px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  font-size: 13px;
 }
 
-.dock-form :deep(.el-radio-button__inner) {
-  width: 100%;
-  padding: 8px 12px;
+.dock-block-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.dock-block-row:first-child {
+  padding-top: 0;
+}
+
+.dock-block-label {
+  min-width: 0;
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+}
+
+.dock-side-group {
+  flex-shrink: 0;
+}
+
+.dock-side-group :deep(.el-radio-button__inner) {
+  padding: 4px 10px;
+}
+
+.dock-block-show {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.dock-show-label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
 }
 
 .dock-hint {
-  margin: 0 0 4px;
+  margin: 10px 0 4px;
   font-size: 0.78rem;
   line-height: 1.55;
   color: var(--muted, #64748b);

@@ -5,6 +5,7 @@ import CodeIgnorePanel from "../components/CodeIgnorePanel.vue";
 import FileWorksetPanel from "../components/FileWorksetPanel.vue";
 import ShellLogPanel from "./ShellLogPanel.vue";
 import PagePropertiesPanel from "../components/PagePropertiesPanel.vue";
+import GitCommitPanel from "../components/shell/GitCommitPanel.vue";
 import { usePagePropertiesHost, setPropertiesActivePage } from "../composables/pagePropertiesHost";
 import { fetchTree, type TreeNode } from "../api";
 import { useAppShell } from "../composables/useAppShell";
@@ -19,14 +20,15 @@ import {
   type WorkspaceTreeFilterState,
 } from "../utils/workspaceTreeFilters";
 import { bindPointerDrag } from "../utils/pointerDrag";
-
-const LOG_MIN_H = 80;
-const LOG_MAX_RATIO = 0.7;
-const TREE_MIN_H = 120;
-const LOG_RESIZER_H = 6;
-const PROPS_MIN_H = 100;
-const PROPS_MAX_RATIO = 0.45;
-const PROPS_RESIZER_H = 6;
+import {
+  maxStoredLogHeightPx,
+  maxStoredPropsFooterHeightPx,
+  maxStoredPropsHeightPx,
+  resolveSidebarStackLayout,
+  SIDEBAR_LOG_MIN_H,
+  SIDEBAR_PROPS_FOOTER_MIN_H,
+  SIDEBAR_PROPS_MIN_H,
+} from "../utils/sidebarStackLayout";
 
 const props = withDefaults(
   defineProps<{
@@ -117,93 +119,72 @@ const panelWidth = computed(() => {
 const logOpen = computed(() => shellLayout.value.log_panel_open);
 const propsOpen = computed(() => shellLayout.value.properties_panel_open);
 const showPropsPanel = computed(() => props.showProps && propsOpen.value && hasProperties.value);
+const showGitCommitPanel = computed(
+  () => props.showProps && propsOpen.value && shell.currentPage.value === "git",
+);
+const showPropsWrap = computed(() => showPropsPanel.value || showGitCommitPanel.value);
+
+const gitCommitExpanded = ref(true);
 
 const panelVisible = computed(
   () =>
     props.showTree ||
     (props.showLog && logOpen.value) ||
-    showPropsPanel.value,
+    showPropsWrap.value,
 );
 
-const splitTreeAndLog = computed(
-  () => props.showTree && props.showLog && logOpen.value && !showPropsPanel.value,
-);
-const splitTreeAndProps = computed(
-  () => props.showTree && showPropsPanel.value && !(props.showLog && logOpen.value),
-);
-const splitAllThree = computed(
-  () => props.showTree && showPropsPanel.value && props.showLog && logOpen.value,
-);
-const splitPropsAndLogOnly = computed(
-  () => !props.showTree && showPropsPanel.value && props.showLog && logOpen.value,
+const stackLayout = computed(() =>
+  resolveSidebarStackLayout({
+    totalHeightPx: sidebarHeight.value,
+    showMain: props.showTree,
+    showPropsWrap: showPropsWrap.value,
+    showPropsMain: showPropsPanel.value,
+    showPropsFooter: showGitCommitPanel.value,
+    propsFooterExpanded: gitCommitExpanded.value,
+    showLog: props.showLog && logOpen.value,
+    storedPropsHeightPx: shellLayout.value.properties_panel_height_px,
+    storedLogHeightPx: shellLayout.value.log_panel_height_px,
+    storedPropsFooterHeightPx: shellLayout.value.properties_footer_height_px,
+  }),
 );
 
-function maxPropsHeightPx(sidebarH: number): number {
-  if (sidebarH <= 0) return shellLayout.value.properties_panel_height_px;
-  const reserved =
-    (props.showTree ? TREE_MIN_H : 0) +
-    (props.showLog && logOpen.value ? displayLogHeightPx.value + LOG_RESIZER_H : 0);
-  const byTree = sidebarH - reserved - PROPS_RESIZER_H;
-  const byRatio = Math.floor(sidebarH * PROPS_MAX_RATIO);
-  return Math.max(PROPS_MIN_H, Math.min(byTree, byRatio));
-}
-
-const displayPropsHeightPx = computed(() => {
-  const stored = shellLayout.value.properties_panel_height_px;
-  if (!showPropsPanel.value) return stored;
-  if (sidebarHeight.value <= 0) return stored;
-  return Math.min(maxPropsHeightPx(sidebarHeight.value), Math.max(PROPS_MIN_H, stored));
-});
-
-const propsPanelStyle = computed(() => {
-  if (!showPropsPanel.value) return undefined;
-  if (props.showTree && (splitTreeAndProps.value || splitAllThree.value)) {
-    return { height: `${displayPropsHeightPx.value}px`, flexShrink: "0" };
-  }
-  if (splitPropsAndLogOnly.value) {
-    return { height: `${displayPropsHeightPx.value}px`, flexShrink: "0" };
+const bodyStyle = computed(() => {
+  if (!props.showTree) return undefined;
+  if (stackLayout.value.mainFlex) {
+    return { flex: "1 1 auto", minHeight: `${stackLayout.value.mainMinHeightPx}px` };
   }
   return { flex: "1 1 auto", minHeight: "0" };
 });
 
-function maxLogHeightPx(sidebarH: number): number {
-  if (sidebarH <= 0) return shellLayout.value.log_panel_height_px;
-  const reserved =
-    (props.showTree ? TREE_MIN_H : 0) +
-    (showPropsPanel.value ? displayPropsHeightPx.value + PROPS_RESIZER_H : 0);
-  const byTree = sidebarH - reserved - LOG_RESIZER_H;
-  const byRatio = Math.floor(sidebarH * LOG_MAX_RATIO);
-  return Math.max(LOG_MIN_H, Math.min(byTree, byRatio));
-}
+const propsPanelStyle = computed(() => {
+  if (!showPropsWrap.value) return undefined;
+  if (stackLayout.value.propsWrapFlex) {
+    return { flex: "1 1 auto", minHeight: "0" };
+  }
+  return { height: `${stackLayout.value.propsWrapHeightPx}px`, flexShrink: "0" };
+});
 
-const displayLogHeightPx = computed(() => {
-  const stored = shellLayout.value.log_panel_height_px;
-  if (!props.showLog || !logOpen.value) return stored;
-  if (sidebarHeight.value <= 0) return stored;
-  const needsClamp = splitTreeAndLog.value || splitAllThree.value || splitPropsAndLogOnly.value;
-  if (!needsClamp && props.showTree) return stored;
-  if (!needsClamp && !props.showTree) return stored;
-  return Math.min(maxLogHeightPx(sidebarHeight.value), Math.max(LOG_MIN_H, stored));
+const propsFooterStyle = computed(() => {
+  if (!showGitCommitPanel.value) return undefined;
+  if (!gitCommitExpanded.value) {
+    return { flexShrink: "0" };
+  }
+  return { height: `${stackLayout.value.propsFooterHeightPx}px`, flexShrink: "0" };
 });
 
 const logPanelStyle = computed(() => {
   if (!logOpen.value || !props.showLog) return undefined;
-  if (!props.showTree && !showPropsPanel.value) {
+  if (stackLayout.value.logFlex) {
     return { flex: "1 1 auto", minHeight: "0" };
   }
-  if (splitTreeAndLog.value || splitAllThree.value || splitPropsAndLogOnly.value) {
-    return { height: `${displayLogHeightPx.value}px`, flexShrink: "0" };
-  }
-  return { flex: "1 1 auto", minHeight: "0" };
+  return { height: `${stackLayout.value.logHeightPx}px`, flexShrink: "0" };
 });
 
-const bodyFlex = computed(() => {
-  if (!props.showTree) return undefined;
-  if (splitTreeAndLog.value || splitTreeAndProps.value || splitAllThree.value) {
-    return { flex: "1 1 auto", minHeight: `${TREE_MIN_H}px` };
-  }
-  return { flex: "1 1 auto", minHeight: "0" };
-});
+const hasBottomFixed = computed(
+  () =>
+    props.showTree &&
+    ((props.showLog && logOpen.value) || showPropsWrap.value),
+);
 
 let resizeObserver: ResizeObserver | null = null;
 
@@ -262,7 +243,7 @@ function onAddVisibleToWorkset() {
 }
 
 function onPropsResizeStart(e: PointerEvent) {
-  if (!showPropsPanel.value) return;
+  if (!showPropsWrap.value) return;
   const sidebarEl = sidebarRef.value;
   if (!sidebarEl) return;
   const startY = e.clientY;
@@ -271,14 +252,48 @@ function onPropsResizeStart(e: PointerEvent) {
   bindPointerDrag(e, {
     cursor: "row-resize",
     onMove(ev) {
-      const delta = startY - ev.clientY;
-      const maxH = maxPropsHeightPx(sidebarEl.clientHeight);
-      const next = Math.min(maxH, Math.max(PROPS_MIN_H, startH + delta));
-      shell.shellLayout.value.properties_panel_height_px = next;
+      const delta = ev.clientY - startY;
+      const maxH = maxStoredPropsHeightPx(
+        sidebarEl.clientHeight,
+        props.showTree,
+        props.showLog && logOpen.value,
+        shell.shellLayout.value.log_panel_height_px,
+      );
+      const next = Math.min(maxH, Math.max(SIDEBAR_PROPS_MIN_H, startH + delta));
+      shell.shellLayout.value = {
+        ...shell.shellLayout.value,
+        properties_panel_height_px: next,
+      };
     },
     onEnd() {
       void shell.persistShellLayout({
         properties_panel_height_px: shell.shellLayout.value.properties_panel_height_px,
+      });
+    },
+  });
+}
+
+function onPropsFooterResizeStart(e: PointerEvent) {
+  if (!showGitCommitPanel.value || !gitCommitExpanded.value) return;
+  const startY = e.clientY;
+  const startH = shellLayout.value.properties_footer_height_px ?? SIDEBAR_PROPS_FOOTER_MIN_H;
+  const wrapH = stackLayout.value.propsWrapHeightPx;
+  let nextFooterH = startH;
+
+  bindPointerDrag(e, {
+    cursor: "row-resize",
+    onMove(ev) {
+      const delta = ev.clientY - startY;
+      const maxH = maxStoredPropsFooterHeightPx(wrapH);
+      nextFooterH = Math.min(maxH, Math.max(SIDEBAR_PROPS_FOOTER_MIN_H, startH + delta));
+      shell.shellLayout.value = {
+        ...shell.shellLayout.value,
+        properties_footer_height_px: nextFooterH,
+      };
+    },
+    onEnd() {
+      void shell.persistShellLayout({ properties_footer_height_px: nextFooterH }).catch((err) => {
+        shell.setStatus(String(err));
       });
     },
   });
@@ -294,10 +309,18 @@ function onLogResizeStart(e: PointerEvent) {
   bindPointerDrag(e, {
     cursor: "row-resize",
     onMove(ev) {
-      const delta = startY - ev.clientY;
-      const maxH = maxLogHeightPx(sidebarEl.clientHeight);
-      const next = Math.min(maxH, Math.max(LOG_MIN_H, startH + delta));
-      shell.shellLayout.value.log_panel_height_px = next;
+      const delta = ev.clientY - startY;
+      const maxH = maxStoredLogHeightPx(
+        sidebarEl.clientHeight,
+        props.showTree,
+        showPropsWrap.value,
+        shell.shellLayout.value.properties_panel_height_px,
+      );
+      const next = Math.min(maxH, Math.max(SIDEBAR_LOG_MIN_H, startH + delta));
+      shell.shellLayout.value = {
+        ...shell.shellLayout.value,
+        log_panel_height_px: next,
+      };
     },
     onEnd() {
       void shell.persistShellLayout({
@@ -354,16 +377,16 @@ onUnmounted(() => {
     :class="[
       `dock-${dockSide}`,
       {
-        'log-only': showLog && !showTree && !showPropsPanel,
-        'props-only': showPropsPanel && !showTree && !(showLog && logOpen),
-        'has-split': splitTreeAndLog || splitTreeAndProps || splitAllThree || splitPropsAndLogOnly,
-        'has-props-split': showPropsPanel && (showTree || (showLog && logOpen)),
+        'log-only': showLog && !showTree && !showPropsWrap,
+        'props-only': showPropsWrap && !showTree && !(showLog && logOpen),
+        'has-stack': hasBottomFixed,
+        'has-props-stack-split': stackLayout.propsStackResizer,
       },
     ]"
     data-tour="workspace-tree"
     :style="{ width: panelWidth }"
   >
-    <div v-if="showTree" class="ws-body" :style="bodyFlex">
+    <div v-if="showTree" class="ws-body" :style="bodyStyle">
       <div class="ws-tab-bar" role="tablist">
         <button
           type="button"
@@ -474,7 +497,7 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <template v-if="showPropsPanel">
+    <template v-if="showPropsWrap">
       <div
         v-if="showTree || (showLog && logOpen)"
         class="props-resizer panel-resizer"
@@ -482,13 +505,29 @@ onUnmounted(() => {
         @pointerdown="onPropsResizeStart"
       />
       <div class="ws-props-wrap" :style="propsPanelStyle">
-        <PagePropertiesPanel />
+        <div
+          v-if="showGitCommitPanel"
+          class="ws-props-stack-head"
+          :class="{ 'is-collapsed': !gitCommitExpanded }"
+          :style="propsFooterStyle"
+        >
+          <GitCommitPanel v-model:expanded="gitCommitExpanded" />
+        </div>
+        <div
+          v-if="stackLayout.propsStackResizer"
+          class="props-stack-resizer panel-resizer"
+          title="拖拽调节 Git 提交区高度"
+          @pointerdown="onPropsFooterResizeStart"
+        />
+        <div v-if="showPropsPanel" class="ws-props-main">
+          <PagePropertiesPanel />
+        </div>
       </div>
     </template>
 
     <template v-if="showLog && logOpen">
       <div
-        v-if="showTree || showPropsPanel"
+        v-if="showTree || showPropsWrap"
         class="log-resizer panel-resizer"
         title="拖拽调节日志区高度"
         @pointerdown="onLogResizeStart"
@@ -528,11 +567,6 @@ onUnmounted(() => {
   min-height: 0;
 }
 
-.ws-sidebar.has-split .ws-body {
-  flex: 1 1 auto;
-  min-height: 120px;
-}
-
 .ws-props-wrap {
   min-height: 0;
   overflow: hidden;
@@ -541,15 +575,61 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
+.ws-props-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.ws-props-stack-head {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.ws-props-stack-head.is-collapsed {
+  height: auto !important;
+  overflow: visible;
+}
+
+.ws-props-stack-head > :deep(.sidebar-block:not(.sidebar-block--collapsed)) {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.ws-props-stack-head > :deep(.sidebar-block.sidebar-block--collapsed) {
+  flex: 0 0 auto;
+  height: auto !important;
+  overflow: visible;
+}
+
+.ws-props-main :deep(.page-props.sidebar-block--collapsed) {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.ws-sidebar.has-props-stack-split .ws-props-main {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .panel-resizer {
   flex-shrink: 0;
+  position: relative;
+  z-index: 4;
   height: 6px;
   cursor: row-resize;
   touch-action: none;
   background: var(--panel-head-bg, #f1f5f9);
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
-  position: relative;
+  box-sizing: border-box;
 }
 
 .panel-resizer::after {
@@ -574,7 +654,7 @@ onUnmounted(() => {
 }
 
 .ws-body {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -586,6 +666,7 @@ onUnmounted(() => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
 }
 
 .ws-tab-bar {

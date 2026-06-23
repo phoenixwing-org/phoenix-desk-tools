@@ -55,6 +55,8 @@ export type ShellLayout = {
   /** 页面属性面板是否展开 */
   properties_panel_open: boolean;
   properties_panel_height_px: number;
+  /** 属性区下方堆叠块高度（如 Git 提交区，px） */
+  properties_footer_height_px: number;
   /** 页面属性面板停靠侧 */
   properties_panel_dock: SideDock;
   /** 属性表「名称」列宽（px） */

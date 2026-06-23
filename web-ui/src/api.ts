@@ -1,4 +1,5 @@
 import type { AppConfig, LauncherPrefs, ModuleScope, ShellLayout, WorkspaceNavModules } from "./types/config";
+import type { GitChangesPayload, GitCommitResult, GitFileDiff, GitWorkspaceInfo } from "./types/gitWorkspace";
 
 export type TreeNode = {
   name: string;
@@ -1659,6 +1660,54 @@ export function runReorderMembers(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+  });
+}
+
+// --- 壳层 Git 插件 (/api/git/*) ---
+
+export function fetchGitInfo() {
+  return jsonFetch<GitWorkspaceInfo>("/api/git/info");
+}
+
+export function fetchGitChanges() {
+  return jsonFetch<GitChangesPayload>("/api/git/changes");
+}
+
+export function fetchGitDiff(path: string, scope: "worktree" | "staged" = "worktree") {
+  const q = new URLSearchParams({ path, scope });
+  return jsonFetch<GitFileDiff>(`/api/git/diff?${q}`);
+}
+
+export function initGitRepo() {
+  return jsonFetch<{ ok: boolean; git_root: string; git_root_display: string }>("/api/git/init", {
+    method: "POST",
+  });
+}
+
+export function stageGitPaths(paths: string[]) {
+  return jsonFetch<{ staged: string[] }>("/api/git/stage", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ paths }),
+  });
+}
+
+export function restoreGitPaths(
+  paths: string[],
+  scope: "worktree" | "staged" | "untracked" = "worktree",
+) {
+  return jsonFetch<{ restored: string[]; scope: string }>("/api/git/restore", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ paths, scope }),
+  });
+}
+
+export function commitGitRepo(message: string) {
+  return jsonFetch<GitCommitResult>("/api/git/commit", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message }),
   });
 }
 

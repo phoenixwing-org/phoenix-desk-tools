@@ -34,10 +34,11 @@ export function useCodeIgnorePropertySheet(pageId: string, form: CodeIgnoreForm)
             hidden: computed(() => !form.hasProcessSuggestions.value),
           }),
         ]),
-        propGroup("paths", "忽略文件", [
-          propReadonly("ignore_file", "路径", {
+        propGroup("paths", "Git 式忽略文件", [
+          propReadonly("ignore_file", "code.ignore", {
             value: computed(() => form.ignoreFileDisplay.value || ".phoenix/code.ignore"),
             mono: true,
+            hint: "磁盘文件，类 .gitignore；非 custom_ignore",
           }),
           propReadonly("ignore_file_status", "状态", {
             value: computed(() => form.ignoreFileStatus.value),

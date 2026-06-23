@@ -77,14 +77,16 @@ defineExpose({ reload: loadPrefs });
     <div class="sections" :class="{ 'sections-page': !compact }">
       <details class="ignore-section" :open="compact ? undefined : true">
         <summary class="ignore-summary">
-          <span class="ignore-title">来自 .ignore 文件</span>
+          <span class="ignore-title">code.ignore（Git 式）</span>
           <span class="muted small">{{ ignoreFilePatterns.length }} 条</span>
         </summary>
         <div class="ignore-body">
           <p class="ignore-lead">
+            磁盘
             <span class="mono">{{ ignoreFileDisplay || ".phoenix/code.ignore" }}</span>
+            ，类 <span class="mono">.gitignore</span>；非下方「自定义配置」。
             <span v-if="ignoreFileExists">（已加载）</span>
-            <span v-else>（未建则读旧文件或仅内置）</span>
+            <span v-else>（未建则读旧 ignore 或仅内置）</span>
           </p>
           <ul v-if="ignoreFilePatterns.length" class="pattern-list mono">
             <li v-for="p in ignoreFilePatterns" :key="p">{{ p }}</li>
@@ -129,7 +131,10 @@ defineExpose({ reload: loadPrefs });
           <span class="muted small">{{ customLineCount }} 条</span>
         </summary>
         <div class="ignore-body">
-          <p v-if="!compact" class="ignore-lead">CAA / Qt 等工程差异；与文件规则合并后生效。</p>
+          <p v-if="!compact" class="ignore-lead">
+            工作空间偏好 <span class="mono">code_ignore.custom_ignore</span>；CAA / Qt 等与 code.ignore 合并后生效。
+          </p>
+          <p v-else class="ignore-lead muted small">工作空间偏好，与上方 Git 式 code.ignore 分开。</p>
           <div class="preset-row">
             <label class="preset-label">
               预设

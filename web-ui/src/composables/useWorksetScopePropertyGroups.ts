@@ -76,7 +76,7 @@ export function useWorksetScopePropertyGroups(
         propEnum("workset_id", "选择", {
           value: worksetIdValue,
           options: worksetSelectOptions,
-          hint: "选「侧栏当前工作集」即跟随侧栏活动项；管理列表请用 Ribbon/页脚「工作集」",
+          hint: "选「侧栏当前工作集」即跟随侧栏活动项；在侧栏「工作集」Tab 管理",
         }),
         propReadonly("active_workset", "侧栏活动", {
           value: activeWorksetLabel,

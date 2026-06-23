@@ -86,8 +86,8 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
     title: "文件详情",
     bullets: [
       "在工作空间树中点击 .FCStd 打开；同一路径复用一个 Tab。",
-      "子 Tab：概览、编辑属性、引用、改名、装配结构等。",
-      "图纸档属性只读。",
+      "子 Tab：概览、编辑属性（图纸档为「查看属性」）、引用、改名、装配结构等。",
+      "纯图纸 FCStd：顶部提示 BOM 只读，点「打开模型」编辑 Link 源文件。",
     ],
     docPath: "doc/cad/文件详情页-整改规划.md",
     tourSteps: [
@@ -185,7 +185,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
     bullets: [
       "所有 Code 工具共用：内置规则 + code.ignore 文件 + 工作空间自定义行。",
       "Code 模块页可在侧栏「忽略设定」Tab 编辑；本页为全屏编辑入口。",
-      "文件级 / 进程目录 / 自定义区可折叠；磁盘改 code.ignore 后点刷新。",
+      "文件级 / 进程目录 / 自定义区可折叠；Git 式 code.ignore 在上方，自定义在下方。",
     ],
     docPath: "doc/code/Code模块-批量改名-规划.md",
   },
@@ -220,6 +220,15 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
     ],
     docPath: "doc/code/Code模块-批量改名-规划.md",
   },
+  git: {
+    title: "Git",
+    bullets: [
+      "已暂存 − 取消暂存；更改 / 未跟踪 点 + 暂存（分区展示）。",
+      "提交说明与 Commit 在右侧属性面板下方的「提交」区。",
+      "Git 状态摘要见属性；范围与说明见 ? 帮助。",
+    ],
+    docPath: "doc/platform/Web壳层-Git工作区插件-规划.md",
+  },
   unit_tests: {
     title: "单元测试",
     bullets: [
@@ -237,7 +246,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
     bullets: [
       "可引用的测试工程为系统内置（test_fixture_catalog.json），如 KtAlarmClock、PNXCaaStudy；随仓库提交，本页不可增删。",
       "本机偏好（launcher.json → test_fixtures）：检出根目录、勾选列表，不提交进 Git。",
-      "勾选或点「检出并链接」：git clone + 链到 tests/fixtures/<名>；Windows 先删旧链接再建（同 PowerShell 脚本）。",
+      "勾选仅标记「要引用」并写入本机偏好；点页头或卡片内「检出并链接」才执行 git clone + 链到 tests/fixtures/<名>。",
     ],
   },
 };

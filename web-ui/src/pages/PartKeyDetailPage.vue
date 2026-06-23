@@ -15,6 +15,7 @@ import { TYPE_CODE_OPTIONS } from "../utils/typeCodeOptions";
 import { parsePartKeyText } from "../utils/partNaming";
 import PageHeader from "../components/PageHeader.vue";
 import { useAppShell } from "../composables/useAppShell";
+import { isDrawingFcstdFile } from "../composables/useDrawingBomReadonly";
 import { usePageSession } from "../composables/usePageSession";
 import type { TableColumnDef } from "../composables/useResizableTable";
 
@@ -317,9 +318,13 @@ async function savePartMeta() {
   }
 }
 
-function openFileDetail(file: PartKeyFile) {
+function openFileDetail(file: PartKeyFile, subTab?: "overview" | "edit") {
   if (file.file_status !== "present") return;
-  shell.openFileDetailForRel(file.repo_rel_path);
+  shell.openFileDetailForRel(file.repo_rel_path, subTab ? { subTab } : undefined);
+}
+
+function openDrawingAttributes(file: PartKeyFile) {
+  openFileDetail(file, "edit");
 }
 
 function openAssemblyStructure(file: PartKeyFile) {
@@ -466,6 +471,13 @@ onUnmounted(() => {
                 <td class="actions">
                   <el-button v-if="file.file_status === 'present'" size="small" @click="openFileDetail(file)">
                     详情
+                  </el-button>
+                  <el-button
+                    v-if="file.file_status === 'present' && isDrawingFcstdFile(file.filename, file.file_role)"
+                    size="small"
+                    @click="openDrawingAttributes(file)"
+                  >
+                    查看属性
                   </el-button>
                   <el-button
                     v-if="file.file_status === 'present' && isAssemblyFile(file)"

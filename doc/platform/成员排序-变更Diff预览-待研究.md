@@ -1,54 +1,67 @@
-# 成员排序 · 变更 Diff 预览 — 待研究
+# 成员排序 · Git 预览 / Revert — 消费方说明
 
-> [文档索引](../文档索引.md) · 状态：**待研究** · 触发场景：Web「变更文件」表点击路径（如 `PNXBomAnalysisParam.h`）  
-> 关联：[成员函数排序-reorder_members.md](../code/成员函数排序-reorder_members.md) · `ReorderMembersPage.vue`
+> **壳层能力**见 **[Web壳层-Git工作区插件-规划.md](Web壳层-Git工作区插件-规划.md)**（**Git 页** + **Git 文件 Tab**）。  
+> **实现归档**：[Web壳层-Git工作区插件-G1续归档.md](Web壳层-Git工作区插件-G1续归档.md)  
+> 关联：[成员函数排序-reorder_members.md](../code/成员函数排序-reorder_members.md) · `ReorderMembersPage.vue`  
+> 状态：**G1 消费方已接壳层 API** · Tab 预览待 `GitFilePage`  
+> 最后更新：2026-06-23
 
-## 需求
+---
 
-预检 / 写盘后「变更文件」列表仅显示路径，用户希望：
+## 1. 本页在插件中的角色
 
-- 点击一行 → **弹窗或新窗口** 查看 **before/after**（最好与 Git 一致的双栏 diff）
-- 预检（dry-run）也应能看 diff，而不必先写盘
+成员排序是 Git 插件的 **首个消费方**：变更表上 **跳转** 壳层 Git，不维护 Git API。
 
-## 方案对照（插件 / 组件 / 集成）
+| 项 | 本页行为 |
+| --- | --- |
+| **Git 后端** | **不实现**；只调壳层 **`/api/git/*`** |
+| **预览** | 写盘后 → 表内 👁 → **`GET /api/git/diff`** + **`GitDiffPreviewDialog`**（**过渡**）；目标仍为 **`openGitFileTab(path)`** |
+| **在 Git 中查看** | 写盘后 → **`openGitPage()`**（可选 payload 高亮 path） |
+| **Revert（快捷）** | 表内 → **`POST /api/git/restore`**（`scope=worktree`） |
+| **暂存 / commit** | **不在本页**；用户在 **Git 页** 点 **+** 暂存 → 填 log → Commit |
+| **预检** | 仅路径列表；无 Git 操作 |
+| **Git init** | 无 `.git` 时 banner → **`POST /api/git/init`**（**仅工作空间根**） |
 
-| 方向 | 代表 | 优点 | 缺点 | 适配度 |
-| --- | --- | --- | --- | --- |
-| **A. 后端内存 diff（推荐优先 POC）** | 自研：`difflib.unified_diff` / `diff-match-patch` | 预检即可返回；不依赖 Git；路径即 workspace 相对路径 | 需 API 增字段或单独 `GET …/diff?path=`；大文件要限流 | ★★★★★ |
-| **B. Git 工作区 diff** | `git diff -- path`（subprocess） | 写盘后与 IDE 一致；实现简单 | 预检无 HEAD 差异；非 Git 工作空间不可用 | ★★★★ |
-| **C. Web Diff 组件** | [Monaco Diff Editor](https://github.com/microsoft/monaco-editor)（`monaco-editor` / `@monaco-editor/loader`） | VS Code 同款双栏；可嵌 `AppModalOverlay` 或 `window.open` | 包体积大（~数 MB）；需 Vite 分包配置 | ★★★★ |
-| **D. HTML 渲染 unified diff** | [diff2html](https://github.com/rtfpessoa/diff2html) + `diff2html-ui` | 轻量、只读、样式接近 GitHub | 非可编辑；需先有 unified diff 文本 | ★★★★ |
-| **E. CodeMirror Merge** | [@codemirror/merge](https://codemirror.net/docs/ref/#merge) | 与现有 TS 栈接近；可定制 | 需自行接 diff 数据源；文档少于 Monaco | ★★★ |
-| **F. 外链 IDE** | Cursor / VS Code：`vscode://file/…`、命令行 `cursor --diff a b` | 零 Web 实现；用户习惯 | **无法仅凭 URL 打开 Git diff**；需本地 CLI 或扩展配合；浏览器安全限制 | ★★ |
-| **G. 桌面壳（若将来 Electron）** | `child_process` 调 `git difftool` / `code --diff` | 原生体验 | 当前为浏览器 + Python API，非桌面壳 | ★★ |
+**范围**：与壳层一致 — **仅当前工作空间根 Git 仓**；子模块路径不在 Git 页展示、不可通过本页 API 操作。
 
-**结论（建议路线）**
+---
 
-1. **POC**：预检时在 Python 侧保留「旧文本 / 新文本」，API 返回 `unified_diff` 或分页；前端用 **diff2html** 或 **Monaco Diff** 弹层（`AppModalOverlay`，与忽略规则弹窗同模式）。
-2. **写盘后**：同一弹层可切换数据源为 `git diff HEAD -- path`（工作空间为 Git 仓时）。
-3. **「新窗口」**：`window.open` + 仅 diff 的轻量路由 `/diff?path=…`，或 Monaco 全屏 Dialog；不必真开 OS 级窗口。
-4. **IDE 跳转（可选）**：侧栏按钮「在 Cursor 中打开文件」用 MCP / 本地 helper，与 diff 预览分开。
+## 2. 交互摘要
 
-## 与现有 TODO / 代码的衔接
+```text
+执行排序（写盘）→ changed_files（展示：文件名 @ 目录/）
+  → [在 Git 中查看] → GitPage
+       更改区 [+] 暂存 → 已暂存区 [-] 可取消 → 提交说明 → Commit
+  → [预览 👁] → GET /api/git/diff → 过渡弹层（diff2html）
+  → [Revert] → restore worktree（表内快捷）
+```
 
-- `ReorderMembersRunResult.changed_files` — 仅有路径列表；可扩展 `diffs: Record<path, string>` 或 `GET /api/code/reorder-members/diff?path=&rev=working|last_dry_run`。
-- `reorder_header_file(dry_run=True)` 已在内存中生成 `new_text`，对比 `payload.text` 即可产出 diff（无需 Git）。
-- 变更表：`ReorderMembersPage.vue` `changed-card` → 路径列加 link / 按钮 `@click="openDiff(row)"`。
+典型收尾：成员排序写盘 → **Git 页** → 对改动文件点 **+** → 填写说明（如 `reorder: Mod/foo.h`）→ **提交**。
 
-## 不推荐作为「插件」直接引入
+---
 
-- 通用 **Vue diff 插件**（如早期 `vue-diff`）维护参差；优先 **Monaco** 或 **diff2html** 二选一。
-- 纯 **GitHub 式** iframe 无法访问本地文件路径。
+## 3. 本页不做
 
-## 验收（研究完成后）
+- 页内 **+ / −** / commit UI  
+- 预检内存 diff  
+- 长期保留 spike **`/api/code/reorder-members/git-*`**（壳层 API 已替代，路由待删）
 
-- [ ] 预检后点击 `PNXBomAnalysisParam.h` → 弹层双栏或 unified diff，内容与磁盘未改前一致
-- [ ] 写盘后同一入口可显示 `git diff`（Git 仓）
-- [ ] 非 Git 工作空间：预检 diff 仍可用；Git 项灰显或隐藏
-- [ ] 大文件（>512KB）提示「仅显示前 N 行」或拒绝
+---
 
-## 参考
+## 4. 验收（G1 消费方）
 
-- Monaco diff Vite：[官方 worker 配置说明](https://github.com/microsoft/monaco-editor/blob/main/docs/integrate-esm.md)
-- diff2html：输入 unified diff 字符串即可
-- 同类 UX：GitHub Desktop / VS Code SCM 文件列表 → 点击打开 diff
+- [ ] 写盘后「在 Git 中查看」→ Git 页 **更改** 区列出本次 path  
+- [ ] 点 **+** 暂存 → **−** 取消 → commit 后文件从列表消失  
+- [x] 表内预览 → 壳层 diff + 弹层（2026-06-23）  
+- [ ] 预览 → `git_file` Tab（G1 收尾）  
+- [ ] 预检行无 Git 按钮  
+
+---
+
+## 历史
+
+- 2026-06-22：独立调研稿  
+- 2026-06-23：并入壳层 Git 插件；Tab 预览  
+- 2026-06-23：Git 页 + commit  
+- 2026-06-23：暂存改为 VS Code 式 **+ / −**（不用复选框批量）  
+- 2026-06-23：消费方迁 `/api/git/*`；弹层挂载修复 — [G1续归档](Web壳层-Git工作区插件-G1续归档.md)

@@ -17,6 +17,7 @@ import {
   Refresh,
   Search,
   Setting,
+  Share,
   Sort,
   Switch,
   Upload,
@@ -26,6 +27,7 @@ import {
 export const RIBBON_PAGE_ICONS: Record<string, Component> = {
   home: HomeFilled,
   config: Setting,
+  git: Share,
   fcstd_map: FolderOpened,
   bom_export: List,
   part_catalog: Grid,

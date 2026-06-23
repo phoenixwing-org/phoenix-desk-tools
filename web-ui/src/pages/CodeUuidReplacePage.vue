@@ -7,6 +7,7 @@ import {
   type UuidApplyStrategy,
 } from "../api";
 import PageHeader from "../components/PageHeader.vue";
+import GitDiffPreviewButton from "../components/git/GitDiffPreviewButton.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useCodeUuidPropertySheet } from "../composables/useCodeUuidPropertySheet";
 import { promptChoice } from "../composables/choiceDialog";
@@ -25,6 +26,7 @@ const hitColumns: TableColumnDef[] = [
 ];
 
 const showReplacementColumn = ref(false);
+const replacementsWritten = ref(false);
 
 const visibleHitColumns = computed(() =>
   showReplacementColumn.value ? hitColumns : hitColumns.filter((c) => c.key !== "new_text"),
@@ -152,6 +154,7 @@ function replacementText(hitId: string): string {
 watch(strategy, () => {
   replacementByHitId.value = {};
   showReplacementColumn.value = false;
+  replacementsWritten.value = false;
 });
 
 async function onScan() {
@@ -161,6 +164,7 @@ async function onScan() {
   selected.value = new Set();
   replacementByHitId.value = {};
   showReplacementColumn.value = false;
+  replacementsWritten.value = false;
   shell.appendLog("[Code UUID] 扫描…", { source: "code_uuid", open: true });
   try {
     const out = await scanCodeUuids({
@@ -245,6 +249,7 @@ async function onApply(dryRun: boolean) {
     if (Object.keys(next).length > 0) {
       showReplacementColumn.value = true;
     }
+    replacementsWritten.value = !dryRun && Object.keys(next).length > 0;
     const logText = out.lines?.join("\n") || out.log || out.message || "完成";
     shell.appendLog(logText, { source: "code_uuid" });
     shell.setStatus(out.implemented ? "完成" : out.message || "引擎尚未接入");
@@ -427,7 +432,13 @@ function thClass(key: string) {
                   :class="{ 'uuid-new-filled': replacementText(h.hit_id) }"
                   :title="replacementText(h.hit_id)"
                 >
-                  {{ replacementText(h.hit_id) || "—" }}
+                  <div class="uuid-new-cell-inner">
+                    <span class="uuid-new-text">{{ replacementText(h.hit_id) || "—" }}</span>
+                    <GitDiffPreviewButton
+                      v-if="replacementText(h.hit_id) && replacementsWritten"
+                      :path="h.repo_rel_path"
+                    />
+                  </div>
                 </td>
                 <td class="mono uuid-cell" :title="h.matched_text">{{ h.matched_text }}</td>
                 <td class="mono dir-cell" :title="h.repo_rel_path">
@@ -721,6 +732,25 @@ function thClass(key: string) {
 
 .uuid-new-cell.uuid-new-filled {
   color: #047857;
+}
+
+.uuid-new-cell-inner {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.uuid-new-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.uuid-new-cell-inner :deep(.git-row-actions) {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .row-alt {

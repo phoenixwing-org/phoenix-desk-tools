@@ -25,6 +25,7 @@ import FileRenamePage from "../pages/FileRenamePage.vue";
 import BomExportPage from "../pages/BomExportPage.vue";
 import UnitTestsPage from "../pages/UnitTestsPage.vue";
 import TestFixturesPage from "../pages/TestFixturesPage.vue";
+import GitPage from "../pages/GitPage.vue";
 import WorkbenchIdlePage from "../pages/WorkbenchIdlePage.vue";
 import PlaceholderPage from "../pages/PlaceholderPage.vue";
 import { sideDockVisibility } from "../utils/sideDockLayout";
@@ -35,6 +36,7 @@ import { WORKBENCH_IDLE_PAGE } from "../constants/workbench";
 import { useDocumentTitle } from "../composables/useDocumentTitle";
 import { useWorkspaceSwitcher } from "../composables/useWorkspaceSwitcher";
 import ChoiceDialogHost from "../components/ChoiceDialogHost.vue";
+import GitDiffPreviewHost from "../components/git/GitDiffPreviewHost.vue";
 import AppModalOverlay from "../components/AppModalOverlay.vue";
 
 const shell = provideAppShell();
@@ -95,6 +97,7 @@ const mainMargins = computed(() => ({
 const PAGE_COMPONENTS: Record<string, Component> = {
   home: HomePage,
   config: ConfigPage,
+  git: GitPage,
   bom_apply: FileDetailPage,
   file_detail: FileDetailPage,
   file_rename: FileRenamePage,
@@ -278,6 +281,7 @@ onUnmounted(() => {
     </div>
     <StatusBar v-if="!isWelcomeFullscreen" />
     <ChoiceDialogHost />
+    <GitDiffPreviewHost />
     <AppModalOverlay
       :open="shell.configOverlayOpen.value"
       aria-label="配置"
@@ -389,6 +393,12 @@ onUnmounted(() => {
   box-sizing: border-box;
   height: 100%;
   overflow: auto;
+}
+
+/* 页内自管滚动（如 Git：固定 PageHeader，仅 body 区滚动） */
+.shell-pages :deep(> .page.git-page) {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .shell-resizer {
