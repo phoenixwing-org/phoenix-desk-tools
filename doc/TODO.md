@@ -127,9 +127,12 @@
 - [x] **壳层区补全**：全 Tab 显示树/属性/日志等；分组大图标 / 单行紧凑联动（见 [归档](platform/Web壳层-Ribbon壳层区补全-归档.md)）
 - [x] **`RIBBON_SHELL_TAB_ID` 运行时修复**（`import type` → 值导入）
 
-- [x] **侧栏高度调节**：顶区弹性 + 下方固定块 · `sidebarStackLayout` — [规划](platform/Web壳层-侧栏高度调节-规划.md)（2026-06-23）
+- [ ] **Git 侧栏显示收尾**：分侧停靠 / 组内条组合 — [归档](platform/Web壳层-侧栏Dock高度与Git块-归档.md) §5
+- [ ] **页脚左/右栏钮**：接 `toggleLeftSidebar` / `toggleRightSidebar` · `PanelSideIcon` — [左右 Dock §9](platform/Web壳层-侧栏左右Dock-规划.md)
+- [x] **侧栏高度调节**：顶区弹性 + 下方固定块 · `sidebarStackLayout` — [规划](platform/Web壳层-侧栏高度调节-规划.md) · [归档](platform/Web壳层-侧栏Dock高度与Git块-归档.md)（2026-06-23）
+- [x] **侧栏左右 Dock**：每块独立左/右 + 显隐 · `SideDockPrefsPanel` — [规划](platform/Web壳层-侧栏左右Dock-规划.md) · [归档](platform/Web壳层-侧栏Dock高度与Git块-归档.md)（2026-06-23）
 - [ ] **侧栏 block 组布局**：标签页 / 分割堆叠 · 标题右键或 `⋮` — [规划](platform/Web壳层-侧栏Block布局模式-规划.md)（见 [TODO-GIT](TODO-GIT.md) 技术债）
-- [ ] **工作集 / 忽略设定独立配置**：与「工作空间树」Tab 解耦，各自可配置显示、停靠、布局模式（标签页 vs 堆叠）；**可能涉及壳层侧栏架构调整**，先研讨后立项 — 关联 [FileWorkset-规划](platform/FileWorkset-规划.md) · [Code忽略](code/Code模块-批量改名-规划.md) §5 · 上条 `workspace_primary` 拆分
+- [ ] **工作集 / 忽略设定独立配置**：与「工作空间树」Tab 解耦 — [左右 Dock §9](platform/Web壳层-侧栏左右Dock-规划.md) · [Block 布局 §9](platform/Web壳层-侧栏Block布局模式-规划.md) · [FileWorkset-规划](platform/FileWorkset-规划.md)
 
 ### 系统 · FileWorkset（文件工作集）
 

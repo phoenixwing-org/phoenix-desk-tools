@@ -282,6 +282,8 @@ class ShellLayoutBody(BaseModel):
     properties_footer_height_px: int | None = None
     properties_panel_dock: str | None = None
     properties_name_col_width_px: int | None = None
+    git_commit_panel_open: bool | None = None
+    git_commit_panel_dock: str | None = None
 
 
 class NavModulesBody(BaseModel):

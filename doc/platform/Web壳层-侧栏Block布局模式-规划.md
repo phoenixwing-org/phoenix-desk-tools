@@ -1,6 +1,6 @@
 # Web 壳层 · 侧栏 Block 布局模式 · 规划
 
-> 关联：[Web壳层-Git工作区插件-G1续归档.md](Web壳层-Git工作区插件-G1续归档.md) · [Web壳层-侧栏高度调节-规划.md](Web壳层-侧栏高度调节-规划.md) · `SidebarBlock` · `WorkspaceTreeSidebar.vue`  
+> 关联：[Web壳层-Git工作区插件-G1续归档.md](Web壳层-Git工作区插件-G1续归档.md) · [Web壳层-侧栏左右Dock-规划.md](Web壳层-侧栏左右Dock-规划.md) · [Web壳层-侧栏高度调节-规划.md](Web壳层-侧栏高度调节-规划.md) · `SidebarBlock` · `WorkspaceTreeSidebar.vue`  
 > 状态：**讨论定稿 · 未立项实现**  
 > 最后更新：2026-06-23
 
@@ -47,6 +47,8 @@
 | `workspace_primary` | 工作空间树 · 工作集 · 忽略设定 | `tabbed` | `ws-tab-bar` |
 | `props_stack` | Git 提交 · 页面属性 | `stacked` | `ws-props-wrap` + 内部分割条 |
 | `shell_log` | 运行日志 | — | 单块，无布局切换 |
+
+**侧栏停靠弹层**（`SideDockPrefsPanel`）：详见 **[侧栏左右Dock-规划](Web壳层-侧栏左右Dock-规划.md) §5.1** — 树 / 属性 / 日志各一行（左/右 + 显示）；Git 页追加 **Git 提交**行（独立左/右 + 显示）。
 
 单块组（仅运行日志）**不显示**布局子菜单。
 
@@ -126,7 +128,7 @@ sidebar_block_groups?: Partial<Record<
 ## 8. 验收（立项后）
 
 - [ ] `props_stack` 右键可在标签页 / 分割堆叠间切换，刷新后保持
-- [ ] `stacked` 时分割条方向与 [G1续归档](Web壳层-Git工作区插件-G1续归档.md) 一致（上拖缩小下方块）；整体高度模型见 [侧栏高度调节-规划](Web壳层-侧栏高度调节-规划.md)
+- [ ] `stacked` 时组内分割条方向 — 外沿 `−delta`、Git 下沿 `+delta`（见 [侧栏高度调节-规划](Web壳层-侧栏高度调节-规划.md) §2.3 · [归档](Web壳层-侧栏Dock高度与Git块-归档.md)）
 - [ ] `tabbed` 时无「折叠了仍占 160px」类空白
 - [ ] 单块组（运行日志）无布局菜单
 - [ ] `⋮` 与右键菜单项一致（若实现 B）

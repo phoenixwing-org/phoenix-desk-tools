@@ -179,6 +179,8 @@ _LAUNCHER_SHELL_LAYOUT_DEFAULT: dict[str, Any] = {
     "properties_footer_height_px": 160,
     "properties_panel_dock": "left",  # left | right
     "properties_name_col_width_px": 132,
+    "git_commit_panel_open": True,
+    "git_commit_panel_dock": "left",  # left | right — Git 页提交区
 }
 
 
@@ -232,6 +234,14 @@ def _normalized_shell_layout(raw: Any) -> dict[str, Any]:
     ppd = raw.get("properties_panel_dock")
     if ppd in ("left", "right"):
         merged["properties_panel_dock"] = str(ppd)
+    gco = raw.get("git_commit_panel_open")
+    if isinstance(gco, bool):
+        merged["git_commit_panel_open"] = gco
+    gcd = raw.get("git_commit_panel_dock")
+    if gcd in ("left", "right"):
+        merged["git_commit_panel_dock"] = str(gcd)
+    elif "git_commit_panel_dock" not in raw:
+        merged["git_commit_panel_dock"] = merged["properties_panel_dock"]
     pnc = raw.get("properties_name_col_width_px")
     if isinstance(pnc, int) and pnc >= 72:
         merged["properties_name_col_width_px"] = min(240, int(pnc))
@@ -551,6 +561,8 @@ def save_launcher_shell_layout(
     properties_footer_height_px: int | None = None,
     properties_panel_dock: str | None = None,
     properties_name_col_width_px: int | None = None,
+    git_commit_panel_open: bool | None = None,
+    git_commit_panel_dock: str | None = None,
 ) -> None:
     """将左侧导航宽窄 / 右栏开合 / 中右分割 sash / 运行日志窗 写入 launcher JSON。"""
     launcher = load_launcher_prefs()
@@ -587,6 +599,10 @@ def save_launcher_shell_layout(
         cur["properties_panel_dock"] = str(properties_panel_dock)
     if properties_name_col_width_px is not None:
         cur["properties_name_col_width_px"] = max(72, min(240, int(properties_name_col_width_px)))
+    if git_commit_panel_open is not None:
+        cur["git_commit_panel_open"] = bool(git_commit_panel_open)
+    if git_commit_panel_dock in ("left", "right"):
+        cur["git_commit_panel_dock"] = str(git_commit_panel_dock)
     launcher["shell_layout"] = cur
     save_launcher_prefs(launcher)
 

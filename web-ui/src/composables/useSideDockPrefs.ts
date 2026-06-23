@@ -11,7 +11,10 @@ export function useSideDockPrefs() {
   const propsDock = computed(() => shell.shellLayout.value.properties_panel_dock);
   const logPanelOpen = computed(() => shell.shellLayout.value.log_panel_open);
   const propsPanelOpen = computed(() => shell.shellLayout.value.properties_panel_open);
+  const gitCommitPanelOpen = computed(() => shell.shellLayout.value.git_commit_panel_open);
+  const gitCommitDock = computed(() => shell.shellLayout.value.git_commit_panel_dock);
   const treePanelOpen = computed(() => shell.shellLayout.value.right_panel_open);
+  const onGitPage = computed(() => shell.currentPage.value === "git");
 
   const unifiedDockSide = computed((): SideDock => {
     const docks = [treeDock.value, logDock.value, propsDock.value];
@@ -95,6 +98,35 @@ export function useSideDockPrefs() {
     shell.setStatus(open ? "已显示页面属性" : "已隐藏页面属性");
   }
 
+  async function setGitCommitDock(side: SideDock) {
+    if (side === gitCommitDock.value) return;
+    const prev = shell.shellLayout.value.git_commit_panel_dock;
+    shell.shellLayout.value = {
+      ...shell.shellLayout.value,
+      git_commit_panel_dock: side,
+    };
+    try {
+      await shell.persistShellLayout({ git_commit_panel_dock: side });
+      shell.setStatus("侧栏布局已保存");
+    } catch (e) {
+      shell.shellLayout.value = {
+        ...shell.shellLayout.value,
+        git_commit_panel_dock: prev,
+      };
+      shell.setStatus(`侧栏布局保存失败：${e}`);
+    }
+  }
+
+  async function setGitCommitPanelOpen(open: boolean) {
+    if (open === gitCommitPanelOpen.value) return;
+    shell.shellLayout.value = {
+      ...shell.shellLayout.value,
+      git_commit_panel_open: open,
+    };
+    await shell.persistShellLayout({ git_commit_panel_open: open });
+    shell.setStatus(open ? "已显示 Git 提交" : "已隐藏 Git 提交");
+  }
+
   return {
     unifiedDockSide,
     dockMixed,
@@ -104,12 +136,17 @@ export function useSideDockPrefs() {
     treePanelOpen,
     logPanelOpen,
     propsPanelOpen,
+    gitCommitPanelOpen,
+    gitCommitDock,
+    onGitPage,
     setUnifiedDockSide,
     setTreeDock,
     setLogDock,
     setPropsDock,
+    setGitCommitDock,
     setTreePanelOpen,
     setLogPanelOpen,
     setPropsPanelOpen,
+    setGitCommitPanelOpen,
   };
 }

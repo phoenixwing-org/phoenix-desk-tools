@@ -84,7 +84,9 @@ watch(ribbonActiveTab, (tabId) => {
   else shell.workbenchFocusScope.value = "all";
 });
 
-const dockVis = computed(() => sideDockVisibility(shellLayout.value));
+const dockVis = computed(() =>
+  sideDockVisibility(shellLayout.value, { onGitPage: shell.currentPage.value === "git" }),
+);
 
 const leftPanelWidth = computed(() => `${shellLayout.value.left_panel_width_px}px`);
 const rightPanelWidth = computed(() => `${shellLayout.value.right_panel_width_px}px`);
@@ -263,6 +265,7 @@ onUnmounted(() => {
         :show-tree="dockVis.leftShowTree"
         :show-log="dockVis.leftShowLog"
         :show-props="dockVis.leftShowProps"
+        :show-git-commit="dockVis.leftShowGitCommit"
       />
       <div
         v-if="!isWelcomeFullscreen && dockVis.rightVisible"
@@ -277,6 +280,7 @@ onUnmounted(() => {
         :show-tree="dockVis.rightShowTree"
         :show-log="dockVis.rightShowLog"
         :show-props="dockVis.rightShowProps"
+        :show-git-commit="dockVis.rightShowGitCommit"
       />
     </div>
     <StatusBar v-if="!isWelcomeFullscreen" />

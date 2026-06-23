@@ -1,7 +1,7 @@
 # Web 壳层 · 侧栏高度调节 · 方案
 
-> 关联：[Web壳层-侧栏Block布局模式-规划.md](Web壳层-侧栏Block布局模式-规划.md)（组内 tabbed/stacked）· [Web壳层-Git工作区插件-G1续归档.md](Web壳层-Git工作区插件-G1续归档.md)  
-> 状态：**已落地首版（2026-06-23）** · 后续修正以此为准  
+> 关联：[Web壳层-侧栏Block布局模式-规划.md](Web壳层-侧栏Block布局模式-规划.md)（组内 tabbed/stacked）· [Web壳层-侧栏左右Dock-规划.md](Web壳层-侧栏左右Dock-规划.md)（水平左/右 · 块 dock）· [Web壳层-Git工作区插件-G1续归档.md](Web壳层-Git工作区插件-G1续归档.md)  
+> 状态：**已落地首版（2026-06-23）** · 归档：[侧栏Dock高度与Git块-归档](Web壳层-侧栏Dock高度与Git块-归档.md)  
 > 代码锚点：`web-ui/src/utils/sidebarStackLayout.ts` · `web-ui/src/layout/WorkspaceTreeSidebar.vue`
 
 ---
@@ -51,11 +51,18 @@
 
 **拖哪条上沿，就只改该块 persisted 高度**；顶区自动让出/吸收空间。
 
+**方向（与 VS Code 侧栏一致）**：`delta = clientY − startY`。
+
+| 手柄位置 | 拖向上 | 公式 |
+| --- | --- | --- |
+| **外部分割条**（属性/日志 **上沿**，改下方块高） | 下方块变高 | `stored − delta` |
+| **组内条**（Git 提交 **下沿**，改上方 Git 高） | Git 区变矮、属性变高 | `stored + delta` |
+
 | 手柄 | 修改字段 | 上限（拖拽时） |
 | --- | --- | --- |
 | 属性区上沿 | `properties_panel_height_px` | `maxStoredPropsHeightPx` = 总高 − main 最小 − 日志 stored − 外部分割条 |
 | 日志区上沿 | `log_panel_height_px` | `maxStoredLogHeightPx` = 总高 − main 最小 − 属性 stored − 外部分割条 |
-| Git 提交 / 属性组内 | `properties_footer_height_px` | `maxStoredPropsFooterHeightPx` = wrap 高 − 属性 main 最小 − 组内分割条 |
+| Git 提交 / 属性组内 | `properties_footer_height_px` | `maxStoredPropsFooterHeightPx`；**`startH + delta`**（Git 在上） |
 
 **已删除**：`PROPS_MAX_RATIO`、`LOG_MAX_RATIO` 及 props/log 互算 max 的 computed 链。
 
@@ -89,7 +96,7 @@
 | `log_panel_height_px` | 180 | 日志区 |
 | `right_panel_open` / `properties_panel_open` / `log_panel_open` | — | 块显隐，与高度键正交 |
 
-块 **左/右停靠** 见 `SideDockPrefsPanel` / `useSideDockPrefs.ts`（与本文 **高度** 正交）。
+块 **左/右停靠** 与 **显隐** 见 **[侧栏左右Dock-规划](Web壳层-侧栏左右Dock-规划.md)**（与本文 **高度** 正交）。
 
 ---
 
@@ -138,7 +145,7 @@
 ## 8. 验收（回归）
 
 - [x] 树 + 属性 + 日志：拖日志上沿 **只长高日志**，树区变矮
-- [x] 拖属性上沿 **只改** `properties_panel_height_px`
+- [x] 拖属性/日志上沿：向上拖增大下方块（`startH − delta`）
 - [x] 窗口拉高：树区先变高，固定块保持 stored
 - [x] 窗口压矮：树到 120px 后，属性/日志等比缩（展示）
 - [x] 分割条单线 6px，无叠线
@@ -151,4 +158,5 @@
 
 | 日期 | 说明 |
 | --- | --- |
+| 2026-06-23 | 组内 Git 下沿 `startH + delta`；外沿 `startH − delta` — [归档](Web壳层-侧栏Dock高度与Git块-归档.md) |
 | 2026-06-23 | 初稿：顶区弹性 + 下方固定块模型 · 纯函数 `sidebarStackLayout` · 去掉比例上限与循环依赖 |

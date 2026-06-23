@@ -6,7 +6,7 @@
 > **消费方**：[成员排序-变更Diff预览-待研究.md](platform/成员排序-变更Diff预览-待研究.md)  
 > 状态：`[ ]` 未做 · `[~]` 进行中 · `[x]` 已完成
 
-最后更新：2026-06-23（G1 续见 [G1续归档](platform/Web壳层-Git工作区插件-G1续归档.md)）
+最后更新：2026-06-23（侧栏归档见 [侧栏Dock高度与Git块-归档](platform/Web壳层-侧栏Dock高度与Git块-归档.md)）
 
 ---
 
@@ -51,11 +51,12 @@
 ## G1 · 侧栏 · 提交与属性
 
 - [x] **`GitCommitPanel`**：侧栏置顶 · **`POST /api/git/commit`**
-- [x] **`properties_footer_height_px`**：与属性区分割条拖拽 · 持久化 `shell_layout`
-- [x] **`SidebarBlock`**：侧栏系统 block（`strip` / `card` · 标题固定 · 内容/底栏分区）
-- [x] Git 提交 · 运行日志 · 属性面板统一 `SidebarBlock`
-- [x] 提交说明 textarea 撑满 block；拖拽方向与 persist 空 patch 400 修复
-- [x] 属性区 / 日志区 **外部分割条**方向修正；`SidebarBlock` 折叠与高度联动 — [G1续归档](platform/Web壳层-Git工作区插件-G1续归档.md)
+- [x] **`SidebarBlock`**：侧栏系统 block（`strip` / `card`）· Git / 日志 / 属性统一
+- [x] **`properties_footer_height_px`**：Git 与属性组内高度 · `shell_layout` 持久化
+- [x] Git 提交独立 `git_commit_panel_dock` · 异侧/同侧模板 · 折叠与「显示」分离 — [侧栏归档](platform/Web壳层-侧栏Dock高度与Git块-归档.md)
+- [~] **Git 侧栏显示**：分侧停靠切换后布局仍待收尾 — 同上 §5
+- [x] 属性区 / 日志区外部分割条 · 组内 Git 下沿分割条方向 — 同上 §3.2
+- [x] 提交说明 textarea 撑满 block
 - [ ] **点检**：分割条拖拽保存 · 标题不随内容滚动 — [G1点检清单 §6](platform/Web壳层-Git工作区插件-G1点检清单.md)
 
 ---
@@ -120,6 +121,7 @@ tests/test_shell_git_workspace.py
 
 | 日期 | 说明 |
 | --- | --- |
+| 2026-06-23 | 侧栏 Dock/高度/Git 块归档 · Git 分侧与分割条修正 |
 | 2026-06-23 | diff API · 成员排序迁壳层 · 侧栏 block/分割条 · [G1续归档](platform/Web壳层-Git工作区插件-G1续归档.md) |
 | 2026-06-23 | §2.5 路径筛选标签（UI + 功能）点检通过 |
 | 2026-06-23 | 从 [TODO.md](TODO.md) 拆出独立 TODO-GIT；含框选批量 · SidebarBlock · 侧栏 persist 修复 |

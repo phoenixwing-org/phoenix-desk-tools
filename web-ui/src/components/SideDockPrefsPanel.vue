@@ -18,12 +18,17 @@ const {
   treePanelOpen,
   logPanelOpen,
   propsPanelOpen,
+  gitCommitPanelOpen,
+  gitCommitDock,
+  onGitPage,
   setTreeDock,
   setLogDock,
   setPropsDock,
+  setGitCommitDock,
   setTreePanelOpen,
   setLogPanelOpen,
   setPropsPanelOpen,
+  setGitCommitPanelOpen,
 } = useSideDockPrefs();
 
 function onDockChange(
@@ -80,6 +85,27 @@ function onOpenChange(setter: (open: boolean) => void | Promise<void>, v: string
               :model-value="propsPanelOpen"
               size="small"
               @update:model-value="(v) => onOpenChange(setPropsPanelOpen, v)"
+            />
+          </div>
+        </div>
+
+        <div v-if="onGitPage" class="dock-block-row" role="listitem">
+          <span class="dock-block-label">Git 提交</span>
+          <el-radio-group
+            :model-value="gitCommitDock"
+            size="small"
+            class="dock-side-group"
+            @update:model-value="(v) => onDockChange(setGitCommitDock, v)"
+          >
+            <el-radio-button value="left">左</el-radio-button>
+            <el-radio-button value="right">右</el-radio-button>
+          </el-radio-group>
+          <div class="dock-block-show">
+            <span class="dock-show-label">显示</span>
+            <el-switch
+              :model-value="gitCommitPanelOpen"
+              size="small"
+              @update:model-value="(v) => onOpenChange(setGitCommitPanelOpen, v)"
             />
           </div>
         </div>
@@ -162,6 +188,13 @@ function onOpenChange(setter: (open: boolean) => void | Promise<void>, v: string
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
+}
+
+.dock-block-inherit {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
 }
 
 .dock-show-label {

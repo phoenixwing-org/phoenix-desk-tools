@@ -52,12 +52,13 @@
 | --- | --- |
 | `SidebarBlock.vue` | 去掉 `innerExpanded` 双状态，单一 `defineModel('expanded')` |
 | `GitCommitPanel` / `WorkspaceTreeSidebar` | 折叠时 `ws-props-stack-head` 不再占 `properties_footer_height_px` 空白 |
-| `onPropsResizeStart` / `onLogResizeStart` | `delta = ev.clientY - startY`（往上拖 **缩小** 下方 block） |
-| Git-only 分割 | `showGitCommitPanel` 无属性 sheet 时外部分割条仍可调高度 |
+| `onPropsResizeStart` / `onLogResizeStart` | 外沿：`startH − delta`（向上拖增大下方块） |
+| `onPropsFooterResizeStart` | 组内 Git 下沿：`startH + delta`（向上拖缩小 Git） |
+| Git 异侧 / 同侧模板 | `showGitCommitStandalone` vs `gitCommitStackedWithProps` — 见 [侧栏Dock高度与Git块-归档](Web壳层-侧栏Dock高度与Git块-归档.md) |
 
 **未做**：通用 `SidebarBlockStack`（块注册表 + 统一 resize）；块组 **标签页 / 分割堆叠** 可配置 — [侧栏Block布局模式-规划](Web壳层-侧栏Block布局模式-规划.md)
 
-**2026-06-23 续**：侧栏 **整体高度模型** 重写 — [侧栏高度调节-规划](Web壳层-侧栏高度调节-规划.md) · Git 页 **分区批量 diff 预览** 规划 — [Git变更分区批量预览-规划](Web壳层-Git变更分区批量预览-规划.md)
+**2026-06-23 续**：侧栏 **整体高度模型** 重写 — [侧栏高度调节-规划](Web壳层-侧栏高度调节-规划.md) · Git 页 **分区批量 diff 预览** 规划 — [Git变更分区批量预览-规划](Web壳层-Git变更分区批量预览-规划.md) · **Dock/高度/Git 块合一归档** — [侧栏Dock高度与Git块-归档](Web壳层-侧栏Dock高度与Git块-归档.md)
 
 ---
 
@@ -100,4 +101,5 @@ tests/test_shell_git_workspace.py
 
 | 日期 | 说明 |
 | --- | --- |
+| 2026-06-23 | 侧栏 Dock/高度/Git 块合一归档 · 组内/外部分割条方向 · 异侧模板 |
 | 2026-06-23 | 初版：diff API · 成员排序迁壳层 API · 侧栏 block/分割条 · 变更表路径格式 |

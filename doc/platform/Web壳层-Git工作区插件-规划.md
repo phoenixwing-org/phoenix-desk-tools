@@ -361,6 +361,8 @@ ws-props-wrap（Git 页）
 
 进入 Git 页时 **自动展开属性面板**（`setPropertiesOpen(true)`），与 FileWorkset 的「工作集 Tab」**不合并**——工作集仍是跨模块 path 集合；Git 提交仅 `git` 页出现。
 
+水平停靠（属性靠左/右）见 **[侧栏左右Dock-规划](Web壳层-侧栏左右Dock-规划.md)**；本节仅描述 **props_stack 组内纵向** 顺序。
+
 共享状态：`useGitPageState`（`stagedCount` / `commitMessage` / refresh 回调）。
 
 ### 5.2 Git 文件 Tab（`git_file`）

@@ -20,7 +20,9 @@ const collapsedSnapshots: { left: SidePanelSnapshot | null; right: SidePanelSnap
 /** 左/右栏与侧栏块开关 — Ribbon「系统」与页脚共用 */
 export function useShellPanelToggles() {
   const shell = useAppShell();
-  const dockVis = computed(() => sideDockVisibility(shell.shellLayout.value));
+  const dockVis = computed(() =>
+    sideDockVisibility(shell.shellLayout.value, { onGitPage: shell.currentPage.value === "git" }),
+  );
 
   const leftSidebarOpen = computed(() => dockVis.value.leftVisible);
   const rightSidebarOpen = computed(() => dockVis.value.rightVisible);
@@ -34,7 +36,8 @@ export function useShellPanelToggles() {
 
   async function toggleSide(side: SideDock) {
     const layout = shell.shellLayout.value;
-    const visible = isSideVisible(layout, side);
+    const onGitPage = shell.currentPage.value === "git";
+    const visible = isSideVisible(layout, side, { onGitPage });
     if (visible) {
       collapsedSnapshots[side] = snapshotPanelsOnSide(layout, side);
       const patch = buildCollapseSidePatch(layout, side);

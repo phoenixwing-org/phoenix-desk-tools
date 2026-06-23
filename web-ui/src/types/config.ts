@@ -57,6 +57,10 @@ export type ShellLayout = {
   properties_panel_height_px: number;
   /** 属性区下方堆叠块高度（如 Git 提交区，px） */
   properties_footer_height_px: number;
+  /** Git 页侧栏「Git 提交」块是否展开 */
+  git_commit_panel_open: boolean;
+  /** Git 提交区停靠侧（Git 页） */
+  git_commit_panel_dock: SideDock;
   /** 页面属性面板停靠侧 */
   properties_panel_dock: SideDock;
   /** 属性表「名称」列宽（px） */

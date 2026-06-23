@@ -36,12 +36,14 @@ const props = withDefaults(
     showTree?: boolean;
     showLog?: boolean;
     showProps?: boolean;
+    showGitCommit?: boolean;
   }>(),
   {
     dockSide: "right",
     showTree: true,
     showLog: true,
     showProps: false,
+    showGitCommit: false,
   },
 );
 
@@ -118,13 +120,20 @@ const panelWidth = computed(() => {
 
 const logOpen = computed(() => shellLayout.value.log_panel_open);
 const propsOpen = computed(() => shellLayout.value.properties_panel_open);
+const gitCommitBodyExpanded = ref(true);
+
 const showPropsPanel = computed(() => props.showProps && propsOpen.value && hasProperties.value);
 const showGitCommitPanel = computed(
-  () => props.showProps && propsOpen.value && shell.currentPage.value === "git",
+  () =>
+    props.showGitCommit &&
+    shell.currentPage.value === "git" &&
+    shellLayout.value.git_commit_panel_open,
 );
+const gitCommitStackedWithProps = computed(() => showGitCommitPanel.value && showPropsPanel.value);
 const showPropsWrap = computed(() => showPropsPanel.value || showGitCommitPanel.value);
-
-const gitCommitExpanded = ref(true);
+const showGitCommitStandalone = computed(
+  () => showGitCommitPanel.value && !gitCommitStackedWithProps.value,
+);
 
 const panelVisible = computed(
   () =>
@@ -139,8 +148,8 @@ const stackLayout = computed(() =>
     showMain: props.showTree,
     showPropsWrap: showPropsWrap.value,
     showPropsMain: showPropsPanel.value,
-    showPropsFooter: showGitCommitPanel.value,
-    propsFooterExpanded: gitCommitExpanded.value,
+    showPropsFooter: showGitCommitPanel.value && gitCommitStackedWithProps.value,
+    propsFooterExpanded: gitCommitBodyExpanded.value,
     showLog: props.showLog && logOpen.value,
     storedPropsHeightPx: shellLayout.value.properties_panel_height_px,
     storedLogHeightPx: shellLayout.value.log_panel_height_px,
@@ -166,8 +175,11 @@ const propsPanelStyle = computed(() => {
 
 const propsFooterStyle = computed(() => {
   if (!showGitCommitPanel.value) return undefined;
-  if (!gitCommitExpanded.value) {
+  if (!gitCommitBodyExpanded.value) {
     return { flexShrink: "0" };
+  }
+  if (!gitCommitStackedWithProps.value) {
+    return { flex: "1 1 auto", minHeight: "0" };
   }
   return { height: `${stackLayout.value.propsFooterHeightPx}px`, flexShrink: "0" };
 });
@@ -259,7 +271,7 @@ function onPropsResizeStart(e: PointerEvent) {
         props.showLog && logOpen.value,
         shell.shellLayout.value.log_panel_height_px,
       );
-      const next = Math.min(maxH, Math.max(SIDEBAR_PROPS_MIN_H, startH + delta));
+      const next = Math.min(maxH, Math.max(SIDEBAR_PROPS_MIN_H, startH - delta));
       shell.shellLayout.value = {
         ...shell.shellLayout.value,
         properties_panel_height_px: next,
@@ -274,7 +286,7 @@ function onPropsResizeStart(e: PointerEvent) {
 }
 
 function onPropsFooterResizeStart(e: PointerEvent) {
-  if (!showGitCommitPanel.value || !gitCommitExpanded.value) return;
+  if (!showGitCommitPanel.value || !gitCommitBodyExpanded.value) return;
   const startY = e.clientY;
   const startH = shellLayout.value.properties_footer_height_px ?? SIDEBAR_PROPS_FOOTER_MIN_H;
   const wrapH = stackLayout.value.propsWrapHeightPx;
@@ -316,7 +328,7 @@ function onLogResizeStart(e: PointerEvent) {
         showPropsWrap.value,
         shell.shellLayout.value.properties_panel_height_px,
       );
-      const next = Math.min(maxH, Math.max(SIDEBAR_LOG_MIN_H, startH + delta));
+      const next = Math.min(maxH, Math.max(SIDEBAR_LOG_MIN_H, startH - delta));
       shell.shellLayout.value = {
         ...shell.shellLayout.value,
         log_panel_height_px: next,
@@ -379,6 +391,8 @@ onUnmounted(() => {
       {
         'log-only': showLog && !showTree && !showPropsWrap,
         'props-only': showPropsWrap && !showTree && !(showLog && logOpen),
+        'git-commit-only':
+          showGitCommitPanel && !showPropsPanel && !showTree && !(showLog && logOpen),
         'has-stack': hasBottomFixed,
         'has-props-stack-split': stackLayout.propsStackResizer,
       },
@@ -497,7 +511,25 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <template v-if="showPropsWrap">
+    <template v-if="showGitCommitStandalone">
+      <div
+        v-if="showTree || (showLog && logOpen)"
+        class="props-resizer panel-resizer"
+        title="拖拽调节 Git 提交区高度"
+        @pointerdown="onPropsResizeStart"
+      />
+      <div class="ws-props-wrap ws-git-commit-wrap" :style="propsPanelStyle">
+        <div
+          class="ws-props-stack-head"
+          :class="{ 'is-collapsed': !gitCommitBodyExpanded }"
+          :style="propsFooterStyle"
+        >
+          <GitCommitPanel v-model:expanded="gitCommitBodyExpanded" />
+        </div>
+      </div>
+    </template>
+
+    <template v-else-if="showPropsPanel || gitCommitStackedWithProps">
       <div
         v-if="showTree || (showLog && logOpen)"
         class="props-resizer panel-resizer"
@@ -506,12 +538,12 @@ onUnmounted(() => {
       />
       <div class="ws-props-wrap" :style="propsPanelStyle">
         <div
-          v-if="showGitCommitPanel"
+          v-if="gitCommitStackedWithProps"
           class="ws-props-stack-head"
-          :class="{ 'is-collapsed': !gitCommitExpanded }"
+          :class="{ 'is-collapsed': !gitCommitBodyExpanded }"
           :style="propsFooterStyle"
         >
-          <GitCommitPanel v-model:expanded="gitCommitExpanded" />
+          <GitCommitPanel v-model:expanded="gitCommitBodyExpanded" />
         </div>
         <div
           v-if="stackLayout.propsStackResizer"
@@ -562,7 +594,8 @@ onUnmounted(() => {
 }
 
 .ws-sidebar.log-only .ws-log-wrap,
-.ws-sidebar.props-only .ws-props-wrap {
+.ws-sidebar.props-only .ws-props-wrap,
+.ws-sidebar.git-commit-only .ws-props-wrap {
   flex: 1;
   min-height: 0;
 }
@@ -599,6 +632,7 @@ onUnmounted(() => {
 .ws-props-stack-head > :deep(.sidebar-block:not(.sidebar-block--collapsed)) {
   flex: 1 1 auto;
   min-height: 0;
+  width: 100%;
   height: 100%;
   overflow: hidden;
 }

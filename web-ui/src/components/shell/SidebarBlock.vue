@@ -119,7 +119,9 @@ function onHeadToggle() {
 .sidebar-block--strip:not(.sidebar-block--collapsed) .sidebar-block-body {
   flex: 1 1 auto;
   min-height: 0;
+  width: 100%;
   padding: 8px 10px;
+  box-sizing: border-box;
 }
 
 .sidebar-block--body-scroll .sidebar-block-body {

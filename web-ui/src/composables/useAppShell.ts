@@ -189,6 +189,8 @@ const DEFAULT_SHELL: ShellLayout = {
   properties_footer_height_px: 160,
   properties_panel_dock: "left",
   properties_name_col_width_px: 132,
+  git_commit_panel_open: true,
+  git_commit_panel_dock: "left",
 };
 
 function clampPanelWidth(px: number): number {
@@ -255,6 +257,12 @@ function normalizeShellLayout(partial?: Partial<ShellLayout>): ShellLayout {
   }
   if (typeof merged.properties_panel_open !== "boolean") {
     merged.properties_panel_open = DEFAULT_SHELL.properties_panel_open;
+  }
+  if (typeof merged.git_commit_panel_open !== "boolean") {
+    merged.git_commit_panel_open = DEFAULT_SHELL.git_commit_panel_open;
+  }
+  if (merged.git_commit_panel_dock !== "left" && merged.git_commit_panel_dock !== "right") {
+    merged.git_commit_panel_dock = merged.properties_panel_dock;
   }
   if (typeof merged.properties_name_col_width_px !== "number" || merged.properties_name_col_width_px < 72) {
     merged.properties_name_col_width_px = readLegacyNameColWidth() ?? DEFAULT_SHELL.properties_name_col_width_px;

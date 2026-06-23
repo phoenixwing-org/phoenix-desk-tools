@@ -77,24 +77,25 @@ async function onCommit() {
 .git-commit-panel:not(.sidebar-block--collapsed) {
   flex: 1 1 auto;
   min-height: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 .git-commit-input {
   flex: 1 1 auto;
+  align-self: stretch;
   min-height: 0;
   width: 100%;
-}
-
-.git-commit-input :deep(.el-textarea) {
-  flex: 1 1 auto;
-  min-height: 0;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
 }
 
 .git-commit-input :deep(.el-textarea__inner) {
   flex: 1 1 auto;
+  width: 100%;
   min-height: 3.5em;
+  height: 100% !important;
   resize: none;
   box-sizing: border-box;
 }
