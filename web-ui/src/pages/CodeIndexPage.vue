@@ -4,6 +4,7 @@ import {
   exportCodeIndexJson,
   fetchCodeIndex,
   fetchCodeIndexEntries,
+  fetchCodeIndexExtensionDiscovery,
   purgeMissingCodeIndex,
   scanCodeIndex,
   type CodeIndexEntry,
@@ -210,10 +211,46 @@ async function refresh(logSummary = false) {
 }
 
 async function onScan() {
+  let adoptExtensions: string[] | undefined;
+
+  try {
+    const discovery = await fetchCodeIndexExtensionDiscovery();
+    const candidates = discovery.candidates ?? [];
+    if (candidates.length > 0) {
+      const choice = await promptChoice({
+        title: "发现未纳入索引的后缀",
+        message:
+          "工作空间内发现以下后缀尚未纳入 Code 索引。勾选要纳入的后缀并扫描；纳入的后缀会保存到本工作空间数据库。",
+        checkboxes: {
+          items: candidates.map((c) => ({
+            id: c.ext,
+            label: `${c.ext}（${c.count} 个文件）`,
+          })),
+          defaultSelectedIds: candidates.map((c) => c.ext),
+        },
+        choices: [
+          { id: "adopt-selected", label: "纳入所选并扫描", variant: "primary" },
+          { id: "builtin-only", label: "仅扫描已知类型", variant: "default" },
+          { id: "cancel", label: "取消", variant: "default" },
+        ],
+        defaultChoiceId: "adopt-selected",
+      });
+      if (choice.choiceId === null || choice.choiceId === "cancel") {
+        setStatus("已取消扫描");
+        return;
+      }
+      if (choice.choiceId === "adopt-selected" && choice.checkedIds.length > 0) {
+        adoptExtensions = choice.checkedIds;
+      }
+    }
+  } catch (e) {
+    shell.appendLog(`[Code 索引] 后缀发现失败：${String(e)}`, { source: "code_index" });
+  }
+
   scanning.value = true;
   shell.appendLog("[Code 索引] 扫描工作空间…", { source: "code_index", open: true });
   try {
-    const out = await scanCodeIndex();
+    const out = await scanCodeIndex({ adoptExtensions });
     data.value = out;
     if (out.summary) {
       shell.appendLog(out.summary, { source: "code_index" });
@@ -246,7 +283,7 @@ async function onPurgeMissing() {
       { id: "confirm", label: `删除 ${n} 条`, variant: "danger" },
     ],
   });
-  if (choice !== "confirm") return;
+  if (choice.choiceId !== "confirm") return;
   purging.value = true;
   shell.appendLog(`[Code 索引] 删除缺失记录 ${n} 条…`, { source: "code_index", open: true });
   try {

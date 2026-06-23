@@ -6,6 +6,7 @@ import FileWorksetPanel from "../components/FileWorksetPanel.vue";
 import ShellLogPanel from "./ShellLogPanel.vue";
 import PagePropertiesPanel from "../components/PagePropertiesPanel.vue";
 import GitCommitPanel from "../components/shell/GitCommitPanel.vue";
+import CaaDialogTreePanel from "../components/caa/CaaDialogTreePanel.vue";
 import { usePagePropertiesHost, setPropertiesActivePage } from "../composables/pagePropertiesHost";
 import { fetchTree, type TreeNode } from "../api";
 import { useAppShell } from "../composables/useAppShell";
@@ -34,6 +35,7 @@ const props = withDefaults(
   defineProps<{
     dockSide?: "left" | "right";
     showTree?: boolean;
+    showCaaTree?: boolean;
     showLog?: boolean;
     showProps?: boolean;
     showGitCommit?: boolean;
@@ -41,6 +43,7 @@ const props = withDefaults(
   {
     dockSide: "right",
     showTree: true,
+    showCaaTree: false,
     showLog: true,
     showProps: false,
     showGitCommit: false,
@@ -138,14 +141,17 @@ const showGitCommitStandalone = computed(
 const panelVisible = computed(
   () =>
     props.showTree ||
+    props.showCaaTree ||
     (props.showLog && logOpen.value) ||
     showPropsWrap.value,
 );
 
+const showMainBlock = computed(() => props.showTree || props.showCaaTree);
+
 const stackLayout = computed(() =>
   resolveSidebarStackLayout({
     totalHeightPx: sidebarHeight.value,
-    showMain: props.showTree,
+    showMain: showMainBlock.value,
     showPropsWrap: showPropsWrap.value,
     showPropsMain: showPropsPanel.value,
     showPropsFooter: showGitCommitPanel.value && gitCommitStackedWithProps.value,
@@ -158,7 +164,7 @@ const stackLayout = computed(() =>
 );
 
 const bodyStyle = computed(() => {
-  if (!props.showTree) return undefined;
+  if (!showMainBlock.value) return undefined;
   if (stackLayout.value.mainFlex) {
     return { flex: "1 1 auto", minHeight: `${stackLayout.value.mainMinHeightPx}px` };
   }
@@ -194,7 +200,7 @@ const logPanelStyle = computed(() => {
 
 const hasBottomFixed = computed(
   () =>
-    props.showTree &&
+    showMainBlock.value &&
     ((props.showLog && logOpen.value) || showPropsWrap.value),
 );
 
@@ -267,7 +273,7 @@ function onPropsResizeStart(e: PointerEvent) {
       const delta = ev.clientY - startY;
       const maxH = maxStoredPropsHeightPx(
         sidebarEl.clientHeight,
-        props.showTree,
+        showMainBlock.value,
         props.showLog && logOpen.value,
         shell.shellLayout.value.log_panel_height_px,
       );
@@ -324,7 +330,7 @@ function onLogResizeStart(e: PointerEvent) {
       const delta = ev.clientY - startY;
       const maxH = maxStoredLogHeightPx(
         sidebarEl.clientHeight,
-        props.showTree,
+        showMainBlock.value,
         showPropsWrap.value,
         shell.shellLayout.value.properties_panel_height_px,
       );
@@ -389,17 +395,22 @@ onUnmounted(() => {
     :class="[
       `dock-${dockSide}`,
       {
-        'log-only': showLog && !showTree && !showPropsWrap,
-        'props-only': showPropsWrap && !showTree && !(showLog && logOpen),
+        'log-only': showLog && !showMainBlock && !showPropsWrap,
+        'props-only': showPropsWrap && !showMainBlock && !(showLog && logOpen),
         'git-commit-only':
-          showGitCommitPanel && !showPropsPanel && !showTree && !(showLog && logOpen),
+          showGitCommitPanel && !showPropsPanel && !showMainBlock && !(showLog && logOpen),
         'has-stack': hasBottomFixed,
         'has-props-stack-split': stackLayout.propsStackResizer,
+        'has-caa-tree': showCaaTree,
       },
     ]"
     data-tour="workspace-tree"
     :style="{ width: panelWidth }"
   >
+    <div v-if="showCaaTree" class="ws-body ws-caa-tree-body" :style="bodyStyle">
+      <CaaDialogTreePanel />
+    </div>
+
     <div v-if="showTree" class="ws-body" :style="bodyStyle">
       <div class="ws-tab-bar" role="tablist">
         <button
@@ -513,7 +524,7 @@ onUnmounted(() => {
 
     <template v-if="showGitCommitStandalone">
       <div
-        v-if="showTree || (showLog && logOpen)"
+        v-if="showMainBlock || (showLog && logOpen)"
         class="props-resizer panel-resizer"
         title="拖拽调节 Git 提交区高度"
         @pointerdown="onPropsResizeStart"
@@ -531,7 +542,7 @@ onUnmounted(() => {
 
     <template v-else-if="showPropsPanel || gitCommitStackedWithProps">
       <div
-        v-if="showTree || (showLog && logOpen)"
+        v-if="showMainBlock || (showLog && logOpen)"
         class="props-resizer panel-resizer"
         title="拖拽调节属性区高度"
         @pointerdown="onPropsResizeStart"
@@ -559,7 +570,7 @@ onUnmounted(() => {
 
     <template v-if="showLog && logOpen">
       <div
-        v-if="showTree || showPropsWrap"
+        v-if="showMainBlock || showPropsWrap"
         class="log-resizer panel-resizer"
         title="拖拽调节日志区高度"
         @pointerdown="onLogResizeStart"
@@ -693,6 +704,15 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.ws-caa-tree-body {
+  min-height: 0;
+}
+
+.ws-caa-tree-body :deep(.caa-dialog-tree-panel) {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .ws-log-wrap {

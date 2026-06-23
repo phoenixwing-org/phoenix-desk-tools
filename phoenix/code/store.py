@@ -163,6 +163,55 @@ def _meta_get(conn: sqlite3.Connection, key: str) -> str | None:
     return str(row[0]) if row else None
 
 
+def _meta_set(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute(
+        f"INSERT INTO {T_META}(key, value) VALUES (?, ?) "
+        f"ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (key, value),
+    )
+
+
+CODE_INDEX_EXTRA_EXTS_KEY = "code_index_extra_exts"
+
+
+def load_code_index_extra_exts(repo_root: Path) -> list[str]:
+    from phoenix.code.kinds import normalize_index_extension
+
+    rr = repo_root.expanduser().resolve(strict=False)
+    with connect(rr) as conn:
+        raw = _meta_get(conn, CODE_INDEX_EXTRA_EXTS_KEY)
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+        if not isinstance(data, list):
+            return []
+        out: list[str] = []
+        for item in data:
+            norm = normalize_index_extension(str(item))
+            if norm:
+                out.append(norm)
+        return sorted(set(out))
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return []
+
+
+def save_code_index_extra_exts(repo_root: Path, extensions: list[str]) -> list[str]:
+    from phoenix.code.kinds import normalize_index_extension
+
+    rr = repo_root.expanduser().resolve(strict=False)
+    normalized = sorted(
+        {norm for e in extensions if (norm := normalize_index_extension(e))}
+    )
+    with connect(rr) as conn:
+        _meta_set(
+            conn,
+            CODE_INDEX_EXTRA_EXTS_KEY,
+            json.dumps(normalized, ensure_ascii=False),
+        )
+    return normalized
+
+
 def code_index_json_path(repo_root: Path) -> Path:
     return workspace_phoenix_dir(repo_root) / "exports" / CODE_INDEX_JSON_NAME
 
@@ -283,6 +332,37 @@ def query_code_files(
             "size_bytes": int(r[5] or 0),
             "text_encoding": str(r[6] or ""),
             "last_seen_at": r[7],
+        }
+        for r in rows
+    ]
+    return entries, total
+
+
+def query_catdlg_index_files(repo_root: Path) -> tuple[list[dict[str, Any]], int]:
+    """单次 SQL：列出 Code 索引中存在的 ``.catdlg`` 文件。"""
+    rr = repo_root.expanduser().resolve(strict=False)
+    sql_count = f"""
+        SELECT COUNT(*) FROM {T_CODE_FILE}
+        WHERE file_status = ? AND file_ext = ?
+    """
+    sql_rows = f"""
+        SELECT repo_rel_path, filename, size_bytes, last_seen_at
+        FROM {T_CODE_FILE}
+        WHERE file_status = ? AND file_ext = ?
+        ORDER BY repo_rel_path COLLATE NOCASE
+    """
+    with connect(rr) as conn:
+        params = (FILE_STATUS_PRESENT, ".catdlg")
+        total_row = conn.execute(sql_count, params).fetchone()
+        total = int(total_row[0]) if total_row else 0
+        rows = conn.execute(sql_rows, params).fetchall()
+
+    entries = [
+        {
+            "repo_rel_path": str(r[0]),
+            "filename": str(r[1]),
+            "size_bytes": int(r[2] or 0),
+            "last_seen_at": r[3],
         }
         for r in rows
     ]

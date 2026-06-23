@@ -65,6 +65,8 @@ export type PagePropertyInfoField = PagePropertyFieldBase & {
   kind: "info";
   value: ReactiveValue<string | number | boolean | null>;
   mono?: boolean;
+  /** 多行说明（如启动步骤） */
+  multiline?: boolean;
 };
 
 /** 相对工作空间路径（可编辑 + 浏览） */

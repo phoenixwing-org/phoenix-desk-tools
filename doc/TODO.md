@@ -2,6 +2,7 @@
 
 > 汇总跨模块待办；细项研究稿见 [文档索引.md](文档索引.md)。  
 > **Git 插件**细项见 **[TODO-GIT.md](TODO-GIT.md)**。  
+> **CAA 模块**细项见 **[TODO-CAA.md](TODO-CAA.md)**。  
 > 状态：`[ ]` 未做 · `[~]` 进行中 · `[x]` 已完成
 
 最后更新：2026-06-23
@@ -262,6 +263,21 @@
 | G2 · diff2html · `status-paths` | [ ] |
 
 **下一步（详见 [TODO-GIT.md §G1 收尾](TODO-GIT.md#g1-收尾)**：`GitFilePage` · 删 spike · G1 点检
+
+### CAA 模块 · 对话框编辑器（单前端 · 双后端）
+
+> **CAA 细项**：[TODO-CAA.md](TODO-CAA.md) · **`web-ui` + `server/caa` + `catdlg-core`** · Python 无 CAA 业务
+
+| 里程碑 | 状态 |
+| --- | --- |
+| C0 · 文档与架构拍板 | [x] |
+| C0b · server/caa + core + Vite 双代理 | [x] |
+| C1–C2 · 解析 + web-ui 预览（P0） | [x] |
+| C2b–C2c · 索引 + 多 Tab | [ ] |
+| C3–C4 · 写回 + Wizard | [ ] |
+| C5 · VS Code 封装（后期） | [ ] |
+
+归档：[caa/CAA对话框-P0快速原型-归档.md](caa/CAA对话框-P0快速原型-归档.md)
 
 ---
 

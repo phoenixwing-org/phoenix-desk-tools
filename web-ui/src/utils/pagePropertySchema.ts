@@ -144,6 +144,7 @@ export function propReadonly(
   opts: {
     value: Ref<string | number | boolean | null> | ComputedRef<string | number | boolean | null>;
     mono?: boolean;
+    multiline?: boolean;
     hint?: string;
     hidden?: MaybeHidden;
   },

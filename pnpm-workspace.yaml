@@ -1,2 +1,4 @@
 packages:
-  - web-ui
+  - "web-ui"
+  - "packages/*"
+  - "server/*"

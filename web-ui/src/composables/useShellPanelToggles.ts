@@ -11,6 +11,7 @@ import {
   type SidePanelSnapshot,
 } from "../utils/sidebarSideToggle";
 import { sideDockVisibility } from "../utils/sideDockLayout";
+import { isCaaEditorPage } from "../constants/caaPages";
 
 const collapsedSnapshots: { left: SidePanelSnapshot | null; right: SidePanelSnapshot | null } = {
   left: null,
@@ -21,7 +22,10 @@ const collapsedSnapshots: { left: SidePanelSnapshot | null; right: SidePanelSnap
 export function useShellPanelToggles() {
   const shell = useAppShell();
   const dockVis = computed(() =>
-    sideDockVisibility(shell.shellLayout.value, { onGitPage: shell.currentPage.value === "git" }),
+    sideDockVisibility(shell.shellLayout.value, {
+      onGitPage: shell.currentPage.value === "git",
+      onCaaPage: isCaaEditorPage(shell.currentPage.value),
+    }),
   );
 
   const leftSidebarOpen = computed(() => dockVis.value.leftVisible);
@@ -37,7 +41,8 @@ export function useShellPanelToggles() {
   async function toggleSide(side: SideDock) {
     const layout = shell.shellLayout.value;
     const onGitPage = shell.currentPage.value === "git";
-    const visible = isSideVisible(layout, side, { onGitPage });
+    const onCaaPage = isCaaEditorPage(shell.currentPage.value);
+    const visible = isSideVisible(layout, side, { onGitPage, onCaaPage });
     if (visible) {
       collapsedSnapshots[side] = snapshotPanelsOnSide(layout, side);
       const patch = buildCollapseSidePatch(layout, side);

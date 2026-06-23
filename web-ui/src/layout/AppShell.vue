@@ -26,17 +26,21 @@ import BomExportPage from "../pages/BomExportPage.vue";
 import UnitTestsPage from "../pages/UnitTestsPage.vue";
 import TestFixturesPage from "../pages/TestFixturesPage.vue";
 import GitPage from "../pages/GitPage.vue";
+import CaaDialogEditorPage from "../pages/CaaDialogEditorPage.vue";
+import CaaDialogHomePage from "../pages/CaaDialogHomePage.vue";
 import WorkbenchIdlePage from "../pages/WorkbenchIdlePage.vue";
 import PlaceholderPage from "../pages/PlaceholderPage.vue";
 import { sideDockVisibility } from "../utils/sideDockLayout";
 import { bindPointerDrag } from "../utils/pointerDrag";
 import { fetchPhoenixDatabaseStatus, recreatePhoenixDatabase } from "../api";
 import { provideAppShell } from "../composables/useAppShell";
+import { isCaaEditorPage } from "../constants/caaPages";
 import { WORKBENCH_IDLE_PAGE } from "../constants/workbench";
 import { useDocumentTitle } from "../composables/useDocumentTitle";
 import { useWorkspaceSwitcher } from "../composables/useWorkspaceSwitcher";
 import ChoiceDialogHost from "../components/ChoiceDialogHost.vue";
 import GitDiffPreviewHost from "../components/git/GitDiffPreviewHost.vue";
+import CaaRelatedFilePreviewHost from "../components/caa/CaaRelatedFilePreviewHost.vue";
 import AppModalOverlay from "../components/AppModalOverlay.vue";
 
 const shell = provideAppShell();
@@ -85,7 +89,10 @@ watch(ribbonActiveTab, (tabId) => {
 });
 
 const dockVis = computed(() =>
-  sideDockVisibility(shellLayout.value, { onGitPage: shell.currentPage.value === "git" }),
+  sideDockVisibility(shellLayout.value, {
+    onGitPage: shell.currentPage.value === "git",
+    onCaaPage: isCaaEditorPage(shell.currentPage.value),
+  }),
 );
 
 const leftPanelWidth = computed(() => `${shellLayout.value.left_panel_width_px}px`);
@@ -119,6 +126,8 @@ const PAGE_COMPONENTS: Record<string, Component> = {
   bom_export: BomExportPage,
   unit_tests: UnitTestsPage,
   test_fixtures: TestFixturesPage,
+  caa_dialog_home: CaaDialogHomePage,
+  caa_dialog: CaaDialogEditorPage,
 };
 
 function pageComponent(pageId: string): Component {
@@ -263,6 +272,7 @@ onUnmounted(() => {
         v-if="!isWelcomeFullscreen && dockVis.leftVisible"
         dock-side="left"
         :show-tree="dockVis.leftShowTree"
+        :show-caa-tree="dockVis.leftShowCaaTree"
         :show-log="dockVis.leftShowLog"
         :show-props="dockVis.leftShowProps"
         :show-git-commit="dockVis.leftShowGitCommit"
@@ -286,6 +296,7 @@ onUnmounted(() => {
     <StatusBar v-if="!isWelcomeFullscreen" />
     <ChoiceDialogHost />
     <GitDiffPreviewHost />
+    <CaaRelatedFilePreviewHost />
     <AppModalOverlay
       :open="shell.configOverlayOpen.value"
       aria-label="配置"

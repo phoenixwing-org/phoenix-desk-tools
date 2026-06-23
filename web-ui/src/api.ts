@@ -104,7 +104,11 @@ function formatApiErrorDetail(detail: unknown): string {
 }
 
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+  const headers = new Headers(init?.headers);
+  if (init?.body != null && init.body !== "" && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  const res = await fetch(url, { ...init, headers });
   const text = await res.text();
   let data: unknown = null;
   if (text) {
@@ -1508,8 +1512,21 @@ export type CodeIndexPayload = {
   present_count: number;
   kind_labels: Record<string, string>;
   kinds: string[];
+  builtin_extensions?: string[];
+  extra_extensions?: string[];
   summary?: string;
   scan_id?: number;
+};
+
+export type CodeIndexExtensionCandidate = {
+  ext: string;
+  count: number;
+};
+
+export type CodeIndexExtensionDiscovery = {
+  builtin_extensions: string[];
+  extra_extensions: string[];
+  candidates: CodeIndexExtensionCandidate[];
 };
 
 export type CodeIndexEntriesPayload = {
@@ -1519,8 +1536,28 @@ export type CodeIndexEntriesPayload = {
   offset: number;
 };
 
+export type CodeIndexCatDlgEntry = {
+  repo_rel_path: string;
+  filename: string;
+  size_bytes: number;
+  last_seen_at?: string | null;
+};
+
+export type CodeIndexCatDlgPayload = {
+  workspace_path: string;
+  workspace_path_display: string;
+  last_scan_at?: string | null;
+  indexed: boolean;
+  count: number;
+  entries: CodeIndexCatDlgEntry[];
+};
+
 export function fetchCodeIndex() {
   return jsonFetch<CodeIndexPayload>("/api/code/index");
+}
+
+export function fetchCodeIndexCatDlg() {
+  return jsonFetch<CodeIndexCatDlgPayload>("/api/code/index/catdlg");
 }
 
 export type CodeIndexSearchMode = "contains" | "filename";
@@ -1546,8 +1583,26 @@ export function fetchCodeIndexEntries(opts?: {
   return jsonFetch<CodeIndexEntriesPayload>(`/api/code/index/entries${qs ? `?${qs}` : ""}`);
 }
 
-export function scanCodeIndex() {
-  return jsonFetch<CodeIndexPayload>("/api/code/index/scan", { method: "POST" });
+export function scanCodeIndex(opts?: { adoptExtensions?: string[] }) {
+  const body =
+    opts?.adoptExtensions?.length
+      ? { adopt_extensions: opts.adoptExtensions }
+      : {};
+  return jsonFetch<CodeIndexPayload>("/api/code/index/scan", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function fetchCodeIndexExtensionDiscovery() {
+  return jsonFetch<CodeIndexExtensionDiscovery>("/api/code/index/extension-discovery");
+}
+
+export function saveCodeIndexExtraExtensions(extensions: string[]) {
+  return jsonFetch<{ extra_extensions: string[] }>("/api/code/index/extra-extensions", {
+    method: "PUT",
+    body: JSON.stringify({ extensions }),
+  });
 }
 
 export function purgeMissingCodeIndex() {

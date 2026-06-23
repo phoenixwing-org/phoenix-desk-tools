@@ -6,6 +6,7 @@ export type SideDockVisibility = {
   leftVisible: boolean;
   rightVisible: boolean;
   leftShowTree: boolean;
+  leftShowCaaTree: boolean;
   leftShowLog: boolean;
   leftShowProps: boolean;
   leftShowGitCommit: boolean;
@@ -17,6 +18,7 @@ export type SideDockVisibility = {
 
 export type SideDockVisibilityContext = {
   onGitPage?: boolean;
+  onCaaPage?: boolean;
 };
 
 export function gitCommitPanelDock(layout: ShellLayout): SideDock {
@@ -43,6 +45,7 @@ export function sideDockVisibility(
   const gitOpen = Boolean(ctx.onGitPage) && layout.git_commit_panel_open;
 
   const leftShowTree = treeLeft && treeOpen;
+  const leftShowCaaTree = Boolean(ctx.onCaaPage);
   const leftShowLog = logLeft && logOpen;
   const leftShowProps = propsLeft && propsOpen;
   const leftShowGitCommit = gitLeft && gitOpen;
@@ -52,9 +55,10 @@ export function sideDockVisibility(
   const rightShowGitCommit = gitRight && gitOpen;
 
   return {
-    leftVisible: leftShowTree || leftShowLog || leftShowProps || leftShowGitCommit,
+    leftVisible: leftShowTree || leftShowCaaTree || leftShowLog || leftShowProps || leftShowGitCommit,
     rightVisible: rightShowTree || rightShowLog || rightShowProps || rightShowGitCommit,
     leftShowTree,
+    leftShowCaaTree,
     leftShowLog,
     leftShowProps,
     leftShowGitCommit,

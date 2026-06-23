@@ -64,7 +64,7 @@ export async function confirmCloseWorkspace(
       ],
       defaultChoiceId: "cancel",
     });
-    return choice === "close" ? "close" : null;
+    return choice.choiceId === "close" ? "close" : null;
   }
 
   const dirtyNote = formatDirtyTabList(dirtyTitles);
@@ -79,7 +79,7 @@ export async function confirmCloseWorkspace(
     ],
     defaultChoiceId: "cancel",
   });
-  return choice === "close_all" ? "close_all" : null;
+  return choice.choiceId === "close_all" ? "close_all" : null;
 }
 
 function formatOpenTabList(tabTitles: string[]): string {
@@ -119,7 +119,7 @@ export async function confirmCloseTabsBeforeWorkspacePick(
     ],
     defaultChoiceId: "cancel",
   });
-  return choice === "confirm";
+  return choice.choiceId === "confirm";
 }
 
 /** 切换工作空间前：有未关页面时系统确认，默认取消。 */
@@ -176,5 +176,5 @@ export async function confirmCloseAllTabs(
       { id: "cancel", label: "取消", variant: "default" },
     ],
   });
-  return choice === "confirm";
+  return choice.choiceId === "confirm";
 }

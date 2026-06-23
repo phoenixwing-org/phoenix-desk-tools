@@ -47,6 +47,7 @@ export const RIBBON_PAGE_ICONS: Record<string, Component> = {
   code_uuid: MagicStick,
   unit_tests: Monitor,
   test_fixtures: Connection,
+  caa_dialog_home: Document,
 };
 
 export function ribbonIconFor(pageId: string): Component {

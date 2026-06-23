@@ -1,5 +1,6 @@
 import { computed, ref, type Ref } from "vue";
 import type { AppConfig } from "../types/config";
+import { CAA_EDITOR_PAGE_ID, CAA_HOME_PAGE_ID } from "../constants/caaPages";
 import type { OpenTabOptions, PageTabPolicy, WorkbenchSessionSnapshot, WorkbenchTab, WorkbenchTabPayload } from "../types/workbench";
 import { getPageSession } from "./usePageSession";
 import { confirmCloseAllTabs, confirmDirtyTabClose } from "./tabCloseConfirm";
@@ -40,6 +41,8 @@ export function createWorkbench(appConfig: Ref<AppConfig | null>) {
       config: "配置",
       part_key_detail: "零件详情",
       rename_analysis: "文件改名",
+      [CAA_HOME_PAGE_ID]: "CAA 对话框",
+      [CAA_EDITOR_PAGE_ID]: "CAA 对话框",
     };
     return extras[pageId] ?? pageId;
   }

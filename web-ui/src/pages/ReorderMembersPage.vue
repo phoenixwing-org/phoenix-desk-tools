@@ -140,7 +140,7 @@ async function onGitInit() {
       { id: "confirm", label: "初始化" },
     ],
   });
-  if (choice !== "confirm") return;
+  if (choice.choiceId !== "confirm") return;
   gitInitLoading.value = true;
   try {
     const out = await initGitRepo();
@@ -164,7 +164,7 @@ async function onRevertFile(row: ChangedFileRow) {
       { id: "confirm", label: "Revert", variant: "danger" },
     ],
   });
-  if (choice !== "confirm") return;
+  if (choice.choiceId !== "confirm") return;
   revertingPath.value = row.path;
   try {
     const out = await restoreGitPaths([row.path], "worktree");
@@ -288,7 +288,7 @@ async function onRun(dryRun: boolean) {
         { id: "confirm", label: "写盘", variant: "danger" },
       ],
     });
-    if (choice !== "confirm") return;
+    if (choice.choiceId !== "confirm") return;
   }
   running.value = true;
   const mode = dryRun ? "预检" : "写盘";

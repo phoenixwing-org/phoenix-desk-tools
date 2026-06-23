@@ -63,7 +63,7 @@ async function onDelete() {
       { id: "delete", label: "删除", variant: "danger" },
     ],
   });
-  if (choice !== "delete") return;
+  if (choice.choiceId !== "delete") return;
   store.deleteWorkset(ws.id);
 }
 

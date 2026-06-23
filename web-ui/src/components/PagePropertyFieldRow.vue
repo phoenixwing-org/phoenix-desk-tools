@@ -167,7 +167,12 @@ async function onBrowsePath(field: PagePropertyPathField) {
           </el-button>
         </div>
 
-        <span v-else-if="field.kind === 'info'" class="prop-info" :class="{ mono: field.mono }">
+        <span
+          v-else-if="field.kind === 'info'"
+          class="prop-info"
+          :class="{ mono: field.mono, multiline: field.multiline }"
+          :title="field.multiline ? undefined : formatInfoValue(unref(field.value))"
+        >
           {{ formatInfoValue(unref(field.value)) }}
         </span>
       </td>
@@ -208,13 +213,8 @@ async function onBrowsePath(field: PagePropertyPathField) {
   vertical-align: middle;
   font-size: 0.72rem;
   line-height: 1.35;
-}
-
-.prop-field-row:has(.prop-info) .prop-name,
-.prop-field-row:has(.prop-info) .prop-value {
-  vertical-align: top;
-  padding-top: 4px;
-  padding-bottom: 4px;
+  overflow: hidden;
+  max-width: 0;
 }
 
 .prop-bool-cell {
@@ -266,8 +266,19 @@ async function onBrowsePath(field: PagePropertyPathField) {
 
 .prop-info {
   display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 0.72rem;
   line-height: 1.35;
-  word-break: break-word;
+}
+
+.prop-info.multiline {
+  white-space: pre-wrap;
+  text-overflow: unset;
+  overflow: visible;
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: var(--muted);
 }
 </style>

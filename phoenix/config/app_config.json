@@ -115,6 +115,13 @@
       "description": "按 cxx-code-style 重排选定模块下 .h/.cpp 类成员"
     },
     {
+      "id": "caa_dialog_home",
+      "label": "CAA 对话框",
+      "page": "caa_dialog_home",
+      "module": "code",
+      "description": "扫描工作空间 .CATDlg 列表；点击在新 Tab 打开编辑器"
+    },
+    {
       "id": "code_rename",
       "label": "Code 批量改名",
       "page": "code_rename",
@@ -168,6 +175,8 @@
       "step_batch": { "max_tabs": 1 },
       "sw_step_export": { "max_tabs": 1 },
       "reorder_members": { "max_tabs": 1 },
+      "caa_dialog_home": { "max_tabs": 1 },
+      "caa_dialog": { "max_tabs": 8, "tab_enabled": true },
       "code_index": { "max_tabs": 1 },
       "code_ignore": { "max_tabs": 1 },
       "code_rename": { "max_tabs": 1 },

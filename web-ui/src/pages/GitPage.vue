@@ -184,7 +184,7 @@ async function onRevert(paths: string[], scope: "worktree" | "untracked" = "work
       { id: "confirm", label: isUntracked ? "删除" : "Revert", variant: "danger" },
     ],
   });
-  if (choice !== "confirm") return;
+  if (choice.choiceId !== "confirm") return;
 
   revertPaths.value = paths;
   try {
@@ -263,7 +263,7 @@ async function onBulkRevert(
       { id: "confirm", label: isUntracked ? "全部删除" : "全部 Revert", variant: "danger" },
     ],
   });
-  if (choice !== "confirm") return;
+  if (choice.choiceId !== "confirm") return;
 
   bulkBusy.value = { section, kind: "revert" };
   try {

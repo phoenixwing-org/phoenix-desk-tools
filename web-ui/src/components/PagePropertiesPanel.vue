@@ -206,6 +206,9 @@ onUnmounted(() => {
   margin: 0;
   padding: 0 8px 4px 22px;
   line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .prop-group-chevron {

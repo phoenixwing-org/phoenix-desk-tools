@@ -229,7 +229,7 @@ async function onApply(dryRun: boolean) {
         { id: "confirm", label: "写盘", variant: "danger" },
       ],
     });
-    if (choice !== "confirm") return;
+    if (choice.choiceId !== "confirm") return;
   }
   applying.value = true;
   const mode = dryRun ? "预检" : "写盘";
