@@ -189,6 +189,13 @@
   line-height: 1.45;
 }
 
+.head-subtitle {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
 @media (max-width: 860px) {
   .head-row.head-row-toolbar:has(> .head-actions) {
     grid-template-columns: 1fr auto;

@@ -1,4 +1,5 @@
 import { computed } from "vue";
+import { nlsKeyForProp, nlsPathSegments, type NlsStringProp } from "@phoenix/catdlg-core";
 import { caaServicePropertyGroup } from "./caaServicePropertyGroup";
 import { usePagePropertySheet } from "./usePagePropertySheet";
 import { useCaaDialogPageStore } from "../stores/caaDialogPage";
@@ -8,15 +9,28 @@ import {
   resolveSelectedNode,
 } from "../utils/caaDialogTree";
 import { catDlgDirRel } from "../utils/caaDialogDisplay";
-import { propGroup, propReadonly, propSheet } from "../utils/pagePropertySchema";
+import { propGroup, propReadonly, propSheet, propString } from "../utils/pagePropertySchema";
 
 function dash(value: string | number | boolean | null | undefined): string {
   if (value === null || value === undefined || value === "") return "—";
   return String(value);
 }
 
+export type CaaNlsFieldChange = {
+  nodeId: string;
+  prop: NlsStringProp;
+  key: string;
+  value: string;
+  columnIndex?: number;
+};
+
 /** CAA 对话框 · 侧栏属性（选中控件 + 对话框元数据） */
-export function useCaaDialogPropertySheet(pageId: string) {
+export function useCaaDialogPropertySheet(
+  pageId: string,
+  opts?: {
+    onNlsChange?: (change: CaaNlsFieldChange) => void;
+  },
+) {
   const store = useCaaDialogPageStore();
 
   const selectedNode = computed(() => resolveSelectedNode(store.ir, store.selectedId));
@@ -31,7 +45,34 @@ export function useCaaDialogPropertySheet(pageId: string) {
       ),
   );
   const hasSize = computed(() => Boolean(selectedNode.value?.size));
-  const hasNls = computed(() => Boolean(selectedNode.value?.nls));
+
+  /** 选中控件各 NLS 属性的键 */
+  const nlsKeyTitle = computed(() => {
+    const node = selectedNode.value;
+    if (!node || !store.ir) return "";
+    return nlsKeyForProp(nlsPathSegments(node, store.ir.root), "title");
+  });
+  const nlsKeyHelp = computed(() => {
+    const node = selectedNode.value;
+    if (!node || !store.ir) return "";
+    return nlsKeyForProp(nlsPathSegments(node, store.ir.root), "help");
+  });
+  const nlsKeyShortHelp = computed(() => {
+    const node = selectedNode.value;
+    if (!node || !store.ir) return "";
+    return nlsKeyForProp(nlsPathSegments(node, store.ir.root), "shortHelp");
+  });
+  const nlsKeyLongHelp = computed(() => {
+    const node = selectedNode.value;
+    if (!node || !store.ir) return "";
+    return nlsKeyForProp(nlsPathSegments(node, store.ir.root), "longHelp");
+  });
+
+  function nlsChange(prop: NlsStringProp, key: ComputedRef<string>, value: string) {
+    const node = selectedNode.value;
+    if (!node) return;
+    opts?.onNlsChange?.({ nodeId: node.id, prop, key: key.value, value });
+  }
 
   usePagePropertySheet(pageId, () =>
     propSheet(
@@ -107,6 +148,42 @@ export function useCaaDialogPropertySheet(pageId: string) {
             hidden: computed(() => !selectedNode.value?.style?.length),
           }),
         ], { hidden: computed(() => !hasSelection.value) }),
+        propGroup(
+          "nls",
+          "文案 (NLS)",
+          [
+            propString("nls_title", "Title", {
+              value: computed(() => selectedNode.value?.nls?.title ?? ""),
+              onChange: (v) => nlsChange("title", nlsKeyTitle, v),
+              placeholder: "控件标签文本",
+            }),
+            propString("nls_help", "Help（提示）", {
+              value: computed(() => selectedNode.value?.nls?.help ?? ""),
+              onChange: (v) => nlsChange("help", nlsKeyHelp, v),
+              placeholder: "悬停提示",
+              hint: "鼠标悬停时显示的完整提示文本",
+            }),
+            propString("nls_short", "ShortHelp（简短提示）", {
+              value: computed(() => selectedNode.value?.nls?.shortHelp ?? ""),
+              onChange: (v) => nlsChange("shortHelp", nlsKeyShortHelp, v),
+              placeholder: "状态栏简短提示",
+              hint: "状态栏 / 快速提示，通常比 Help 更短",
+            }),
+            propString("nls_long", "LongHelp（详细提示）", {
+              value: computed(() => selectedNode.value?.nls?.longHelp ?? ""),
+              onChange: (v) => nlsChange("longHelp", nlsKeyLongHelp, v),
+              placeholder: "详细说明文本",
+              hint: "详细帮助文本，用于更完整的说明",
+            }),
+            propReadonly("nls_columns", "列标题", {
+              value: computed(() =>
+                dash(selectedNode.value?.nls?.columnTitles?.filter(Boolean).join(" · ")),
+              ),
+              hidden: computed(() => !selectedNode.value?.nls?.columnTitles?.length),
+            }),
+          ],
+          { hidden: computed(() => !hasSelection.value) },
+        ),
         propGroup("grid", "Grid 布局", [
           propReadonly("grid_placement", "位置", {
             value: computed(() =>
@@ -152,35 +229,6 @@ export function useCaaDialogPropertySheet(pageId: string) {
             }),
           ],
           { hidden: computed(() => !hasSize.value), defaultCollapsed: true },
-        ),
-        propGroup(
-          "nls",
-          "文案 (NLS)",
-          [
-            propReadonly("nls_title", "Title", {
-              value: computed(() => dash(selectedNode.value?.nls?.title)),
-              hidden: computed(() => !selectedNode.value?.nls?.title),
-            }),
-            propReadonly("nls_help", "Help", {
-              value: computed(() => dash(selectedNode.value?.nls?.help)),
-              hidden: computed(() => !selectedNode.value?.nls?.help),
-            }),
-            propReadonly("nls_short", "ShortHelp", {
-              value: computed(() => dash(selectedNode.value?.nls?.shortHelp)),
-              hidden: computed(() => !selectedNode.value?.nls?.shortHelp),
-            }),
-            propReadonly("nls_long", "LongHelp", {
-              value: computed(() => dash(selectedNode.value?.nls?.longHelp)),
-              hidden: computed(() => !selectedNode.value?.nls?.longHelp),
-            }),
-            propReadonly("nls_columns", "列标题", {
-              value: computed(() =>
-                dash(selectedNode.value?.nls?.columnTitles?.filter(Boolean).join(" · ")),
-              ),
-              hidden: computed(() => !selectedNode.value?.nls?.columnTitles?.length),
-            }),
-          ],
-          { hidden: computed(() => !hasNls.value), defaultCollapsed: true },
         ),
       ],
       { title: "CAA 对话框" },

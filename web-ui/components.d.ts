@@ -23,6 +23,7 @@ declare module 'vue' {
     CaaDialogTreePanel: typeof import('./src/components/caa/CaaDialogTreePanel.vue')['default']
     CaaInlineNlsText: typeof import('./src/components/caa/CaaInlineNlsText.vue')['default']
     CaaInlineNlsValue: typeof import('./src/components/caa/CaaInlineNlsValue.vue')['default']
+    CaaNlsSupplementDialog: typeof import('./src/components/caa/CaaNlsSupplementDialog.vue')['default']
     CaaRelatedFilePreviewDialog: typeof import('./src/components/caa/CaaRelatedFilePreviewDialog.vue')['default']
     CaaRelatedFilePreviewHost: typeof import('./src/components/caa/CaaRelatedFilePreviewHost.vue')['default']
     ChoiceDialogHost: typeof import('./src/components/ChoiceDialogHost.vue')['default']
