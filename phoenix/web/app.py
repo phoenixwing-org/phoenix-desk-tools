@@ -279,8 +279,11 @@ class ShellLayoutBody(BaseModel):
     shell_log_dock: str | None = None
     properties_panel_open: bool | None = None
     properties_panel_height_px: int | None = None
+    properties_footer_height_px: int | None = None
     properties_panel_dock: str | None = None
     properties_name_col_width_px: int | None = None
+    git_commit_panel_open: bool | None = None
+    git_commit_panel_dock: str | None = None
 
 
 class NavModulesBody(BaseModel):
@@ -1829,6 +1832,10 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
     ) -> dict:
         full_ids = [i.strip() for i in ids if i and i.strip()]
         return get_test_case_catalog(full_ids or None)
+
+    from phoenix.web.git_routes import register_git_routes
+
+    register_git_routes(app)
 
     if static_dir is not None and static_dir.is_dir():
         app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")

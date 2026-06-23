@@ -93,6 +93,7 @@ web-ui/
 ```
 
 - **壳层**只依赖 `pageId` → 组件映射 + `openTab` / `ui_session`
+- **壳层系统能力**（跨插件、无独立导航页）：[FileWorkset](FileWorkset-规划.md)、[Git 工作区](Web壳层-Git工作区插件-规划.md)（G1 核心已落地）
 - **插件**声明自己需要的 DB 域、导航项、onboarding 步骤
 - 第二个插件示例：`phoenix_erp_` 表、`erp-inventory` 页面（占位）
 

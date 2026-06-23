@@ -60,6 +60,7 @@ export function useRibbonTabs(options: {
         page === "welcome" ||
         page === "home" ||
         page === "config" ||
+        page === "git" ||
         page === "unit_tests" ||
         page === "test_fixtures"
       ) {

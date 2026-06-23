@@ -106,8 +106,11 @@ def update_shell_layout(patch: dict[str, Any]) -> dict[str, Any]:
         shell_log_dock=patch.get("shell_log_dock"),
         properties_panel_open=patch.get("properties_panel_open"),
         properties_panel_height_px=patch.get("properties_panel_height_px"),
+        properties_footer_height_px=patch.get("properties_footer_height_px"),
         properties_panel_dock=patch.get("properties_panel_dock"),
         properties_name_col_width_px=patch.get("properties_name_col_width_px"),
+        git_commit_panel_open=patch.get("git_commit_panel_open"),
+        git_commit_panel_dock=patch.get("git_commit_panel_dock"),
     )
     launcher = load_launcher_prefs()
     return launcher.get("shell_layout") or {}

@@ -1,20 +1,29 @@
 <script setup lang="ts">
+import { Document, Folder } from "@element-plus/icons-vue";
 import { computed, onMounted, ref, watch } from "vue";
 import { promptChoice } from "../composables/choiceDialog";
 import {
+  fetchGitInfo,
   fetchReorderMembersPrefs,
   fetchReorderMembersTopLevel,
+  initGitRepo,
+  restoreGitPaths,
   runReorderMembers,
   saveReorderMembersPrefs,
   type ReorderMembersEntry,
 } from "../api";
+import type { GitWorkspaceInfo } from "../types/gitWorkspace";
 import PageHeader from "../components/PageHeader.vue";
 import AppModalOverlay from "../components/AppModalOverlay.vue";
+import GitChangePathLabel from "../components/git/GitChangePathLabel.vue";
+import GitDiffPreviewButton from "../components/git/GitDiffPreviewButton.vue";
+import GitRevertWorktreeButton from "../components/git/GitRevertWorktreeButton.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useReorderMembersPageStore } from "../stores/reorderMembersPage";
 import { useFileWorksetsStore } from "../stores/fileWorksets";
 import { useReorderMembersPropertySheet } from "../composables/useReorderMembersPropertySheet";
 import { deriveReorderTopLevelFromWorkset } from "../utils/deriveReorderTopLevelFromWorkset";
+import { formatFileAtRepoDir } from "../utils/workspaceFileQuery";
 
 const shell = useAppShell();
 const pageStore = useReorderMembersPageStore();
@@ -51,6 +60,12 @@ const loading = ref(false);
 const saving = ref(false);
 const running = ref(false);
 const loadError = ref("");
+
+const gitInfo = ref<GitWorkspaceInfo | null>(null);
+const gitInitLoading = ref(false);
+const revertingPath = ref<string | null>(null);
+
+const gitReady = computed(() => Boolean(gitInfo.value?.git_installed && gitInfo.value?.repo_initialized));
 
 const selectedCount = computed(() => pageStore.selectedCount);
 const allChecked = computed(
@@ -101,6 +116,69 @@ function buildChangedRows(paths: string[], dryRun: boolean): ChangedFileRow[] {
 function collectChangedPaths(out: Awaited<ReturnType<typeof runReorderMembers>>): string[] {
   if (out.changed_files?.length) return out.changed_files;
   return (out.item_results ?? []).flatMap((item) => item.changed_files ?? []);
+}
+
+function canGitActions(row: ChangedFileRow): boolean {
+  return row.status === "written" && gitReady.value;
+}
+
+async function loadGitInfo() {
+  try {
+    gitInfo.value = await fetchGitInfo();
+  } catch {
+    gitInfo.value = null;
+  }
+}
+
+async function onGitInit() {
+  const choice = await promptChoice({
+    title: "初始化 Git 仓库",
+    message: "将在当前工作空间根目录执行 git init。\n需本机已安装 Git。\n\n继续？",
+    defaultChoiceId: "cancel",
+    choices: [
+      { id: "cancel", label: "取消" },
+      { id: "confirm", label: "初始化" },
+    ],
+  });
+  if (choice !== "confirm") return;
+  gitInitLoading.value = true;
+  try {
+    const out = await initGitRepo();
+    await loadGitInfo();
+    shell.setStatus(`已初始化 Git：${out.git_root_display || out.git_root}`);
+  } catch (e) {
+    shell.setStatus(String(e));
+  } finally {
+    gitInitLoading.value = false;
+  }
+}
+
+async function onRevertFile(row: ChangedFileRow) {
+  if (!canGitActions(row)) return;
+  const choice = await promptChoice({
+    title: "Revert 文件",
+    message: `将用 git restore 恢复：\n${row.path}\n\n未跟踪或二进制文件可能无法恢复。继续？`,
+    defaultChoiceId: "cancel",
+    choices: [
+      { id: "cancel", label: "取消" },
+      { id: "confirm", label: "Revert", variant: "danger" },
+    ],
+  });
+  if (choice !== "confirm") return;
+  revertingPath.value = row.path;
+  try {
+    const out = await restoreGitPaths([row.path], "worktree");
+    if (out.restored.includes(row.path)) {
+      changedFileRows.value = changedFileRows.value.filter((r) => r.path !== row.path);
+      shell.setStatus(`已 Revert：${row.path}`);
+    } else {
+      shell.setStatus(`未能 Revert：${row.path}（可能未跟踪或无 Git 差异）`);
+    }
+  } catch (e) {
+    shell.setStatus(String(e));
+  } finally {
+    revertingPath.value = null;
+  }
 }
 
 function prefsPayload() {
@@ -231,6 +309,7 @@ async function onRun(dryRun: boolean) {
     const logText = pageStore.verbose ? out.log || out.summary : out.summary || out.log;
     shell.appendLog(logText || "完成", { source: "reorder_members" });
     shell.setStatus(out.summary || (out.ok ? "完成" : "失败"));
+    if (!dryRun) await loadGitInfo();
   } catch (e) {
     shell.appendLog(String(e), { source: "reorder_members" });
     shell.setStatus(String(e));
@@ -244,6 +323,7 @@ onMounted(async () => {
   try {
     await loadPrefsFromApi();
     await refreshList();
+    await loadGitInfo();
   } catch (e) {
     shell.setStatus(String(e));
   }
@@ -256,6 +336,7 @@ watch(
     try {
       await loadPrefsFromApi();
       await refreshList();
+      await loadGitInfo();
     } catch (e) {
       shell.setStatus(String(e));
     }
@@ -339,11 +420,18 @@ watch(
             </template>
           </el-table-column>
           <el-table-column prop="name" label="名称" min-width="160" class-name="mono" />
-          <el-table-column label="类型" width="72" align="center">
+          <el-table-column label="类型" width="52" align="center">
             <template #default="{ row }">
-              <el-tag size="small" :type="row.kind === 'file' ? 'success' : 'info'" effect="plain">
-                {{ kindLabel(row.kind) }}
-              </el-tag>
+              <el-tooltip :content="kindLabel(row.kind)" placement="top" :show-after="400">
+                <el-icon
+                  class="entry-kind-icon"
+                  :class="row.kind === 'file' ? 'is-file' : 'is-dir'"
+                  :aria-label="kindLabel(row.kind)"
+                >
+                  <Document v-if="row.kind === 'file'" />
+                  <Folder v-else />
+                </el-icon>
+              </el-tooltip>
             </template>
           </el-table-column>
           <el-table-column prop="source_file_count" label="源文件" width="72" align="center" />
@@ -366,6 +454,35 @@ watch(
           <span v-else-if="lastRunSummary" class="muted small">本次无变更</span>
         </div>
         <p v-if="lastRunSummary && !changedFileRows.length" class="run-summary muted">{{ lastRunSummary.split("\n")[0] }}</p>
+        <div v-if="changedFileRows.length && !lastRunDryRun" class="git-hint-row">
+          <el-alert
+            v-if="gitInfo && !gitInfo.git_installed"
+            type="warning"
+            :closable="false"
+            title="未检测到 Git，预览与 Revert 不可用（请本机安装 Git）"
+            show-icon
+          />
+          <el-alert
+            v-else-if="gitInfo && !gitInfo.repo_initialized"
+            type="info"
+            :closable="false"
+            show-icon
+          >
+            <template #default>
+              写盘后可用 Git 预览 diff。当前工作空间尚未初始化 Git。
+              <el-button
+                size="small"
+                type="primary"
+                link
+                :loading="gitInitLoading"
+                class="git-init-link"
+                @click="onGitInit"
+              >
+                初始化 Git 仓库
+              </el-button>
+            </template>
+          </el-alert>
+        </div>
       </header>
 
       <el-table v-if="changedFileRows.length" :data="pagedChangedFiles" size="small" stripe class="changed-table">
@@ -374,8 +491,14 @@ watch(
             {{ changedPageSafe * CHANGED_PAGE_SIZE + $index + 1 }}
           </template>
         </el-table-column>
-        <el-table-column prop="path" label="路径" min-width="200" class-name="mono">
-          <template #default="{ row }">{{ row.path }}</template>
+        <el-table-column prop="path" label="文件" min-width="200" class-name="mono">
+          <template #default="{ row }">
+            <GitChangePathLabel
+              :path="row.path"
+              :label="formatFileAtRepoDir(row.path)"
+              multiline
+            />
+          </template>
         </el-table-column>
         <el-table-column label="状态" width="88" align="center">
           <template #default="{ row }">
@@ -392,6 +515,21 @@ watch(
         <el-table-column label="类型" width="80" align="center">
           <template #default="{ row }">
             <el-tag size="small" effect="plain">{{ fileKindLabel(row.path) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="96" align="center" fixed="right">
+          <template #default="{ row }">
+            <template v-if="canGitActions(row)">
+              <div class="git-row-actions">
+                <GitDiffPreviewButton :path="row.path" />
+                <GitRevertWorktreeButton
+                  :path="row.path"
+                  :loading="revertingPath === row.path"
+                  @click="onRevertFile(row)"
+                />
+              </div>
+            </template>
+            <span v-else class="muted small">—</span>
           </template>
         </el-table-column>
       </el-table>
@@ -473,8 +611,42 @@ watch(
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+.entry-kind-icon {
+  font-size: 16px;
+  vertical-align: middle;
+}
+
+.entry-kind-icon.is-dir {
+  color: var(--el-color-info);
+}
+
+.entry-kind-icon.is-file {
+  color: var(--el-color-success);
+}
+
 .changed-table :deep(.mono) {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.changed-table :deep(td.mono) {
+  vertical-align: top;
+}
+
+.changed-table :deep(td.mono .cell) {
+  white-space: normal !important;
+  overflow: hidden;
+  line-height: 1.35;
+}
+
+.changed-table :deep(td.mono .el-tooltip__trigger) {
+  display: flex;
+  align-items: flex-start;
+  overflow: hidden;
+  max-width: 100%;
+}
+
+.changed-table :deep(.git-row-actions) {
+  justify-content: center;
 }
 
 .pager {

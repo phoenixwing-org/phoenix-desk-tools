@@ -1,12 +1,29 @@
 /** 页脚 / Ribbon 面板切换按钮文案（前端静态；后端 shell_layout 仅存开关与布局，不含 tooltip） */
 
-export type ShellPanelToggleKey = "tree" | "properties" | "log" | "workset" | "sideDock";
+export type ShellPanelToggleKey =
+  | "leftSidebar"
+  | "rightSidebar"
+  | "tree"
+  | "properties"
+  | "log"
+  | "workset"
+  | "sideDock";
 
 export const shellPanelToggleCopy = {
+  leftSidebar: {
+    name: "左栏",
+    open: "展开左栏",
+    close: "收起左栏",
+  },
+  rightSidebar: {
+    name: "右栏",
+    open: "展开右栏",
+    close: "收起右栏",
+  },
   tree: {
-    name: "工作空间树 / 侧栏",
-    open: "展开侧栏",
-    close: "收起侧栏",
+    name: "工作空间树",
+    open: "展开工作空间树",
+    close: "收起工作空间树",
   },
   properties: {
     name: "页面属性",
@@ -24,8 +41,8 @@ export const shellPanelToggleCopy = {
     action: "打开侧栏并切换到工作集",
   },
   sideDock: {
-    name: "侧栏停靠",
-    action: "设置树 / 属性 / 日志 左·右停靠",
+    name: "侧栏",
+    action: "侧栏位置与块显示",
   },
 } as const;
 

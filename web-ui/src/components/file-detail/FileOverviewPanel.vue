@@ -1,19 +1,12 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useFileDetailContext } from "../../composables/useFileDetailContext";
+import { useDrawingBomReadonly } from "../../composables/useDrawingBomReadonly";
 import { useAppShell } from "../../composables/useAppShell";
 
 const { preview, form, incomingCount, outgoingCount, switchSubTab } = useFileDetailContext();
 const shell = useAppShell();
-
-const bomReadonly = computed(() => preview.value?.bom_readonly ?? false);
-const bomSourceRel = computed(() => preview.value?.bom_source_rel ?? null);
-
-function openSourceModel() {
-  const src = bomSourceRel.value;
-  if (!src) return;
-  shell.openFileDetailForRel(src, { subTab: "edit" });
-}
+const { canOpenSourceModel, editSubTabLabel, openSourceModel } = useDrawingBomReadonly(preview);
 
 const partKey = computed(() => {
   const pn = String(form.value.PartNumber ?? "").trim();
@@ -65,13 +58,6 @@ const summaryRows = computed(() => {
         入向宿主 {{ incomingCount }} · 出向引用 {{ outgoingCount }}
       </p>
       <p v-if="preview.source_note" class="source muted">{{ preview.source_note }}</p>
-      <p v-if="bomReadonly" class="readonly-note">
-        BOM 只读（图纸 · App::Link）
-        <template v-if="bomSourceRel">
-          · 来源
-          <button type="button" class="link-btn mono" @click="openSourceModel">{{ bomSourceRel }}</button>
-        </template>
-      </p>
       <p v-if="preview.embedded_warning" class="warn">{{ preview.embedded_warning }}</p>
     </section>
 
@@ -99,13 +85,13 @@ const summaryRows = computed(() => {
     </section>
 
     <section class="quick-links">
+      <el-button v-if="canOpenSourceModel" type="primary" size="small" @click="openSourceModel">
+        打开模型
+      </el-button>
       <el-button v-if="canOpenPart" size="small" class="mono" @click="openPartKey">
         {{ partKey }}
       </el-button>
-      <el-button v-if="bomReadonly && bomSourceRel" size="small" @click="openSourceModel">
-        打开模型
-      </el-button>
-      <el-button size="small" @click="switchSubTab('edit')">编辑属性</el-button>
+      <el-button size="small" @click="switchSubTab('edit')">{{ editSubTabLabel }}</el-button>
       <el-button v-if="incomingCount + outgoingCount" size="small" @click="switchSubTab('xref')">
         查看引用
       </el-button>
@@ -156,25 +142,6 @@ const summaryRows = computed(() => {
   font-size: 0.78rem;
 }
 
-.readonly-note {
-  margin: 8px 0 0;
-  font-size: 0.82rem;
-  color: #1e40af;
-}
-
-.link-btn {
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--accent, #2563eb);
-  cursor: pointer;
-  font: inherit;
-}
-
-.link-btn:hover {
-  text-decoration: underline;
-}
-
 .warn {
   margin: 8px 0 0;
   font-size: 0.78rem;
@@ -209,21 +176,6 @@ const summaryRows = computed(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-.btn {
-  padding: 6px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--border-strong);
-  background: var(--btn-bg);
-  font-size: 0.82rem;
-  cursor: pointer;
-}
-
-.part-btn {
-  color: var(--accent, #2563eb);
-  border-color: #bfdbfe;
-  background: #eff6ff;
 }
 
 .part-key-link {

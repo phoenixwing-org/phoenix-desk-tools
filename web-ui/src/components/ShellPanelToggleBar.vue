@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { Collection, Document, FolderOpened, List, Operation } from "@element-plus/icons-vue";
+import { Document, FolderOpened, List, Operation } from "@element-plus/icons-vue";
 import RibbonToolButton from "../layout/ribbon/RibbonToolButton.vue";
 import SideDockPrefsPanel from "./SideDockPrefsPanel.vue";
 import { useShellPanelToggles } from "../composables/useShellPanelToggles";
@@ -21,18 +21,15 @@ const {
   panelOpen,
   logOpen,
   propsOpen,
-  worksetOpen,
   hasProperties,
   hasLogContent,
   treeTip,
   propsTip,
   logTip,
-  worksetTip,
   sideDockTip,
   togglePanel,
   toggleLog,
   toggleProps,
-  openWorksetPanel,
 } = useShellPanelToggles();
 
 const footerTipProps = {
@@ -88,22 +85,10 @@ const footerTipProps = {
           <span v-if="hasLogContent && !logOpen" class="toggle-dot" aria-hidden="true" />
         </button>
       </el-tooltip>
-      <el-tooltip v-bind="footerTipProps" :content="worksetTip">
-        <button
-          type="button"
-          class="status-toggle"
-          :class="{ active: worksetOpen }"
-          :aria-label="worksetTip"
-          :aria-pressed="worksetOpen"
-          @click="openWorksetPanel"
-        >
-          <el-icon><Collection /></el-icon>
-        </button>
-      </el-tooltip>
       <el-popover
         v-model:visible="sideDockOpen"
         placement="top-end"
-        :width="280"
+        :width="300"
         trigger="click"
         popper-class="ribbon-side-dock-popover"
         title="侧栏停靠"
@@ -123,7 +108,7 @@ const footerTipProps = {
             </el-tooltip>
           </span>
         </template>
-        <SideDockPrefsPanel compact :show-log-switch="false" />
+        <SideDockPrefsPanel compact />
       </el-popover>
     </template>
 
@@ -137,16 +122,6 @@ const footerTipProps = {
       >
         <span class="ribbon-util-icon"><el-icon><FolderOpened /></el-icon></span>
         <span class="ribbon-util-label">工作空间树</span>
-      </button>
-      <button
-        type="button"
-        class="ribbon-util-btn"
-        :class="{ active: worksetOpen }"
-        :title="worksetTip"
-        @click="openWorksetPanel"
-      >
-        <span class="ribbon-util-icon"><el-icon><Collection /></el-icon></span>
-        <span class="ribbon-util-label">工作集</span>
       </button>
       <button
         v-if="hasProperties"
@@ -172,7 +147,7 @@ const footerTipProps = {
       <el-popover
         v-model:visible="sideDockOpen"
         placement="bottom-end"
-        :width="280"
+        :width="300"
         trigger="click"
         popper-class="ribbon-side-dock-popover"
         title="侧栏停靠"
@@ -188,7 +163,7 @@ const footerTipProps = {
             <span class="ribbon-util-label">侧栏</span>
           </button>
         </template>
-        <SideDockPrefsPanel compact :show-log-switch="false" />
+        <SideDockPrefsPanel compact />
       </el-popover>
     </template>
 
@@ -201,15 +176,6 @@ const footerTipProps = {
         :active="panelOpen"
         :title="treeTip"
         @click="togglePanel"
-      />
-      <RibbonToolButton
-        label="工作集"
-        :icon="Collection"
-        size="large"
-        layout="stacked"
-        :active="worksetOpen"
-        :title="worksetTip"
-        @click="openWorksetPanel"
       />
       <RibbonToolButton
         v-if="hasProperties"
@@ -233,7 +199,7 @@ const footerTipProps = {
       <el-popover
         v-model:visible="sideDockOpen"
         placement="bottom-end"
-        :width="280"
+        :width="300"
         trigger="click"
         popper-class="ribbon-side-dock-popover"
         title="侧栏停靠"
@@ -250,7 +216,7 @@ const footerTipProps = {
             />
           </span>
         </template>
-        <SideDockPrefsPanel compact :show-log-switch="false" />
+        <SideDockPrefsPanel compact />
       </el-popover>
     </template>
   </div>

@@ -8,7 +8,9 @@ import FileAttributesPanel from "../components/file-detail/FileAttributesPanel.v
 import FileXrefPanel from "../components/file-detail/FileXrefPanel.vue";
 import FileAssemblyPanel from "../components/file-detail/FileAssemblyPanel.vue";
 import FileRenamePanel from "../components/file-detail/FileRenamePanel.vue";
+import DrawingBomReadonlyBanner from "../components/file-detail/DrawingBomReadonlyBanner.vue";
 import { provideFileDetailContext } from "../composables/useFileDetailContext";
+import { useDrawingBomReadonly } from "../composables/useDrawingBomReadonly";
 import { useAppShell } from "../composables/useAppShell";
 import { usePageSession } from "../composables/usePageSession";
 import { promptChoice } from "../composables/choiceDialog";
@@ -74,6 +76,8 @@ const showAssemblyTab = computed(() => {
   if (preview.value.document_kinds?.assembly) return true;
   return /\.assy\.fcstd$/i.test(rel.value);
 });
+
+const { editSubTabLabel } = useDrawingBomReadonly(preview);
 
 function invalidateXrefCache(relPath?: string) {
   const key = (relPath ?? rel.value).trim();
@@ -380,6 +384,7 @@ onUnmounted(() => {
 
     <template v-else-if="rel && preview">
       <div data-tour-page-filedetail-body>
+      <DrawingBomReadonlyBanner :preview="preview" :show-open-button="true" />
       <el-radio-group
         :model-value="activeSubTab"
         size="small"
@@ -388,7 +393,7 @@ onUnmounted(() => {
         @change="switchSubTab($event as FileDetailSubTab)"
       >
         <el-radio-button value="overview">属性</el-radio-button>
-        <el-radio-button value="edit">编辑属性</el-radio-button>
+        <el-radio-button value="edit">{{ editSubTabLabel }}</el-radio-button>
         <el-radio-button value="xref">
           引用
           <span v-if="incomingCount + outgoingCount" class="tab-badge">{{ incomingCount + outgoingCount }}</span>

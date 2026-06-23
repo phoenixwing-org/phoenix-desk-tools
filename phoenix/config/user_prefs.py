@@ -176,8 +176,11 @@ _LAUNCHER_SHELL_LAYOUT_DEFAULT: dict[str, Any] = {
     "shell_log_dock": "left",  # left | right — 默认与 properties 同列：属性左上、日志左下
     "properties_panel_open": True,
     "properties_panel_height_px": 220,
+    "properties_footer_height_px": 160,
     "properties_panel_dock": "left",  # left | right
     "properties_name_col_width_px": 132,
+    "git_commit_panel_open": True,
+    "git_commit_panel_dock": "left",  # left | right — Git 页提交区
 }
 
 
@@ -225,9 +228,20 @@ def _normalized_shell_layout(raw: Any) -> dict[str, Any]:
     pph = raw.get("properties_panel_height_px")
     if isinstance(pph, int) and pph >= 80:
         merged["properties_panel_height_px"] = int(pph)
+    pfh = raw.get("properties_footer_height_px")
+    if isinstance(pfh, int) and pfh >= 80:
+        merged["properties_footer_height_px"] = int(pfh)
     ppd = raw.get("properties_panel_dock")
     if ppd in ("left", "right"):
         merged["properties_panel_dock"] = str(ppd)
+    gco = raw.get("git_commit_panel_open")
+    if isinstance(gco, bool):
+        merged["git_commit_panel_open"] = gco
+    gcd = raw.get("git_commit_panel_dock")
+    if gcd in ("left", "right"):
+        merged["git_commit_panel_dock"] = str(gcd)
+    elif "git_commit_panel_dock" not in raw:
+        merged["git_commit_panel_dock"] = merged["properties_panel_dock"]
     pnc = raw.get("properties_name_col_width_px")
     if isinstance(pnc, int) and pnc >= 72:
         merged["properties_name_col_width_px"] = min(240, int(pnc))
@@ -544,8 +558,11 @@ def save_launcher_shell_layout(
     shell_log_dock: str | None = None,
     properties_panel_open: bool | None = None,
     properties_panel_height_px: int | None = None,
+    properties_footer_height_px: int | None = None,
     properties_panel_dock: str | None = None,
     properties_name_col_width_px: int | None = None,
+    git_commit_panel_open: bool | None = None,
+    git_commit_panel_dock: str | None = None,
 ) -> None:
     """将左侧导航宽窄 / 右栏开合 / 中右分割 sash / 运行日志窗 写入 launcher JSON。"""
     launcher = load_launcher_prefs()
@@ -576,10 +593,16 @@ def save_launcher_shell_layout(
         cur["properties_panel_open"] = bool(properties_panel_open)
     if properties_panel_height_px is not None:
         cur["properties_panel_height_px"] = max(80, int(properties_panel_height_px))
+    if properties_footer_height_px is not None:
+        cur["properties_footer_height_px"] = max(80, int(properties_footer_height_px))
     if properties_panel_dock in ("left", "right"):
         cur["properties_panel_dock"] = str(properties_panel_dock)
     if properties_name_col_width_px is not None:
         cur["properties_name_col_width_px"] = max(72, min(240, int(properties_name_col_width_px)))
+    if git_commit_panel_open is not None:
+        cur["git_commit_panel_open"] = bool(git_commit_panel_open)
+    if git_commit_panel_dock in ("left", "right"):
+        cur["git_commit_panel_dock"] = str(git_commit_panel_dock)
     launcher["shell_layout"] = cur
     save_launcher_prefs(launcher)
 

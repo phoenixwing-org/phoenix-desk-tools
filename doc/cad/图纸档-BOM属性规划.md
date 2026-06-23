@@ -47,9 +47,9 @@ API 返回 `bom_readonly=true`、`bom_source_rel=模型相对路径`。
 - 用户在前端 **保存 / 推荐写盘** 时：图纸-primary（挂载于 Link 且无 Body 等）→ **拒绝**，提示编辑 Link 指向的模型。  
 - 可选 Phase 2：`sync_drawing_link_bom_mirror` 将模型 BOM **只读镜像** 写入图纸内 App::Link（`ro=1`），不在表单保存路径自动改图纸包。
 
-### 4.4 前端
+### 4.4 前端（2026-06-22 Web 统一）
 
-文件详情 · 属性 / 概览：只读时禁用输入与「写入 Document.xml」；展示来源模型路径与「打开模型」说明。
+文件详情 · 属性 / 概览 / 各 Tab：**顶部** `DrawingBomReadonlyBanner`；只读时禁用输入与「写入 Document.xml」；Tab 文案「查看属性」；**打开模型** 跳转 `bom_source_rel`。零件详情 · 图纸关联文件提供「查看属性」入口。归档：[图纸档-编辑属性只读体验-归档.md](../platform/图纸档-编辑属性只读体验-归档.md)。
 
 ## 5. 后续（Phase 2+）
 

@@ -97,16 +97,12 @@ async function onToggleEnabled(name: string, on: boolean) {
   if (syncing.value) return;
   const prev = new Set(enabledSet.value);
   const next = toggleEnabledLocal(name, on);
-  if (on) {
-    const ok = await applySync(name);
-    if (!ok) enabledSet.value = prev;
-    return;
-  }
   try {
     payload.value = await updateTestFixturesPrefs({
       checkout_root: checkoutRootInput.value.trim(),
       enabled: [...next],
     });
+    enabledSet.value = new Set(payload.value.enabled ?? [...next]);
   } catch (e) {
     enabledSet.value = prev;
     ElMessage.error(String(e));
@@ -247,7 +243,10 @@ useTestFixturesPropertySheet("test_fixtures", {
           系统内置 {{ items.length }} 项 · 已勾选 {{ enabledCount }} · 已链接 {{ linkedCount }}
         </span>
       </div>
-      <p class="section-hint muted small">清单由产品配置，不可在本页增删；仅选择是否在本机检出并链接。</p>
+      <p class="section-hint muted small">
+        清单由产品配置，不可在本页增删。勾选表示「要引用」；需点击「检出并链接」才会 git clone 并建立
+        tests/fixtures 目录链接。
+      </p>
 
       <div v-loading="loading" class="fixture-list">
         <article

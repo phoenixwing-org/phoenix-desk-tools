@@ -186,8 +186,11 @@ const DEFAULT_SHELL: ShellLayout = {
   shell_log_dock: "left",
   properties_panel_open: true,
   properties_panel_height_px: 220,
+  properties_footer_height_px: 160,
   properties_panel_dock: "left",
   properties_name_col_width_px: 132,
+  git_commit_panel_open: true,
+  git_commit_panel_dock: "left",
 };
 
 function clampPanelWidth(px: number): number {
@@ -200,7 +203,11 @@ function clampPxInt(value: number, min: number, max: number): number {
 }
 
 function sanitizeShellLayoutPatch(patch: Partial<ShellLayout>): Partial<ShellLayout> {
-  const out: Partial<ShellLayout> = { ...patch };
+  const out: Partial<ShellLayout> = {};
+  for (const [key, value] of Object.entries(patch) as [keyof ShellLayout, ShellLayout[keyof ShellLayout]][]) {
+    if (value === undefined) continue;
+    out[key] = value;
+  }
   if (out.left_panel_width_px != null) {
     out.left_panel_width_px = clampPxInt(out.left_panel_width_px, 160, 560);
   }
@@ -212,6 +219,9 @@ function sanitizeShellLayoutPatch(patch: Partial<ShellLayout>): Partial<ShellLay
   }
   if (out.properties_panel_height_px != null) {
     out.properties_panel_height_px = clampPxInt(out.properties_panel_height_px, 80, 4096);
+  }
+  if (out.properties_footer_height_px != null) {
+    out.properties_footer_height_px = clampPxInt(out.properties_footer_height_px, 80, 4096);
   }
   if (out.properties_name_col_width_px != null) {
     out.properties_name_col_width_px = clampPxInt(out.properties_name_col_width_px, 72, 240);
@@ -239,11 +249,20 @@ function normalizeShellLayout(partial?: Partial<ShellLayout>): ShellLayout {
   if (typeof merged.properties_panel_height_px !== "number" || merged.properties_panel_height_px < 80) {
     merged.properties_panel_height_px = DEFAULT_SHELL.properties_panel_height_px;
   }
+  if (typeof merged.properties_footer_height_px !== "number" || merged.properties_footer_height_px < 80) {
+    merged.properties_footer_height_px = DEFAULT_SHELL.properties_footer_height_px;
+  }
   if (merged.properties_panel_dock !== "left" && merged.properties_panel_dock !== "right") {
     merged.properties_panel_dock = DEFAULT_SHELL.properties_panel_dock;
   }
   if (typeof merged.properties_panel_open !== "boolean") {
     merged.properties_panel_open = DEFAULT_SHELL.properties_panel_open;
+  }
+  if (typeof merged.git_commit_panel_open !== "boolean") {
+    merged.git_commit_panel_open = DEFAULT_SHELL.git_commit_panel_open;
+  }
+  if (merged.git_commit_panel_dock !== "left" && merged.git_commit_panel_dock !== "right") {
+    merged.git_commit_panel_dock = merged.properties_panel_dock;
   }
   if (typeof merged.properties_name_col_width_px !== "number" || merged.properties_name_col_width_px < 72) {
     merged.properties_name_col_width_px = readLegacyNameColWidth() ?? DEFAULT_SHELL.properties_name_col_width_px;
@@ -999,6 +1018,7 @@ export function provideAppShell(): AppShellContext {
 
   async function persistShellLayout(patch: Partial<ShellLayout>) {
     const safe = sanitizeShellLayoutPatch(patch);
+    if (!Object.keys(safe).length) return;
     shellLayout.value = normalizeShellLayout({ ...shellLayout.value, ...safe });
     const updated = await patchShellLayout(safe);
     shellLayout.value = normalizeShellLayout({ ...shellLayout.value, ...updated });

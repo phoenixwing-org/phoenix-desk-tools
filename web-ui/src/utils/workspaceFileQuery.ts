@@ -15,6 +15,14 @@ export function repoDirFromRel(rel: string): string {
   return p.slice(0, idx + 1);
 }
 
+/** `文件名 @ 目录/`（根目录文件仅显示文件名） */
+export function formatFileAtRepoDir(rel: string): string {
+  const name = basenameFromRel(rel);
+  const dir = repoDirFromRel(rel);
+  if (!dir || dir === "—" || dir === "./") return name;
+  return `${name} @ ${dir}`;
+}
+
 export function normalizeRepoRel(rel: string): string {
   return rel.replace(/\\/g, "/").replace(/^\.\//, "").trim();
 }

@@ -1,0 +1,78 @@
+/* Git 变更列表 / 业务页表内行操作 — 共用图标按钮（勿用 el-button type=primary|danger） */
+
+.git-row-actions {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.git-icon-btn {
+  padding: 0;
+  margin: 0;
+  width: 22px;
+  height: 22px;
+  min-height: 22px;
+  border: none;
+  color: var(--el-text-color-regular);
+}
+
+.git-icon-btn:hover:not(.is-disabled):not(:disabled) {
+  color: var(--el-text-color-primary);
+  background: var(--el-fill-color);
+  border-radius: 3px;
+}
+
+.git-icon-btn.is-disabled,
+.git-icon-btn:disabled {
+  opacity: 0.45;
+}
+
+.git-icon-btn :deep(.el-icon) {
+  font-size: 16px;
+}
+
+/* 变更列表行尾：操作条 + 状态标签靠右；操作条约为默认尺寸的 ~70% */
+.git-row-tail {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  padding-left: 6px;
+}
+
+.git-status-tail {
+  flex-shrink: 0;
+}
+
+.git-change-file-row .git-row-actions {
+  gap: 0;
+  justify-content: flex-end;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.git-change-file-row .git-icon-btn {
+  width: 16px;
+  height: 16px;
+  min-height: 16px;
+}
+
+.git-change-file-row .git-icon-btn :deep(.el-icon) {
+  font-size: 11px;
+}
+
+.git-change-file-row .git-status-tail :deep(.git-status-badge) {
+  min-width: 20px;
+  font-size: 11px;
+}
+
+.git-change-file-row:hover .git-row-actions,
+.git-change-file-row:focus-within .git-row-actions,
+.git-change-file-row.git-row-busy .git-row-actions,
+.git-change-file-row.is-selected .git-row-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
