@@ -40,7 +40,7 @@ import { useCaaDialogPageStore } from "../stores/caaDialogPage";
 import { storeToRefs } from "pinia";
 import type { CaaDialogIr, CaaDialogNode } from "../types/caaDialogIr";
 import { dialogNameFromCatDlgRel } from "../utils/caaDialogDisplay";
-import { findCaaNode, nlsFlatMapsEqual } from "../utils/caaDialogTree";
+import { addChildNode, findCaaNode, insertGridRow, insertGridCol, nlsFlatMapsEqual } from "../utils/caaDialogTree";
 import { createBlankCaaDialogIr } from "../utils/createBlankCaaDialogIr";
 
 const PAGE_ID = CAA_EDITOR_PAGE_ID;
@@ -644,6 +644,35 @@ provide(CAA_CONTROL_KEY, {
   toggleGridRowResize,
   toggleGridColResize,
   editMode: storeToRefs(store).editMode,
+  // ── Builder ──
+  addControl(containerId: string, type: string, row: number, col: number) {
+    const root = localIr.value?.root;
+    if (!root) return "";
+    const container = findCaaNode(root, containerId);
+    if (!container) return "";
+    const node = addChildNode(container, type, { row, col });
+    markIrDirty();
+    syncToSidebar();
+    return node.id;
+  },
+  insertRow(containerId: string, beforeRow: number) {
+    const root = localIr.value?.root;
+    if (!root) return;
+    const container = findCaaNode(root, containerId);
+    if (!container) return;
+    insertGridRow(container, beforeRow);
+    markIrDirty();
+    syncToSidebar();
+  },
+  insertCol(containerId: string, beforeCol: number) {
+    const root = localIr.value?.root;
+    if (!root) return;
+    const container = findCaaNode(root, containerId);
+    if (!container) return;
+    insertGridCol(container, beforeCol);
+    markIrDirty();
+    syncToSidebar();
+  },
 });
 
 const nlsEditCtx = {

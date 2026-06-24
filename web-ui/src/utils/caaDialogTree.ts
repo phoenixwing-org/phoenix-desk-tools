@@ -54,3 +54,87 @@ export function nlsFlatMapsEqual(a: Record<string, string>, b: Record<string, st
   }
   return true;
 }
+
+// ── Builder 模式：IR 树操作 ──
+
+/** 类型短名 → 默认节点 ID 前缀 */
+const TYPE_ID_PREFIX: Record<string, string> = {
+  CATDlgLabel: "Label",
+  CATDlgEditor: "Editor",
+  CATDlgPushButton: "PushButton",
+  CATDlgCombo: "Combo",
+  CATDlgCheckButton: "CheckButton",
+  CATDlgRadioButton: "RadioButton",
+  CATDlgSpinner: "Spinner",
+  CATDlgSelectorList: "SelectorList",
+  CATDlgMultiList: "MultiList",
+  CATDlgFrame: "Frame",
+  CATDlgTabContainer: "TabContainer",
+  CATDlgContainer: "Container",
+  CATDlgSeparator: "Separator",
+};
+
+/** 在容器内生成唯一节点 ID */
+export function generateNodeId(container: CaaDialogNode, type: string): string {
+  const prefix = TYPE_ID_PREFIX[type] ?? type.replace(/^CATDlg/, "");
+  const existing = new Set<string>();
+  function collect(n: CaaDialogNode) {
+    existing.add(n.id);
+    for (const c of n.children) collect(c);
+  }
+  collect(container);
+  let i = 1;
+  while (existing.has(`${prefix}${i}`)) i++;
+  return `${prefix}${i}`;
+}
+
+/** 创建新控件节点 */
+export function createControlNode(type: string, id: string, grid: { row: number; col: number }): CaaDialogNode {
+  const node: CaaDialogNode = {
+    id,
+    type,
+    grid: { row: grid.row, col: grid.col, rowSpan: 1, colSpan: 1 },
+    children: [],
+  };
+  // 预设默认 NLS title
+  const prefix = TYPE_ID_PREFIX[type];
+  if (prefix && type !== "CATDlgFrame" && type !== "CATDlgContainer" && type !== "CATDlgSeparator") {
+    node.nls = { title: prefix };
+  }
+  return node;
+}
+
+/** 向容器添加子节点 */
+export function addChildNode(container: CaaDialogNode, type: string, grid: { row: number; col: number }): CaaDialogNode {
+  const id = generateNodeId(container, type);
+  const node = createControlNode(type, id, grid);
+  node.father = container.id;
+  container.children.push(node);
+  return node;
+}
+
+/** 插入新行：beforeRow 及之后的行号 +1 */
+export function insertGridRow(container: CaaDialogNode, beforeRow: number): void {
+  for (const child of container.children) {
+    if (child.grid && child.grid.row >= beforeRow) {
+      child.grid = { ...child.grid, row: child.grid.row + 1 };
+    }
+  }
+}
+
+/** 插入新列：beforeCol 及之后的列号 +1 */
+export function insertGridCol(container: CaaDialogNode, beforeCol: number): void {
+  for (const child of container.children) {
+    if (child.grid && child.grid.col >= beforeCol) {
+      child.grid = { ...child.grid, col: child.grid.col + 1 };
+    }
+  }
+}
+
+/** 判断节点是否为容器（可接受子控件拖入） */
+export function isContainerNode(node: CaaDialogNode): boolean {
+  return node.type === "CATDlgDialog" ||
+    node.type === "CATDlgFrame" ||
+    node.type === "CATDlgContainer" ||
+    node.type === "CATDlgTabPage";
+}

@@ -81,6 +81,86 @@ function itemStyle(child: CaaDialogNode, isEdit: boolean): Record<string, string
   };
 }
 
+// ── drag-and-drop from palette ──
+
+const dragOverCell = ref<{ row: number; col: number; edge: "inside" | "right" | "bottom" } | null>(null);
+const dragOverGrid = ref(false);
+
+/** 获取某 cell 已有的子节点 */
+function cellChild(row: number, col: number): CaaDialogNode | undefined {
+  return props.node.children.find(
+    (c) => c.grid?.row === row && c.grid?.col === col,
+  );
+}
+
+function onGridDragOver(e: DragEvent) {
+  if (!e.dataTransfer?.types.includes("application/x-caa-control-type")) return;
+  e.preventDefault();
+  e.dataTransfer!.dropEffect = "copy";
+  dragOverGrid.value = true;
+
+  const grid = (e.currentTarget as HTMLElement).querySelector(".caa-grid") as HTMLElement | null;
+  if (!grid) return;
+  const rect = grid.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const m = gridMetrics.value;
+
+  const eOffset = editMode.value ? 14 : 0; // header row + indicator col in edit mode
+  const totalCols = Math.max(1, m.cols);
+  const totalRows = Math.max(1, m.rows);
+
+  // Approximate cell size
+  const cellW = (rect.width - eOffset) / totalCols;
+  const cellH = (rect.height - eOffset) / totalRows;
+
+  const col = Math.max(0, Math.min(totalCols - 1, Math.floor((mx - eOffset) / cellW)));
+  const row = Math.max(0, Math.min(totalRows - 1, Math.floor((my - eOffset) / cellH)));
+
+  // Detect edge
+  const xInCell = (mx - eOffset) - col * cellW;
+  const yInCell = (my - eOffset) - row * cellH;
+  const xPct = xInCell / cellW;
+  const yPct = yInCell / cellH;
+
+  let edge: "inside" | "right" | "bottom" = "inside";
+  if (cellChild(row, col) && xPct > 0.7) edge = "right";
+  else if (cellChild(row, col) && yPct > 0.7) edge = "bottom";
+
+  dragOverCell.value = { row, col, edge };
+}
+
+function onGridDragLeave() {
+  dragOverGrid.value = false;
+  dragOverCell.value = null;
+}
+
+function onGridDrop(e: DragEvent) {
+  e.preventDefault();
+  const type = e.dataTransfer?.getData("application/x-caa-control-type");
+  if (!type || !dragOverCell.value || !ctx) {
+    dragOverCell.value = null;
+    dragOverGrid.value = false;
+    return;
+  }
+
+  const { row, col, edge } = dragOverCell.value;
+  const id = props.node.id;
+
+  if (edge === "right") {
+    ctx.insertCol(id, col + 1);
+    ctx.addControl(id, type, row, col + 1);
+  } else if (edge === "bottom") {
+    ctx.insertRow(id, row + 1);
+    ctx.addControl(id, type, row + 1, col);
+  } else {
+    ctx.addControl(id, type, row, col);
+  }
+
+  dragOverCell.value = null;
+  dragOverGrid.value = false;
+}
+
 // ── toggle resize from indicator click ──
 
 function toggleColResize(col: number) {
@@ -131,9 +211,21 @@ function onGridContextmenu(e: MouseEvent) {
 </script>
 
 <template>
-  <div v-if="node.children.length" class="caa-grid-host">
+  <div
+    v-if="editMode || node.children.length"
+    class="caa-grid-host"
+    :class="{ 'caa-grid-host--drop-target': dragOverGrid, 'caa-grid-host--empty': !node.children.length }"
+    @dragover="onGridDragOver"
+    @dragleave="onGridDragLeave"
+    @drop="onGridDrop"
+  >
+    <!-- 空容器占位提示 -->
+    <div v-if="!node.children.length && editMode" class="caa-grid-empty-hint">
+      拖放控件到此处
+    </div>
     <!-- ════ 编辑模式：行列伸缩指示器 + 1px 网格线 ════ -->
     <div
+      v-if="node.children.length"
       class="caa-grid"
       :class="{ 'caa-grid--fill': fillParent, 'caa-grid--edit': editMode }"
       :style="gridStyle"
@@ -186,6 +278,20 @@ function onGridContextmenu(e: MouseEvent) {
           :width-style="childResizeStyle(child)"
         />
       </div>
+
+      <!-- drop 高亮指示器（在 grid 内部，CSS Grid 定位） -->
+      <div
+        v-if="dragOverCell && editMode"
+        class="caa-drop-indicator"
+        :class="{
+          'caa-drop-indicator--right': dragOverCell.edge === 'right',
+          'caa-drop-indicator--bottom': dragOverCell.edge === 'bottom',
+        }"
+        :style="{
+          gridRow: `${dragOverCell.row + 2} / span 1`,
+          gridColumn: `${dragOverCell.col + 2} / span 1`,
+        }"
+      />
     </div>
 
     <!-- grid settings popover -->
@@ -207,6 +313,47 @@ function onGridContextmenu(e: MouseEvent) {
   position: relative;
   min-width: 0;
   max-width: 100%;
+}
+
+.caa-grid-host--drop-target {
+  outline: 2px dashed #3b82f6;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.caa-grid-host--empty {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.caa-grid-empty-hint {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  font-style: italic;
+  pointer-events: none;
+}
+
+/* drop target cell indicator */
+.caa-drop-indicator {
+  background: rgba(59, 130, 246, 0.12);
+  border: 2px dashed #3b82f6;
+  border-radius: 3px;
+  min-height: 20px;
+  min-width: 40px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.caa-drop-indicator--right {
+  border-left-width: 4px;
+  border-left-style: solid;
+}
+
+.caa-drop-indicator--bottom {
+  border-top-width: 4px;
+  border-top-style: solid;
 }
 
 /* ── grid ── */

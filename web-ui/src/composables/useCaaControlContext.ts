@@ -52,6 +52,12 @@ export interface CaaControlContext {
   toggleGridColResize: (containerId: string, colIndex: number) => void;
   /** 编辑模式：控制 grid bar / 辅助线 / 单元格边界显隐 */
   editMode: Ref<boolean>;
+  /** Builder 模式：向容器添加控件，返回新节点 ID */
+  addControl: (containerId: string, type: string, row: number, col: number) => string;
+  /** Builder 模式：插入行 */
+  insertRow: (containerId: string, beforeRow: number) => void;
+  /** Builder 模式：插入列 */
+  insertCol: (containerId: string, beforeCol: number) => void;
 }
 
 export const CAA_CONTROL_KEY: InjectionKey<CaaControlContext> = Symbol("caaControl");
