@@ -11,7 +11,7 @@ const props = defineProps<{
 const store = useCaaDialogPageStore();
 const { ir, editMode } = storeToRefs(store);
 
-const showPalette = computed(() => hasParsed && editMode.value);
+const showPalette = computed(() => props.hasParsed);
 </script>
 
 <template>
@@ -22,7 +22,7 @@ const showPalette = computed(() => hasParsed && editMode.value);
     <p v-if="store.errorText" class="banner banner-err">{{ store.errorText }}</p>
 
     <el-empty
-      v-if="!hasParsed && !store.loading"
+      v-if="!props.hasParsed && !store.loading"
       class="caa-empty"
       description="点击「解析」加载 .CATDlg、多语言 .CATNls、.CATRsc 与位图目录"
       :image-size="72"

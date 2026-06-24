@@ -93,51 +93,63 @@ function cellChild(row: number, col: number): CaaDialogNode | undefined {
   );
 }
 
+let dragEnterCount = 0;
+
 function onGridDragOver(e: DragEvent) {
-  if (!e.dataTransfer?.types.includes("application/x-caa-control-type")) return;
   e.preventDefault();
-  e.dataTransfer!.dropEffect = "copy";
+  if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
   dragOverGrid.value = true;
 
-  const grid = (e.currentTarget as HTMLElement).querySelector(".caa-grid") as HTMLElement | null;
-  if (!grid) return;
-  const rect = grid.getBoundingClientRect();
+  const host = e.currentTarget as HTMLElement;
+  const grid = host.querySelector(".caa-grid") as HTMLElement | null;
+  const rect = grid ? grid.getBoundingClientRect() : host.getBoundingClientRect();
+  if (rect.width < 10 || rect.height < 10) return;
   const mx = e.clientX - rect.left;
   const my = e.clientY - rect.top;
-  const m = gridMetrics.value;
+  const m = props.node.children.length ? gridMetrics.value : { rows: 1, cols: 1 };
+  const hasChildren = props.node.children.length > 0;
 
-  const eOffset = editMode.value ? 14 : 0; // header row + indicator col in edit mode
+  const eOffset = (editMode.value && hasChildren) ? 14 : 0;
   const totalCols = Math.max(1, m.cols);
   const totalRows = Math.max(1, m.rows);
 
-  // Approximate cell size
-  const cellW = (rect.width - eOffset) / totalCols;
-  const cellH = (rect.height - eOffset) / totalRows;
+  const cellW = Math.max(40, (rect.width - eOffset) / totalCols);
+  const cellH = Math.max(20, (rect.height - eOffset) / totalRows);
 
   const col = Math.max(0, Math.min(totalCols - 1, Math.floor((mx - eOffset) / cellW)));
   const row = Math.max(0, Math.min(totalRows - 1, Math.floor((my - eOffset) / cellH)));
 
-  // Detect edge
-  const xInCell = (mx - eOffset) - col * cellW;
-  const yInCell = (my - eOffset) - row * cellH;
-  const xPct = xInCell / cellW;
-  const yPct = yInCell / cellH;
-
   let edge: "inside" | "right" | "bottom" = "inside";
-  if (cellChild(row, col) && xPct > 0.7) edge = "right";
-  else if (cellChild(row, col) && yPct > 0.7) edge = "bottom";
+  if (hasChildren) {
+    const xInCell = (mx - eOffset) - col * cellW;
+    const yInCell = (my - eOffset) - row * cellH;
+    const xPct = Math.max(0, xInCell) / cellW;
+    const yPct = Math.max(0, yInCell) / cellH;
+    if (cellChild(row, col) && xPct > 0.7) edge = "right";
+    else if (cellChild(row, col) && yPct > 0.7) edge = "bottom";
+  }
 
   dragOverCell.value = { row, col, edge };
 }
 
+function onGridDragEnter() {
+  dragEnterCount++;
+}
+
 function onGridDragLeave() {
-  dragOverGrid.value = false;
-  dragOverCell.value = null;
+  dragEnterCount--;
+  if (dragEnterCount <= 0) {
+    dragEnterCount = 0;
+    dragOverGrid.value = false;
+    dragOverCell.value = null;
+  }
 }
 
 function onGridDrop(e: DragEvent) {
   e.preventDefault();
-  const type = e.dataTransfer?.getData("application/x-caa-control-type");
+  const raw = e.dataTransfer?.getData("text/plain") ?? "";
+  const type = raw.startsWith("caa:") ? raw.slice(4) : "";
+  dragEnterCount = 0;
   if (!type || !dragOverCell.value || !ctx) {
     dragOverCell.value = null;
     dragOverGrid.value = false;
@@ -212,9 +224,10 @@ function onGridContextmenu(e: MouseEvent) {
 
 <template>
   <div
-    v-if="editMode || node.children.length"
+    v-if="true"
     class="caa-grid-host"
     :class="{ 'caa-grid-host--drop-target': dragOverGrid, 'caa-grid-host--empty': !node.children.length }"
+    @dragenter="onGridDragEnter"
     @dragover="onGridDragOver"
     @dragleave="onGridDragLeave"
     @drop="onGridDrop"
