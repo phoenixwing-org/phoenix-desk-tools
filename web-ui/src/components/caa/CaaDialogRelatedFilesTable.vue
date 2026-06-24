@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, unref } from "vue";
+import { useCaaDialogPageStore } from "../../stores/caaDialogPage";
 import { ElMessage } from "element-plus";
 import type { CaaDialogIr } from "../../types/caaDialogIr";
 import { buildCaaDialogRelatedFiles } from "../../utils/caaDialogRelatedFiles";
@@ -56,15 +57,20 @@ function onRowClick(row: { filename: string; repoRelPath: string; kindLabel: str
 function onEditNls(row: { repoRelPath: string }) {
   nlsSession?.openCatNlsEditor(row.repoRelPath);
 }
+
+const store = useCaaDialogPageStore();
+function toggleCollapse() { store.toggleRelatedFiles(); }
 </script>
 
 <template>
   <section class="caa-related-files">
-    <header class="caa-related-head">
+    <header class="caa-related-head" @click="toggleCollapse">
+      <span class="caa-related-arrow" :class="{ expanded: !store.relatedFilesCollapsed }">▸</span>
       <span class="caa-related-title">关联文件</span>
       <span class="caa-related-hint muted small">共 {{ rows.length }} 项 · 点击行预览 · .CATNls 可编辑</span>
     </header>
     <el-table
+      v-show="!store.relatedFilesCollapsed"
       class="caa-related-table"
       :data="rows"
       size="small"
@@ -115,9 +121,19 @@ function onEditNls(row: { repoRelPath: string }) {
 .caa-related-head {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: 6px;
   flex-shrink: 0;
+  cursor: pointer;
+  user-select: none;
 }
+
+.caa-related-head:hover .caa-related-title { color: var(--accent, #3b82f6); }
+
+.caa-related-arrow {
+  display: inline-block; width: 12px; font-size: 0.7rem;
+  color: var(--muted, #94a3b8); transition: transform 0.15s;
+}
+.caa-related-arrow.expanded { transform: rotate(90deg); }
 
 .caa-related-title {
   font-size: 0.82rem;

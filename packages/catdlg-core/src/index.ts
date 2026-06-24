@@ -9,4 +9,5 @@ export * from "./parseCatRsc.js";
 export * from "./lightMeta.js";
 export * from "./nlsKeys.js";
 export * from "./patchCatNls.js";
+export * from "./patchCatDlg.js";
 export * from "./nlsLocales.js";
