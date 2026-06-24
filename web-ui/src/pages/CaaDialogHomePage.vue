@@ -117,6 +117,10 @@ function onOpen(item: CaaDialogListItem) {
   });
 }
 
+function onNewDialog() {
+  shell.openNewCaaDialog();
+}
+
 const headSummary = computed(() => {
   if (!hasScan.value) return "";
   if (!indexed.value) return "Code 索引尚未建立";
@@ -142,6 +146,9 @@ watch(workspacePath, () => {
     <PageHeader title="CAA 对话框" :page-id="PAGE_ID">
       <template #actions>
         <div class="head-actions-inner">
+          <el-button type="primary" size="small" @click="onNewDialog">
+            + 新建
+          </el-button>
           <el-button type="primary" size="small" :loading="scanning" :disabled="!workspaceReady" @click="onRescan">
             重新检索
           </el-button>

@@ -11,18 +11,25 @@ import PageHeader from "../components/PageHeader.vue";
 import CaaDialogEditorView from "../components/caa/CaaDialogEditorView.vue";
 import CaaNlsSupplementDialog from "../components/caa/CaaNlsSupplementDialog.vue";
 import CaaControlContextMenu from "../components/caa/CaaControlContextMenu.vue";
+import CaaDropOverlay from "../components/caa/CaaDropOverlay.vue";
 import CaaNlsTreeEditor from "../components/caa/CaaNlsTreeEditor.vue";
 import CaaDialogRelatedFilesTable from "../components/caa/CaaDialogRelatedFilesTable.vue";
 import type { NlsSupplementDirection } from "../components/caa/CaaNlsSupplementDialog.vue";
 import type { CaaNlsLocaleOption, CaaNlsDisplayMode } from "../components/caa/CaaCatNlsEditDialog.vue";
 import {
   createCaaDialogLocaleNls,
+  createCaaDialogFromIr,
+  deleteCaaDraft,
+  fetchCaaDrafts,
   fetchCaaHealth,
+  fetchCaaModuleDirs,
   parseCaaDialog,
+  saveCaaDraft,
   saveCaaDialogNls,
   saveCaaDialog,
   type CaaDialogGridPatch,
 } from "../api/caaDialog";
+import type { CaaDialogDraft } from "../types/caaDialogDraft";
 import { CAA_EDITOR_PAGE_ID } from "../constants/caaPages";
 import { useCaaDialogPropertySheet } from "../composables/useCaaDialogPropertySheet";
 import { CAA_NLS_EDIT_KEY, CAA_NLS_SESSION_KEY, type CaaNlsEditTarget } from "../composables/caaNlsEdit";
@@ -34,7 +41,8 @@ import { useCaaDialogPageStore } from "../stores/caaDialogPage";
 import { storeToRefs } from "pinia";
 import type { CaaDialogIr, CaaDialogNode } from "../types/caaDialogIr";
 import { dialogNameFromCatDlgRel } from "../utils/caaDialogDisplay";
-import { findCaaNode, nlsFlatMapsEqual } from "../utils/caaDialogTree";
+import { addChildNode, findCaaNode, insertGridRow, insertGridCol, nlsFlatMapsEqual, renumberGrid } from "../utils/caaDialogTree";
+import { createBlankCaaDialogIr } from "../utils/createBlankCaaDialogIr";
 
 const PAGE_ID = CAA_EDITOR_PAGE_ID;
 
@@ -79,6 +87,17 @@ const saving = ref(false);
 const localErrorText = ref("");
 const hasParsed = ref(false);
 const openIsDemo = ref(false);
+
+/** 是否为新建草稿（无磁盘文件） */
+const isNewDraft = ref(false);
+const draftId = ref<string | null>(null);
+
+/** 模块目录选择器 */
+const modulePickerOpen = ref(false);
+const moduleDirs = ref<string[]>([]);
+const selectedModuleDir = ref("");
+const newDialogName = ref("");
+const loadingModuleDirs = ref(false);
 
 const baselineNlsFlat = ref<Record<string, string>>({});
 const currentNlsFlat = ref<Record<string, string>>({});
@@ -215,6 +234,12 @@ function setNlsFlatKey(key: string, value: string, locale?: "en" | "cn") {
       ...localeNlsFlats.value,
       [id]: { ...(localeNlsFlats.value[id] ?? {}), [key]: trimmed },
     };
+    // 如果画布正在显示此 locale，同步更新 IR 树使控件即时反映
+    if (nlsEditorLocale.value === id && localIr.value) {
+      applyNlsKeyToRoot(localIr.value.root, key, trimmed);
+      if (key === "Title") localIr.value.title = trimmed;
+      syncToSidebar();
+    }
     syncTabDirty();
     return;
   }
@@ -258,6 +283,13 @@ function openCatNlsEditor(repoRelPath?: string) {
   nlsEditorLocale.value = localeId;
   nlsDisplayMode.value = localeId === "default" ? "en" : "cn";
   nlsTreeEditorOpen.value = true;
+}
+
+/** NLS 编辑面板切换 EN/CN/中英 → 同步画布控件文本 */
+function onNlsEditorLocaleChange(mode: "en" | "cn" | "both") {
+  if (mode === "en") nlsEditorLocale.value = "default";
+  else if (mode === "cn") nlsEditorLocale.value = CAA_NLS_LOCALE_SIMPLIFIED_CHINESE;
+  // "both" 保持当前 locale 不变（仅展示双列）
 }
 
 async function createChineseLocale() {
@@ -539,6 +571,8 @@ function commitNlsEdit(key: string, value: string, target: CaaNlsEditTarget) {
   syncToSidebar();
 }
 
+const dropIndicator = ref<{ rect: { left: number; top: number; width: number; height: number } | null; edge: "inside" | "right" | "bottom" | "left" | "top" }>({ rect: null, edge: "inside" });
+
 const contextMenuVisible = ref(false);
 const contextMenuItems = ref<CaaContextMenuItem[]>([]);
 const contextMenuPosition = ref({ x: 0, y: 0 });
@@ -613,6 +647,70 @@ provide(CAA_CONTROL_KEY, {
   toggleGridRowResize,
   toggleGridColResize,
   editMode: storeToRefs(store).editMode,
+  // ── Builder drop indicator ──
+  dropIndicator,
+  // ── Builder ──
+  addControl(containerId: string, typeOrNodeId: string, row: number, col: number) {
+    const root = localIr.value?.root;
+    if (!root) return "";
+    const container = findCaaNode(root, containerId);
+    if (!container) return "";
+    // 如果是已存在的节点 ID（跨容器移动），直接复用
+    const existing = findCaaNode(root, typeOrNodeId);
+    if (existing) {
+      existing.grid = { row, col, rowSpan: 1, colSpan: 1 };
+      existing.father = containerId;
+      container.children.push(existing);
+    } else {
+      addChildNode(container, typeOrNodeId, { row, col });
+    }
+    renumberGrid(container);
+    markIrDirty();
+    syncToSidebar();
+    return typeOrNodeId;
+  },
+  removeControl(containerId: string, nodeId: string) {
+    const root = localIr.value?.root;
+    if (!root) return;
+    const container = findCaaNode(root, containerId);
+    if (!container) return;
+    container.children = container.children.filter((c) => c.id !== nodeId);
+    renumberGrid(container);
+    markIrDirty();
+    syncToSidebar();
+  },
+  insertRow(containerId: string, beforeRow: number) {
+    const root = localIr.value?.root;
+    if (!root) return;
+    const container = findCaaNode(root, containerId);
+    if (!container) return;
+    insertGridRow(container, beforeRow);
+    renumberGrid(container);
+    markIrDirty();
+    syncToSidebar();
+  },
+  insertCol(containerId: string, beforeCol: number) {
+    const root = localIr.value?.root;
+    if (!root) return;
+    const container = findCaaNode(root, containerId);
+    if (!container) return;
+    insertGridCol(container, beforeCol);
+    renumberGrid(container);
+    markIrDirty();
+    syncToSidebar();
+  },
+  // ── 原子替换子节点（MVC：计算→apply 一次完成）──
+  setChildren(containerId: string, children: CaaDialogNode[], selectId?: string) {
+    const root = localIr.value?.root;
+    if (!root) return;
+    const container = findCaaNode(root, containerId);
+    if (!container) return;
+    container.children = children;
+    renumberGrid(container);
+    if (selectId) localSelectedId.value = selectId;
+    markIrDirty();
+    syncToSidebar();
+  },
 });
 
 const nlsEditCtx = {
@@ -642,14 +740,21 @@ async function checkHealth() {
   }
 }
 
-function resolveOpenTarget(): { catDlgRel: string; isDemo: boolean } | null {
+function resolveOpenTarget(): { catDlgRel: string; isDemo: boolean; isNewDraft?: boolean; draftId?: string } | null {
   if (!props.workbenchTabId) return null;
   const payload = shell.consumeTabPayload(props.workbenchTabId);
   const fromPayload = payload?.caaDialog;
+  if (fromPayload?.isNewDraft && fromPayload?.draftId?.trim()) {
+    return { catDlgRel: "", isDemo: false, isNewDraft: true, draftId: fromPayload.draftId.trim() };
+  }
   if (fromPayload?.catDlgRel?.trim()) {
     return { catDlgRel: fromPayload.catDlgRel.trim(), isDemo: Boolean(fromPayload.isDemo) };
   }
+  // 会话恢复：payload 已被消费，从 contextKey 判断
   const rel = catDlgRel.value;
+  if (rel?.startsWith("draft:")) {
+    return { catDlgRel: "", isDemo: false, isNewDraft: true, draftId: rel.slice(6) };
+  }
   if (rel) return { catDlgRel: rel, isDemo: false };
   return null;
 }
@@ -665,9 +770,52 @@ async function parseDialog() {
     return;
   }
 
+  // ── 新建草稿：从 API 加载 IR ──
+  if (target.isNewDraft && target.draftId) {
+    isNewDraft.value = true;
+    draftId.value = target.draftId;
+    parsing.value = true;
+    localErrorText.value = "";
+    try {
+      const ws = workspacePath.value;
+      if (ws) {
+        const { drafts } = await fetchCaaDrafts(ws);
+        const found = drafts.find((d: Record<string, unknown>) => d.id === target.draftId);
+        if (found) {
+          localIr.value = found.ir as CaaDialogIr;
+          currentNlsFlat.value = (found.nlsFlat as Record<string, string>) ?? {};
+          baselineNlsFlat.value = { ...currentNlsFlat.value };
+        } else {
+          // 草稿丢失，用空白 IR
+          localIr.value = createBlankCaaDialogIr(target.draftId === "" ? "NewDlg" : "NewDlg");
+          currentNlsFlat.value = {};
+          baselineNlsFlat.value = {};
+        }
+      } else {
+        localIr.value = createBlankCaaDialogIr();
+        currentNlsFlat.value = {};
+        baselineNlsFlat.value = {};
+      }
+      localSelectedId.value = localIr.value?.dialogName ?? null;
+      hasParsed.value = true;
+      openIsDemo.value = false;
+      if (props.workbenchTabId) {
+        shell.updateTab(props.workbenchTabId, {
+          title: localIr.value?.dialogName ?? "NewDlg",
+          subtitle: "未保存",
+          dirty: true,
+        });
+      }
+    } catch (e) {
+      localErrorText.value = e instanceof Error ? e.message : String(e);
+    } finally {
+      parsing.value = false;
+      syncToSidebar();
+    }
+    return;
+  }
+
   openIsDemo.value = target.isDemo;
-  parsing.value = true;
-  localErrorText.value = "";
   syncToSidebar();
   shell.appendLog(`[CAA 对话框] 解析 ${target.catDlgRel}…`, { source: PAGE_ID, open: true });
   try {
@@ -889,6 +1037,68 @@ async function saveNls(opts?: { gridSave?: boolean }) {
   }
 }
 
+/** 打开模块目录选择器 */
+async function openModulePicker() {
+  const ws = workspacePath.value;
+  if (!ws) { ElMessage.warning("请先选择工作空间"); return; }
+  modulePickerOpen.value = true;
+  newDialogName.value = localIr.value?.dialogName || "NewDlg";
+  selectedModuleDir.value = "";
+  if (!moduleDirs.value.length) {
+    loadingModuleDirs.value = true;
+    try {
+      const { dirs } = await fetchCaaModuleDirs(ws);
+      moduleDirs.value = dirs;
+    } catch { moduleDirs.value = []; }
+    finally { loadingModuleDirs.value = false; }
+  }
+}
+
+/** 新建对话框：将 IR 写入磁盘 */
+async function saveDialogToDisk() {
+  const ir = localIr.value;
+  const ws = workspacePath.value;
+  const dir = selectedModuleDir.value.trim();
+  const name = newDialogName.value.trim();
+  if (!ir || !ws || !dir || !name) {
+    ElMessage.warning("请选择模块目录并输入对话框名称");
+    return;
+  }
+  modulePickerOpen.value = false;
+  saving.value = true;
+  try {
+    const result = await createCaaDialogFromIr({
+      workspaceRoot: ws,
+      targetDirRel: dir,
+      dialogName: name,
+      ir: ir as unknown as Record<string, unknown>,
+    });
+    ir.sources.catDlg = result.catDlgRel;
+    ir.sources.catNls = result.catNlsRel;
+    isNewDraft.value = false;
+    if (draftId.value) {
+      deleteCaaDraft(ws, draftId.value).catch(() => {});
+    }
+    if (props.workbenchTabId) {
+      shell.updateTab(props.workbenchTabId, {
+        title: ir.dialogName,
+        subtitle: result.catDlgRel.split("/").pop() ?? "",
+        dirty: false,
+      });
+      // 更新 contextKey 为真实路径
+      const tab = shell.getTab(props.workbenchTabId);
+      if (tab) tab.contextKey = result.catDlgRel;
+    }
+    ElMessage.success(`已创建 ${result.catDlgRel}`);
+    shell.appendLog(`[CAA 对话框] 已创建 ${result.catDlgRel}`, { source: PAGE_ID });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    ElMessage.error(msg);
+  } finally {
+    saving.value = false;
+  }
+}
+
 usePageSession(props.workbenchTabId, {
   serialize: () => ({
     nlsFlat: currentNlsFlat.value,
@@ -950,7 +1160,7 @@ onActivated(() => {
             {{ store.editMode ? '✎' : '◉' }}
           </el-button>
           <el-button
-            v-if="hasParsed && !openIsDemo"
+            v-if="hasParsed && !openIsDemo && !isNewDraft"
             size="small"
             :disabled="!nlsLocaleOptions.length"
             @click="nlsTreeEditorOpen = true"
@@ -958,7 +1168,7 @@ onActivated(() => {
             编辑文案
           </el-button>
           <el-select
-            v-if="nlsLocaleOptions.length > 1"
+            v-if="nlsLocaleOptions.length > 1 && !isNewDraft"
             :model-value="nlsEditorLocale"
             size="small"
             style="width: 160px"
@@ -986,6 +1196,7 @@ onActivated(() => {
             />
           </el-select>
           <el-button
+            v-if="!isNewDraft"
             type="success"
             size="small"
             :loading="saving"
@@ -994,7 +1205,16 @@ onActivated(() => {
           >
             保存
           </el-button>
-          <el-button type="primary" size="small" :loading="parsing" @click="parseDialog">解析</el-button>
+          <el-button
+            v-if="isNewDraft"
+            type="success"
+            size="small"
+            :loading="saving"
+            @click="openModulePicker"
+          >
+            创建文件…
+          </el-button>
+          <el-button v-if="!isNewDraft" type="primary" size="small" :loading="parsing" @click="parseDialog">解析</el-button>
         </div>
       </template>
     </PageHeader>
@@ -1024,6 +1244,9 @@ onActivated(() => {
 
     <CaaDialogEditorView :has-parsed="hasParsed" />
 
+    <!-- 拖放指示器（页面级 position:fixed，最高层级，唯一视觉反馈） -->
+    <CaaDropOverlay />
+
     <CaaDialogRelatedFilesTable v-if="localIr" :ir="localIr" />
 
     <!-- NLS 编辑器（页面内嵌面板，最后） -->
@@ -1040,6 +1263,7 @@ onActivated(() => {
       @update:value="setNlsFlatKey"
       @save="saveNls({ gridSave: false })"
       @create-cn="createChineseLocale"
+      @locale-change="onNlsEditorLocaleChange"
     />
 
     <CaaNlsSupplementDialog
@@ -1053,6 +1277,38 @@ onActivated(() => {
     />
 
     <CaaControlContextMenu />
+
+    <!-- 模块目录选择器（新建对话框时） -->
+    <el-dialog v-model="modulePickerOpen" title="选择模块目录" width="480px" :close-on-click-modal="false">
+      <el-form label-position="top">
+        <el-form-item label="目标模块目录（目录名含 . 的 CAA 模块）">
+          <el-select
+            v-model="selectedModuleDir"
+            filterable
+            allow-create
+            :loading="loadingModuleDirs"
+            :placeholder="loadingModuleDirs ? '扫描模块目录…' : '选择或输入模块目录'"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="d in moduleDirs"
+              :key="d"
+              :label="d"
+              :value="d"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="对话框名称">
+          <el-input v-model="newDialogName" placeholder="如 MyDialog" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="modulePickerOpen = false">取消</el-button>
+        <el-button type="primary" :disabled="!selectedModuleDir.trim() || !newDialogName.trim()" :loading="saving" @click="saveDialogToDisk">
+          创建
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 

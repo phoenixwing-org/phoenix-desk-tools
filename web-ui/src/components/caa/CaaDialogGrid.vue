@@ -5,6 +5,8 @@ import CaaDialogNodeView from "./CaaDialogNodeView.vue";
 import CaaGridSettingsPopover from "./CaaGridSettingsPopover.vue";
 import { CAA_CONTROL_KEY, type CaaContextMenuItem } from "../../composables/useCaaControlContext";
 import { caaGridFillTrackTemplate, caaGridTrackTemplate } from "../../utils/caaControlMetrics";
+import { findCaaNode, renumberGrid, generateNodeId, createControlNode } from "../../utils/caaDialogTree";
+import { resolveDropEdgeFromRect, applyDropTransform, findOverlaps } from "../../utils/caaDropZone";
 import type { ContainerResizeResult } from "./controls/useCaaContainerResize";
 
 const props = withDefaults(
@@ -40,6 +42,20 @@ const gridMetrics = computed(() => {
 
 const colSet = computed(() => new Set(gridMetrics.value.colResizable));
 const rowSet = computed(() => new Set(gridMetrics.value.rowResizable));
+
+/** 空格子列表：grid 中未被任何控件占据的 (row, col) 位置，用于渲染占位 div 以支持拖放检测 */
+const emptyCells = computed(() => {
+  const m = gridMetrics.value;
+  const cells: { row: number; col: number }[] = [];
+  for (let r = 0; r < m.rows; r++) {
+    for (let c = 0; c < m.cols; c++) {
+      if (!cellOccupied(r, c)) {
+        cells.push({ row: r, col: c });
+      }
+    }
+  }
+  return cells;
+});
 
 const gridStyle = computed(() => {
   const hasResize = props.resize != null;
@@ -81,6 +97,342 @@ function itemStyle(child: CaaDialogNode, isEdit: boolean): Record<string, string
   };
 }
 
+// ── drag-and-drop ──
+
+const dragOverCell = ref<{ row: number; col: number; edge: "inside" | "right" | "bottom" | "left" | "top" } | null>(null);
+const dragOverGrid = ref(false);
+
+/** 判断 (row,col) 是否被已存在控件占据（含 rowSpan/colSpan） */
+function cellOccupied(row: number, col: number): boolean {
+  return props.node.children.some((c) => {
+    if (!c.grid) return false;
+    return (
+      row >= c.grid.row && row < c.grid.row + c.grid.rowSpan &&
+      col >= c.grid.col && col < c.grid.col + c.grid.colSpan
+    );
+  });
+}
+
+/** 根据实际渲染的 cell DOM 元素计算鼠标所在位置（使用纯函数规则）；返回 cell 矩形供 overlay 定位 */
+function cellFromPoint(_gridEl: HTMLElement, clientX: number, clientY: number): { row: number; col: number; edge: "inside" | "right" | "bottom" | "left" | "top"; rect: DOMRect } | null {
+  const hasChildren = props.node.children.length > 0;
+
+  if (hasChildren) {
+    const cells = document.querySelectorAll(`[data-grid-host="${props.node.id}"] .caa-grid-cell`);
+    for (const cell of cells) {
+      const r = cell.getBoundingClientRect();
+      if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) {
+        const row = parseInt((cell as HTMLElement).dataset.gridRow ?? "0");
+        const col = parseInt((cell as HTMLElement).dataset.gridCol ?? "0");
+        const occupied = cellOccupied(row, col);
+        const edge = resolveDropEdgeFromRect(occupied, r, clientX, clientY);
+        return { row, col, edge, rect: r };
+      }
+    }
+  }
+
+  // 兜底：返回 null（没有找到匹配的 cell，不在任何 cell 上方）
+  return null;
+}
+
+let dragEnterCount = 0;
+
+function writeDropIndicator(cell: ReturnType<typeof cellFromPoint>, gridEl: HTMLElement, clientX: number, clientY: number) {
+  if (!ctx) return;
+  if (cell) {
+    ctx.dropIndicator.value = { rect: { left: cell.rect.left, top: cell.rect.top, width: cell.rect.width, height: cell.rect.height }, edge: cell.edge };
+    return;
+  }
+  // 兜底：空容器（无 cell DOM）→ 鼠标在 grid host 上 → 整格 inside
+  if (!props.node.children.length) {
+    const gr = gridEl.getBoundingClientRect();
+    if (clientX >= gr.left && clientX <= gr.right && clientY >= gr.top && clientY <= gr.bottom) {
+      ctx.dropIndicator.value = { rect: { left: gr.left, top: gr.top, width: gr.width, height: gr.height }, edge: "inside" };
+      return;
+    }
+  }
+}
+
+function onGridDragOver(e: DragEvent) {
+  e.preventDefault();
+  e.stopPropagation();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+  dragOverGrid.value = true;
+
+  const gridEl = e.currentTarget as HTMLElement;
+  const cell = cellFromPoint(gridEl, e.clientX, e.clientY);
+  dragOverCell.value = cell;
+  writeDropIndicator(cell, gridEl, e.clientX, e.clientY);
+}
+
+function onGridDragEnter(e: DragEvent) {
+  e.stopPropagation();
+  dragEnterCount++;
+}
+
+function onGridDragLeave(e: DragEvent) {
+  e.stopPropagation();
+  dragEnterCount--;
+  if (dragEnterCount <= 0) {
+    dragEnterCount = 0;
+    dragOverGrid.value = false;
+    dragOverCell.value = null;
+    if (ctx) ctx.dropIndicator.value.rect = null;
+  }
+}
+
+function doDrop(row: number, col: number, edge: string, payload: string) {
+  const targetId = props.node.id;
+  const root = ctx!.dialogRoot;
+  if (!root) return;
+
+  const targetContainer = findCaaNode(root, targetId);
+  if (!targetContainer) return;
+
+  console.log("[CAA drop] ═══ doDrop ═══ row=%d col=%d edge=%s payload=%s container=%s children=%d",
+    row, col, edge, payload, targetId, targetContainer.children.length);
+  console.log("[CAA drop] 现有控件：", targetContainer.children.map(c => ({ id: c.id, grid: c.grid })));
+
+  // ── ① 快照（用于回退）──
+  const snapChildren = targetContainer.children.map((c) => ({
+    ...c,
+    grid: c.grid ? { ...c.grid } : undefined,
+    children: c.children,
+  }));
+
+  // For MOVE: also snapshot source container
+  let sourceNodeId = "";
+  let sourceContainerId = "";
+  let sourceSnapChildren: CaaDialogNode[] | null = null;
+  let sourceNode: CaaDialogNode | null = null;
+
+  if (payload.startsWith("MOVE:")) {
+    const rest = payload.slice(5);
+    const sep = rest.lastIndexOf(":");
+    sourceNodeId = rest.slice(0, sep);
+    sourceContainerId = rest.slice(sep + 1);
+    sourceNode = findCaaNode(root, sourceNodeId);
+    if (!sourceNode) return;
+
+    if (sourceContainerId !== targetId) {
+      const srcCtr = findCaaNode(root, sourceContainerId);
+      if (srcCtr) {
+        sourceSnapChildren = srcCtr.children.map((c) => ({
+          ...c,
+          grid: c.grid ? { ...c.grid } : undefined,
+          children: c.children,
+        }));
+      }
+    }
+  }
+
+  // ── ② 纯函数计算完整变换（不修改树，只计算位置）──
+  //    对于 MOVE：先从目标容器的 children 中排除源节点（如果同容器）
+  const computeInput = payload.startsWith("MOVE:") && sourceContainerId === targetId
+    ? targetContainer.children.filter((c) => c.id !== sourceNodeId)
+    : targetContainer.children;
+
+  console.log("[CAA drop] applyDropTransform 输入：children=%d target=(%d,%d) edge=%s",
+    computeInput.length, row, col, edge);
+
+  const result = applyDropTransform({
+    children: computeInput,
+    targetRow: row,
+    targetCol: col,
+    edge: edge as "inside" | "right" | "bottom" | "left" | "top",
+  });
+
+  console.log("[CAA drop] applyDropTransform 结果：success=%s placed=(%d,%d) insertCol=%s insertRow=%s %s",
+    result.success, result.placedRow, result.placedCol,
+    result.insertColBefore ?? "-", result.insertRowBefore ?? "-",
+    result.error ? "error=" + result.error : "");
+
+  if (!result.success) {
+    console.warn("[CAA drop] 拒绝放置：", result.error);
+    return;
+  }
+
+  // ── ③ 构建最终子节点列表 ──
+  const newChildren: CaaDialogNode[] = result.children as CaaDialogNode[];
+  console.log("[CAA drop] 变换后 children：", newChildren.map(c => ({ id: c.id, grid: c.grid })));
+
+  if (payload.startsWith("COPY:")) {
+    const type = payload.slice(5);
+    const newId = generateNodeId(targetContainer, type);
+    const newNode = createControlNode(type, newId, { row: result.placedRow, col: result.placedCol });
+    newNode.father = targetId;
+    newChildren.push(newNode);
+  } else if (payload.startsWith("MOVE:") && sourceNode) {
+    sourceNode.grid = { row: result.placedRow, col: result.placedCol, rowSpan: 1, colSpan: 1 };
+    sourceNode.father = targetId;
+    newChildren.push(sourceNode);
+  }
+
+  // ── ④ 验证：无重叠 ──
+  const overlaps = findOverlaps(newChildren as any);
+  if (overlaps.length > 0) {
+    console.warn("[CAA drop] 检测到重叠，回退：", overlaps.map((o) => o.cell).join(", "));
+    targetContainer.children = snapChildren;
+    renumberGrid(targetContainer);
+    if (sourceSnapChildren) {
+      const srcCtr = findCaaNode(root, sourceContainerId);
+      if (srcCtr) {
+        srcCtr.children = sourceSnapChildren;
+        renumberGrid(srcCtr);
+      }
+    }
+    return;
+  }
+
+  // ── ⑤ 原子替换 ──
+  ctx!.setChildren(targetId, newChildren);
+
+  // 跨容器 MOVE：更新源容器
+  if (sourceNodeId && sourceContainerId !== targetId) {
+    const srcCtr = findCaaNode(root, sourceContainerId);
+    if (srcCtr) {
+      srcCtr.children = srcCtr.children.filter((c) => c.id !== sourceNodeId);
+      renumberGrid(srcCtr);
+    }
+  }
+
+  if (sourceNodeId) ctx!.select(sourceNodeId);
+}
+
+function onGridDrop(e: DragEvent) {
+  e.preventDefault();
+  e.stopPropagation();
+  const raw = e.dataTransfer?.getData("text/plain") ?? "";
+  dragEnterCount = 0;
+  if (!raw.startsWith("caa:") || !ctx) {
+    clearDragState();
+    return;
+  }
+  if (dragOverCell.value) {
+    const { row, col, edge } = dragOverCell.value;
+    doDrop(row, col, edge, raw.slice(4));
+  } else if (!props.node.children.length) {
+    // 空容器兜底
+    const gr = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    if (e.clientX >= gr.left && e.clientX <= gr.right && e.clientY >= gr.top && e.clientY <= gr.bottom) {
+      doDrop(0, 0, "inside", raw.slice(4));
+    }
+  }
+  clearDragState();
+}
+
+function clearDragState() {
+  dragOverCell.value = null;
+  dragOverGrid.value = false;
+  if (ctx) ctx.dropIndicator.value.rect = null;
+}
+
+// ── 内部拖动（mousedown/mousemove/mouseup 手动实现，绕过 HTML5 子元素拦截）──
+//
+// 设计要点：
+//   1. mousedown 记录起点，但不立即激活（等移动 > 5px 才算真正拖拽）
+//   2. 激活后绑定 window mouseup / mousemove 作为安全网，确保鼠标在 grid 外松开也能清理
+//   3. 所有 mousemove 入口必须检查 e.buttons & 1 —— 防止 mouseup 事件被吞掉时
+//      状态泄漏（指示器残留跟随鼠标）
+//   4. Escape 键取消拖拽
+//   5. finishInternalDrag 中关闭状态 + 解绑全局事件 + 清除指示器
+
+const internalDrag = ref<{ sourceNodeId: string; sourceContainerId: string; startX: number; startY: number; active: boolean } | null>(null);
+
+function onCellMouseDown(e: MouseEvent, child: CaaDialogNode) {
+  // 仅记录拖拽起点，不阻止默认行为（input 仍可聚焦、button 仍可点击）
+  // 规则：5px 阈值在 onGridMouseMove 中区分点击和拖拽，不再按 tagName 过滤
+  if (e.button !== 0) return;
+  internalDrag.value = {
+    sourceNodeId: child.id,
+    sourceContainerId: props.node.id,
+    startX: e.clientX,
+    startY: e.clientY,
+    active: false,
+  };
+}
+
+function cancelInternalDrag() {
+  internalDrag.value = null;
+  clearDragState();
+  window.removeEventListener("mouseup", onWindowMouseUp);
+  window.removeEventListener("mousemove", onWindowMouseMove);
+  window.removeEventListener("keydown", onWindowKeyDown);
+}
+
+function finishInternalDrag() {
+  const d = internalDrag.value;
+  if (!d) return;
+  if (d.active && dragOverCell.value && ctx) {
+    const { row, col, edge } = dragOverCell.value;
+    doDrop(row, col, edge, `MOVE:${d.sourceNodeId}:${d.sourceContainerId}`);
+  }
+  internalDrag.value = null;
+  clearDragState();
+  window.removeEventListener("mouseup", onWindowMouseUp);
+  window.removeEventListener("mousemove", onWindowMouseMove);
+  window.removeEventListener("keydown", onWindowKeyDown);
+}
+
+function onWindowMouseUp() { finishInternalDrag(); }
+function onWindowMouseMove(e: MouseEvent) {
+  // 安全网：鼠标松开（buttons=0）则强制取消
+  if (!(e.buttons & 1)) { cancelInternalDrag(); return; }
+  const d = internalDrag.value;
+  if (!d) return;
+  // 用 grid host 元素做 hit-test（window 上没有 currentTarget）
+  const gridEl = document.querySelector(`[data-grid-host="${props.node.id}"]`) as HTMLElement | null;
+  if (!gridEl) return;
+  const cell = cellFromPoint(gridEl, e.clientX, e.clientY);
+  dragOverCell.value = cell;
+  writeDropIndicator(cell, gridEl, e.clientX, e.clientY);
+}
+function onWindowKeyDown(e: KeyboardEvent) {
+  if (e.key === "Escape") cancelInternalDrag();
+}
+
+function onGridMouseMove(e: MouseEvent) {
+  // 安全检查：按钮已松开则强制退出拖拽（防止 mouseup 事件被吞导致指示器残留）
+  if (!(e.buttons & 1)) {
+    if (internalDrag.value) cancelInternalDrag();
+    return;
+  }
+  const d = internalDrag.value;
+  if (!d) return;
+  e.stopPropagation();
+  const dx = Math.abs(e.clientX - d.startX);
+  const dy = Math.abs(e.clientY - d.startY);
+  if (dx < 5 && dy < 5) return;
+
+  // 首次跨越阈值：激活拖拽 + 绑定全局事件
+  if (!d.active) {
+    d.active = true;
+    dragOverGrid.value = true;
+    window.addEventListener("mouseup", onWindowMouseUp);
+    window.addEventListener("mousemove", onWindowMouseMove);
+    window.addEventListener("keydown", onWindowKeyDown);
+  }
+
+  const gridEl = e.currentTarget as HTMLElement;
+  const cell = cellFromPoint(gridEl, e.clientX, e.clientY);
+  dragOverCell.value = cell;
+  writeDropIndicator(cell, gridEl, e.clientX, e.clientY);
+}
+
+function onGridMouseUp(e: MouseEvent) {
+  e.stopPropagation();
+  finishInternalDrag();
+}
+
+// ── HTML5 外部拖入 ──
+
+function onCellDragStart(e: DragEvent, child: CaaDialogNode) {
+  e.stopPropagation();
+  if (!e.dataTransfer) return;
+  e.dataTransfer.effectAllowed = "move";
+  e.dataTransfer.setData("text/plain", `caa:MOVE:${child.id}:${props.node.id}`);
+}
+
 // ── toggle resize from indicator click ──
 
 function toggleColResize(col: number) {
@@ -102,6 +454,8 @@ function openGridSettings() {
 // ── right-click context menu ──
 
 function onGridContextmenu(e: MouseEvent) {
+  // 拖动中右键 → 取消拖动
+  if (internalDrag.value?.active) { cancelInternalDrag(); return; }
   if (!ctx) return;
   e.preventDefault();
   e.stopPropagation();
@@ -131,9 +485,21 @@ function onGridContextmenu(e: MouseEvent) {
 </script>
 
 <template>
-  <div v-if="node.children.length" class="caa-grid-host">
+  <div
+    v-if="true"
+    class="caa-grid-host"
+    :data-grid-host="node.id"
+    :class="{ 'caa-grid-host--drop-target': dragOverGrid, 'caa-grid-host--empty': !node.children.length }"
+    @dragenter="onGridDragEnter"
+    @dragover="onGridDragOver"
+    @dragleave="onGridDragLeave"
+    @drop="onGridDrop"
+    @mousemove="onGridMouseMove"
+    @mouseup="onGridMouseUp"
+  >
     <!-- ════ 编辑模式：行列伸缩指示器 + 1px 网格线 ════ -->
     <div
+      v-if="node.children.length"
       class="caa-grid"
       :class="{ 'caa-grid--fill': fillParent, 'caa-grid--edit': editMode }"
       :style="gridStyle"
@@ -176,8 +542,12 @@ function onGridContextmenu(e: MouseEvent) {
         v-for="child in node.children"
         :key="child.id"
         class="caa-grid-cell"
-        :class="{ 'caa-grid-cell--edit': editMode }"
+        :data-grid-row="child.grid?.row"
+        :data-grid-col="child.grid?.col"
+        :class="{ 'caa-grid-cell--edit': editMode, 'caa-grid-cell--dragging': dragOverGrid }"
         :style="itemStyle(child, editMode)"
+        @dragstart.stop="onCellDragStart($event, child)"
+        @mousedown="onCellMouseDown($event, child)"
       >
         <CaaDialogNodeView
           :node="child"
@@ -186,6 +556,23 @@ function onGridContextmenu(e: MouseEvent) {
           :width-style="childResizeStyle(child)"
         />
       </div>
+
+      <!-- 空格子占位（仅编辑模式）：无控件占据的 cell，提供拖放检测区域 -->
+      <div
+        v-for="ec in emptyCells"
+        :key="'empty-' + ec.row + '-' + ec.col"
+        class="caa-grid-cell caa-grid-cell--empty"
+        :class="{ 'caa-grid-cell--edit': editMode }"
+        :data-grid-row="ec.row"
+        :data-grid-col="ec.col"
+        :style="{
+          gridRow: `${ec.row + (editMode ? 2 : 1)} / span 1`,
+          gridColumn: `${ec.col + (editMode ? 2 : 1)} / span 1`,
+          minWidth: '0',
+        }"
+      />
+
+    <!-- drop 指示器已移至顶层 CaaDropOverlay（position:absolute + 像素定位细条） -->
     </div>
 
     <!-- grid settings popover -->
@@ -208,6 +595,28 @@ function onGridContextmenu(e: MouseEvent) {
   min-width: 0;
   max-width: 100%;
 }
+
+.caa-grid-host--drop-target {
+  outline: 2px dashed #3b82f6;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.caa-grid-host--empty {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.caa-grid-empty-hint {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  font-style: italic;
+  pointer-events: none;
+}
+
+/* drop 指示器已移至顶层 CaaDropOverlay */
 
 /* ── grid ── */
 
@@ -310,6 +719,21 @@ function onGridContextmenu(e: MouseEvent) {
 /* 编辑模式：单元格白底覆盖灰色 gap 线 */
 .caa-grid-cell--edit {
   background: #fff;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 空格子占位：编辑模式下显示虚线边界，让用户看到 grid 结构 */
+.caa-grid-cell--empty {
+  background: transparent;
+  min-height: 24px;
+  min-width: 24px;
+}
+
+.caa-grid-cell--empty.caa-grid-cell--edit {
+  background: #fafbfc;
+  outline: 1px dashed #e2e8f0;
+  outline-offset: -1px;
 }
 
 .caa-grid--fill .caa-grid-cell {

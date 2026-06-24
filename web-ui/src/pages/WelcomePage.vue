@@ -15,6 +15,7 @@ import {
 } from "../constants/moduleScope";
 import { useAppShell } from "../composables/useAppShell";
 import { useShellTour } from "../composables/useShellTour";
+import CaaUnsavedDraftsPanel from "../components/caa/CaaUnsavedDraftsPanel.vue";
 import { useWorkspaceDirectoryPicker } from "../composables/useWorkspaceDirectoryPicker";
 import { confirmCloseTabsBeforeWorkspacePick } from "../composables/tabCloseConfirm";
 import { DEFAULT_APP_TITLE } from "../types/config";
@@ -289,6 +290,8 @@ function returnToWorkspace() {
           </li>
         </ul>
       </section>
+
+      <CaaUnsavedDraftsPanel />
     </main>
   </div>
 </template>

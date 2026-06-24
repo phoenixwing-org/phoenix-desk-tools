@@ -44,7 +44,7 @@ function onContextmenu(e: MouseEvent) {
     <span class="caa-unknown-type">{{ node.type.replace(/^CATDlg/, "") }}</span>
     <span class="caa-unknown-id">{{ node.id }}</span>
     <CaaDialogGrid
-      v-if="node.children.length && !isContainerLike"
+      v-if="node.children.length"
       :node="node"
       class="caa-unknown-children"
       :fill-parent="fillParent"

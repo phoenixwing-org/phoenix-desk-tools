@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { CaaDialogNode } from "../../../types/caaDialogIr";
-import CaaInlineNlsText from "../CaaInlineNlsText.vue";
 import { useCaaControl } from "./useCaaControl";
 
 const props = defineProps<{
@@ -11,37 +10,33 @@ const props = defineProps<{
 }>();
 
 const widthOverride = computed(() => props.widthStyle);
-const { isSelected, onClick, onContextmenu, titleBinding, helpTooltip, widthStyle: resolvedWidth } = useCaaControl(props, { widthOverride });
+const { isSelected, onClick, onContextmenu, helpTooltip, widthStyle: resolvedWidth } = useCaaControl(props, { widthOverride });
 </script>
 
 <template>
   <div
-    class="caa-selector caa-combo caa-selector--mock"
+    class="caa-combo"
     :class="{ 'caa-combo--selected': isSelected }"
     :style="resolvedWidth"
     :title="helpTooltip"
     @click="onClick"
     @contextmenu="onContextmenu($event)"
   >
-    <CaaInlineNlsText
-      :text="titleBinding.text"
-      :nls-key="titleBinding.key"
-      :node-id="node.id"
-      :prop="titleBinding.prop"
-    />
+    <span class="caa-combo-arrow">▾</span>
   </div>
 </template>
 
 <style scoped>
-.caa-selector--mock {
+.caa-combo {
   min-height: 1.6rem;
-  padding: 2px 2px;
-  border: 1px solid var(--border, #cbd5e1);
+  min-width: 80px;
+  padding: 2px 6px;
+  border: 1px solid #cbd5e1;
   border-radius: 3px;
   background: #fff;
   display: flex;
   align-items: center;
-  font-size: 0.75rem;
+  justify-content: flex-end;
   box-sizing: border-box;
   cursor: pointer;
 }
@@ -51,4 +46,8 @@ const { isSelected, onClick, onContextmenu, titleBinding, helpTooltip, widthStyl
   outline-offset: 1px;
 }
 
+.caa-combo-arrow {
+  color: #94a3b8;
+  font-size: 0.6rem;
+}
 </style>

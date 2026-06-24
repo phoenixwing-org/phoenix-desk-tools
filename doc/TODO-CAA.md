@@ -7,7 +7,7 @@
 > **控件组件化**：[caa/CAA对话框-控件组件化设计.md](caa/CAA对话框-控件组件化设计.md)  
 > 状态：`[ ]` 未做 · `[~]` 进行中 · `[x]` 已完成
 
-最后更新：2026-06-24
+最后更新：2026-06-25
 
 ---
 
@@ -26,11 +26,40 @@
 - [x] 点击切换伸缩/固定，颜色不混淆选中蓝
 - [x] 伸缩触发 irDirty → 保存按钮亮起
 
+### Builder 拖放
+
+- [x] 控件面板拖入 Grid（HTML5 COPY）
+- [x] 内部拖动移动控件位置（MOVE）
+- [x] 5 方向 drop：inside / right / left / bottom / top
+- [x] 5 种指示器：整格蓝底（inside）+ 4 边界蓝条（right/left/bottom/top）
+- [!] left / top 指示器拖入有问题，待排查
+- [x] 空格子占位 div（拖入空格子有指示器）
+- [x] 所有控件可拖（Editor/Spinner/PushButton/Combo…）
+- [x] 不覆盖已有控件（occupied cell 禁止 inside）
+- [x] spanning 控件 straddle 安全处理
+- [x] 鼠标松开指示器残留修复（e.buttons 检查 + window 安全网）
+- [ ] 撤销 / 重做（见 [caa/CAA对话框-撤销重做-规划.md](caa/CAA对话框-撤销重做-规划.md)）
+- [ ] 拖拽调整控件 span 大小（resize handle）
+- [ ] 拖行列头调整 ROWRES/COLRES（目前仅 click 切换）
+- [ ] 删除控件（右键/键盘）
+- [ ] 跨容器拖动（从一个 Frame/Container 拖到另一个）
+
 ### baseContainer 统一 resize
 - [ ] COLRES 列控件 `width: 100%` 填满
 - [ ] 非 COLRES 列控件内容宽
 - [ ] 高度内容自驱（不溢出/不塌陷）
 - [ ] 测试 DLG（Group + MultiList + Button）正常
+
+### 主页表格优化
+- [x] 目录列移除
+- [x] 第一列序号 # 1~n
+- [x] 文件名列蓝色链接样式 + hover 下划线
+- [x] 列表自动适应 11 个对话框内容
+
+### 控件内文本显示修复
+- [x] CaaControlEditor 显示 NLS title 文本（不再显示 node.id）
+- [x] CaaControlSpinner 显示 NLS title 文本 + 重新设计为 SpinnerBox（上下按钮 + 数值输入）
+- [x] CaaControlUnknown 修复未定义 `isContainerLike` bug
 
 ### NLS 统一编辑器（内嵌面板）
 - [ ] 点「编辑文案」打开面板（canvas 下方）
@@ -40,6 +69,8 @@
 - [x] 中英模式「互相填写空白」按钮
 - [x] 选中控件 → 编辑文案 → 自动切树表格 + 滚动到该控件
 - [x] 关联文件 CATNls「编辑」→ 打开面板 + 滚动
+- [x] 列顺序：# → 英文 (EN) → 简体中文 (CN) → Key
+- [x] 平铺表模式第一列序号 1~n
 - [x] Key 列溢出隐藏，不重叠
 - [x] 点 ✕ 关闭面板
 
@@ -183,13 +214,23 @@ Vite：`/api/caa` → Node；`/api` → Python（**caa 规则在上**）。
 
 ### 空白对话框新建（Builder 模式）
 
-- [ ] 主页/CAA 页「新建对话框」按钮
-  - [ ] 创建空白 IR（仅 Dialog 壳，无子控件）
-  - [ ] 未保存状态，写入 Pinia / Tab store
-- [ ] 左侧工具条：n 行 × 2 列控件面板
-  - [ ] 可拖拽或点击添加：Label / Editor / SelectorList / Combo / Button …
-  - [ ] 分组：基础控件 / 容器 / 装饰
-- [ ] 右侧对话框画布：实时预览 + Grid 编辑
+- [x] 主页/CAA 页「新建对话框」按钮
+  - [x] 创建空白 IR（仅 Dialog 壳 + CATDlgWndBtn style）
+  - [x] 未保存状态，写入工作空间 `.phoenix/caa-drafts/`（JSON 文件）
+  - [x] 欢迎页/最近工作空间显示「未保存的对话框」草稿列表
+  - [x] 保存到磁盘调用 `POST /api/caa/dialog/create` 生成 .CATDlg + .CATNls
+  - [x] 草稿 API：GET/POST/DELETE `/api/caa/dialog/drafts`
+- [x] 左侧工具条：n 行 × 2 列控件面板
+  - [x] 可拖拽或点击添加：Label / Editor / SelectorList / Combo / Button …
+  - [x] 分组：基础控件 / 容器 / 装饰
+- [x] 右侧对话框画布：实时预览 + Grid 编辑
+  - [x] 拖放入 Grid（COPY）→ 不覆盖已有控件 → 5 方向 edge
+  - [x] 内部拖动（MOVE）重排控件位置
+  - [x] 空格子占位 + 蓝色指示条 overlay
+  - [ ] 撤销/重做
+  - [ ] 拖拽调整 span 大小
+  - [ ] 删除控件
+  - [ ] 跨容器拖动
 - [ ] 保存：生成 .CATDlg + .CATNls 写回磁盘
 
 ## C2b · 对话框索引（`phoenix_caa_*`）
@@ -206,9 +247,44 @@ Vite：`/api/caa` → Node；`/api` → Python（**caa 规则在上**）。
 
 ---
 
-## C3–C5
+## C3 · 写回
 
-见 [规划 §8–11](caa/CAA对话框-Web编辑器-规划.md)。
+- [ ] `POST /api/caa/dialog/write` — IR → .CATDlg + .CATNls 落盘
+- [ ] 写前 dry-run diff 预览
+- [ ] 写前校验：Grid 重叠、非法 FATHER、未知控件类型
+- [ ] 永不改写 Wizard 区外代码（`BuildMore`、`UpdateDialog` 保持原样）
+
+## C4 · Wizard 同步 + 控件补全
+
+- [ ] .h WIDGET DECLARATION SECTION 写回
+- [ ] .cpp WIDGET CONSTRUCTION SECTION 写回（`new`、`SetGridConstraints`、`SetGrid*Resizable`、`SetColumnTitles`…）
+- [ ] `UpdateDialog` 注释解析 → 侧栏只读字段绑定
+- [ ] .CATRsc 图标名预览
+- [ ] P2 控件入 catalog：CATDlgContainer、CATDlgSplitter、CATDlgIconBox、CATDlgProgress、CATDlgSlider、CATDlgScrollbar
+- [ ] Menu/Toolbar/StatusBar 体系只读解析 + 灰盒
+- [ ] `control_catalog.json` + Vitest（`PNXBomAnalysisDlg`）
+- [ ] 实工程扫描统计未覆盖类型
+
+## C5 · 后期封装
+
+- [ ] `catdlg-core` + `io-adapter` 抽离，供 VS Code 扩展 POC
+- [ ] 可选 Electron 壳（内嵌 `web-ui` build）
+- [ ] 启动脚本合并（三进程合一）
+- [ ] VS Code Custom Editor、npm 发包名
+
+---
+
+## 跨文档待办归集（2026-06-25 扫描 6 个 CAA 文档）
+
+> 所有代码级待办已归入上方对应章节。以下为文档维护项 + 已知不一致。
+
+### 文档维护
+- [ ] `doc/文档索引.md` 补 2 个缺失文档：`控件组件化设计`、`撤销重做-规划`
+- [ ] `CAA对话框-P0快速原型-归档.md`「已知限制」更新——画布选中、工作空间打开等已在 C2/C2d 实现
+- [ ] `CAA对话框-Web编辑器-规划.md` §6.3 画布行为 P0/P1 表加脚注"已超前实现"；§13「P0 范围待确认」已过时
+
+### 已知问题
+- [!] left / top 指示器拖入有问题，待排查
 
 ---
 

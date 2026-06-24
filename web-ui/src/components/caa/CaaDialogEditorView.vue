@@ -1,13 +1,17 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { storeToRefs } from "pinia";
 import { useCaaDialogPageStore } from "../../stores/caaDialogPage";
+import CaaControlPalette from "./CaaControlPalette.vue";
 import CaaDialogCanvas from "./CaaDialogCanvas.vue";
 
 const props = defineProps<{
   hasParsed?: boolean;
 }>();
 const store = useCaaDialogPageStore();
-const { ir } = storeToRefs(store);
+const { ir, editMode } = storeToRefs(store);
+
+const showPalette = computed(() => props.hasParsed);
 </script>
 
 <template>
@@ -18,12 +22,15 @@ const { ir } = storeToRefs(store);
     <p v-if="store.errorText" class="banner banner-err">{{ store.errorText }}</p>
 
     <el-empty
-      v-if="!hasParsed && !store.loading"
+      v-if="!props.hasParsed && !store.loading"
       class="caa-empty"
       description="点击「解析」加载 .CATDlg、多语言 .CATNls、.CATRsc 与位图目录"
       :image-size="72"
     />
-    <CaaDialogCanvas v-else class="caa-main" :ir="ir" />
+    <div v-else class="caa-workspace">
+      <CaaControlPalette v-if="showPalette" />
+      <CaaDialogCanvas class="caa-main" :ir="ir" />
+    </div>
   </div>
 </template>
 
@@ -33,6 +40,14 @@ const { ir } = storeToRefs(store);
   flex-direction: column;
   flex: 0 0 auto;
   gap: 10px;
+}
+
+.caa-workspace {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+  gap: 0;
 }
 
 .banner {
@@ -53,7 +68,7 @@ const { ir } = storeToRefs(store);
 }
 
 .caa-main {
-  flex: 0 0 auto;
+  flex: 1;
   min-width: 0;
 }
 
