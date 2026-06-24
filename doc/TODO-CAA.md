@@ -32,6 +32,7 @@
 - [x] 内部拖动移动控件位置（MOVE）
 - [x] 5 方向 drop：inside / right / left / bottom / top
 - [x] 5 种指示器：整格蓝底（inside）+ 4 边界蓝条（right/left/bottom/top）
+- [!] left / top 指示器拖入有问题，待排查
 - [x] 空格子占位 div（拖入空格子有指示器）
 - [x] 所有控件可拖（Editor/Spinner/PushButton/Combo…）
 - [x] 不覆盖已有控件（occupied cell 禁止 inside）
@@ -41,6 +42,7 @@
 - [ ] 拖拽调整控件 span 大小（resize handle）
 - [ ] 拖行列头调整 ROWRES/COLRES（目前仅 click 切换）
 - [ ] 删除控件（右键/键盘）
+- [ ] 跨容器拖动（从一个 Frame/Container 拖到另一个）
 
 ### baseContainer 统一 resize
 - [ ] COLRES 列控件 `width: 100%` 填满
@@ -244,9 +246,56 @@ Vite：`/api/caa` → Node；`/api` → Python（**caa 规则在上**）。
 
 ---
 
-## C3–C5
+## C3 · 写回
 
-见 [规划 §8–11](caa/CAA对话框-Web编辑器-规划.md)。
+- [ ] `POST /api/caa/dialog/write` — IR → .CATDlg + .CATNls 落盘
+- [ ] 写前 dry-run diff 预览
+- [ ] 写前校验：Grid 重叠、非法 FATHER、未知控件类型
+- [ ] 永不改写 Wizard 区外代码（`BuildMore`、`UpdateDialog` 保持原样）
+
+## C4 · Wizard 同步 + 控件补全
+
+- [ ] .h WIDGET DECLARATION SECTION 写回
+- [ ] .cpp WIDGET CONSTRUCTION SECTION 写回（`new`、`SetGridConstraints`、`SetGrid*Resizable`、`SetColumnTitles`…）
+- [ ] `UpdateDialog` 注释解析 → 侧栏只读字段绑定
+- [ ] .CATRsc 图标名预览
+- [ ] P2 控件入 catalog：CATDlgContainer、CATDlgSplitter、CATDlgIconBox、CATDlgProgress、CATDlgSlider、CATDlgScrollbar
+- [ ] Menu/Toolbar/StatusBar 体系只读解析 + 灰盒
+- [ ] `control_catalog.json` + Vitest（`PNXBomAnalysisDlg`）
+- [ ] 实工程扫描统计未覆盖类型
+
+## C5 · 后期封装
+
+- [ ] `catdlg-core` + `io-adapter` 抽离，供 VS Code 扩展 POC
+- [ ] 可选 Electron 壳（内嵌 `web-ui` build）
+- [ ] 启动脚本合并（三进程合一）
+- [ ] VS Code Custom Editor、npm 发包名
+
+---
+
+## 跨文档待办归集（2026-06-25 统一扫描）
+
+> 从 `doc/caa/` 全部 6 个文档中提取未完成项，统一归入本文档。
+
+### 已归集（上文已有）
+- C2b 索引 / C2c 多Tab / C3 写回 / C4 Wizard / C5 封装：见上方各节
+- Builder 拖放待办：见「验证清单 → Builder 拖放」
+- NLS 树编辑器 `[~]`：见「验证清单 → NLS 统一编辑器」
+- baseContainer resize：见「验证清单」
+- 保存 / dirty：见「验证清单」
+
+### 文档维护
+- [ ] `doc/文档索引.md` 补上 2 个缺失文档：`CAA对话框-控件组件化设计.md`、`CAA对话框-撤销重做-规划.md`
+- [ ] `CAA对话框-P0快速原型-归档.md` 的「已知限制」节更新——画布选中、工作空间打开等已在 C2/C2d 实现
+- [ ] `CAA对话框-Web编辑器-规划.md` §6.3 画布行为 P0/P1 表与实际进度同步（但该文档为规划快照，可加脚注说明"已超前实现"）
+
+### 已知问题
+- [!] left / top 指示器拖入有问题，待排查
+- [!] `CAA对话框-Web编辑器-规划.md` §13 决策记录「P0 范围：待确认」已过时——P0 已确认为只读
+
+---
+
+## 永久不做
 
 ---
 
