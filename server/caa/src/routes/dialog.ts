@@ -419,6 +419,138 @@ dialogRoutes.post("/create-locale-nls", async (c) => {
   }
 });
 
+// ── 草稿 CRUD（.phoenix/caa-drafts/）──
+
+const DRAFTS_DIRNAME = "caa-drafts";
+
+function phoenixDraftsDir(workspaceRoot: string): string {
+  return path.join(workspaceRoot, ".phoenix", DRAFTS_DIRNAME);
+}
+
+dialogRoutes.get("/drafts", async (c) => {
+  const workspaceRoot = c.req.query("workspaceRoot")?.trim();
+  if (!workspaceRoot) {
+    return c.json({ error: "workspaceRoot 必填" }, 400);
+  }
+  try {
+    const dir = phoenixDraftsDir(workspaceRoot);
+    if (!(await pathExists(dir))) return c.json({ drafts: [] });
+    const files = await fs.readdir(dir);
+    const drafts = [];
+    for (const f of files) {
+      if (!f.endsWith(".json")) continue;
+      try {
+        const text = await readUtf8(path.join(dir, f));
+        drafts.push(JSON.parse(text));
+      } catch { /* skip corrupted */ }
+    }
+    return c.json({ drafts });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return c.json({ error: msg }, 500);
+  }
+});
+
+dialogRoutes.post("/drafts", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as {
+    workspaceRoot?: string;
+    draft?: { id?: string };
+  };
+  const root = body.workspaceRoot?.trim();
+  const draft = body.draft;
+  if (!root || !draft?.id) {
+    return c.json({ error: "workspaceRoot 与 draft.id 必填" }, 400);
+  }
+  try {
+    const dir = phoenixDraftsDir(root);
+    await fs.mkdir(dir, { recursive: true });
+    const abs = path.join(dir, `${draft.id}.json`);
+    await fs.writeFile(abs, JSON.stringify(draft, null, 2), "utf8");
+    return c.json({ ok: true, id: draft.id });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return c.json({ error: msg }, 500);
+  }
+});
+
+dialogRoutes.delete("/drafts/:id", async (c) => {
+  const workspaceRoot = c.req.query("workspaceRoot")?.trim();
+  const id = c.req.param("id");
+  if (!workspaceRoot || !id) {
+    return c.json({ error: "workspaceRoot 与 id 必填" }, 400);
+  }
+  try {
+    const abs = path.join(phoenixDraftsDir(workspaceRoot), `${id}.json`);
+    if (await pathExists(abs)) await fs.unlink(abs);
+    return c.json({ ok: true });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return c.json({ error: msg }, 500);
+  }
+});
+
+// ── 从 IR 创建对话框文件到磁盘 ──
+
+dialogRoutes.post("/create", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as {
+    workspaceRoot?: string;
+    targetDirRel?: string;
+    dialogName?: string;
+    ir?: Record<string, unknown>;
+  };
+  const root = body.workspaceRoot?.trim();
+  const dirRel = body.targetDirRel?.trim();
+  const dialogName = body.dialogName?.trim();
+  const ir = body.ir;
+  if (!root || !dirRel || !dialogName || !ir) {
+    return c.json({ error: "workspaceRoot, targetDirRel, dialogName, ir 必填" }, 400);
+  }
+  try {
+    const targetDir = resolveUnderRoot(root, dirRel);
+    await fs.mkdir(targetDir, { recursive: true });
+
+    const catDlgRel = `${dirRel}/${dialogName}.CATDlg`.replace(/\/+/g, "/");
+    const catNlsRel = `${dirRel}/${dialogName}.CATNls`.replace(/\/+/g, "/");
+    const catDlgAbs = path.join(targetDir, `${dialogName}.CATDlg`);
+    const catNlsAbs = path.join(targetDir, `${dialogName}.CATNls`);
+
+    if ((await pathExists(catDlgAbs)) || (await pathExists(catNlsAbs))) {
+      return c.json({ error: `文件已存在：${dialogName}.CATDlg 或 .CATNls` }, 409);
+    }
+
+    // 生成简易 .CATDlg
+    const catDlgText = `${dialogName} CATDlg {\n}\n`;
+    await fs.writeFile(catDlgAbs, catDlgText, "utf8");
+
+    // 生成 .CATNls（从 IR 收集 NLS 键）
+    const nlsKeys: Record<string, string> = {};
+    function collectNls(node: Record<string, unknown>) {
+      const nls = node.nls as Record<string, string> | undefined;
+      if (nls) {
+        for (const [k, v] of Object.entries(nls)) {
+          if (v?.trim()) nlsKeys[k] = v.trim();
+        }
+      }
+      const children = node.children as Record<string, unknown>[] | undefined;
+      if (children) for (const child of children) collectNls(child);
+    }
+    if (ir.root) collectNls(ir.root as Record<string, unknown>);
+    const defaultTitleKey = `${dialogName}.Title`;
+    if (!nlsKeys[defaultTitleKey]) nlsKeys[defaultTitleKey] = dialogName;
+    const catNlsText = emitCatNlsFile(nlsKeys, {
+      headerLines: ["// auto-generated"],
+    });
+    await fs.writeFile(catNlsAbs, catNlsText, "utf8");
+
+    caaLog("create OK", { catDlgAbs, catNlsAbs });
+    return c.json({ ok: true, catDlgRel, catNlsRel });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    caaLog(`create 异常: ${msg}`);
+    return c.json({ error: msg }, 500);
+  }
+});
+
 export function createCaaApp() {
   const port = Number(process.env.CAA_SERVER_PORT || 5180);
   const app = new Hono();

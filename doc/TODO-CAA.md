@@ -196,12 +196,12 @@ Vite：`/api/caa` → Node；`/api` → Python（**caa 规则在上**）。
 
 ### 空白对话框新建（Builder 模式）
 
-- [~] 主页/CAA 页「新建对话框」按钮（计划中）
-  - [~] 创建空白 IR（仅 Dialog 壳，无子控件）
-  - [~] 未保存状态，写入工作空间 `.phoenix/caa-drafts/`（JSON 文件，非 localStorage）
-  - [~] 欢迎页/最近工作空间显示「未保存的对话框」草稿列表
-  - [~] 保存到磁盘调用 `POST /api/caa/dialog/create` 生成 .CATDlg + .CATNls
-  - [~] 草稿 API：GET/POST/DELETE `/api/caa/drafts`
+- [x] 主页/CAA 页「新建对话框」按钮
+  - [x] 创建空白 IR（仅 Dialog 壳 + CATDlgWndBtn style）
+  - [x] 未保存状态，写入工作空间 `.phoenix/caa-drafts/`（JSON 文件）
+  - [x] 欢迎页/最近工作空间显示「未保存的对话框」草稿列表
+  - [x] 保存到磁盘调用 `POST /api/caa/dialog/create` 生成 .CATDlg + .CATNls
+  - [x] 草稿 API：GET/POST/DELETE `/api/caa/dialog/drafts`
 - [ ] 左侧工具条：n 行 × 2 列控件面板
   - [ ] 可拖拽或点击添加：Label / Editor / SelectorList / Combo / Button …
   - [ ] 分组：基础控件 / 容器 / 装饰

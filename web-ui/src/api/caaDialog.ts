@@ -129,6 +129,53 @@ export async function fetchCaaDialogFilePreview(opts: {
   return data as CaaFilePreviewPayload;
 }
 
+// ── 草稿 CRUD ──
+
+export async function fetchCaaDrafts(workspaceRoot: string): Promise<{ drafts: Record<string, unknown>[] }> {
+  const res = await fetch(`/api/caa/dialog/drafts?workspaceRoot=${encodeURIComponent(workspaceRoot)}`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error ?? `drafts failed ${res.status}`);
+  return data as { drafts: Record<string, unknown>[] };
+}
+
+export async function saveCaaDraft(workspaceRoot: string, draft: Record<string, unknown>): Promise<{ ok: boolean; id: string }> {
+  const res = await fetch("/api/caa/dialog/drafts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ workspaceRoot, draft }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error ?? `save-draft failed ${res.status}`);
+  return data as { ok: boolean; id: string };
+}
+
+export async function deleteCaaDraft(workspaceRoot: string, id: string): Promise<{ ok: boolean }> {
+  const res = await fetch(`/api/caa/dialog/drafts/${encodeURIComponent(id)}?workspaceRoot=${encodeURIComponent(workspaceRoot)}`, {
+    method: "DELETE",
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error ?? `delete-draft failed ${res.status}`);
+  return data as { ok: boolean };
+}
+
+export async function createCaaDialogFromIr(opts: {
+  workspaceRoot: string;
+  targetDirRel: string;
+  dialogName: string;
+  ir: Record<string, unknown>;
+}): Promise<{ ok: boolean; catDlgRel: string; catNlsRel: string }> {
+  const res = await fetch("/api/caa/dialog/create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(opts),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error ?? `create dialog failed ${res.status}`);
+  return data as { ok: boolean; catDlgRel: string; catNlsRel: string };
+}
+
+// ── locale ──
+
 export async function createCaaDialogLocaleNls(opts: {
   workspaceRoot: string;
   defaultCatNlsRel: string;

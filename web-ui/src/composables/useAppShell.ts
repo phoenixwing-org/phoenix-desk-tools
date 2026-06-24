@@ -33,6 +33,9 @@ import { WORKBENCH_IDLE_PAGE } from "../constants/workbench";
 import { runShellTour } from "./useShellTour";
 import { CAA_EDITOR_PAGE_ID, CAA_HOME_PAGE_ID, CAA_NAV_MODULE } from "../constants/caaPages";
 import { dialogNameFromCatDlgRel, shortCatDlgPath } from "../utils/caaDialogDisplay";
+import { createBlankCaaDialogIr } from "../utils/createBlankCaaDialogIr";
+import { saveCaaDraft } from "../api/caaDialog";
+import type { CaaDialogDraft } from "../types/caaDialogDraft";
 import { resolveTabForModuleScope } from "../utils/moduleScopeNavigation";
 
 export { WORKBENCH_IDLE_PAGE };
@@ -114,6 +117,8 @@ export type AppShellContext = {
     dialogName?: string;
     isDemo?: boolean;
   }) => void;
+  openNewCaaDialog: () => void;
+  openCaaDialogForDraft: (opts: { draftId: string; dialogName: string }) => void;
   /** 磁盘改名后更新文件详情 Tab 路由（避免同文件占两个 Tab） */
   rerouteFileDetailTab: (oldRel: string, newRel: string, tabId: string) => void;
   openFileRenameForRel: (
@@ -513,6 +518,7 @@ export function provideAppShell(): AppShellContext {
         partKeyTabByKey.set(t.contextKey.trim(), t.id);
       }
       if (t.pageId === CAA_EDITOR_PAGE_ID && t.contextKey?.trim()) {
+        if (t.contextKey.startsWith("draft:")) continue; // 排除草稿 tab
         caaDialogTabByRel.set(normalizeCaaDlgRel(t.contextKey), t.id);
       }
     }
@@ -823,6 +829,63 @@ export function provideAppShell(): AppShellContext {
         forceNew: true,
       });
       caaDialogTabByRel.set(rel, tabId);
+    } catch (e) {
+      setStatus(String(e));
+    }
+  }
+
+  function openNewCaaDialog() {
+    const draftId = crypto.randomUUID();
+    const dialogName = "NewDlg";
+    const ir = createBlankCaaDialogIr(dialogName);
+    const now = new Date().toISOString();
+    const draft: CaaDialogDraft = {
+      id: draftId, dialogName, ir, nlsFlat: {},
+      createdAt: now, updatedAt: now,
+    };
+    // 异步写入草稿文件
+    if (workspacePath.value) {
+      saveCaaDraft(workspacePath.value, draft as unknown as Record<string, unknown>).catch(() => {});
+    }
+
+    shellOpenTab({
+      pageId: CAA_EDITOR_PAGE_ID,
+      title: dialogName,
+      subtitle: "未保存",
+      contextKey: `draft:${draftId}`,
+      payload: {
+        caaDialog: {
+          isNewDraft: true,
+          draftId,
+          dialogName,
+        },
+      },
+      forceNew: true,
+    });
+  }
+
+  function openCaaDialogForDraft(opts: { draftId: string; dialogName: string }) {
+    const { draftId, dialogName } = opts;
+    // 查找已有 draft tab
+    const key = `draft:${draftId}`;
+    const found = wb.tabs.value.find(
+      (t) => t.pageId === CAA_EDITOR_PAGE_ID && (t.contextKey ?? "").trim() === key,
+    );
+    if (found) {
+      shellActivateTab(found.id);
+      return;
+    }
+    try {
+      shellOpenTab({
+        pageId: CAA_EDITOR_PAGE_ID,
+        title: dialogName,
+        subtitle: "未保存",
+        contextKey: key,
+        payload: {
+          caaDialog: { isNewDraft: true, draftId, dialogName },
+        },
+        forceNew: true,
+      });
     } catch (e) {
       setStatus(String(e));
     }
@@ -1394,6 +1457,8 @@ export function provideAppShell(): AppShellContext {
     openBomApplyForRel,
     openFileDetailForRel,
     openCaaDialogForRel,
+    openNewCaaDialog,
+    openCaaDialogForDraft,
     rerouteFileDetailTab,
     openFileRenameForRel,
     openRenameAnalysis,

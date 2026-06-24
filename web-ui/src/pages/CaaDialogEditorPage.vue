@@ -17,12 +17,17 @@ import type { NlsSupplementDirection } from "../components/caa/CaaNlsSupplementD
 import type { CaaNlsLocaleOption, CaaNlsDisplayMode } from "../components/caa/CaaCatNlsEditDialog.vue";
 import {
   createCaaDialogLocaleNls,
+  createCaaDialogFromIr,
+  deleteCaaDraft,
+  fetchCaaDrafts,
   fetchCaaHealth,
   parseCaaDialog,
+  saveCaaDraft,
   saveCaaDialogNls,
   saveCaaDialog,
   type CaaDialogGridPatch,
 } from "../api/caaDialog";
+import type { CaaDialogDraft } from "../types/caaDialogDraft";
 import { CAA_EDITOR_PAGE_ID } from "../constants/caaPages";
 import { useCaaDialogPropertySheet } from "../composables/useCaaDialogPropertySheet";
 import { CAA_NLS_EDIT_KEY, CAA_NLS_SESSION_KEY, type CaaNlsEditTarget } from "../composables/caaNlsEdit";
@@ -35,6 +40,7 @@ import { storeToRefs } from "pinia";
 import type { CaaDialogIr, CaaDialogNode } from "../types/caaDialogIr";
 import { dialogNameFromCatDlgRel } from "../utils/caaDialogDisplay";
 import { findCaaNode, nlsFlatMapsEqual } from "../utils/caaDialogTree";
+import { createBlankCaaDialogIr } from "../utils/createBlankCaaDialogIr";
 
 const PAGE_ID = CAA_EDITOR_PAGE_ID;
 
@@ -79,6 +85,10 @@ const saving = ref(false);
 const localErrorText = ref("");
 const hasParsed = ref(false);
 const openIsDemo = ref(false);
+
+/** 是否为新建草稿（无磁盘文件） */
+const isNewDraft = ref(false);
+const draftId = ref<string | null>(null);
 
 const baselineNlsFlat = ref<Record<string, string>>({});
 const currentNlsFlat = ref<Record<string, string>>({});
@@ -655,10 +665,13 @@ async function checkHealth() {
   }
 }
 
-function resolveOpenTarget(): { catDlgRel: string; isDemo: boolean } | null {
+function resolveOpenTarget(): { catDlgRel: string; isDemo: boolean; isNewDraft?: boolean; draftId?: string } | null {
   if (!props.workbenchTabId) return null;
   const payload = shell.consumeTabPayload(props.workbenchTabId);
   const fromPayload = payload?.caaDialog;
+  if (fromPayload?.isNewDraft && fromPayload?.draftId?.trim()) {
+    return { catDlgRel: "", isDemo: false, isNewDraft: true, draftId: fromPayload.draftId.trim() };
+  }
   if (fromPayload?.catDlgRel?.trim()) {
     return { catDlgRel: fromPayload.catDlgRel.trim(), isDemo: Boolean(fromPayload.isDemo) };
   }
@@ -678,9 +691,52 @@ async function parseDialog() {
     return;
   }
 
+  // ── 新建草稿：从 API 加载 IR ──
+  if (target.isNewDraft && target.draftId) {
+    isNewDraft.value = true;
+    draftId.value = target.draftId;
+    parsing.value = true;
+    localErrorText.value = "";
+    try {
+      const ws = workspacePath.value;
+      if (ws) {
+        const { drafts } = await fetchCaaDrafts(ws);
+        const found = drafts.find((d: Record<string, unknown>) => d.id === target.draftId);
+        if (found) {
+          localIr.value = found.ir as CaaDialogIr;
+          currentNlsFlat.value = (found.nlsFlat as Record<string, string>) ?? {};
+          baselineNlsFlat.value = { ...currentNlsFlat.value };
+        } else {
+          // 草稿丢失，用空白 IR
+          localIr.value = createBlankCaaDialogIr(target.draftId === "" ? "NewDlg" : "NewDlg");
+          currentNlsFlat.value = {};
+          baselineNlsFlat.value = {};
+        }
+      } else {
+        localIr.value = createBlankCaaDialogIr();
+        currentNlsFlat.value = {};
+        baselineNlsFlat.value = {};
+      }
+      localSelectedId.value = localIr.value?.dialogName ?? null;
+      hasParsed.value = true;
+      openIsDemo.value = false;
+      if (props.workbenchTabId) {
+        shell.updateTab(props.workbenchTabId, {
+          title: localIr.value?.dialogName ?? "NewDlg",
+          subtitle: "未保存",
+          dirty: true,
+        });
+      }
+    } catch (e) {
+      localErrorText.value = e instanceof Error ? e.message : String(e);
+    } finally {
+      parsing.value = false;
+      syncToSidebar();
+    }
+    return;
+  }
+
   openIsDemo.value = target.isDemo;
-  parsing.value = true;
-  localErrorText.value = "";
   syncToSidebar();
   shell.appendLog(`[CAA 对话框] 解析 ${target.catDlgRel}…`, { source: PAGE_ID, open: true });
   try {
@@ -902,6 +958,48 @@ async function saveNls(opts?: { gridSave?: boolean }) {
   }
 }
 
+/** 新建对话框：将 IR 写入磁盘 */
+async function saveDialogToDisk() {
+  const ir = localIr.value;
+  const ws = workspacePath.value;
+  if (!ir || !ws) {
+    ElMessage.warning("无法创建：缺少工作空间或 IR");
+    return;
+  }
+  saving.value = true;
+  try {
+    const result = await createCaaDialogFromIr({
+      workspaceRoot: ws,
+      targetDirRel: ".",
+      dialogName: ir.dialogName || "NewDlg",
+      ir: ir as unknown as Record<string, unknown>,
+    });
+    ir.sources.catDlg = result.catDlgRel;
+    ir.sources.catNls = result.catNlsRel;
+    isNewDraft.value = false;
+    if (draftId.value) {
+      deleteCaaDraft(ws, draftId.value).catch(() => {});
+    }
+    if (props.workbenchTabId) {
+      shell.updateTab(props.workbenchTabId, {
+        title: ir.dialogName,
+        subtitle: result.catDlgRel.split("/").pop() ?? "",
+        dirty: false,
+      });
+      // 更新 contextKey 为真实路径
+      const tab = shell.getTab(props.workbenchTabId);
+      if (tab) tab.contextKey = result.catDlgRel;
+    }
+    ElMessage.success(`已创建 ${result.catDlgRel}`);
+    shell.appendLog(`[CAA 对话框] 已创建 ${result.catDlgRel}`, { source: PAGE_ID });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    ElMessage.error(msg);
+  } finally {
+    saving.value = false;
+  }
+}
+
 usePageSession(props.workbenchTabId, {
   serialize: () => ({
     nlsFlat: currentNlsFlat.value,
@@ -963,7 +1061,7 @@ onActivated(() => {
             {{ store.editMode ? '✎' : '◉' }}
           </el-button>
           <el-button
-            v-if="hasParsed && !openIsDemo"
+            v-if="hasParsed && !openIsDemo && !isNewDraft"
             size="small"
             :disabled="!nlsLocaleOptions.length"
             @click="nlsTreeEditorOpen = true"
@@ -971,7 +1069,7 @@ onActivated(() => {
             编辑文案
           </el-button>
           <el-select
-            v-if="nlsLocaleOptions.length > 1"
+            v-if="nlsLocaleOptions.length > 1 && !isNewDraft"
             :model-value="nlsEditorLocale"
             size="small"
             style="width: 160px"
@@ -999,6 +1097,7 @@ onActivated(() => {
             />
           </el-select>
           <el-button
+            v-if="!isNewDraft"
             type="success"
             size="small"
             :loading="saving"
@@ -1007,7 +1106,16 @@ onActivated(() => {
           >
             保存
           </el-button>
-          <el-button type="primary" size="small" :loading="parsing" @click="parseDialog">解析</el-button>
+          <el-button
+            v-if="isNewDraft"
+            type="success"
+            size="small"
+            :loading="saving"
+            @click="saveDialogToDisk"
+          >
+            创建文件
+          </el-button>
+          <el-button v-if="!isNewDraft" type="primary" size="small" :loading="parsing" @click="parseDialog">解析</el-button>
         </div>
       </template>
     </PageHeader>
