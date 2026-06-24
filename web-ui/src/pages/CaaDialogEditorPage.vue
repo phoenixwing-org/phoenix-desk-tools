@@ -215,6 +215,12 @@ function setNlsFlatKey(key: string, value: string, locale?: "en" | "cn") {
       ...localeNlsFlats.value,
       [id]: { ...(localeNlsFlats.value[id] ?? {}), [key]: trimmed },
     };
+    // 如果画布正在显示此 locale，同步更新 IR 树使控件即时反映
+    if (nlsEditorLocale.value === id && localIr.value) {
+      applyNlsKeyToRoot(localIr.value.root, key, trimmed);
+      if (key === "Title") localIr.value.title = trimmed;
+      syncToSidebar();
+    }
     syncTabDirty();
     return;
   }
@@ -258,6 +264,13 @@ function openCatNlsEditor(repoRelPath?: string) {
   nlsEditorLocale.value = localeId;
   nlsDisplayMode.value = localeId === "default" ? "en" : "cn";
   nlsTreeEditorOpen.value = true;
+}
+
+/** NLS 编辑面板切换 EN/CN/中英 → 同步画布控件文本 */
+function onNlsEditorLocaleChange(mode: "en" | "cn" | "both") {
+  if (mode === "en") nlsEditorLocale.value = "default";
+  else if (mode === "cn") nlsEditorLocale.value = CAA_NLS_LOCALE_SIMPLIFIED_CHINESE;
+  // "both" 保持当前 locale 不变（仅展示双列）
 }
 
 async function createChineseLocale() {
@@ -1040,6 +1053,7 @@ onActivated(() => {
       @update:value="setNlsFlatKey"
       @save="saveNls({ gridSave: false })"
       @create-cn="createChineseLocale"
+      @locale-change="onNlsEditorLocaleChange"
     />
 
     <CaaNlsSupplementDialog

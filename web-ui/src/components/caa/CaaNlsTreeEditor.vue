@@ -65,11 +65,15 @@ const emit = defineEmits<{
   save: [];
   /** 添加简体中文 locale */
   "create-cn": [];
+  /** 切换 EN/CN/中英 时通知父页面同步画布 */
+  "locale-change": [mode: LocaleMode];
 }>();
 
 /** 显示模式：en=仅英文, cn=仅中文, both=中英对照 */
 type LocaleMode = "en" | "cn" | "both";
 const localeMode = ref<LocaleMode>(props.initialLocaleMode ?? (props.cnFlat ? "both" : "en"));
+
+watch(localeMode, (mode) => emit("locale-change", mode));
 
 /** auto-fill 中英空白值 */
 function autoFill() {
@@ -100,20 +104,29 @@ const colPct = computed(() => {
   return { ctrl, en: 100 - ctrl, cn: 0 };                       // 仅 EN
 });
 
-function onColResizeStart(col: "en" | "cn", e: MouseEvent) {
+function onColResizeStart(col: "en" | "cn" | "ctrl", e: MouseEvent) {
   e.preventDefault();
   const startX = e.clientX;
   const start = { ...store.nlsColWidths };
   const onMove = (ev: MouseEvent) => {
-    const dx = ((ev.clientX - startX) / (document.querySelector(".caa-nls-panel")?.clientWidth ?? 800)) * 100;
+    const panelWidth = document.querySelector(".caa-nls-panel")?.clientWidth ?? 800;
+    const availWidth = panelWidth - ROW_NUM_WIDTH;
+    const dx = ((ev.clientX - startX) / availWidth) * 100;
     if (col === "en") {
-      const ctrl = Math.max(15, Math.min(70, start.ctrl + dx));
-      const en = Math.max(15, start.en - dx);
-      store.setNlsColWidths({ ctrl, en, cn: 100 - ctrl - en > 0 ? 100 - ctrl - en : start.cn });
-    } else {
+      // EN 左缘（#|EN）：调整 EN ← → CN
+      const en = Math.max(15, Math.min(70, start.en - dx));
+      const cn = Math.max(15, start.cn + dx);
+      store.setNlsColWidths({ en, cn, ctrl: 100 - en - cn > 0 ? 100 - en - cn : start.ctrl });
+    } else if (col === "cn") {
+      // CN 左缘（EN|CN）：调整 EN ↔ CN
       const en = Math.max(15, Math.min(70, start.en + dx));
       const cn = Math.max(15, start.cn - dx);
       store.setNlsColWidths({ en, cn, ctrl: 100 - en - cn > 0 ? 100 - en - cn : start.ctrl });
+    } else {
+      // Key 左缘（CN|Key）：调整 CN ↔ Key
+      const cn = Math.max(15, Math.min(70, start.cn + dx));
+      const ctrl = Math.max(15, start.ctrl - dx);
+      store.setNlsColWidths({ cn, ctrl, en: 100 - cn - ctrl > 0 ? 100 - cn - ctrl : start.en });
     }
   };
   const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
@@ -411,7 +424,9 @@ const title = computed(() => {
             <th v-if="showCn" class="col-cn" :style="{ width: colPct.cn + '%' }">
               简体中文 (CN)<span class="col-resize-handle" @mousedown="onColResizeStart('cn', $event)"></span>
             </th>
-            <th class="col-ctrl" :style="{ width: colPct.ctrl + '%' }">Key</th>
+            <th class="col-ctrl" :style="{ width: colPct.ctrl + '%' }">
+              Key<span class="col-resize-handle" @mousedown="onColResizeStart('ctrl', $event)"></span>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -472,7 +487,9 @@ const title = computed(() => {
             <th v-if="showCn" class="col-cn" :style="{ width: colPct.cn + '%' }">
               简体中文 (CN)<span class="col-resize-handle" @mousedown="onColResizeStart('cn', $event)"></span>
             </th>
-            <th class="col-key" :style="{ width: colPct.ctrl + '%' }">Key</th>
+            <th class="col-key" :style="{ width: colPct.ctrl + '%' }">
+              Key<span class="col-resize-handle" @mousedown="onColResizeStart('ctrl', $event)"></span>
+            </th>
           </tr>
         </thead>
         <tbody>
