@@ -419,6 +419,46 @@ dialogRoutes.post("/create-locale-nls", async (c) => {
   }
 });
 
+// ── 列出可放置对话框的模块目录 ──
+
+async function collectModuleDirs(workspaceRoot: string): Promise<string[]> {
+  const root = path.resolve(workspaceRoot);
+  const seen = new Set<string>();
+
+  async function walk(dir: string, depth: number): Promise<void> {
+    if (depth > 5) return;
+    let entries: import("node:fs").Dirent[];
+    try { entries = await fs.readdir(dir, { withFileTypes: true }); } catch { return; }
+    for (const ent of entries) {
+      if (!ent.isDirectory()) continue;
+      const name = ent.name;
+      if (name.startsWith(".") || name === "node_modules") continue;
+      const full = path.join(dir, name);
+      // 目录名包含 . 的是模块目录（如 *UI.m, *.d）
+      if (name.includes(".")) {
+        const rel = path.relative(root, full).split(path.sep).join("/");
+        if (rel && !rel.startsWith("..")) seen.add(rel);
+      }
+      await walk(full, depth + 1);
+    }
+  }
+
+  await walk(root, 0);
+  return [...seen].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+}
+
+dialogRoutes.get("/dirs", async (c) => {
+  const workspaceRoot = c.req.query("workspaceRoot")?.trim();
+  if (!workspaceRoot) return c.json({ error: "workspaceRoot 必填" }, 400);
+  try {
+    const dirs = await collectModuleDirs(workspaceRoot);
+    return c.json({ dirs });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return c.json({ error: msg }, 500);
+  }
+});
+
 // ── 草稿 CRUD（.phoenix/caa-drafts/）──
 
 const DRAFTS_DIRNAME = "caa-drafts";

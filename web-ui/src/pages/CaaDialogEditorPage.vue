@@ -21,6 +21,7 @@ import {
   deleteCaaDraft,
   fetchCaaDrafts,
   fetchCaaHealth,
+  fetchCaaModuleDirs,
   parseCaaDialog,
   saveCaaDraft,
   saveCaaDialogNls,
@@ -89,6 +90,13 @@ const openIsDemo = ref(false);
 /** 是否为新建草稿（无磁盘文件） */
 const isNewDraft = ref(false);
 const draftId = ref<string | null>(null);
+
+/** 模块目录选择器 */
+const modulePickerOpen = ref(false);
+const moduleDirs = ref<string[]>([]);
+const selectedModuleDir = ref("");
+const newDialogName = ref("");
+const loadingModuleDirs = ref(false);
 
 const baselineNlsFlat = ref<Record<string, string>>({});
 const currentNlsFlat = ref<Record<string, string>>({});
@@ -675,7 +683,11 @@ function resolveOpenTarget(): { catDlgRel: string; isDemo: boolean; isNewDraft?:
   if (fromPayload?.catDlgRel?.trim()) {
     return { catDlgRel: fromPayload.catDlgRel.trim(), isDemo: Boolean(fromPayload.isDemo) };
   }
+  // 会话恢复：payload 已被消费，从 contextKey 判断
   const rel = catDlgRel.value;
+  if (rel?.startsWith("draft:")) {
+    return { catDlgRel: "", isDemo: false, isNewDraft: true, draftId: rel.slice(6) };
+  }
   if (rel) return { catDlgRel: rel, isDemo: false };
   return null;
 }
@@ -958,20 +970,40 @@ async function saveNls(opts?: { gridSave?: boolean }) {
   }
 }
 
+/** 打开模块目录选择器 */
+async function openModulePicker() {
+  const ws = workspacePath.value;
+  if (!ws) { ElMessage.warning("请先选择工作空间"); return; }
+  modulePickerOpen.value = true;
+  newDialogName.value = localIr.value?.dialogName || "NewDlg";
+  selectedModuleDir.value = "";
+  if (!moduleDirs.value.length) {
+    loadingModuleDirs.value = true;
+    try {
+      const { dirs } = await fetchCaaModuleDirs(ws);
+      moduleDirs.value = dirs;
+    } catch { moduleDirs.value = []; }
+    finally { loadingModuleDirs.value = false; }
+  }
+}
+
 /** 新建对话框：将 IR 写入磁盘 */
 async function saveDialogToDisk() {
   const ir = localIr.value;
   const ws = workspacePath.value;
-  if (!ir || !ws) {
-    ElMessage.warning("无法创建：缺少工作空间或 IR");
+  const dir = selectedModuleDir.value.trim();
+  const name = newDialogName.value.trim();
+  if (!ir || !ws || !dir || !name) {
+    ElMessage.warning("请选择模块目录并输入对话框名称");
     return;
   }
+  modulePickerOpen.value = false;
   saving.value = true;
   try {
     const result = await createCaaDialogFromIr({
       workspaceRoot: ws,
-      targetDirRel: ".",
-      dialogName: ir.dialogName || "NewDlg",
+      targetDirRel: dir,
+      dialogName: name,
       ir: ir as unknown as Record<string, unknown>,
     });
     ir.sources.catDlg = result.catDlgRel;
@@ -1111,9 +1143,9 @@ onActivated(() => {
             type="success"
             size="small"
             :loading="saving"
-            @click="saveDialogToDisk"
+            @click="openModulePicker"
           >
-            创建文件
+            创建文件…
           </el-button>
           <el-button v-if="!isNewDraft" type="primary" size="small" :loading="parsing" @click="parseDialog">解析</el-button>
         </div>
@@ -1175,6 +1207,38 @@ onActivated(() => {
     />
 
     <CaaControlContextMenu />
+
+    <!-- 模块目录选择器（新建对话框时） -->
+    <el-dialog v-model="modulePickerOpen" title="选择模块目录" width="480px" :close-on-click-modal="false">
+      <el-form label-position="top">
+        <el-form-item label="目标模块目录（目录名含 . 的 CAA 模块）">
+          <el-select
+            v-model="selectedModuleDir"
+            filterable
+            allow-create
+            :loading="loadingModuleDirs"
+            :placeholder="loadingModuleDirs ? '扫描模块目录…' : '选择或输入模块目录'"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="d in moduleDirs"
+              :key="d"
+              :label="d"
+              :value="d"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="对话框名称">
+          <el-input v-model="newDialogName" placeholder="如 MyDialog" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="modulePickerOpen = false">取消</el-button>
+        <el-button type="primary" :disabled="!selectedModuleDir.trim() || !newDialogName.trim()" :loading="saving" @click="saveDialogToDisk">
+          创建
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 

@@ -129,6 +129,15 @@ export async function fetchCaaDialogFilePreview(opts: {
   return data as CaaFilePreviewPayload;
 }
 
+// ── 模块目录 ──
+
+export async function fetchCaaModuleDirs(workspaceRoot: string): Promise<{ dirs: string[] }> {
+  const res = await fetch(`/api/caa/dialog/dirs?workspaceRoot=${encodeURIComponent(workspaceRoot)}`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error ?? `dirs failed ${res.status}`);
+  return data as { dirs: string[] };
+}
+
 // ── 草稿 CRUD ──
 
 export async function fetchCaaDrafts(workspaceRoot: string): Promise<{ drafts: Record<string, unknown>[] }> {
