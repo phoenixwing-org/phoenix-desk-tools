@@ -7,7 +7,7 @@
 > **控件组件化**：[caa/CAA对话框-控件组件化设计.md](caa/CAA对话框-控件组件化设计.md)  
 > 状态：`[ ]` 未做 · `[~]` 进行中 · `[x]` 已完成
 
-最后更新：2026-06-24
+最后更新：2026-06-25
 
 ---
 
@@ -25,6 +25,22 @@
 - [x] 行弹簧（绿色竖线 = 伸缩，灰点 = 固定）
 - [x] 点击切换伸缩/固定，颜色不混淆选中蓝
 - [x] 伸缩触发 irDirty → 保存按钮亮起
+
+### Builder 拖放
+
+- [x] 控件面板拖入 Grid（HTML5 COPY）
+- [x] 内部拖动移动控件位置（MOVE）
+- [x] 5 方向 drop：inside / right / left / bottom / top
+- [x] 5 种指示器：整格蓝底（inside）+ 4 边界蓝条（right/left/bottom/top）
+- [x] 空格子占位 div（拖入空格子有指示器）
+- [x] 所有控件可拖（Editor/Spinner/PushButton/Combo…）
+- [x] 不覆盖已有控件（occupied cell 禁止 inside）
+- [x] spanning 控件 straddle 安全处理
+- [x] 鼠标松开指示器残留修复（e.buttons 检查 + window 安全网）
+- [ ] 撤销 / 重做（见 [caa/CAA对话框-撤销重做-规划.md](caa/CAA对话框-撤销重做-规划.md)）
+- [ ] 拖拽调整控件 span 大小（resize handle）
+- [ ] 拖行列头调整 ROWRES/COLRES（目前仅 click 切换）
+- [ ] 删除控件（右键/键盘）
 
 ### baseContainer 统一 resize
 - [ ] COLRES 列控件 `width: 100%` 填满
@@ -206,6 +222,12 @@ Vite：`/api/caa` → Node；`/api` → Python（**caa 规则在上**）。
   - [x] 可拖拽或点击添加：Label / Editor / SelectorList / Combo / Button …
   - [x] 分组：基础控件 / 容器 / 装饰
 - [x] 右侧对话框画布：实时预览 + Grid 编辑
+  - [x] 拖放入 Grid（COPY）→ 不覆盖已有控件 → 5 方向 edge（right/left/bottom/top）
+  - [x] 内部拖动（MOVE）重排控件位置
+  - [x] 空格子占位 + 蓝色指示条 overlay
+  - [ ] 撤销/重做
+  - [ ] 拖拽调整 span 大小
+  - [ ] 删除控件
 - [ ] 保存：生成 .CATDlg + .CATNls 写回磁盘
 
 ## C2b · 对话框索引（`phoenix_caa_*`）
