@@ -24,8 +24,9 @@ const controlRows = computed(() => props.node.size?.textHeight ?? 3);
     :style="resolvedWidth"
     :rows="controlRows"
     readonly
-    :placeholder="node.id"
-    :title="helpTooltip" @click="onClick"
+    placeholder=""
+    :title="helpTooltip"
+    @click="onClick"
     @contextmenu="onContextmenu($event)"
   />
   <input
@@ -35,8 +36,9 @@ const controlRows = computed(() => props.node.size?.textHeight ?? 3);
     :style="resolvedWidth"
     type="text"
     readonly
-    :placeholder="node.id"
-    :title="helpTooltip" @click="onClick"
+    placeholder=""
+    :title="helpTooltip"
+    @click="onClick"
     @contextmenu="onContextmenu($event)"
   />
 </template>
@@ -48,6 +50,11 @@ const controlRows = computed(() => props.node.size?.textHeight ?? 3);
   font-size: 0.8rem;
   box-sizing: border-box;
   cursor: pointer;
+  border: 1px solid #cbd5e1;
+  border-radius: 3px;
+  padding: 2px 6px;
+  background: #fff;
+  color: #1e293b;
 }
 
 .caa-editor--multi {
@@ -59,5 +66,4 @@ const controlRows = computed(() => props.node.size?.textHeight ?? 3);
   outline: 2px solid var(--accent, #3b82f6);
   outline-offset: 1px;
 }
-
 </style>

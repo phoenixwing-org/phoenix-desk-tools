@@ -32,6 +32,17 @@
 - [ ] 高度内容自驱（不溢出/不塌陷）
 - [ ] 测试 DLG（Group + MultiList + Button）正常
 
+### 主页表格优化
+- [x] 目录列移除
+- [x] 第一列序号 # 1~n
+- [x] 文件名列蓝色链接样式 + hover 下划线
+- [x] 列表自动适应 11 个对话框内容
+
+### 控件内文本显示修复
+- [x] CaaControlEditor 显示 NLS title 文本（不再显示 node.id）
+- [x] CaaControlSpinner 显示 NLS title 文本 + 重新设计为 SpinnerBox（上下按钮 + 数值输入）
+- [x] CaaControlUnknown 修复未定义 `isContainerLike` bug
+
 ### NLS 统一编辑器（内嵌面板）
 - [ ] 点「编辑文案」打开面板（canvas 下方）
 - [ ] 默认平铺表模式
@@ -40,6 +51,8 @@
 - [x] 中英模式「互相填写空白」按钮
 - [x] 选中控件 → 编辑文案 → 自动切树表格 + 滚动到该控件
 - [x] 关联文件 CATNls「编辑」→ 打开面板 + 滚动
+- [x] 列顺序：# → 英文 (EN) → 简体中文 (CN) → Key
+- [x] 平铺表模式第一列序号 1~n
 - [x] Key 列溢出隐藏，不重叠
 - [x] 点 ✕ 关闭面板
 
@@ -183,9 +196,12 @@ Vite：`/api/caa` → Node；`/api` → Python（**caa 规则在上**）。
 
 ### 空白对话框新建（Builder 模式）
 
-- [ ] 主页/CAA 页「新建对话框」按钮
-  - [ ] 创建空白 IR（仅 Dialog 壳，无子控件）
-  - [ ] 未保存状态，写入 Pinia / Tab store
+- [~] 主页/CAA 页「新建对话框」按钮（计划中）
+  - [~] 创建空白 IR（仅 Dialog 壳，无子控件）
+  - [~] 未保存状态，写入工作空间 `.phoenix/caa-drafts/`（JSON 文件，非 localStorage）
+  - [~] 欢迎页/最近工作空间显示「未保存的对话框」草稿列表
+  - [~] 保存到磁盘调用 `POST /api/caa/dialog/create` 生成 .CATDlg + .CATNls
+  - [~] 草稿 API：GET/POST/DELETE `/api/caa/drafts`
 - [ ] 左侧工具条：n 行 × 2 列控件面板
   - [ ] 可拖拽或点击添加：Label / Editor / SelectorList / Combo / Button …
   - [ ] 分组：基础控件 / 容器 / 装饰

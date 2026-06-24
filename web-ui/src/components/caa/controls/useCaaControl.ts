@@ -67,7 +67,7 @@ export function useCaaControl(
   /** 控件宽度：外部 resize > fillParent 伸缩 > TW 固有宽度 */
   const widthStyle = computed(() => {
     if (opts?.widthOverride?.value) return opts.widthOverride.value;
-    if (props.fillParent) return undefined;
+    if (props.fillParent) return { width: "100%", boxSizing: "border-box" as const };
     return caaControlWidthStyle(props.node.size?.textWidth);
   });
 

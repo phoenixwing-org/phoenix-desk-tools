@@ -14,8 +14,15 @@ const props = defineProps<{
 
 const { isSelected, onClick, onContextmenu, bindingFor } = useCaaControl(props);
 
+/** 过滤隐藏工具页（如 EditorOutInfo） */
+function isHiddenTabPage(node: CaaDialogNode): boolean {
+  const id = node.id.toLowerCase();
+  if (id.includes("outinfo") || id.includes("outputlog")) return true;
+  return false;
+}
+
 const tabPages = computed(() =>
-  props.node.children.filter((c) => c.type === "CATDlgTabPage"),
+  props.node.children.filter((c) => c.type === "CATDlgTabPage" && !isHiddenTabPage(c)),
 );
 
 const activeTabIndex = ref(0);

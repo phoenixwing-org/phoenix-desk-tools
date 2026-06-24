@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import type { CaaDialogListGroup, CaaDialogListItem } from "../../types/caaDialogList";
-import { shortCatDlgDir } from "../../utils/caaDialogDisplay";
-
 type TableRow = CaaDialogListItem;
 
 const props = defineProps<{
@@ -94,9 +92,18 @@ function onRowClick(row: TableRow) {
         highlight-current-row
         @row-click="onRowClick"
       >
-        <el-table-column label="文件名" min-width="168" show-overflow-tooltip>
+        <el-table-column label="#" width="52" align="center">
+          <template #default="{ $index }">
+            <span class="caa-row-index">{{ $index + 1 }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="文件名" min-width="180" show-overflow-tooltip>
           <template #default="{ row }">
-            <span class="mono caa-cell-file" :title="row.dialogName !== row.fileName ? row.dialogName : row.fileName">
+            <span
+              class="caa-cell-file-link"
+              :title="row.dialogName !== row.fileName ? row.dialogName : row.fileName"
+              @click.stop="onRowClick(row)"
+            >
               {{ row.fileName }}
             </span>
           </template>
@@ -104,13 +111,6 @@ function onRowClick(row: TableRow) {
         <el-table-column prop="groupKey" label="模块" width="148" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="caa-cell-module">{{ row.groupKey }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="目录" min-width="160" show-overflow-tooltip>
-          <template #default="{ row }">
-            <span class="mono caa-cell-path" :title="row.catDlgRel">
-              {{ shortCatDlgDir(row.catDlgRel) }}
-            </span>
           </template>
         </el-table-column>
         <el-table-column label="" width="56" align="center">
@@ -199,6 +199,31 @@ function onRowClick(row: TableRow) {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.caa-row-index {
+  color: #94a3b8;
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.caa-cell-file-link {
+  color: #2563eb;
+  font-size: 0.78rem;
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 0.15s, text-decoration 0.15s;
+}
+
+.caa-cell-file-link:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+.caa-row-active .caa-cell-file-link,
+.el-table__row:hover .caa-cell-file-link {
+  color: #1d4ed8;
+  text-decoration: underline;
 }
 
 .caa-cell-module {

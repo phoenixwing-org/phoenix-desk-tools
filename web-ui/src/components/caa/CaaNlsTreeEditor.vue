@@ -89,7 +89,10 @@ const store = useCaaDialogPageStore();
 
 // ── column resize ──
 
-/** 根据可见列动态计算百分比 */
+/** 序号列固定宽度 */
+const ROW_NUM_WIDTH = 48;
+
+/** 根据可见列动态计算百分比（剩余空间在 Key / EN / CN 间分配） */
 const colPct = computed(() => {
   const { ctrl, en, cn } = store.nlsColWidths;
   if (showCn.value && showEn.value) return { ctrl, en, cn }; // 三列
@@ -206,7 +209,7 @@ interface TreeRow {
   propLabel: string;
   leaf?: NlsTreeLeaf;
   group?: NlsTreeGroup;
-  cnValue: string;
+  cnValue?: string;
   indent: number; // 0=control header, 1=title, 2=group header, 3=group member
   isCollapsible: boolean;
   collapseKey: string;
@@ -401,20 +404,21 @@ const title = computed(() => {
       <table class="caa-nls-tree-table">
         <thead>
           <tr>
-            <th class="col-ctrl" :style="{ width: colPct.ctrl + '%' }">控件 / 属性</th>
+            <th class="col-row-num" :style="{ width: ROW_NUM_WIDTH + 'px' }">#</th>
             <th v-if="showEn" class="col-en" :style="{ width: colPct.en + '%' }">
               英文 (EN)<span class="col-resize-handle" @mousedown="onColResizeStart('en', $event)"></span>
             </th>
             <th v-if="showCn" class="col-cn" :style="{ width: colPct.cn + '%' }">
               简体中文 (CN)<span class="col-resize-handle" @mousedown="onColResizeStart('cn', $event)"></span>
             </th>
+            <th class="col-ctrl" :style="{ width: colPct.ctrl + '%' }">Key</th>
           </tr>
         </thead>
         <tbody>
           <template v-for="(row, ri) in treeRows" :key="ri">
             <!-- control header -->
             <tr v-if="row.indent === 0" class="row-ctrl-header" :data-nls-ctrl="row.control.nodeId">
-              <td :colspan="(showEn ? 1 : 0) + (showCn ? 1 : 0) + 1">
+              <td :colspan="(showEn ? 1 : 0) + (showCn ? 1 : 0) + 2">
                 <button class="ctrl-toggle-btn" @click="toggleControl(row.control.nodeId)">
                   <span class="arrow" :class="{ expanded: !collapsedControls.has(row.control.nodeId) }">▸</span>
                   <span class="ctrl-name mono">{{ row.control.nodeId }}</span>
@@ -425,11 +429,7 @@ const title = computed(() => {
             </tr>
             <!-- leaf row -->
             <tr v-else class="row-leaf" :class="`indent-${row.indent}`" :data-collapse-key="row.collapseKey">
-              <td class="col-ctrl">
-                <span v-if="row.isCollapsible" class="arrow small" :class="{ expanded: !collapsedGroups.has(row.collapseKey) }" @click="toggleGroup(row.collapseKey)">▸</span>
-                <span class="prop-label" :style="{ paddingLeft: (row.indent - 1) * 14 + 'px' }">{{ row.propLabel }}</span>
-                <span v-if="row.group?.allSameValue && row.group.members.length > 1" class="group-hint">({{ row.group.members.length }} 键)</span>
-              </td>
+              <td class="col-row-num cell-num">{{ ri + 1 }}</td>
               <td v-if="showEn" class="col-en" @click="row.group?.allSameValue && row.group.members.length > 1 ? commitGroupEdit(row.group, row.leaf?.value ?? '') : startEdit(row.leaf?.key ?? '', row.leaf?.value ?? '', 'en')">
                 <template v-if="!row.group?.allSameValue && row.leaf && isEditing(row.leaf.key, 'en')">
                   <input ref="inputRef" v-model="draft" class="edit-input" @keydown="onEditKeydown" @blur="commitEdit" />
@@ -440,13 +440,18 @@ const title = computed(() => {
                   </span>
                 </template>
               </td>
-              <td v-if="showCn" class="col-cn" @click="row.group?.allSameValue && row.group.members.length > 1 ? row.group.members.forEach(m => emit('update:value', m.key, row.cnValue, 'cn')) : startEdit(row.leaf?.key ?? '', row.cnValue, 'cn')">
+              <td v-if="showCn" class="col-cn" @click="row.group?.allSameValue && row.group.members.length > 1 ? row.group.members.forEach(m => emit('update:value', m.key, row.cnValue ?? '', 'cn')) : startEdit(row.leaf?.key ?? '', row.cnValue ?? '', 'cn')">
                 <template v-if="!row.group?.allSameValue && row.leaf && isEditing(row.leaf.key, 'cn')">
                   <input ref="inputRef" v-model="draft" class="edit-input" @keydown="onEditKeydown" @blur="commitEdit" />
                 </template>
                 <template v-else>
                   <span class="cell-value" :class="{ empty: !row.cnValue }">{{ row.cnValue || '（空）' }}</span>
                 </template>
+              </td>
+              <td class="col-ctrl">
+                <span v-if="row.isCollapsible" class="arrow small" :class="{ expanded: !collapsedGroups.has(row.collapseKey) }" @click="toggleGroup(row.collapseKey)">▸</span>
+                <span class="prop-label" :style="{ paddingLeft: (row.indent - 1) * 14 + 'px' }">{{ row.propLabel }}</span>
+                <span v-if="row.group?.allSameValue && row.group.members.length > 1" class="group-hint">({{ row.group.members.length }} 键)</span>
               </td>
             </tr>
           </template>
@@ -460,18 +465,19 @@ const title = computed(() => {
       <table class="caa-nls-flat-table">
         <thead>
           <tr>
-            <th class="col-key" :style="{ width: colPct.ctrl + '%' }">Key</th>
+            <th class="col-row-num" :style="{ width: ROW_NUM_WIDTH + 'px' }">#</th>
             <th v-if="showEn" class="col-en" :style="{ width: colPct.en + '%' }">
               英文 (EN)<span class="col-resize-handle" @mousedown="onColResizeStart('en', $event)"></span>
             </th>
             <th v-if="showCn" class="col-cn" :style="{ width: colPct.cn + '%' }">
               简体中文 (CN)<span class="col-resize-handle" @mousedown="onColResizeStart('cn', $event)"></span>
             </th>
+            <th class="col-key" :style="{ width: colPct.ctrl + '%' }">Key</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in tableRows" :key="row.key">
-            <td class="col-key mono small">{{ row.key }}</td>
+          <tr v-for="(row, ri) in tableRows" :key="row.key">
+            <td class="col-row-num cell-num">{{ ri + 1 }}</td>
             <td v-if="showEn" class="col-en" @click="startEdit(row.key, row.enValue, 'en')">
               <template v-if="isEditing(row.key, 'en')">
                 <input ref="inputRef" v-model="draft" class="edit-input" @keydown="onEditKeydown" @blur="commitEdit" />
@@ -484,6 +490,7 @@ const title = computed(() => {
               </template>
               <span v-else class="cell-value" :class="{ empty: !row.cnValue }">{{ row.cnValue || '（空）' }}</span>
             </td>
+            <td class="col-key mono small">{{ row.key }}</td>
           </tr>
         </tbody>
       </table>
@@ -538,6 +545,8 @@ td { padding: 4px 8px; border-bottom: 1px solid var(--border-light, #f1f5f9); ve
 .col-key { overflow: hidden; text-overflow: ellipsis; }
 .col-en { position: relative; }
 .col-cn { border-left: 1px solid var(--border, #e2e8f0); position: relative; }
+.col-row-num { width: 48px; min-width: 48px; text-align: center; }
+.cell-num { color: #94a3b8; font-size: 0.72rem; font-variant-numeric: tabular-nums; }
 td.col-key { white-space: nowrap; }
 
 /* 列拖拽手柄 */
