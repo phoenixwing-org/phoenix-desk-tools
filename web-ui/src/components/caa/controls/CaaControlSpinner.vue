@@ -34,8 +34,8 @@ function stepDown(e: MouseEvent) { e.stopPropagation(); spinnerValue.value--; }
       readonly
     />
     <span class="caa-spinner-btns">
-      <span class="caa-spinner-arrow caa-spinner-arrow--up" @mousedown.prevent="stepUp" />
-      <span class="caa-spinner-arrow caa-spinner-arrow--down" @mousedown.prevent="stepDown" />
+      <span class="caa-spinner-arrow caa-spinner-arrow--up" @click.stop="stepUp" />
+      <span class="caa-spinner-arrow caa-spinner-arrow--down" @click.stop="stepDown" />
     </span>
   </div>
 </template>

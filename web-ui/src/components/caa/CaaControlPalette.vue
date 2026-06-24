@@ -56,7 +56,7 @@ const groups: PaletteGroup[] = [
 function onDragStart(e: DragEvent, type: string) {
   if (!e.dataTransfer) return;
   e.dataTransfer.effectAllowed = "copy";
-  e.dataTransfer.setData("text/plain", `caa:${type}`);
+  e.dataTransfer.setData("text/plain", `caa:COPY:${type}`);
 }
 </script>
 

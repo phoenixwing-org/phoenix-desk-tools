@@ -11,6 +11,7 @@ import PageHeader from "../components/PageHeader.vue";
 import CaaDialogEditorView from "../components/caa/CaaDialogEditorView.vue";
 import CaaNlsSupplementDialog from "../components/caa/CaaNlsSupplementDialog.vue";
 import CaaControlContextMenu from "../components/caa/CaaControlContextMenu.vue";
+import CaaDropOverlay from "../components/caa/CaaDropOverlay.vue";
 import CaaNlsTreeEditor from "../components/caa/CaaNlsTreeEditor.vue";
 import CaaDialogRelatedFilesTable from "../components/caa/CaaDialogRelatedFilesTable.vue";
 import type { NlsSupplementDirection } from "../components/caa/CaaNlsSupplementDialog.vue";
@@ -40,7 +41,7 @@ import { useCaaDialogPageStore } from "../stores/caaDialogPage";
 import { storeToRefs } from "pinia";
 import type { CaaDialogIr, CaaDialogNode } from "../types/caaDialogIr";
 import { dialogNameFromCatDlgRel } from "../utils/caaDialogDisplay";
-import { addChildNode, findCaaNode, insertGridRow, insertGridCol, nlsFlatMapsEqual } from "../utils/caaDialogTree";
+import { addChildNode, findCaaNode, insertGridRow, insertGridCol, nlsFlatMapsEqual, renumberGrid } from "../utils/caaDialogTree";
 import { createBlankCaaDialogIr } from "../utils/createBlankCaaDialogIr";
 
 const PAGE_ID = CAA_EDITOR_PAGE_ID;
@@ -570,6 +571,8 @@ function commitNlsEdit(key: string, value: string, target: CaaNlsEditTarget) {
   syncToSidebar();
 }
 
+const dropIndicator = ref<{ rect: { left: number; top: number; width: number; height: number } | null; edge: "inside" | "right" | "bottom" | "left" | "top" }>({ rect: null, edge: "inside" });
+
 const contextMenuVisible = ref(false);
 const contextMenuItems = ref<CaaContextMenuItem[]>([]);
 const contextMenuPosition = ref({ x: 0, y: 0 });
@@ -644,16 +647,37 @@ provide(CAA_CONTROL_KEY, {
   toggleGridRowResize,
   toggleGridColResize,
   editMode: storeToRefs(store).editMode,
+  // ── Builder drop indicator ──
+  dropIndicator,
   // ── Builder ──
-  addControl(containerId: string, type: string, row: number, col: number) {
+  addControl(containerId: string, typeOrNodeId: string, row: number, col: number) {
     const root = localIr.value?.root;
     if (!root) return "";
     const container = findCaaNode(root, containerId);
     if (!container) return "";
-    const node = addChildNode(container, type, { row, col });
+    // 如果是已存在的节点 ID（跨容器移动），直接复用
+    const existing = findCaaNode(root, typeOrNodeId);
+    if (existing) {
+      existing.grid = { row, col, rowSpan: 1, colSpan: 1 };
+      existing.father = containerId;
+      container.children.push(existing);
+    } else {
+      addChildNode(container, typeOrNodeId, { row, col });
+    }
+    renumberGrid(container);
     markIrDirty();
     syncToSidebar();
-    return node.id;
+    return typeOrNodeId;
+  },
+  removeControl(containerId: string, nodeId: string) {
+    const root = localIr.value?.root;
+    if (!root) return;
+    const container = findCaaNode(root, containerId);
+    if (!container) return;
+    container.children = container.children.filter((c) => c.id !== nodeId);
+    renumberGrid(container);
+    markIrDirty();
+    syncToSidebar();
   },
   insertRow(containerId: string, beforeRow: number) {
     const root = localIr.value?.root;
@@ -661,6 +685,7 @@ provide(CAA_CONTROL_KEY, {
     const container = findCaaNode(root, containerId);
     if (!container) return;
     insertGridRow(container, beforeRow);
+    renumberGrid(container);
     markIrDirty();
     syncToSidebar();
   },
@@ -670,6 +695,19 @@ provide(CAA_CONTROL_KEY, {
     const container = findCaaNode(root, containerId);
     if (!container) return;
     insertGridCol(container, beforeCol);
+    renumberGrid(container);
+    markIrDirty();
+    syncToSidebar();
+  },
+  // ── 原子替换子节点（MVC：计算→apply 一次完成）──
+  setChildren(containerId: string, children: CaaDialogNode[], selectId?: string) {
+    const root = localIr.value?.root;
+    if (!root) return;
+    const container = findCaaNode(root, containerId);
+    if (!container) return;
+    container.children = children;
+    renumberGrid(container);
+    if (selectId) localSelectedId.value = selectId;
     markIrDirty();
     syncToSidebar();
   },
@@ -1205,6 +1243,9 @@ onActivated(() => {
     </el-alert>
 
     <CaaDialogEditorView :has-parsed="hasParsed" />
+
+    <!-- 拖放指示器（页面级 position:fixed，最高层级，唯一视觉反馈） -->
+    <CaaDropOverlay />
 
     <CaaDialogRelatedFilesTable v-if="localIr" :ir="localIr" />
 

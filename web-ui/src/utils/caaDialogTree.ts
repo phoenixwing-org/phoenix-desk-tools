@@ -113,20 +113,30 @@ export function addChildNode(container: CaaDialogNode, type: string, grid: { row
   return node;
 }
 
-/** 插入新行：beforeRow 及之后的行号 +1 */
+/** 插入新行：beforeRow 及之后的行号 +1；跨越插入点的 rowSpan +1 */
 export function insertGridRow(container: CaaDialogNode, beforeRow: number): void {
   for (const child of container.children) {
-    if (child.grid && child.grid.row >= beforeRow) {
-      child.grid = { ...child.grid, row: child.grid.row + 1 };
+    if (!child.grid) continue;
+    const g = child.grid;
+    if (g.row >= beforeRow) {
+      child.grid = { ...g, row: g.row + 1 };
+    } else if (g.row + g.rowSpan > beforeRow) {
+      // 控件跨越插入点 → rowSpan 增长
+      child.grid = { ...g, rowSpan: g.rowSpan + 1 };
     }
   }
 }
 
-/** 插入新列：beforeCol 及之后的列号 +1 */
+/** 插入新列：beforeCol 及之后的列号 +1；跨越插入点的 colSpan +1 */
 export function insertGridCol(container: CaaDialogNode, beforeCol: number): void {
   for (const child of container.children) {
-    if (child.grid && child.grid.col >= beforeCol) {
-      child.grid = { ...child.grid, col: child.grid.col + 1 };
+    if (!child.grid) continue;
+    const g = child.grid;
+    if (g.col >= beforeCol) {
+      child.grid = { ...g, col: g.col + 1 };
+    } else if (g.col + g.colSpan > beforeCol) {
+      // 控件跨越插入点 → colSpan 增长
+      child.grid = { ...g, colSpan: g.colSpan + 1 };
     }
   }
 }
@@ -137,4 +147,50 @@ export function isContainerNode(node: CaaDialogNode): boolean {
     node.type === "CATDlgFrame" ||
     node.type === "CATDlgContainer" ||
     node.type === "CATDlgTabPage";
+}
+
+/** 压缩空白行/列：移除没有任何控件的行和列，重新编号 */
+export function renumberGrid(container: CaaDialogNode): void {
+  if (!container.children.length) return;
+
+  // 找到最大行列
+  let maxRow = 0, maxCol = 0;
+  for (const c of container.children) {
+    if (!c.grid) continue;
+    maxRow = Math.max(maxRow, c.grid.row + c.grid.rowSpan);
+    maxCol = Math.max(maxCol, c.grid.col + c.grid.colSpan);
+  }
+
+  // 检查哪些行被占用
+  const rowUsed = new Set<number>();
+  const colUsed = new Set<number>();
+  for (const c of container.children) {
+    if (!c.grid) continue;
+    for (let r = c.grid.row; r < c.grid.row + c.grid.rowSpan; r++) rowUsed.add(r);
+    for (let co = c.grid.col; co < c.grid.col + c.grid.colSpan; co++) colUsed.add(co);
+  }
+
+  // 建立行映射：旧行号 → 新行号
+  const rowMap = new Map<number, number>();
+  let newRow = 0;
+  for (let r = 0; r < maxRow; r++) {
+    if (rowUsed.has(r)) { rowMap.set(r, newRow); newRow++; }
+  }
+
+  // 建立列映射
+  const colMap = new Map<number, number>();
+  let newCol = 0;
+  for (let c = 0; c < maxCol; c++) {
+    if (colUsed.has(c)) { colMap.set(c, newCol); newCol++; }
+  }
+
+  // 应用映射
+  for (const child of container.children) {
+    if (!child.grid) continue;
+    child.grid = {
+      ...child.grid,
+      row: rowMap.get(child.grid.row) ?? child.grid.row,
+      col: colMap.get(child.grid.col) ?? child.grid.col,
+    };
+  }
 }

@@ -558,9 +558,16 @@ dialogRoutes.post("/create", async (c) => {
       return c.json({ error: `文件已存在：${dialogName}.CATDlg 或 .CATNls` }, 409);
     }
 
-    // 生成简易 .CATDlg
-    const catDlgText = `${dialogName} CATDlg {\n}\n`;
-    await fs.writeFile(catDlgAbs, catDlgText, "utf8");
+    // 生成合法的 .CATDlg
+    const style = (ir.root as Record<string, unknown>)?.style as string[] | undefined;
+    const styleStr = style?.length ? style.join("|") : "CATDlgWndBtn";
+    const catDlgLines: string[] = [];
+    catDlgLines.push(`${dialogName} CATDlgDialog`);
+    catDlgLines.push("{");
+    catDlgLines.push(`  STYLE = ${styleStr};`);
+    catDlgLines.push("}");
+    catDlgLines.push("");
+    await fs.writeFile(catDlgAbs, catDlgLines.join("\n"), "utf8");
 
     // 生成 .CATNls（从 IR 收集 NLS 键）
     const nlsKeys: Record<string, string> = {};

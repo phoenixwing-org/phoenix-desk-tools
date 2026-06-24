@@ -202,10 +202,10 @@ Vite：`/api/caa` → Node；`/api` → Python（**caa 规则在上**）。
   - [x] 欢迎页/最近工作空间显示「未保存的对话框」草稿列表
   - [x] 保存到磁盘调用 `POST /api/caa/dialog/create` 生成 .CATDlg + .CATNls
   - [x] 草稿 API：GET/POST/DELETE `/api/caa/dialog/drafts`
-- [ ] 左侧工具条：n 行 × 2 列控件面板
-  - [ ] 可拖拽或点击添加：Label / Editor / SelectorList / Combo / Button …
-  - [ ] 分组：基础控件 / 容器 / 装饰
-- [ ] 右侧对话框画布：实时预览 + Grid 编辑
+- [x] 左侧工具条：n 行 × 2 列控件面板
+  - [x] 可拖拽或点击添加：Label / Editor / SelectorList / Combo / Button …
+  - [x] 分组：基础控件 / 容器 / 装饰
+- [x] 右侧对话框画布：实时预览 + Grid 编辑
 - [ ] 保存：生成 .CATDlg + .CATNls 写回磁盘
 
 ## C2b · 对话框索引（`phoenix_caa_*`）
