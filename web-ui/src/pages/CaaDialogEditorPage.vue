@@ -9,22 +9,30 @@ import {
 } from "@phoenix/catdlg-core";
 import PageHeader from "../components/PageHeader.vue";
 import CaaDialogEditorView from "../components/caa/CaaDialogEditorView.vue";
-import CaaCatNlsEditDialog from "../components/caa/CaaCatNlsEditDialog.vue";
-import type { CaaNlsLocaleOption } from "../components/caa/CaaCatNlsEditDialog.vue";
+import CaaNlsSupplementDialog from "../components/caa/CaaNlsSupplementDialog.vue";
+import CaaControlContextMenu from "../components/caa/CaaControlContextMenu.vue";
+import CaaNlsTreeEditor from "../components/caa/CaaNlsTreeEditor.vue";
+import CaaDialogRelatedFilesTable from "../components/caa/CaaDialogRelatedFilesTable.vue";
+import type { NlsSupplementDirection } from "../components/caa/CaaNlsSupplementDialog.vue";
+import type { CaaNlsLocaleOption, CaaNlsDisplayMode } from "../components/caa/CaaCatNlsEditDialog.vue";
 import {
   createCaaDialogLocaleNls,
   fetchCaaHealth,
   parseCaaDialog,
   saveCaaDialogNls,
+  saveCaaDialog,
+  type CaaDialogGridPatch,
 } from "../api/caaDialog";
 import { CAA_EDITOR_PAGE_ID } from "../constants/caaPages";
 import { useCaaDialogPropertySheet } from "../composables/useCaaDialogPropertySheet";
 import { CAA_NLS_EDIT_KEY, CAA_NLS_SESSION_KEY, type CaaNlsEditTarget } from "../composables/caaNlsEdit";
+import { CAA_CONTROL_KEY, type CaaContextMenuItem } from "../composables/useCaaControlContext";
 import { useAppShell } from "../composables/useAppShell";
 import { usePageSession } from "../composables/usePageSession";
 import { usePageSummary } from "../composables/usePageSummary";
 import { useCaaDialogPageStore } from "../stores/caaDialogPage";
-import type { CaaDialogIr } from "../types/caaDialogIr";
+import { storeToRefs } from "pinia";
+import type { CaaDialogIr, CaaDialogNode } from "../types/caaDialogIr";
 import { dialogNameFromCatDlgRel } from "../utils/caaDialogDisplay";
 import { findCaaNode, nlsFlatMapsEqual } from "../utils/caaDialogTree";
 
@@ -37,7 +45,30 @@ const props = defineProps<{
 const shell = useAppShell();
 const store = useCaaDialogPageStore();
 
-useCaaDialogPropertySheet(PAGE_ID);
+useCaaDialogPropertySheet(PAGE_ID, {
+  onNlsChange(change) {
+    if (!localIr.value) return;
+    const node = findCaaNode(localIr.value.root, change.nodeId);
+    if (!node) return;
+    // 更新 IR 树（画布即时反映）
+    applyNlsPropToNode(node, change.prop, change.value, change.columnIndex);
+    if (change.nodeId === localIr.value.root.id && change.prop === "title") {
+      localIr.value.title = change.value;
+    }
+    // 写入当前活动 locale 的 flat map
+    if (nlsEditorLocale.value === "default") {
+      currentNlsFlat.value = { ...currentNlsFlat.value, [change.key]: change.value };
+    } else {
+      const id = nlsEditorLocale.value;
+      localeNlsFlats.value = {
+        ...localeNlsFlats.value,
+        [id]: { ...(localeNlsFlats.value[id] ?? {}), [change.key]: change.value },
+      };
+    }
+    syncTabDirty();
+    syncToSidebar();
+  },
+});
 
 const workspacePath = computed(() => shell.workspacePath.value.trim());
 
@@ -54,7 +85,13 @@ const currentNlsFlat = ref<Record<string, string>>({});
 const nlsSourceText = ref("");
 const nlsEditorOpen = ref(false);
 const nlsEditorLocale = ref("default");
+const nlsDisplayMode = ref<CaaNlsDisplayMode>("en");
+const nlsTreeEditorOpen = ref(false);
 const creatingChinese = ref(false);
+const supplementDialogOpen = ref(false);
+const supplementDirection = ref<NlsSupplementDirection>("en-to-cn");
+const supplementMissingKeys = ref<string[]>([]);
+const supplementing = ref(false);
 const localeNlsFlats = ref<Record<string, Record<string, string>>>({});
 const localeBaselineFlats = ref<Record<string, Record<string, string>>>({});
 const localeSourceTexts = ref<Record<string, string>>({});
@@ -111,6 +148,37 @@ const nlsLocaleOptions = computed((): CaaNlsLocaleOption[] => {
   return opts;
 });
 
+const currentNlsPath = computed(() => {
+  const opt = nlsLocaleOptions.value.find((o) => o.id === nlsEditorLocale.value);
+  const rel = opt?.catNlsRel ?? "";
+  if (!rel) return "";
+  return `${opt!.label} · ${rel}`;
+});
+
+const nlsKeyCountMismatch = computed<{
+  en: number;
+  cn: number;
+  missingInCn: string[];
+  missingInEn: string[];
+} | null>(() => {
+  if (!hasChineseLocale.value) return null;
+  const enFlat = currentNlsFlat.value;
+  const cnFlat = localeNlsFlats.value[CAA_NLS_LOCALE_SIMPLIFIED_CHINESE] ?? {};
+  const enKeys = Object.keys(enFlat);
+  const cnKeys = Object.keys(cnFlat);
+  if (enKeys.length === cnKeys.length) return null;
+  const cnKeySet = new Set(cnKeys);
+  const enKeySet = new Set(enKeys);
+  return {
+    en: enKeys.length,
+    cn: cnKeys.length,
+    missingInCn: enKeys.filter((k) => !cnKeySet.has(k)),
+    missingInEn: cnKeys.filter((k) => !enKeySet.has(k)),
+  };
+});
+
+const hasNlsKeyMismatch = computed(() => nlsKeyCountMismatch.value !== null);
+
 const nlsEditorRows = computed(() => {
   const flat =
     nlsEditorLocale.value === "default"
@@ -121,13 +189,31 @@ const nlsEditorRows = computed(() => {
     .map((key) => ({ key, value: flat[key] ?? "" }));
 });
 
-function setNlsFlatKey(key: string, value: string) {
+const enNlsRows = computed(() => {
+  const flat = currentNlsFlat.value;
+  return Object.keys(flat)
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
+    .map((key) => ({ key, value: flat[key] ?? "" }));
+});
+
+const cnNlsRows = computed(() => {
+  const flat = localeNlsFlats.value[CAA_NLS_LOCALE_SIMPLIFIED_CHINESE] ?? {};
+  return Object.keys(flat)
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
+    .map((key) => ({ key, value: flat[key] ?? "" }));
+});
+
+function setNlsFlatKey(key: string, value: string, locale?: "en" | "cn") {
   const trimmed = value.trim();
-  if (nlsEditorLocale.value !== "default") {
-    const locale = nlsEditorLocale.value;
+  const targetLocale = locale === "cn"
+    ? CAA_NLS_LOCALE_SIMPLIFIED_CHINESE
+    : locale === "en" ? "default" : nlsEditorLocale.value;
+
+  if (targetLocale !== "default") {
+    const id = targetLocale;
     localeNlsFlats.value = {
       ...localeNlsFlats.value,
-      [locale]: { ...(localeNlsFlats.value[locale] ?? {}), [key]: trimmed },
+      [id]: { ...(localeNlsFlats.value[id] ?? {}), [key]: trimmed },
     };
     syncTabDirty();
     return;
@@ -151,6 +237,12 @@ function resolveLocaleIdForRel(rel: string): string {
   return "default";
 }
 
+const nlsInitialLocaleMode = computed<"en" | "cn" | "both">(() => {
+  if (nlsEditorLocale.value === CAA_NLS_LOCALE_SIMPLIFIED_CHINESE) return "cn";
+  if (hasChineseLocale.value) return "both";
+  return "en";
+});
+
 function openCatNlsEditor(repoRelPath?: string) {
   const rel = repoRelPath?.trim() || primaryCatNlsRel.value;
   if (!rel) return;
@@ -164,7 +256,8 @@ function openCatNlsEditor(repoRelPath?: string) {
     return;
   }
   nlsEditorLocale.value = localeId;
-  nlsEditorOpen.value = true;
+  nlsDisplayMode.value = localeId === "default" ? "en" : "cn";
+  nlsTreeEditorOpen.value = true;
 }
 
 async function createChineseLocale() {
@@ -184,7 +277,14 @@ async function createChineseLocale() {
       localeDir: CAA_NLS_LOCALE_SIMPLIFIED_CHINESE,
     });
     const id = CAA_NLS_LOCALE_SIMPLIFIED_CHINESE;
-    localeNlsFlats.value = { ...localeNlsFlats.value, [id]: { ...result.nlsKeys } };
+    // 用英文值填充中文初始值：修改的修改，不修改的保留英文原值
+    const enFlat = currentNlsFlat.value;
+    const filledKeys: Record<string, string> = {};
+    for (const key of Object.keys(result.nlsKeys)) {
+      filledKeys[key] = enFlat[key] ?? "";
+    }
+    localeNlsFlats.value = { ...localeNlsFlats.value, [id]: filledKeys };
+    // baseline 保持空值（磁盘状态），使填充后的值全部标记为 dirty
     localeBaselineFlats.value = { ...localeBaselineFlats.value, [id]: { ...result.nlsKeys } };
     localeSourceTexts.value = { ...localeSourceTexts.value, [id]: result.sourceText };
     if (!ir.sources.nlsLocales) ir.sources.nlsLocales = {};
@@ -208,8 +308,9 @@ async function createChineseLocale() {
       };
     }
     nlsEditorLocale.value = id;
+    nlsDisplayMode.value = "cn";
     nlsEditorOpen.value = true;
-    ElMessage.success("已创建简体中文翻译文件");
+    ElMessage.success("已创建简体中文翻译文件，英文值已填入");
     shell.appendLog(`[CAA 对话框] 已创建 ${result.catNlsRel}`, { source: PAGE_ID });
     syncToSidebar();
   } catch (e) {
@@ -218,6 +319,108 @@ async function createChineseLocale() {
     shell.appendLog(`[CAA 对话框] 创建中文 NLS 失败：${msg}`, { source: PAGE_ID, open: true });
   } finally {
     creatingChinese.value = false;
+  }
+}
+
+function autoFillNlsCompare() {
+  const enFlat = currentNlsFlat.value;
+  const cnFlat = localeNlsFlats.value[CAA_NLS_LOCALE_SIMPLIFIED_CHINESE] ?? {};
+  if (!Object.keys(enFlat).length && !Object.keys(cnFlat).length) return;
+
+  const allKeys = new Set([...Object.keys(enFlat), ...Object.keys(cnFlat)]);
+  let enChanged = false;
+  let cnChanged = false;
+  const newEn = { ...enFlat };
+  const newCn = { ...cnFlat };
+
+  for (const key of allKeys) {
+    const enVal = (enFlat[key] ?? "").trim();
+    const cnVal = (cnFlat[key] ?? "").trim();
+    if (enVal && !cnVal) {
+      newCn[key] = enVal;
+      cnChanged = true;
+    } else if (cnVal && !enVal) {
+      newEn[key] = cnVal;
+      if (localIr.value) {
+        applyNlsKeyToRoot(localIr.value.root, key, cnVal);
+        if (key === "Title") localIr.value.title = cnVal;
+      }
+      enChanged = true;
+    }
+  }
+
+  if (enChanged) currentNlsFlat.value = newEn;
+  if (cnChanged) {
+    localeNlsFlats.value = {
+      ...localeNlsFlats.value,
+      [CAA_NLS_LOCALE_SIMPLIFIED_CHINESE]: newCn,
+    };
+  }
+
+  if (enChanged || cnChanged) {
+    syncTabDirty();
+    syncToSidebar();
+    const parts: string[] = [];
+    if (enChanged) parts.push("英文");
+    if (cnChanged) parts.push("简体中文");
+    ElMessage.success(`已自动填写空缺值 → ${parts.join("、")}`);
+  } else {
+    ElMessage.info("没有需要填写的空缺值");
+  }
+}
+
+function openSupplementDialog() {
+  const m = nlsKeyCountMismatch.value;
+  if (!m) return;
+  if (m.missingInCn.length > 0) {
+    supplementDirection.value = "en-to-cn";
+    supplementMissingKeys.value = m.missingInCn;
+  } else {
+    supplementDirection.value = "cn-to-en";
+    supplementMissingKeys.value = m.missingInEn;
+  }
+  supplementDialogOpen.value = true;
+}
+
+function supplementNlsKeys(payload: { keys: string[]; copyValues: boolean }) {
+  const ir = localIr.value;
+  if (!ir) return;
+  supplementing.value = true;
+  try {
+    if (supplementDirection.value === "en-to-cn") {
+      const source = currentNlsFlat.value;
+      const target = { ...(localeNlsFlats.value[CAA_NLS_LOCALE_SIMPLIFIED_CHINESE] ?? {}) };
+      for (const key of payload.keys) {
+        target[key] = payload.copyValues ? (source[key] ?? "") : "";
+      }
+      localeNlsFlats.value = {
+        ...localeNlsFlats.value,
+        [CAA_NLS_LOCALE_SIMPLIFIED_CHINESE]: target,
+      };
+    } else {
+      const source = localeNlsFlats.value[CAA_NLS_LOCALE_SIMPLIFIED_CHINESE] ?? {};
+      const updated = { ...currentNlsFlat.value };
+      for (const key of payload.keys) {
+        const val = payload.copyValues ? (source[key] ?? "") : "";
+        updated[key] = val;
+        applyNlsKeyToRoot(ir.root, key, val);
+        if (key === "Title") ir.title = val;
+      }
+      currentNlsFlat.value = updated;
+    }
+    supplementDialogOpen.value = false;
+    syncTabDirty();
+    syncToSidebar();
+    ElMessage.success(`已补全 ${payload.keys.length} 个键`);
+    shell.appendLog(
+      `[CAA 对话框] 已补全 ${payload.keys.length} 个 NLS 键（${supplementDirection.value}）`,
+      { source: PAGE_ID },
+    );
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    ElMessage.error(msg);
+  } finally {
+    supplementing.value = false;
   }
 }
 
@@ -231,12 +434,7 @@ const canCreateChinese = computed(
 );
 
 const canSaveNls = computed(
-  () =>
-    hasParsed.value &&
-    !openIsDemo.value &&
-    Boolean(localIr.value?.sources.catNls) &&
-    Boolean(workspacePath.value) &&
-    nlsIsDirtyAll(),
+  () => hasParsed.value && !openIsDemo.value && Boolean(workspacePath.value),
 );
 
 const headSummary = computed(() => {
@@ -256,9 +454,20 @@ function isActiveTab(): boolean {
   return Boolean(props.workbenchTabId && shell.activeTabId.value === props.workbenchTabId);
 }
 
+const irDirty = ref(false);
+
+function anyDirty(): boolean {
+  return nlsIsDirtyAll() || irDirty.value;
+}
+
+function markIrDirty() {
+  irDirty.value = true;
+  syncTabDirty();
+}
+
 function syncTabDirty() {
   if (!props.workbenchTabId) return;
-  shell.updateTab(props.workbenchTabId, { dirty: nlsIsDirtyAll() });
+  shell.updateTab(props.workbenchTabId, { dirty: anyDirty() });
 }
 
 function initNlsSession(ir: CaaDialogIr) {
@@ -311,14 +520,100 @@ function commitNlsEdit(key: string, value: string, target: CaaNlsEditTarget) {
   if (!localIr.value) return;
   const node = findCaaNode(localIr.value.root, target.nodeId);
   if (!node) return;
+  // 更新 IR 树（画布即时反映）
   applyNlsPropToNode(node, target.prop, value, target.columnIndex);
-  currentNlsFlat.value = { ...currentNlsFlat.value, [key]: value };
   if (target.nodeId === localIr.value.root.id && target.prop === "title") {
     localIr.value.title = value;
+  }
+  // 写入当前活动 locale 的 flat map
+  if (nlsEditorLocale.value === "default") {
+    currentNlsFlat.value = { ...currentNlsFlat.value, [key]: value };
+  } else {
+    const id = nlsEditorLocale.value;
+    localeNlsFlats.value = {
+      ...localeNlsFlats.value,
+      [id]: { ...(localeNlsFlats.value[id] ?? {}), [key]: value },
+    };
   }
   syncTabDirty();
   syncToSidebar();
 }
+
+const contextMenuVisible = ref(false);
+const contextMenuItems = ref<CaaContextMenuItem[]>([]);
+const contextMenuPosition = ref({ x: 0, y: 0 });
+const contextMenuTargetId = ref<string | null>(null);
+
+function showContextMenu(nodeId: string, items: CaaContextMenuItem[], pos: { x: number; y: number }) {
+  contextMenuTargetId.value = nodeId;
+  contextMenuItems.value = items;
+  contextMenuPosition.value = pos;
+  contextMenuVisible.value = true;
+}
+
+function hideContextMenu() {
+  contextMenuVisible.value = false;
+  contextMenuTargetId.value = null;
+}
+
+function toggleGridRowResize(containerId: string, rowIndex: number) {
+  const root = localIr.value?.root;
+  if (!root) return;
+  const node = findCaaNode(root, containerId);
+  if (!node) return;
+  const gl = node.gridLayout ?? {};
+  const cur = [...(gl.rowResizable ?? [])];
+  const idx = cur.indexOf(rowIndex);
+  if (idx >= 0) cur.splice(idx, 1);
+  else cur.push(rowIndex);
+  cur.sort((a, b) => a - b);
+  node.gridLayout = { ...gl, rowResizable: cur };
+  markIrDirty();
+  syncToSidebar();
+}
+
+function toggleGridColResize(containerId: string, colIndex: number) {
+  const root = localIr.value?.root;
+  if (!root) return;
+  const node = findCaaNode(root, containerId);
+  if (!node) return;
+  const gl = node.gridLayout ?? {};
+  const cur = [...(gl.colResizable ?? [])];
+  const idx = cur.indexOf(colIndex);
+  if (idx >= 0) cur.splice(idx, 1);
+  else cur.push(colIndex);
+  cur.sort((a, b) => a - b);
+  node.gridLayout = { ...gl, colResizable: cur };
+  markIrDirty();
+  syncToSidebar();
+}
+
+const canEditNls = computed(
+  () => hasParsed.value && !openIsDemo.value && Boolean(localIr.value?.sources.catNls),
+);
+
+function handleControlSelect(nodeId: string) {
+  localSelectedId.value = nodeId;
+  store.setSelectedId(nodeId);
+}
+
+provide(CAA_CONTROL_KEY, {
+  get dialogRoot() { return localIr.value?.root ?? null; },
+  selectedId: localSelectedId,
+  select: handleControlSelect,
+  canEdit: canEditNls,
+  activeLocale: nlsEditorLocale,
+  commitNls: commitNlsEdit,
+  showContextMenu,
+  hideContextMenu,
+  contextMenuVisible,
+  contextMenuItems,
+  contextMenuPosition,
+  contextMenuTargetId,
+  toggleGridRowResize,
+  toggleGridColResize,
+  editMode: storeToRefs(store).editMode,
+});
 
 const nlsEditCtx = {
   enabled: computed(
@@ -430,12 +725,81 @@ async function parseDialog() {
   }
 }
 
-async function saveNls() {
+// ── 开发用：最小测试 IR（只有 Group + MultiList + Button）──
+
+function loadTestDlg() {
+  const root: CaaDialogNode = {
+    id: "TestDlg",
+    type: "CATDlgDialog",
+    style: ["CATDlgWndBtn"],
+    gridLayout: { rowResizable: [0], colResizable: [0] },
+    children: [
+      {
+        id: "FrameGroup",
+        type: "CATDlgFrame",
+        grid: { row: 0, col: 0, rowSpan: 1, colSpan: 1 },
+        gridLayout: { rowResizable: [0], colResizable: [0] },
+        nls: { title: " Test Group " },
+        children: [
+          {
+            id: "MultiListInGroup",
+            type: "CATDlgMultiList",
+            grid: { row: 0, col: 0, rowSpan: 1, colSpan: 1 },
+            size: { textHeight: 5, textWidth: 20, columnCount: 3 },
+            nls: { title: "表格", columnTitles: ["A", "B", "C"] },
+            children: [],
+          },
+          {
+            id: "BtnInGroup",
+            type: "CATDlgPushButton",
+            grid: { row: 1, col: 0, rowSpan: 1, colSpan: 1 },
+            nls: { title: "Test Button" },
+            children: [],
+          },
+        ],
+      },
+    ],
+  };
+
+  localIr.value = {
+    schemaVersion: 1,
+    dialogName: "TestDlg",
+    title: "Test Group Dialog",
+    root,
+    sources: { catDlg: "__test__/TestDlg.CATDlg" },
+  };
+  localSelectedId.value = "TestDlg";
+  hasParsed.value = true;
+  openIsDemo.value = false;
+  syncToSidebar();
+  ElMessage.success("已加载测试 DLG（Group + MultiList + Button）");
+}
+
+/** 收集 IR 中所有容器的 gridLayout → patch 列表 */
+function collectGridPatches(): CaaDialogGridPatch[] {
+  const patches: CaaDialogGridPatch[] = [];
+  function walk(n: CaaDialogNode) {
+    if (n.gridLayout) {
+      patches.push({
+        nodeId: n.id,
+        rowResizable: n.gridLayout.rowResizable,
+        colResizable: n.gridLayout.colResizable,
+      });
+    }
+    for (const c of n.children) walk(c);
+  }
+  if (localIr.value?.root) walk(localIr.value.root);
+  return patches;
+}
+
+async function saveNls(opts?: { gridSave?: boolean }) {
+  const doGridSave = opts?.gridSave !== false;
   const ir = localIr.value;
   const catNlsRel = ir?.sources.catNls?.trim();
+  const catDlgRel = ir?.sources.catDlg?.trim();
   const ws = workspacePath.value;
-  if (!ir || !catNlsRel || !ws) {
-    ElMessage.warning("无法保存：缺少工作空间或 .CATNls 路径");
+  if (!ir || !ws) {
+    ElMessage.warning("无法保存：缺少工作空间");
     return;
   }
   if (openIsDemo.value) {
@@ -443,6 +807,7 @@ async function saveNls() {
     return;
   }
   saving.value = true;
+  let savedCount = 0;
   try {
     if (nlsIsDirty()) {
       shell.appendLog(`[CAA 对话框] 保存 .CATNls → ${catNlsRel}`, { source: PAGE_ID, open: true });
@@ -456,6 +821,7 @@ async function saveNls() {
       if (ir.parseMeta) ir.parseMeta.catNlsSourceText = result.sourceText;
       baselineNlsFlat.value = { ...currentNlsFlat.value };
       shell.appendLog(`[CAA 对话框] 已写入 ${result.absPath}`, { source: PAGE_ID });
+      savedCount++;
     }
 
     const nlsLocales = ir.sources.nlsLocales ?? {};
@@ -485,10 +851,35 @@ async function saveNls() {
         };
       }
       shell.appendLog(`[CAA 对话框] 已写入 ${result.absPath}`, { source: PAGE_ID });
+      savedCount++;
     }
 
     syncTabDirty();
-    ElMessage.success("已保存 .CATNls");
+    if (savedCount > 0) {
+      ElMessage.success(`已保存 ${savedCount} 个 .CATNls`);
+    }
+
+    // Grid 布局写回 .CATDlg（仅在完整保存时）
+    if (doGridSave && irDirty.value && catDlgRel) {
+      try {
+        const patches = collectGridPatches();
+        if (patches.length > 0) {
+          const result = await saveCaaDialog({ workspaceRoot: ws, catDlgRel, patches });
+          shell.appendLog(`[CAA 对话框] Grid 布局已写入 ${result.absPath}`, { source: PAGE_ID });
+          irDirty.value = false;
+          savedCount++;
+          syncTabDirty();
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        shell.appendLog(`[CAA 对话框] Grid 写回失败：${msg}`, { source: PAGE_ID, open: true });
+        ElMessage.error(`Grid 写回失败：${msg}`);
+      }
+    }
+
+    if (savedCount === 0) {
+      ElMessage.info("没有需要保存的修改");
+    }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     ElMessage.error(msg);
@@ -506,6 +897,21 @@ usePageSession(props.workbenchTabId, {
   }),
   hydrate: async () => false,
   isDirty: nlsIsDirtyAll,
+});
+
+/** 切换语言时把对应 locale 的 NLS 值写入 IR 树，画布即时切换 */
+watch(nlsEditorLocale, (locale) => {
+  const ir = localIr.value;
+  if (!ir) return;
+  const flat =
+    locale === "default"
+      ? currentNlsFlat.value
+      : (localeNlsFlats.value[locale] ?? {});
+  for (const [key, value] of Object.entries(flat)) {
+    applyNlsKeyToRoot(ir.root, key, value);
+    if (key === "Title") ir.title = value || undefined;
+  }
+  syncToSidebar();
 });
 
 watch([localIr, localSelectedId, parsing, localErrorText], syncToSidebar);
@@ -535,6 +941,51 @@ onActivated(() => {
       <template #actions>
         <div class="head-actions-inner">
           <el-button
+            v-if="hasParsed"
+            size="small"
+            :type="store.editMode ? 'primary' : 'default'"
+            :title="store.editMode ? '编辑模式' : '预览模式'"
+            @click="store.toggleEditMode()"
+          >
+            {{ store.editMode ? '✎' : '◉' }}
+          </el-button>
+          <el-button
+            v-if="hasParsed && !openIsDemo"
+            size="small"
+            :disabled="!nlsLocaleOptions.length"
+            @click="nlsTreeEditorOpen = true"
+          >
+            编辑文案
+          </el-button>
+          <el-select
+            v-if="nlsLocaleOptions.length > 1"
+            :model-value="nlsEditorLocale"
+            size="small"
+            style="width: 160px"
+            @update:model-value="(v: string) => (nlsEditorLocale = v)"
+          >
+            <el-option
+              v-for="opt in nlsLocaleOptions"
+              :key="opt.id"
+              :label="opt.label"
+              :value="opt.id"
+            />
+          </el-select>
+          <el-select
+            v-else-if="nlsLocaleOptions.length === 1 && hasParsed"
+            :model-value="nlsEditorLocale"
+            size="small"
+            style="width: 160px"
+            disabled
+          >
+            <el-option
+              v-for="opt in nlsLocaleOptions"
+              :key="opt.id"
+              :label="opt.label"
+              :value="opt.id"
+            />
+          </el-select>
+          <el-button
             type="success"
             size="small"
             :loading="saving"
@@ -548,26 +999,70 @@ onActivated(() => {
       </template>
     </PageHeader>
 
+    <el-alert
+      v-if="hasNlsKeyMismatch && nlsKeyCountMismatch"
+      type="warning"
+      :closable="false"
+      class="caa-nls-consistency-banner"
+    >
+      <template #title>
+        <span>
+          NLS 键数量不一致：英文 {{ nlsKeyCountMismatch.en }} 键，
+          简体中文 {{ nlsKeyCountMismatch.cn }} 键
+          <template v-if="nlsKeyCountMismatch.missingInCn.length">
+            （简体中文缺少 {{ nlsKeyCountMismatch.missingInCn.length }} 键）
+          </template>
+          <template v-if="nlsKeyCountMismatch.missingInEn.length">
+            （英文缺少 {{ nlsKeyCountMismatch.missingInEn.length }} 键）
+          </template>
+          <el-button type="warning" size="small" link style="margin-left: 8px" @click="openSupplementDialog">
+            补全缺失键
+          </el-button>
+        </span>
+      </template>
+    </el-alert>
+
     <CaaDialogEditorView :has-parsed="hasParsed" />
 
-    <CaaCatNlsEditDialog
-      :open="nlsEditorOpen"
-      :active-locale="nlsEditorLocale"
-      :locale-options="nlsLocaleOptions"
-      :rows="nlsEditorRows"
+    <CaaDialogRelatedFilesTable v-if="localIr" :ir="localIr" />
+
+    <!-- NLS 编辑器（页面内嵌面板，最后） -->
+    <CaaNlsTreeEditor
+      :open="nlsTreeEditorOpen"
+      :root="localIr?.root ?? null"
+      :en-flat="currentNlsFlat"
+      :cn-flat="localeNlsFlats[CAA_NLS_LOCALE_SIMPLIFIED_CHINESE]"
+      :compare-mode="hasChineseLocale"
       :dirty="nlsIsDirtyAll()"
-      :can-create-chinese="canCreateChinese"
-      :creating-chinese="creatingChinese"
-      @close="nlsEditorOpen = false"
-      @update:locale="(v) => (nlsEditorLocale = v)"
+      :initial-locale-mode="nlsInitialLocaleMode"
+      :can-create-cn="canCreateChinese"
+      @close="nlsTreeEditorOpen = false"
       @update:value="setNlsFlatKey"
-      @create-chinese="createChineseLocale"
+      @save="saveNls({ gridSave: false })"
+      @create-cn="createChineseLocale"
     />
+
+    <CaaNlsSupplementDialog
+      :open="supplementDialogOpen"
+      :direction="supplementDirection"
+      :missing-keys="supplementMissingKeys"
+      :applying="supplementing"
+      @close="supplementDialogOpen = false"
+      @update:direction="(v) => (supplementDirection = v)"
+      @apply:keys="supplementNlsKeys"
+    />
+
+    <CaaControlContextMenu />
   </div>
 </template>
 
 <style scoped>
 @import "./page-shared.css";
+
+.caa-nls-consistency-banner {
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
 
 .caa-dialog-page {
   display: flex;

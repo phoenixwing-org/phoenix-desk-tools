@@ -92,6 +92,27 @@ export async function saveCaaDialogNls(opts: {
   return data as { ok: boolean; sourceText: string; absPath: string };
 }
 
+export interface CaaDialogGridPatch {
+  nodeId: string;
+  rowResizable?: number[];
+  colResizable?: number[];
+}
+
+export async function saveCaaDialog(opts: {
+  workspaceRoot: string;
+  catDlgRel: string;
+  patches: CaaDialogGridPatch[];
+}): Promise<{ ok: boolean; absPath: string }> {
+  const res = await fetch("/api/caa/dialog/save-dialog", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(opts),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error ?? `save-dialog failed ${res.status}`);
+  return data as { ok: boolean; absPath: string };
+}
+
 export async function fetchCaaDialogFilePreview(opts: {
   workspaceRoot: string;
   repoRelPath: string;

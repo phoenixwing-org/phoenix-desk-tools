@@ -42,6 +42,7 @@ phoenix/web/               # Python（无 CAA 业务）
 | --- | --- |
 | [CAA对话框-Web编辑器-规划.md](CAA对话框-Web编辑器-规划.md) | 主规划 |
 | [CAA对话框-P0快速原型-归档.md](CAA对话框-P0快速原型-归档.md) | **P0 已落地**（解析 + 预览 + 壳层侧栏） |
+| [CAA对话框-控件组件化设计.md](CAA对话框-控件组件化设计.md) | **控件拆分**：一控件一 Vue 组件 + 右键菜单 + NLS 树编辑器 |
 | [CAA对话框索引与多Tab-规划.md](CAA对话框索引与多Tab-规划.md) | 索引库 `phoenix_caa_*`、检索侧栏、多 Tab |
 | [../code/测试工程外链-fixture.md](../code/测试工程外链-fixture.md) | `PNXCaaStudy` |
 

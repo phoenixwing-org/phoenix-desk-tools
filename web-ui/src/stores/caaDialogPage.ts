@@ -33,6 +33,19 @@ export const useCaaDialogPageStore = defineStore("caaDialogPage", () => {
     selectedId.value = id;
   }
 
+  /** 编辑/预览模式（默认编辑） */
+  const editMode = ref(true);
+  /** 关联文件表折叠（默认收起） */
+  const relatedFilesCollapsed = ref(true);
+  /** NLS 表格列宽百分比（ctrl / en / cn） */
+  const nlsColWidths = ref({ ctrl: 30, en: 35, cn: 35 });
+
+  function toggleEditMode() { editMode.value = !editMode.value; }
+  function toggleRelatedFiles() { relatedFilesCollapsed.value = !relatedFilesCollapsed.value; }
+  function setNlsColWidths(w: { ctrl?: number; en?: number; cn?: number }) {
+    nlsColWidths.value = { ...nlsColWidths.value, ...w };
+  }
+
   function clearEditor() {
     ir.value = null;
     selectedId.value = null;
@@ -48,9 +61,15 @@ export const useCaaDialogPageStore = defineStore("caaDialogPage", () => {
     caaOnline,
     caaServicePort,
     caaServiceUrl,
+    editMode,
+    relatedFilesCollapsed,
+    nlsColWidths,
     setCaaHealth,
     setIr,
     setSelectedId,
+    toggleEditMode,
+    toggleRelatedFiles,
+    setNlsColWidths,
     clearEditor,
   };
 });

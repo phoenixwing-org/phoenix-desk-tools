@@ -3,6 +3,7 @@ import PageHelpButton from "./PageHelpButton.vue";
 
 defineProps<{
   title: string;
+  subtitle?: string;
   pageId: string;
   /** 默认 true：三栏网格（标题 · 居中工具条 · ?） */
   toolbar?: boolean;
@@ -14,6 +15,7 @@ defineProps<{
     <div class="head-row" :class="{ 'head-row-toolbar': toolbar !== false }">
       <div class="head-left">
         <h1 class="page-title">{{ title }}</h1>
+        <span v-if="subtitle" class="head-subtitle">{{ subtitle }}</span>
       </div>
       <div v-if="$slots.actions" class="head-actions">
         <slot name="actions" />
