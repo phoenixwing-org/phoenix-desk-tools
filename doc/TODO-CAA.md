@@ -29,20 +29,40 @@
 ### Builder 拖放
 
 - [x] 控件面板拖入 Grid（HTML5 COPY）
-- [x] 内部拖动移动控件位置（MOVE）
+- [x] 内部拖动移动控件位置（MOVE）+ 跨容器拖动（Frame↔Container↔Dialog）
 - [x] 5 方向 drop：inside / right / left / bottom / top
-- [x] 5 种指示器：整格蓝底（inside）+ 4 边界蓝条（right/left/bottom/top）
-- [!] left / top 指示器拖入有问题，待排查
-- [x] 空格子占位 div（拖入空格子有指示器）
-- [x] 所有控件可拖（Editor/Spinner/PushButton/Combo…）
-- [x] 不覆盖已有控件（occupied cell 禁止 inside）
-- [x] spanning 控件 straddle 安全处理
-- [x] 鼠标松开指示器残留修复（e.buttons 检查 + window 安全网）
+- [x] 不覆盖已有控件（occupied cell 禁止 inside）+ spanning straddle 安全
+- [x] 删除控件（右键菜单）+ dragJustEnded 抑制误触 click
+- [x] 跨容器 BuilderRecord（源/目标容器快照 + affectedNodeId）
+- [x] cellFromPoint 最近 cell 兜底（grid 边缘/空隙可命中）
+- [!] left/top 指示器 + 跨容器指示器缺失（待新 overlay 架构）
+- [!] 对话框左侧/上侧边缘不易命中（最近 cell 兜底改善但未根治）
+- [!] 拖放后列挤压（需点伸缩恢复），疑似 grid template 未重算
 - [ ] 撤销 / 重做（见 [caa/CAA对话框-撤销重做-规划.md](caa/CAA对话框-撤销重做-规划.md)）
 - [ ] 拖拽调整控件 span 大小（resize handle）
-- [ ] 拖行列头调整 ROWRES/COLRES（目前仅 click 切换）
-- [ ] 删除控件（右键/键盘）
-- [ ] 跨容器拖动（从一个 Frame/Container 拖到另一个）
+- [ ] 新 overlay 架构（统一接管拖放事件，解耦组件间耦合）
+- [ ] 按钮点击不误触发拖动 → 待用户验证
+
+### Builder 删除
+
+- [x] 右键菜单「删除」→ grid 压缩 + NLS 残留清除 + BuilderRecord
+
+### Builder NLS 同步
+
+- [x] collectNlsFlat/Ordered: model 树 → 扁平表（DFS grid 排序）
+- [x] patchCatNls: WIZARD zone 完整重写（非 patch），旧 key 自动清除
+- [x] 保存前 syncNlsFromModel: 去除残留 + 合并用户编辑
+- [ ] NLS 多语言模型重构（见 [caa/CAA对话框-NLS多语言模型-讨论.md](caa/CAA对话框-NLS多语言模型-讨论.md)）
+
+### Builder 保存
+
+- [x] emitCatDlg(model) → 完整 .CATDlg（FATHER→STYLE→size→GRID→ROWRES/COLRES 顺序）
+- [x] 拖放/删除后保存 → grid/father/NLS 正确
+- [ ] .CATDlg 格式微调
+
+### 主页增强
+- [ ] 对话框列表增加「已改动文件」列（基于 git diff）
+- [ ] 显示 git diff / revert 操作（复用现有 git 页面接口）
 
 ### baseContainer 统一 resize
 - [ ] COLRES 列控件 `width: 100%` 填满

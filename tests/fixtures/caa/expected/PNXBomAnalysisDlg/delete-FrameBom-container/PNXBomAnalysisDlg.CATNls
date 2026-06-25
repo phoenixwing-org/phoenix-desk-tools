@@ -1,0 +1,19 @@
+//======================================================================
+// @copyright   Shanghai Kuntai Software Technology Co., Ltd. 2025
+// @license     MIT
+// @author      Phoenix Wing
+// @checkout    PNXBomAnalysis.git 
+// @brief       Message catalog
+//======================================================================
+
+// DO NOT EDIT :: THE CAA2 WIZARD WILL REPLACE ALL THE CODE HERE
+Title = "PNX Bom Analysis";
+FrameParams.LabelFirstProduct.Title = "Root Product:";
+FrameParams.SelectorListFirstProduct.Help = "Select Base Curve";
+FrameParams.SelectorListFirstProduct.ShortHelp = "Select Base Curve";
+FrameParams.SelectorListFirstProduct.LongHelp = "Select Base Curve";
+FrameParams.LabelFirstPartNumber.Title = "Part Number:";
+FrameParams.EditorFirstPartNumber.Help = "First Part Number";
+FrameParams.EditorFirstPartNumber.ShortHelp = "First Part Number";
+FrameParams.EditorFirstPartNumber.LongHelp = "First Part Number";
+// END WIZARD REPLACEMENT ZONE

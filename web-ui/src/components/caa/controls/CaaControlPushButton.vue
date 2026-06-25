@@ -16,7 +16,6 @@ const { isSelected, onClick, onContextmenu, titleBinding, helpTooltip } = useCaa
     type="button"
     class="caa-btn"
     :class="{ 'caa-btn--selected': isSelected }"
-    disabled
     :title="helpTooltip" @click="onClick"
     @contextmenu="onContextmenu($event)"
   >

@@ -77,7 +77,7 @@ export async function parseCaaDialog(opts: {
 export async function saveCaaDialogNls(opts: {
   workspaceRoot: string;
   catNlsRel: string;
-  nlsKeys: Record<string, string>;
+  entries: { key: string; value: string }[];
   sourceText?: string;
 }): Promise<{ ok: boolean; sourceText: string; absPath: string }> {
   const res = await fetch("/api/caa/dialog/save-nls", {
@@ -92,16 +92,10 @@ export async function saveCaaDialogNls(opts: {
   return data as { ok: boolean; sourceText: string; absPath: string };
 }
 
-export interface CaaDialogGridPatch {
-  nodeId: string;
-  rowResizable?: number[];
-  colResizable?: number[];
-}
-
 export async function saveCaaDialog(opts: {
   workspaceRoot: string;
   catDlgRel: string;
-  patches: CaaDialogGridPatch[];
+  root: Record<string, unknown>;
 }): Promise<{ ok: boolean; absPath: string }> {
   const res = await fetch("/api/caa/dialog/save-dialog", {
     method: "POST",

@@ -1,0 +1,106 @@
+[
+  {
+    "key": "Title",
+    "value": "PNX Bom Analysis"
+  },
+  {
+    "key": "FrameParams.LabelFirstProduct.Title",
+    "value": "Root Product:"
+  },
+  {
+    "key": "FrameParams.SelectorListFirstProduct.Help",
+    "value": "Select Base Curve"
+  },
+  {
+    "key": "FrameParams.SelectorListFirstProduct.ShortHelp",
+    "value": "Select Base Curve"
+  },
+  {
+    "key": "FrameParams.SelectorListFirstProduct.LongHelp",
+    "value": "Select Base Curve"
+  },
+  {
+    "key": "FrameParams.PushButtonJson.Title",
+    "value": "Print Json"
+  },
+  {
+    "key": "FrameParams.PushButtonJson.Help",
+    "value": "Print Json"
+  },
+  {
+    "key": "FrameParams.PushButtonJson.ShortHelp",
+    "value": "Print Json"
+  },
+  {
+    "key": "FrameParams.PushButtonJson.LongHelp",
+    "value": "Print Json"
+  },
+  {
+    "key": "FrameParams.LabelFirstPartNumber.Title",
+    "value": "Part Number:"
+  },
+  {
+    "key": "FrameParams.EditorFirstPartNumber.Help",
+    "value": "First Part Number"
+  },
+  {
+    "key": "FrameParams.EditorFirstPartNumber.ShortHelp",
+    "value": "First Part Number"
+  },
+  {
+    "key": "FrameParams.EditorFirstPartNumber.LongHelp",
+    "value": "First Part Number"
+  },
+  {
+    "key": "FrameBom.Title",
+    "value": "Bom"
+  },
+  {
+    "key": "FrameBom.MultiListPartBom.Help",
+    "value": "Part Bom"
+  },
+  {
+    "key": "FrameBom.MultiListPartBom.ShortHelp",
+    "value": "Part Bom"
+  },
+  {
+    "key": "FrameBom.MultiListPartBom.LongHelp",
+    "value": "Part Bom"
+  },
+  {
+    "key": "FrameBom.MultiListPartBom.ColumnTitle1",
+    "value": "name"
+  },
+  {
+    "key": "FrameBom.MultiListPartBom.ColumnTitle2",
+    "value": "revision"
+  },
+  {
+    "key": "FrameBom.MultiListPartBom.ColumnTitle3",
+    "value": "define"
+  },
+  {
+    "key": "FrameBom.MultiListPartBom.ColumnTitle4",
+    "value": "title03"
+  },
+  {
+    "key": "FrameBom.MultiListPartBom.ColumnTitle5",
+    "value": "title04"
+  },
+  {
+    "key": "FrameBom.FrameOutput.PushButtonPrintMarkdown.Title",
+    "value": "Print Markdown"
+  },
+  {
+    "key": "FrameBom.FrameOutput.PushButtonPrintMarkdown.Help",
+    "value": "Print Markdown"
+  },
+  {
+    "key": "FrameBom.FrameOutput.PushButtonPrintMarkdown.ShortHelp",
+    "value": "Print Markdown"
+  },
+  {
+    "key": "FrameBom.FrameOutput.PushButtonPrintMarkdown.LongHelp",
+    "value": "Print Markdown"
+  }
+]

@@ -6,7 +6,7 @@ import {
   extractCatDlgDialogName,
   findRepoRoot,
   patchCatNls,
-  patchCatDlgGridLayout,
+  emitCatDlg,
   PNX_BOM_ANALYSIS_DEMO,
   emitCatNlsFile,
   buildLocaleNlsInitialKeys,
@@ -222,21 +222,21 @@ dialogRoutes.post("/save-nls", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as {
     workspaceRoot?: string;
     catNlsRel?: string;
-    nlsKeys?: Record<string, string>;
+    entries?: { key: string; value: string }[];
     sourceText?: string;
   };
 
   const root = body.workspaceRoot?.trim();
   const catNlsRel = body.catNlsRel?.trim();
-  const nlsKeys = body.nlsKeys;
+  const entries = body.entries;
   if (!root || !catNlsRel) {
     return c.json({ error: "workspaceRoot 与 catNlsRel 必填" }, 400);
   }
-  if (!nlsKeys || typeof nlsKeys !== "object" || Object.keys(nlsKeys).length === 0) {
-    return c.json({ error: "nlsKeys 不能为空" }, 400);
+  if (!entries || !Array.isArray(entries) || entries.length === 0) {
+    return c.json({ error: "entries 不能为空" }, 400);
   }
 
-  caaLog("POST /save-nls", { workspaceRoot: root, catNlsRel, keyCount: Object.keys(nlsKeys).length });
+  caaLog("POST /save-nls", { workspaceRoot: root, catNlsRel, entryCount: entries.length });
 
   try {
     const abs = resolveUnderRoot(root, catNlsRel);
@@ -245,7 +245,7 @@ dialogRoutes.post("/save-nls", async (c) => {
     }
     const sourceText =
       body.sourceText?.length ? body.sourceText : await readUtf8(abs);
-    const patched = patchCatNls(sourceText, nlsKeys);
+    const patched = patchCatNls(sourceText, entries);
     await fs.writeFile(abs, patched, "utf8");
     caaLog("save-nls OK", { abs, bytes: patched.length });
     return c.json({
@@ -262,31 +262,27 @@ dialogRoutes.post("/save-nls", async (c) => {
   }
 });
 
-// ── 保存 .CATDlg（Grid 布局 ROWRES/COLRES 写回）──
+// ── 保存 .CATDlg（model → 文件完整 emit）──
 
 dialogRoutes.post("/save-dialog", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as {
     workspaceRoot?: string;
     catDlgRel?: string;
-    patches?: { nodeId: string; rowResizable?: number[]; colResizable?: number[] }[];
+    root?: Record<string, unknown>;
   };
   const root = body.workspaceRoot?.trim();
   const catDlgRel = body.catDlgRel?.trim();
-  const patches = body.patches;
-  if (!root || !catDlgRel || !patches?.length) {
-    return c.json({ error: "workspaceRoot, catDlgRel, patches 必填" }, 400);
+  const rootNode = body.root;
+  if (!root || !catDlgRel || !rootNode) {
+    return c.json({ error: "workspaceRoot, catDlgRel, root 必填" }, 400);
   }
-  caaLog("POST /save-dialog", { root, catDlgRel, patchCount: patches.length });
+  caaLog("POST /save-dialog", { root, catDlgRel });
   try {
     const abs = resolveUnderRoot(root, catDlgRel);
-    if (!(await pathExists(abs))) {
-      return c.json({ error: `.CATDlg 不存在：${catDlgRel}` }, 404);
-    }
-    const sourceText = await readUtf8(abs);
-    const patched = patchCatDlgGridLayout(sourceText, patches);
-    await fs.writeFile(abs, patched, "utf8");
-    caaLog("save-dialog OK", { abs, bytes: patched.length });
-    return c.json({ ok: true, catDlgRel, absPath: abs, bytes: patched.length });
+    const emitted = emitCatDlg(rootNode as any);
+    await fs.writeFile(abs, emitted, "utf8");
+    caaLog("save-dialog OK", { abs, bytes: emitted.length });
+    return c.json({ ok: true, catDlgRel, absPath: abs, bytes: emitted.length });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     caaLog(`save-dialog 异常: ${msg}`);

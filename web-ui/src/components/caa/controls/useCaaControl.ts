@@ -34,9 +34,13 @@ export function useCaaControl(
   /** 是否可编辑 NLS */
   const canEdit = computed(() => ctx?.canEdit.value ?? false);
 
-  /** 点击选中 */
+  /** 点击选中（拖拽刚结束时跳过，防止误触发） */
   function onClick(e: MouseEvent) {
     e.stopPropagation();
+    if (ctx?.dragJustEnded.value) {
+      ctx.dragJustEnded.value = false;
+      return;
+    }
     if (ctx) ctx.select(props.node.id);
   }
 
@@ -142,6 +146,20 @@ export function useCaaControl(
           action: () => {},
         });
       }
+    }
+
+    // ── 删除（仅非根节点）──
+    if (node.father) {
+      items.push({ divider: true, label: "", action: () => {} });
+      items.push({
+        label: "删除",
+        action: () => {
+          if (ctx && node.father) {
+            ctx.select(node.father);
+            ctx.removeControl(node.father, node.id);
+          }
+        },
+      });
     }
 
     return items;

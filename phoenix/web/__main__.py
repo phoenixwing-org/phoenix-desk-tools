@@ -104,7 +104,7 @@ def _run_dev_mode(
 
     def _serve_api() -> None:
         try:
-            uvicorn.run(app, host=host, port=api_port, log_level="info")
+            uvicorn.run(app, host=host, port=api_port, log_level="warning", access_log=False)
         except BaseException as exc:
             api_error.append(exc)
 
@@ -244,7 +244,7 @@ def main() -> None:
         print(f"前端: {static_dir}")
     print(f"API: {url}/api/health")
 
-    uvicorn.run(app, host=args.host, port=args.port, log_level="info")
+    uvicorn.run(app, host=args.host, port=args.port, log_level="warning", access_log=False)
 
 
 if __name__ == "__main__":

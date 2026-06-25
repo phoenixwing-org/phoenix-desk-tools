@@ -25,7 +25,7 @@ export function buildLocaleNlsInitialKeys(defaultFlat: Record<string, string>): 
 }
 
 export function emitCatNlsFile(
-  keys: Record<string, string>,
+  keys: Record<string, string> | { key: string; value: string }[],
   opts?: { headerLines?: string[]; wizardZone?: boolean },
 ): string {
   const wizard = opts?.wizardZone ?? true;
@@ -34,11 +34,11 @@ export function emitCatNlsFile(
     if (lines.length) lines.push("");
     lines.push("// DO NOT EDIT :: THE CAA2 WIZARD WILL REPLACE ALL THE CODE HERE");
   }
-  const sorted = Object.keys(keys).sort((a, b) =>
-    a.localeCompare(b, undefined, { sensitivity: "base" }),
-  );
-  for (const key of sorted) {
-    lines.push(formatCatNlsLine(key, keys[key] ?? ""));
+  const entries: { key: string; value: string }[] = Array.isArray(keys)
+    ? keys
+    : Object.entries(keys).map(([k, v]) => ({ key: k, value: v }));
+  for (const e of entries) {
+    lines.push(formatCatNlsLine(e.key, e.value ?? ""));
   }
   if (wizard) {
     lines.push("// END WIZARD REPLACEMENT ZONE");
