@@ -97,8 +97,29 @@ def classify_module(module_name: str) -> str:
     return "platform"
 
 
+def _read_vitest_modules_from_db() -> list[str] | None:
+    """从共享 SQLite 读取 vitest 模块列表（Node 启动时已扫描）。失败返回 None。"""
+    import sqlite3
+    db_path = repo_root() / "tests" / "fixtures" / "caa" / "test-catalog.db"
+    try:
+        conn = sqlite3.connect(str(db_path))
+        rows = conn.execute(
+            "SELECT module FROM test_modules WHERE backend='vitest' ORDER BY module"
+        ).fetchall()
+        conn.close()
+        if rows:
+            return [r[0] for r in rows]
+    except Exception:
+        pass
+    return None
+
+
 def modules_for_suite(suite_id: str) -> List[str]:
     if suite_id in VITEST_MODULES:
+        # 优先读共享 SQLite（Node 启动时扫描），回落硬编码列表
+        db_mods = _read_vitest_modules_from_db()
+        if db_mods:
+            return db_mods
         return list(VITEST_MODULES[suite_id])
     all_modules = discover_test_module_names()
     if suite_id == "all":

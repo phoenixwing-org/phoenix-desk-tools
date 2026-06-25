@@ -1,5 +1,7 @@
 obsidian/
 *.db
+*.db-shm
+*.db-wal
 .obsidian
 *.FCBak
 __pycache__

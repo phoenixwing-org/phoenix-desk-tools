@@ -293,7 +293,7 @@ def log_query_sql(
 ) -> None:
     """统一 SQL 日志：``SQL <调用方> | <单行语句>``。"""
     rendered = _format_debug_sql(sql, params) if params else sql.strip()
-    log.info("SQL %s | %s", hint, sql_one_line(rendered))
+    log.debug("SQL %s | %s", hint, sql_one_line(rendered))
 
 
 def _format_debug_sql(sql: str, params: tuple[Any, ...]) -> str:

@@ -246,24 +246,19 @@ def _fetch_vitest_details(module_names: list[str]) -> dict[str, dict]:
         return {}
 
     result: dict[str, dict] = {}
-    for tr in data.get("testResults", []):
-        name = tr.get("name", "")
-        assertions = tr.get("assertionResults", [])
+    for m in data.get("modules", []):
+        name = m.get("file", "")
+        count = m.get("count", 0)
+        tests = m.get("tests", [])
         cases = [
             {
-                "id": a.get("fullName", f"{name}::{a.get('title','?')}"),
-                "class_name": (a.get("ancestorTitles") or [""])[0],
-                "method": a.get("title", ""),
+                "id": f"{name}::{t}",
+                "class_name": name.rsplit("/", 1)[-1].replace(".test.ts", ""),
+                "method": t,
             }
-            for a in assertions
+            for t in tests
         ]
-        detail = {"count": len(cases), "cases": cases}
-        result[name] = detail
-        # 短名映射
-        for mod in module_names:
-            short = mod.replace("web-ui/src/", "").replace("packages/catdlg-core/src/", "")
-            if mod not in result and (mod in name or short in name):
-                result[mod] = detail
+        result[name] = {"count": count, "cases": cases}
     return result
 
 
@@ -628,10 +623,12 @@ def suites_payload() -> dict:
     py_suites = list_suites()
     result_suites = []
     for s in py_suites:
-        mods = modules_by_backend.get("python", []) if s.backend == "python" else list(s.modules)
-        # vitest 模块从 DB
-        if s.id == "caa":
+        if s.backend == "vitest":
+            # vitest 模块从共享 DB 读取（Node 启动时扫描）
             mods = modules_by_backend.get("vitest", [])
+        else:
+            # python 套件用 registry 分类好的模块列表
+            mods = list(s.modules)
         result_suites.append({
             "id": s.id,
             "label": s.label,

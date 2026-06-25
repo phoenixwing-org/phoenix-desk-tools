@@ -546,17 +546,20 @@ async function loadSuites() {
     // Python 套件 + vitest 套件合并
     const pySuites = pyData.suites;
     const vitestModules = vitestData.modules ?? [];
+    const caaFromVitest = vitestModules.length > 0
+      ? [{
+          id: "caa",
+          label: "CAA 模块",
+          description: "对话框编辑器：解析/emit/拖放/NLS/保存（vitest）",
+          module_count: vitestModules.length,
+          modules: vitestModules.map((m) => m.file),
+          backend: "vitest" as const,
+        }]
+      : [];
     suites.value = [
-      ...pySuites,
-      // 补充 vitest 模块到 CAA 套件
-      ...(vitestModules.length > 0 ? [{
-        id: "caa",
-        label: "CAA 模块",
-        description: "对话框编辑器：解析/emit/拖放/NLS/保存（vitest）",
-        module_count: vitestModules.length,
-        modules: vitestModules.map((m) => m.file),
-        backend: "vitest" as const,
-      }] : []),
+      // Python 套件，但 vitest 有数据时跳过 Python 的 vitest 套件（由 Node 数据替代）
+      ...pySuites.filter((s) => !(caaFromVitest.length > 0 && s.backend === "vitest")),
+      ...caaFromVitest,
     ];
     void loadRunPlan();
   } catch (e) {

@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
 import { caaLog } from "../caaLog.js";
-import { readAllModules, readModulesByBackend } from "../testCatalog.js";
+import { readModulesByBackend, upsertVitestModules } from "../testCatalog.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "../../../..");
@@ -64,7 +64,6 @@ export function refreshVitestCatalog() {
       caaLog(`vitest-catalog: ${pkg} 扫描失败 — ${err.message || err}`);
     }
   }
-  const { upsertVitestModules } = require("../testCatalog.js");
   upsertVitestModules(allModules);
   caaLog(`vitest-catalog: ${allModules.length} files → SQLite`);
 }
@@ -77,7 +76,7 @@ unitTestRoutes.get("/ping", (c) => c.json({ ok: true }));
 
 /** 返回所有模块（含 python + vitest，如果有 python 数据的话） */
 unitTestRoutes.get("/suites", (c) => {
-  const rows = readAllModules();
+  const rows = readModulesByBackend("vitest");
   const modules = rows.map((r) => ({
     file: r.module,
     count: r.case_count,
