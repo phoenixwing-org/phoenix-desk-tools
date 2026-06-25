@@ -29,6 +29,7 @@ from phoenix.freecad.phoenix_schema import (
     workspace_database_path,
 )
 from phoenix.code.schema import migrate_code_schema
+from phoenix.caa.schema import migrate_caa_schema
 from phoenix.config.workspace_prefs_schema import migrate_workspace_pref_schema
 from phoenix.workset.schema import migrate_workset_schema
 
@@ -197,6 +198,7 @@ def connect(repo_root: Path) -> Iterator[sqlite3.Connection]:
 def _ensure_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(CREATE_SCHEMA_DDL)
     migrate_code_schema(conn)
+    migrate_caa_schema(conn)
     migrate_workset_schema(conn)
     migrate_workspace_pref_schema(conn)
     conn.execute(

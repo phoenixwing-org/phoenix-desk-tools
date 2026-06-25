@@ -25,9 +25,11 @@ export type WorkbenchTabPayload = {
     autoAnalyze?: boolean;
   };
   caaDialog?: {
-    catDlgRel: string;
+    catDlgRel?: string;
     dialogName?: string;
     isDemo?: boolean;
+    isNewDraft?: boolean;
+    draftId?: string;
   };
 };
 

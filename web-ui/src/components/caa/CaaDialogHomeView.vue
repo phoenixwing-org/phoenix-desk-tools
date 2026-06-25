@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import type { CaaControlTypeCoverage } from "../../api/caaDialog";
 import type { CaaDialogListGroup, CaaDialogListItem } from "../../types/caaDialogList";
 type TableRow = CaaDialogListItem;
 
@@ -11,6 +12,7 @@ const props = defineProps<{
   workspaceReady?: boolean;
   hasScan?: boolean;
   indexed?: boolean;
+  typeCoverage?: CaaControlTypeCoverage;
 }>();
 
 const emit = defineEmits<{
@@ -44,6 +46,7 @@ const tableRows = computed(() => {
 });
 
 const filteredCount = computed(() => tableRows.value.length);
+const topUnknownTypes = computed(() => props.typeCoverage?.unknown.slice(0, 6) ?? []);
 
 function onRowClick(row: TableRow) {
   emit("open", row);
@@ -66,7 +69,7 @@ function onRowClick(row: TableRow) {
     </section>
 
     <p v-if="!workspaceReady" class="banner banner-warn">
-      请先在壳层选择<strong>工作空间</strong>；进入本页将自动从 Code 索引 SQL 加载表格。
+      请先在壳层选择<strong>工作空间</strong>；进入本页将自动从 CAA 索引 SQL 加载表格。
     </p>
     <p v-if="errorText" class="banner banner-err">{{ errorText }}</p>
 
@@ -79,6 +82,31 @@ function onRowClick(row: TableRow) {
         共 <strong>{{ count }}</strong> 个对话框可编辑
       </template>
     </p>
+
+    <section v-if="hasScan && typeCoverage" class="coverage-strip">
+      <span>
+        catalog 覆盖
+        <strong>{{ typeCoverage.known_types }}</strong> / {{ typeCoverage.total_types }} 种类型
+      </span>
+      <span>
+        控件块 <strong>{{ typeCoverage.total_controls }}</strong> 个
+      </span>
+      <span v-if="typeCoverage.unknown_types === 0" class="coverage-ok">无未登记类型</span>
+      <span v-else class="coverage-warn">
+        未登记 {{ typeCoverage.unknown_types }} 种 / {{ typeCoverage.unknown_controls }} 个
+      </span>
+      <span v-if="topUnknownTypes.length" class="coverage-tags">
+        <el-tag
+          v-for="row in topUnknownTypes"
+          :key="row.type"
+          size="small"
+          type="warning"
+          effect="plain"
+        >
+          {{ row.type }} ×{{ row.count }}
+        </el-tag>
+      </span>
+    </section>
 
     <div class="table-area">
       <el-table
@@ -133,9 +161,9 @@ function onRowClick(row: TableRow) {
           !workspaceReady
             ? '请先选择工作空间'
             : hasScan && !indexed
-              ? 'Code 索引尚未建立；请到 Code 索引执行「工程内搜索」，或点击「重新检索」'
+              ? 'CAA 索引尚未建立；请点击「重新检索」扫描 .CATDlg'
               : hasScan && count === 0
-                ? '索引中暂无 .CATDlg；确认工程含对话框资源并已纳入 Code 索引'
+                ? '索引中暂无 .CATDlg；确认工程含对话框资源'
                 : '正在加载…'
         "
         :image-size="72"
@@ -171,6 +199,37 @@ function onRowClick(row: TableRow) {
 .list-summary {
   margin: 0 0 8px;
   flex-shrink: 0;
+}
+
+.coverage-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 6px;
+  background: #f8fafc;
+  font-size: 0.75rem;
+  color: #475569;
+  flex-shrink: 0;
+}
+
+.coverage-ok {
+  color: #15803d;
+  font-weight: 600;
+}
+
+.coverage-warn {
+  color: #b45309;
+  font-weight: 600;
+}
+
+.coverage-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .table-area {

@@ -2,7 +2,11 @@
 import { ref, unref } from "vue";
 import { ElMessage } from "element-plus";
 import { pickWorkspaceDirectory } from "../api";
-import type { PagePropertyField, PagePropertyPathField } from "../types/pageProperties";
+import type {
+  PagePropertyField,
+  PagePropertyPathField,
+  PagePropertySelectField,
+} from "../types/pageProperties";
 import { useAppShell } from "../composables/useAppShell";
 import { resolveWorkspacePathHint, toRepoRelativePath } from "../utils/toRepoRelativePath";
 
@@ -50,6 +54,12 @@ function onStringChange(field: PagePropertyField & { kind: "string" | "path" }, 
 function onNumberChange(field: PagePropertyField & { kind: "number" }, value: number) {
   const next = Number(value);
   if (Number(unref(field.value)) === next) return;
+  field.onChange?.(next);
+}
+
+function onSelectChange(field: PagePropertySelectField, value: unknown) {
+  const next = String(value);
+  if (String(unref(field.value)) === next) return;
   field.onChange?.(next);
 }
 
@@ -131,13 +141,7 @@ async function onBrowsePath(field: PagePropertyPathField) {
           size="small"
           class="prop-select"
           :title="fieldHint(field) || undefined"
-          @update:model-value="
-            (v) => {
-              const next = String(v);
-              if (String(unref(field.value)) === next) return;
-              field.onChange?.(next);
-            }
-          "
+          @update:model-value="onSelectChange(field, $event)"
         >
           <el-option
             v-for="opt in selectOptions(field)"

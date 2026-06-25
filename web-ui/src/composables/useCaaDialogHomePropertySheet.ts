@@ -46,7 +46,7 @@ export function useCaaDialogHomePropertySheet(
             hidden: computed(() => !indexed.value || dialogCount.value <= 0),
           }),
           propReadonly("data_source", "数据来源", {
-            value: computed(() => "Code 索引 SQL"),
+            value: computed(() => "CAA 索引 SQL"),
           }),
           propReadonly("list_state", "加载状态", {
             value: computed(() => (listLoading.value ? "加载中…" : indexed.value ? "已加载" : "索引未建立")),
@@ -56,7 +56,7 @@ export function useCaaDialogHomePropertySheet(
             hidden: computed(() => !lastLoadedAt.value),
           }),
         ]),
-        propGroup("index", "Code 索引", [
+        propGroup("index", "CAA 索引", [
           propReadonly("index_state", "索引状态", {
             value: computed(() => (indexed.value ? "已建立" : "尚未扫描")),
           }),

@@ -1,4 +1,9 @@
 import type { CaaDialogIr, CaaDialogNode } from "../types/caaDialogIr";
+import {
+  controlIdPrefix,
+  isCaaContainerType,
+  shouldCreateDefaultTitle,
+} from "@phoenix/catdlg-core";
 
 export type CaaElTreeNode = { id: string; label: string; children?: CaaElTreeNode[] };
 
@@ -57,26 +62,9 @@ export function nlsFlatMapsEqual(a: Record<string, string>, b: Record<string, st
 
 // ── Builder 模式：IR 树操作 ──
 
-/** 类型短名 → 默认节点 ID 前缀 */
-const TYPE_ID_PREFIX: Record<string, string> = {
-  CATDlgLabel: "Label",
-  CATDlgEditor: "Editor",
-  CATDlgPushButton: "PushButton",
-  CATDlgCombo: "Combo",
-  CATDlgCheckButton: "CheckButton",
-  CATDlgRadioButton: "RadioButton",
-  CATDlgSpinner: "Spinner",
-  CATDlgSelectorList: "SelectorList",
-  CATDlgMultiList: "MultiList",
-  CATDlgFrame: "Frame",
-  CATDlgTabContainer: "TabContainer",
-  CATDlgContainer: "Container",
-  CATDlgSeparator: "Separator",
-};
-
 /** 在容器内生成唯一节点 ID */
 export function generateNodeId(container: CaaDialogNode, type: string): string {
-  const prefix = TYPE_ID_PREFIX[type] ?? type.replace(/^CATDlg/, "");
+  const prefix = controlIdPrefix(type);
   const existing = new Set<string>();
   function collect(n: CaaDialogNode) {
     existing.add(n.id);
@@ -97,8 +85,8 @@ export function createControlNode(type: string, id: string, grid: { row: number;
     children: [],
   };
   // 预设默认 NLS title
-  const prefix = TYPE_ID_PREFIX[type];
-  if (prefix && type !== "CATDlgFrame" && type !== "CATDlgContainer" && type !== "CATDlgSeparator") {
+  const prefix = controlIdPrefix(type);
+  if (prefix && shouldCreateDefaultTitle(type)) {
     node.nls = { title: prefix };
   }
   return node;
@@ -143,10 +131,7 @@ export function insertGridCol(container: CaaDialogNode, beforeCol: number): void
 
 /** 判断节点是否为容器（可接受子控件拖入） */
 export function isContainerNode(node: CaaDialogNode): boolean {
-  return node.type === "CATDlgDialog" ||
-    node.type === "CATDlgFrame" ||
-    node.type === "CATDlgContainer" ||
-    node.type === "CATDlgTabPage";
+  return isCaaContainerType(node.type);
 }
 
 /** 压缩空白行/列：移除没有任何控件的行和列，重新编号 */

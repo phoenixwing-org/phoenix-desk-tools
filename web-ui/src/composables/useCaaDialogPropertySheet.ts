@@ -1,4 +1,4 @@
-import { computed } from "vue";
+import { computed, type ComputedRef } from "vue";
 import { nlsKeyForProp, nlsPathSegments, type NlsStringProp } from "@phoenix/catdlg-core";
 import { caaServicePropertyGroup } from "./caaServicePropertyGroup";
 import { usePagePropertySheet } from "./usePagePropertySheet";
@@ -45,6 +45,33 @@ export function useCaaDialogPropertySheet(
       ),
   );
   const hasSize = computed(() => Boolean(selectedNode.value?.size));
+  const bindingCount = computed(() => store.ir?.parseMeta?.bindings?.length ?? 0);
+  const selectedBindings = computed(() => {
+    const nodeId = selectedNode.value?.id;
+    if (!nodeId) return [];
+    return (store.ir?.parseMeta?.bindings ?? []).filter(
+      (b) => b.nodeId === nodeId || b.controlId === nodeId,
+    );
+  });
+
+  function bindingSourceLabel(source: string | undefined): string {
+    if (source === "updateDialog") return "UpdateDialog";
+    if (source === "kevinWizard") return "KEVIN WIZARD";
+    return "heuristic";
+  }
+
+  function formatBindingLines(
+    bindings: NonNullable<NonNullable<typeof store.ir>["parseMeta"]>["bindings"],
+  ): string {
+    if (!bindings?.length) return "-";
+    return bindings
+      .map((b) => {
+        const where = `${bindingSourceLabel(b.source)}${b.line ? `:${b.line}` : ""}`;
+        const raw = b.text ? `\n${b.text}` : "";
+        return `${b.target} · ${where}${raw}`;
+      })
+      .join("\n\n");
+  }
 
   /** 选中控件各 NLS 属性的键 */
   const nlsKeyTitle = computed(() => {
@@ -108,6 +135,10 @@ export function useCaaDialogPropertySheet(
             mono: true,
             hidden: computed(() => !store.ir?.sources.catRsc),
           }),
+          propReadonly("binding_count", "字段绑定", {
+            value: computed(() => bindingCount.value),
+            hidden: computed(() => bindingCount.value === 0),
+          }),
           propReadonly("nls_locales", "NLS 语言", {
             value: computed(() => {
               const locales = store.ir?.parseMeta?.locales;
@@ -148,6 +179,13 @@ export function useCaaDialogPropertySheet(
             hidden: computed(() => !selectedNode.value?.style?.length),
           }),
         ], { hidden: computed(() => !hasSelection.value) }),
+        propGroup("bindings", "字段绑定（只读）", [
+          propReadonly("selected_bindings", "绑定", {
+            value: computed(() => formatBindingLines(selectedBindings.value)),
+            mono: true,
+            multiline: true,
+          }),
+        ], { hidden: computed(() => selectedBindings.value.length === 0) }),
         propGroup(
           "nls",
           "文案 (NLS)",

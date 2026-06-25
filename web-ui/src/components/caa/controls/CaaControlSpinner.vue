@@ -12,10 +12,32 @@ const props = defineProps<{
 const widthOverride = computed(() => props.widthStyle);
 const { isSelected, onClick, onContextmenu, helpTooltip, widthStyle: resolvedWidth } = useCaaControl(props, { widthOverride });
 
-const spinnerValue = ref(0);
+const min = computed(() => props.node.spinner?.min);
+const max = computed(() => props.node.spinner?.max);
+const step = computed(() => props.node.spinner?.step ?? 1);
+const precision = computed(() => props.node.spinner?.prec);
+const spinnerValue = ref(min.value ?? 0);
 
-function stepUp(e: MouseEvent) { e.stopPropagation(); spinnerValue.value++; }
-function stepDown(e: MouseEvent) { e.stopPropagation(); spinnerValue.value--; }
+const displayValue = computed(() => {
+  const value = spinnerValue.value;
+  return precision.value != null ? value.toFixed(precision.value) : String(value);
+});
+
+function clamp(value: number): number {
+  let next = value;
+  if (min.value != null) next = Math.max(min.value, next);
+  if (max.value != null) next = Math.min(max.value, next);
+  return next;
+}
+
+function stepUp(e: MouseEvent) {
+  e.stopPropagation();
+  spinnerValue.value = clamp(spinnerValue.value + step.value);
+}
+function stepDown(e: MouseEvent) {
+  e.stopPropagation();
+  spinnerValue.value = clamp(spinnerValue.value - step.value);
+}
 </script>
 
 <template>
@@ -30,7 +52,7 @@ function stepDown(e: MouseEvent) { e.stopPropagation(); spinnerValue.value--; }
     <input
       class="caa-spinner-input"
       type="text"
-      :value="spinnerValue"
+      :value="displayValue"
       readonly
     />
     <span class="caa-spinner-btns">

@@ -9,7 +9,7 @@ const props = defineProps<{
   hasParsed?: boolean;
 }>();
 const store = useCaaDialogPageStore();
-const { ir, editMode } = storeToRefs(store);
+const { ir } = storeToRefs(store);
 
 const showPalette = computed(() => props.hasParsed);
 </script>

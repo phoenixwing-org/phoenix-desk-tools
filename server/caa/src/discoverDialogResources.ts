@@ -29,6 +29,8 @@ export type DiscoveredDialogResources = {
   primaryNlsRel?: string;
   nlsLocales: CaaNlsLocaleRef[];
   catRscRel?: string;
+  headerRel?: string;
+  cppRel?: string;
   bitmapDirs: string[];
   bitmapFiles: DiscoveredBitmapFile[];
   bitmapFileCount: number;
@@ -88,6 +90,23 @@ function msgCatalogDirFromNlsRel(nlsRel: string): string {
   return idx >= 0 ? norm.slice(0, idx) : norm;
 }
 
+function dialogBaseRel(catDlgRel: string): string {
+  return normalizeRepoRel(catDlgRel).replace(/\.CATDlg$/i, "");
+}
+
+function inferHeaderCandidates(catDlgRel: string): string[] {
+  const base = dialogBaseRel(catDlgRel);
+  return [`${base}.h`, `${base}.hpp`];
+}
+
+function inferCppCandidates(catDlgRel: string): string[] {
+  const base = dialogBaseRel(catDlgRel);
+  const candidates = [`${base}.cpp`];
+  const srcBase = base.replace(/\/LocalInterfaces\//i, "/src/");
+  if (srcBase !== base) candidates.push(`${srcBase}.cpp`);
+  return candidates;
+}
+
 async function probePath(
   resolveAbs: (rel: string) => string,
   probes: PathProbe[],
@@ -109,6 +128,8 @@ export async function discoverDialogResources(
   const warnings: string[] = [];
   const pathProbes: PathProbe[] = [];
   const nlsLocales: CaaNlsLocaleRef[] = [];
+  let headerRel: string | undefined;
+  let cppRel: string | undefined;
   const nlsCandidates = inferCatNlsRelCandidates(catDlgRel);
   let primaryNlsRel: string | undefined;
   let catRscRel: string | undefined;
@@ -196,6 +217,20 @@ export async function discoverDialogResources(
     }
   }
 
+  for (const cand of inferHeaderCandidates(catDlgRel)) {
+    if (await probePath(resolveAbs, pathProbes, "header", cand)) {
+      headerRel = cand;
+      break;
+    }
+  }
+
+  for (const cand of inferCppCandidates(catDlgRel)) {
+    if (await probePath(resolveAbs, pathProbes, "cpp", cand)) {
+      cppRel = cand;
+      break;
+    }
+  }
+
   const bitmapDirs: string[] = [];
   const bitmapFiles: DiscoveredBitmapFile[] = [];
   const seenBitmapPaths = new Set<string>();
@@ -232,6 +267,8 @@ export async function discoverDialogResources(
     primaryNlsRel,
     nlsLocaleCount: nlsLocales.length,
     catRscRel,
+    headerRel,
+    cppRel,
     bitmapDirs,
     bitmapFileCount,
     bitmapFiles: bitmapFiles.map((f) => f.repoRelPath),
@@ -242,6 +279,8 @@ export async function discoverDialogResources(
     primaryNlsRel,
     nlsLocales,
     catRscRel,
+    headerRel,
+    cppRel,
     bitmapDirs,
     bitmapFiles,
     bitmapFileCount,

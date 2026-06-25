@@ -1,16 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { fetchCodeIndexCatDlg, scanCodeIndex } from "../api";
 import PageHeader from "../components/PageHeader.vue";
 import CaaDialogHomeView from "../components/caa/CaaDialogHomeView.vue";
-import { fetchCaaHealth } from "../api/caaDialog";
+import { fetchCaaHealth, fetchCaaIndexGroups, scanCaaIndex, type CaaIndexStats } from "../api/caaDialog";
 import { CAA_HOME_PAGE_ID } from "../constants/caaPages";
 import { useAppShell } from "../composables/useAppShell";
 import { useCaaDialogHomePropertySheet } from "../composables/useCaaDialogHomePropertySheet";
 import { usePageSummary } from "../composables/usePageSummary";
 import { useCaaDialogPageStore } from "../stores/caaDialogPage";
 import type { CaaDialogListGroup, CaaDialogListItem } from "../types/caaDialogList";
-import { buildCatDlgGroupsFromIndex } from "../utils/caaDialogListFromIndex";
 
 const PAGE_ID = CAA_HOME_PAGE_ID;
 const shell = useAppShell();
@@ -29,6 +27,7 @@ const hasScan = ref(false);
 const indexed = ref(false);
 const lastScanAt = ref<string | null>(null);
 const lastLoadedAt = ref<string | null>(null);
+const indexStats = ref<CaaIndexStats | null>(null);
 
 useCaaDialogHomePropertySheet(PAGE_ID, {
   dialogCount,
@@ -55,17 +54,19 @@ async function loadFromIndex() {
     hasScan.value = false;
     indexed.value = false;
     lastScanAt.value = null;
+    indexStats.value = null;
     return;
   }
 
   listLoading.value = true;
   listErrorText.value = "";
   try {
-    const data = await fetchCodeIndexCatDlg();
+    const data = await fetchCaaIndexGroups(undefined, { fallbackWorkspaceRoot: workspacePath.value });
     indexed.value = data.indexed;
     lastScanAt.value = data.last_scan_at ?? null;
     dialogCount.value = data.count;
-    dialogGroups.value = buildCatDlgGroupsFromIndex(data.entries);
+    dialogGroups.value = data.groups;
+    indexStats.value = data.stats ?? null;
     moduleCount.value = dialogGroups.value.length;
     hasScan.value = true;
     lastLoadedAt.value = new Date().toISOString();
@@ -74,6 +75,7 @@ async function loadFromIndex() {
     dialogGroups.value = [];
     dialogCount.value = 0;
     moduleCount.value = 0;
+    indexStats.value = null;
     hasScan.value = false;
   } finally {
     listLoading.value = false;
@@ -88,9 +90,9 @@ async function onRescan() {
   }
   scanning.value = true;
   listErrorText.value = "";
-  shell.appendLog("[CAA 对话框] 更新 Code 索引…", { source: PAGE_ID, open: true });
+  shell.appendLog("[CAA 对话框] 更新 CAA 索引…", { source: PAGE_ID, open: true });
   try {
-    const out = await scanCodeIndex();
+    const out = await scanCaaIndex({ fallbackWorkspaceRoot: workspacePath.value });
     if (out.summary) {
       shell.appendLog(out.summary, { source: PAGE_ID });
     }
@@ -123,14 +125,14 @@ function onNewDialog() {
 
 const headSummary = computed(() => {
   if (!hasScan.value) return "";
-  if (!indexed.value) return "Code 索引尚未建立";
-  return `共 ${dialogCount.value} 个 .CATDlg（Code 索引）`;
+  if (!indexed.value) return "CAA 索引尚未建立";
+  return `共 ${dialogCount.value} 个 .CATDlg（CAA 索引）`;
 });
 
 usePageSummary(headSummary);
 
 onMounted(() => {
-  store.clearEditor();
+  store.setActiveEditor(null);
   void checkHealth();
   if (workspaceReady.value) void loadFromIndex();
 });
@@ -171,6 +173,7 @@ watch(workspacePath, () => {
       :workspace-ready="workspaceReady"
       :has-scan="hasScan"
       :indexed="indexed"
+      :type-coverage="indexStats?.control_type_coverage"
       @open="onOpen"
     />
   </div>

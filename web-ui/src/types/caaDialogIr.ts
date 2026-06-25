@@ -24,6 +24,7 @@ export type CaaDialogNode = {
   grid?: GridPlacement;
   gridLayout?: { rowResizable?: number[]; colResizable?: number[] };
   size?: { textHeight?: number; textWidth?: number; columnCount?: number; visibleColumnCount?: number };
+  spinner?: { min?: number; max?: number; step?: number; prec?: number };
   nls?: ControlNls;
   children: CaaDialogNode[];
 };
@@ -32,6 +33,8 @@ export type CaaDialogSources = {
   catDlg: string;
   catNls?: string;
   catRsc?: string;
+  header?: string;
+  cpp?: string;
   nlsLocales?: Record<string, string>;
 };
 
@@ -48,6 +51,15 @@ export type CaaDialogBitmapFile = {
   sizeBytes?: number;
 };
 
+export type CaaDialogBinding = {
+  nodeId?: string;
+  controlId?: string;
+  target: string;
+  source: "updateDialog" | "kevinWizard" | "heuristic";
+  line?: number;
+  text?: string;
+};
+
 export type CaaDialogParseMeta = {
   locales: CaaDialogParseLocale[];
   primaryLocale: string;
@@ -59,6 +71,7 @@ export type CaaDialogParseMeta = {
   imageRefs: string[];
   warnings: string[];
   logs?: string[];
+  bindings?: CaaDialogBinding[];
   catNlsSourceText?: string;
   localeNlsSourceTexts?: Record<string, string>;
   resolvedAbs?: {
@@ -66,6 +79,8 @@ export type CaaDialogParseMeta = {
     catDlg?: string;
     catNls?: string;
     catRsc?: string;
+    header?: string;
+    cpp?: string;
     msgCatalogDir?: string;
   };
 };

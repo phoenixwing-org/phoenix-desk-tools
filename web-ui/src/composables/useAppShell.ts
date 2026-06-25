@@ -16,6 +16,7 @@ import {
 import { collectPageStates } from "./usePageSession";
 import { loadWorkbenchSession, saveWorkbenchSessionAll, writeLocalWorkbenchSession } from "./workbenchSession";
 import { createWorkbench, type WorkbenchContext } from "./useWorkbench";
+import type { OpenTabOptions, WorkbenchTab, WorkbenchTabPayload } from "../types/workbench";
 import { basenameFromRel, normalizeRepoRelForApi } from "../utils/workspaceFileQuery";
 import { normalizeDetailTabRel, partKeyTabContextKey } from "../utils/detailTabRoute";
 import {
@@ -214,9 +215,10 @@ function clampPxInt(value: number, min: number, max: number): number {
 
 function sanitizeShellLayoutPatch(patch: Partial<ShellLayout>): Partial<ShellLayout> {
   const out: Partial<ShellLayout> = {};
+  const writableOut = out as Record<keyof ShellLayout, ShellLayout[keyof ShellLayout] | undefined>;
   for (const [key, value] of Object.entries(patch) as [keyof ShellLayout, ShellLayout[keyof ShellLayout]][]) {
     if (value === undefined) continue;
-    out[key] = value;
+    writableOut[key] = value;
   }
   if (out.left_panel_width_px != null) {
     out.left_panel_width_px = clampPxInt(out.left_panel_width_px, 160, 560);
@@ -1330,14 +1332,11 @@ export function provideAppShell(): AppShellContext {
       }
       return;
     }
+    if (pageId === CAA_EDITOR_PAGE_ID && rel) {
+      openCaaDialogForRel({ catDlgRel: rel });
+      return;
+    }
     goToPage(pageId);
-  }
-
-  function applyUrlDeepLink(): boolean {
-    const intent = parseShellUrl();
-    if (!intent) return false;
-    applyShellUrlIntent(intent);
-    return true;
   }
 
   async function openCodeIgnoreSidebar() {

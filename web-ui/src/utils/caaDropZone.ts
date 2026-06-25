@@ -235,11 +235,6 @@ export interface DropTransformResult {
 export function applyDropTransform(input: DropTransformInput): DropTransformResult {
   const { children, targetRow, targetCol, edge } = input;
 
-  const logPrefix = "[CAA dropZone]";
-  console.log("%s applyDropTransform 输入：children=%d target=(%d,%d) edge=%s",
-    logPrefix, children.length, targetRow, targetCol, edge);
-  console.log("%s 输入 children grid：", logPrefix, children.map(c => ({ grid: c.grid })));
-
   // 1. 深拷贝（不影响原数据）
   const working: GridChild[] = children.map((c) => ({
     ...c,
@@ -247,12 +242,10 @@ export function applyDropTransform(input: DropTransformInput): DropTransformResu
   }));
 
   const spanning = getSpanningChild(working, targetRow, targetCol);
-  console.log("%s spanning child：", logPrefix, spanning ? describeChild(spanning) : "null");
 
   // 2. 根据 edge 计算
   if (edge === "inside") {
     if (spanning) {
-      console.log("%s inside + 被占据 → 拒绝", logPrefix);
       return {
         success: false,
         children: working,
@@ -261,7 +254,6 @@ export function applyDropTransform(input: DropTransformInput): DropTransformResu
         error: `Cell (${targetRow},${targetCol}) 已被 ${describeChild(spanning)} 占据，不允许覆盖`,
       };
     }
-    console.log("%s inside + 空 → 直接放置", logPrefix);
     return {
       success: true,
       children: working,
@@ -273,10 +265,7 @@ export function applyDropTransform(input: DropTransformInput): DropTransformResu
   if (edge === "right") {
     const endCol = spanning ? spanning.grid!.col + spanning.grid!.colSpan : targetCol + 1;
     const insertBefore = Math.max(targetCol + 1, endCol);
-    console.log("%s right：spanning=%s endCol=%d insertBefore=%d",
-      logPrefix, spanning ? describeChild(spanning) : "null", endCol, insertBefore);
-    shiftColsAfter(working, insertBefore, logPrefix);
-    console.log("%s right 完成后 children：", logPrefix, working.map(c => ({ grid: c.grid })));
+    shiftColsAfter(working, insertBefore);
     return {
       success: true,
       children: working,
@@ -289,10 +278,7 @@ export function applyDropTransform(input: DropTransformInput): DropTransformResu
   if (edge === "left") {
     const startCol = spanning ? spanning.grid!.col : targetCol;
     const insertBefore = Math.min(targetCol, startCol);
-    console.log("%s left：spanning=%s startCol=%d insertBefore=%d",
-      logPrefix, spanning ? describeChild(spanning) : "null", startCol, insertBefore);
-    shiftColsAfter(working, insertBefore, logPrefix);
-    console.log("%s left 完成后 children：", logPrefix, working.map(c => ({ grid: c.grid })));
+    shiftColsAfter(working, insertBefore);
     return {
       success: true,
       children: working,
@@ -305,10 +291,7 @@ export function applyDropTransform(input: DropTransformInput): DropTransformResu
   if (edge === "bottom") {
     const endRow = spanning ? spanning.grid!.row + spanning.grid!.rowSpan : targetRow + 1;
     const insertBefore = Math.max(targetRow + 1, endRow);
-    console.log("%s bottom：spanning=%s endRow=%d insertBefore=%d",
-      logPrefix, spanning ? describeChild(spanning) : "null", endRow, insertBefore);
-    shiftRowsAfter(working, insertBefore, logPrefix);
-    console.log("%s bottom 完成后 children：", logPrefix, working.map(c => ({ grid: c.grid })));
+    shiftRowsAfter(working, insertBefore);
     return {
       success: true,
       children: working,
@@ -321,10 +304,7 @@ export function applyDropTransform(input: DropTransformInput): DropTransformResu
   // edge === "top"
   const startRow = spanning ? spanning.grid!.row : targetRow;
   const insertBefore = Math.min(targetRow, startRow);
-  console.log("%s top：spanning=%s startRow=%d insertBefore=%d",
-    logPrefix, spanning ? describeChild(spanning) : "null", startRow, insertBefore);
-  shiftRowsAfter(working, insertBefore, logPrefix);
-  console.log("%s top 完成后 children：", logPrefix, working.map(c => ({ grid: c.grid })));
+  shiftRowsAfter(working, insertBefore);
   return {
     success: true,
     children: working,
@@ -335,33 +315,27 @@ export function applyDropTransform(input: DropTransformInput): DropTransformResu
 }
 
 /** 插入列后 shift：col >= insertBefore 的右移，跨越插入点的 colSpan+1 */
-function shiftColsAfter(working: GridChild[], insertBefore: number, logPrefix: string): void {
+function shiftColsAfter(working: GridChild[], insertBefore: number): void {
   for (const c of working) {
     if (!c.grid) continue;
     const g = c.grid;
-    const before = { ...g };
     if (g.col >= insertBefore) {
       g.col += 1;
-      console.log("%s   shift col：%s col %d→%d", logPrefix, describeChild(c), before.col, g.col);
     } else if (g.col + g.colSpan > insertBefore) {
       g.colSpan += 1;
-      console.log("%s   grow colSpan：%s colSpan %d→%d", logPrefix, describeChild(c), before.colSpan, g.colSpan);
     }
   }
 }
 
 /** 插入行后 shift：row >= insertBefore 的下移，跨越插入点的 rowSpan+1 */
-function shiftRowsAfter(working: GridChild[], insertBefore: number, logPrefix: string): void {
+function shiftRowsAfter(working: GridChild[], insertBefore: number): void {
   for (const c of working) {
     if (!c.grid) continue;
     const g = c.grid;
-    const before = { ...g };
     if (g.row >= insertBefore) {
       g.row += 1;
-      console.log("%s   shift row：%s row %d→%d", logPrefix, describeChild(c), before.row, g.row);
     } else if (g.row + g.rowSpan > insertBefore) {
       g.rowSpan += 1;
-      console.log("%s   grow rowSpan：%s rowSpan %d→%d", logPrefix, describeChild(c), before.rowSpan, g.rowSpan);
     }
   }
 }
@@ -397,29 +371,6 @@ export function findOverlaps(children: readonly GridChild[]): { a: number; b: nu
  */
 export function compactChildren(children: GridChild[]): void {
   if (!children.length) return;
-
-  // 找到最大行/列
-  let maxRow = 0, maxCol = 0;
-  for (const c of children) {
-    if (!c.grid) continue;
-    maxRow = Math.max(maxRow, c.grid.row + c.grid.rowSpan);
-    maxCol = Math.max(maxCol, c.grid.col + c.grid.colSpan);
-  }
-
-  // 找出空行
-  const emptyRows: number[] = [];
-  for (let r = 0; r < maxRow; r++) {
-    if (!isCellOccupied(children, r, 0) && !children.some((c) => {
-      if (!c.grid) return false;
-      // 检查该行在任意列是否有控件
-      for (let col = 0; col < maxCol; col++) {
-        if (isCellOccupied(children, r, col)) return true;
-      }
-      return false;
-    })) {
-      // 整行都空才标记
-    }
-  }
 
   // 简化版 compact：按非空行/列重新编号
   const occupiedRows = new Set<number>();

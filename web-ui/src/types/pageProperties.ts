@@ -74,6 +74,7 @@ export type PagePropertyPathField = PagePropertyFieldBase & {
   kind: "path";
   value: ReactiveValue<string>;
   placeholder?: string;
+  mono?: boolean;
   /** 是否显示浏览按钮，默认 true */
   browse?: boolean;
   onChange?: (value: string) => void;

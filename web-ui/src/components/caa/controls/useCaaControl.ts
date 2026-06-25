@@ -144,6 +144,14 @@ export function useCaaControl(
       }
     }
 
+    if (!isDialog.value && node.father) {
+      items.push({ divider: true, label: "", action: () => {} });
+      items.push({
+        label: "删除控件",
+        action: () => ctx?.removeControl(node.father!, node.id),
+      });
+    }
+
     return items;
   }
 

@@ -2,6 +2,7 @@
 
 /** 对话框预览固定外框宽（px）；内部 Grid/控件按 100% 铺满。 */
 export const CAA_DIALOG_PREVIEW_WIDTH_PX = 500;
+export const CAA_GRID_EDIT_ROW_MIN_PX = 24;
 
 export function caaCharWidthCh(tw: number | undefined): string | undefined {
   if (tw == null || tw <= 0) return undefined;
@@ -37,4 +38,17 @@ export function caaGridFillTrackTemplate(
   return Array.from({ length: Math.max(1, count) }, (_, i) =>
     res.includes(i) ? "1fr" : "auto",
   ).join(" ");
+}
+
+/** 编辑模式下每行都有最小可拖拽/可观察高度，避免空行在 CSS Grid auto 轨道里塌缩。 */
+export function caaGridEditRowTrackTemplate(
+  count: number,
+  resizable: number[] | undefined,
+  fillParent: boolean,
+): string {
+  const res = resizable ?? [];
+  return Array.from({ length: Math.max(1, count) }, (_, i) => {
+    const track = fillParent && res.includes(i) ? "1fr" : "auto";
+    return `minmax(${CAA_GRID_EDIT_ROW_MIN_PX}px, ${track})`;
+  }).join(" ");
 }
