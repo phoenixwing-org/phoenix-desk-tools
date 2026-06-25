@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
 import time
 import traceback
 import unittest
@@ -14,6 +16,7 @@ from phoenix.testing.suite_registry import (
     classify_module,
     list_suites,
     modules_for_suite,
+    repo_root,
     suite_label,
 )
 
@@ -157,7 +160,15 @@ def _resolve_run_modules(suite_ids: List[str]) -> tuple[List[str], str, str]:
                 seen.add(mod)
                 modules.append(mod)
     if not modules:
-        raise ValueError("所选套件无测试模块")
+        # vitest 模块不计入 Python modules 但仍是有效选择
+        vitest_all = [
+            m for sid in suite_ids if sid in _get_vitest_suite_ids()
+            for m in modules_for_suite(sid)
+        ]
+        if vitest_all:
+            modules = vitest_all
+        else:
+            raise ValueError("所选套件无测试模块")
     ordered_ids = sorted(set(suite_ids))
     label = " + ".join(suite_label(s) for s in ordered_ids)
     return modules, "+".join(ordered_ids), label
@@ -195,11 +206,65 @@ def _load_modules_plan(module_names: List[str]) -> tuple[List[tuple[str, unittes
     loaded: List[tuple[str, unittest.TestSuite]] = []
     load_errors: List[str] = []
     for mod in module_names:
+        # vitest 模块跳过（非 Python 无法加载）
+        if _is_vitest_module(mod):
+            continue
         try:
             loaded.append((mod, loader.loadTestsFromName(mod)))
         except Exception as exc:
             load_errors.append(f"{mod}: {exc}")
     return loaded, load_errors, module_names
+
+
+def _is_vitest_module(module_name: str) -> bool:
+    """判断是否为 vitest 前端测试模块（非 Python unittest）"""
+    from phoenix.testing.suite_registry import VITEST_MODULES
+    all_vitest: set[str] = set()
+    for mods in VITEST_MODULES.values():
+        all_vitest.update(mods)
+    return module_name in all_vitest
+
+
+def _get_vitest_suite_ids() -> frozenset[str]:
+    from phoenix.testing.suite_registry import VITEST_MODULES
+    return frozenset(VITEST_MODULES.keys())
+
+
+def _fetch_vitest_details(module_names: list[str]) -> dict[str, dict]:
+    """通过 Node.js CAA 后端获取 vitest 模块用例详情（count + cases list）"""
+    import json as _json
+    import urllib.request
+
+    try:
+        req = urllib.request.Request(
+            "http://127.0.0.1:5180/api/caa/unit-tests/suites",
+            method="GET",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = _json.loads(resp.read().decode())
+    except Exception:
+        return {}
+
+    result: dict[str, dict] = {}
+    for tr in data.get("testResults", []):
+        name = tr.get("name", "")
+        assertions = tr.get("assertionResults", [])
+        cases = [
+            {
+                "id": a.get("fullName", f"{name}::{a.get('title','?')}"),
+                "class_name": (a.get("ancestorTitles") or [""])[0],
+                "method": a.get("title", ""),
+            }
+            for a in assertions
+        ]
+        detail = {"count": len(cases), "cases": cases}
+        result[name] = detail
+        # 短名映射
+        for mod in module_names:
+            short = mod.replace("web-ui/src/", "").replace("packages/catdlg-core/src/", "")
+            if mod not in result and (mod in name or short in name):
+                result[mod] = detail
+    return result
 
 
 def _load_test_plan(
@@ -447,6 +512,16 @@ def run_unit_test_suites(
     options: UnitTestRunOptions | None = None,
 ) -> UnitTestRunResult:
     opts = options or UnitTestRunOptions()
+    vitest_ids = _get_vitest_suite_ids()
+    is_vitest_only = all(sid in vitest_ids for sid in suite_ids if sid != "all")
+
+    if is_vitest_only and suite_ids:
+        # vitest 套件走子进程运行
+        from phoenix.testing.vitest_runner import run_vitest_suite
+        from dataclasses import asdict
+        result_dict = run_vitest_suite("+".join(suite_ids))
+        return UnitTestRunResult(**result_dict)
+
     _, load_errors, modules, suite_id, label, planned, ignored = _resolve_run_context(suite_ids, opts)
     started = time.perf_counter()
     result = _run_planned_cases(planned)
@@ -492,6 +567,24 @@ def plan_unit_test_run(
         if include_cases:
             row["cases"] = cases
         module_rows.append(row)
+
+    # 补充 vitest 模块（通过 Node 后端获取实际用例数）
+    vitest_mods = [m for m in modules if _is_vitest_module(m)]
+    vitest_details = _fetch_vitest_details(vitest_mods) if vitest_mods else {}
+    for mod in vitest_mods:
+        detail = vitest_details.get(mod, {})
+        cases_list = detail.get("cases", [])
+        count = len(cases_list) if cases_list else detail.get("count", 0)
+        row: Dict[str, Any] = {
+            "module": mod,
+            "suite_id": classify_module(mod),
+            "case_count": count,
+            "backend": "vitest",
+        }
+        if include_cases and cases_list:
+            row["cases"] = cases_list
+        module_rows.append(row)
+
     return {
         "suite_id": suite_id,
         "suite_label": label,
@@ -509,18 +602,45 @@ def run_unit_test_suite(suite_id: str) -> UnitTestRunResult:
 
 
 def suites_payload() -> dict:
-    return {
-        "suites": [
-            {
-                "id": s.id,
-                "label": s.label,
-                "description": s.description,
-                "module_count": s.module_count,
-                "modules": list(s.modules),
-            }
-            for s in list_suites()
-        ]
-    }
+    import sqlite3
+    import json as _json
+
+    # 先同步 Python 模块到共享 DB
+    from phoenix.testing.suite_registry import sync_python_modules_to_db
+    try:
+        sync_python_modules_to_db()
+    except Exception:
+        pass
+
+    # 从共享 DB 读取（含 Python + vitest）
+    db_path = str(repo_root() / "tests" / "fixtures" / "caa" / "test-catalog.db")
+    modules_by_backend: dict[str, list[str]] = {}
+    try:
+        conn = sqlite3.connect(db_path)
+        rows = conn.execute("SELECT backend, module FROM test_modules ORDER BY backend, module").fetchall()
+        for backend, module in rows:
+            modules_by_backend.setdefault(backend, []).append(module)
+        conn.close()
+    except Exception:
+        pass
+
+    # 合并：python 套件从 registry + DB，vitest 套件从 DB
+    py_suites = list_suites()
+    result_suites = []
+    for s in py_suites:
+        mods = modules_by_backend.get("python", []) if s.backend == "python" else list(s.modules)
+        # vitest 模块从 DB
+        if s.id == "caa":
+            mods = modules_by_backend.get("vitest", [])
+        result_suites.append({
+            "id": s.id,
+            "label": s.label,
+            "description": s.description,
+            "module_count": len(mods),
+            "modules": mods,
+            "backend": s.backend,
+        })
+    return {"suites": result_suites}
 
 
 def run_payload(

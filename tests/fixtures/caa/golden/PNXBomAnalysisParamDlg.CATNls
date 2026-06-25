@@ -1,0 +1,15 @@
+//======================================================================
+// @copyright   Shanghai Kuntai Software Technology Co., Ltd. 2025
+// @license     MIT
+// @author      Phoenix Wing
+// @checkout    PNXBomAnalysis.git 
+// @brief       Message catalog
+//======================================================================
+// DO NOT EDIT :: THE CAA2 WIZARD WILL REPLACE ALL THE CODE HERE
+Title = "Parameter Dialog";
+FrameOthers.Title = "Other parameters";
+FrameOthers.LabelVersion.Title = "Version:";
+FrameOthers.LabelSag.Title = "Sag :";
+FrameOthers.SpinnerPartCount.ShortHelp = "Part Count";
+EditorMyResult.ShortHelp = "Output My Result";
+// END WIZARD REPLACEMENT ZONE

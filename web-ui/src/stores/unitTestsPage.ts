@@ -7,7 +7,7 @@ import {
 } from "../utils/unitTestWatchlist";
 import type { ModuleSortBy } from "../utils/unitTestModuleHistory";
 
-export const UNIT_TEST_RUNNABLE_SUITE_IDS = ["code", "cad", "platform"] as const;
+export const UNIT_TEST_RUNNABLE_SUITE_IDS = ["code", "cad", "platform", "caa"] as const;
 
 export type UnitTestsPageTab = "results" | "watchlist";
 

@@ -5,6 +5,7 @@ import {
   fetchTestCaseCatalog,
   fetchUnitTestPlan,
   fetchUnitTestSuites,
+  fetchVitestTestList,
   cancelUnitTestRun,
   runUnitTestsStream,
   type TestModuleCatalogEntry,
@@ -292,6 +293,7 @@ function suiteShortLabel(suiteId: string): string {
   if (suiteId === "cad") return "CAD";
   if (suiteId === "code") return "Code";
   if (suiteId === "platform") return "平台";
+  if (suiteId === "caa") return "CAA";
   if (suiteId === "all") return "全部";
   return suiteLabelById.value.get(suiteId) ?? suiteId;
 }
@@ -535,8 +537,27 @@ async function loadCaseCatalog(caseIds?: string[]) {
 async function loadSuites() {
   loadError.value = "";
   try {
-    const data = await fetchUnitTestSuites();
-    suites.value = data.suites;
+    // 并行从 Python + Node 获取套件列表
+    const [pyData, vitestData] = await Promise.all([
+      fetchUnitTestSuites().catch(() => ({ suites: [] as UnitTestSuiteInfo[] })),
+      fetchVitestTestList().catch(() => ({ modules: [] as { file: string; count: number; tests: string[] }[] })),
+    ]);
+
+    // Python 套件 + vitest 套件合并
+    const pySuites = pyData.suites;
+    const vitestModules = vitestData.modules ?? [];
+    suites.value = [
+      ...pySuites,
+      // 补充 vitest 模块到 CAA 套件
+      ...(vitestModules.length > 0 ? [{
+        id: "caa",
+        label: "CAA 模块",
+        description: "对话框编辑器：解析/emit/拖放/NLS/保存（vitest）",
+        module_count: vitestModules.length,
+        modules: vitestModules.map((m) => m.file),
+        backend: "vitest" as const,
+      }] : []),
+    ];
     void loadRunPlan();
   } catch (e) {
     loadError.value = String(e);
@@ -1046,6 +1067,12 @@ onMounted(() => {
           <el-table-column label="套件" width="72" align="center">
             <template #default="{ row }">
               <el-tag size="small" effect="plain">{{ suiteShortLabel(row.suite_id) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="后端" width="66" align="center">
+            <template #default="{ row }">
+              <el-tag v-if="row.backend === 'vitest'" size="small" type="warning" effect="plain">vitest</el-tag>
+              <span v-else class="muted" style="font-size:0.7rem">py</span>
             </template>
           </el-table-column>
           <el-table-column label="用例" width="56" align="center">

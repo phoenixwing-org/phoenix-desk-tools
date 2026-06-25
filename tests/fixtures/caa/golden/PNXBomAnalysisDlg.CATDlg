@@ -1,0 +1,88 @@
+// DO NOT EDIT :: THE CAA2 WIZARD WILL REPLACE ALL THE CODE HERE
+CATDlgDialog PNXBomAnalysisDlg
+{
+  STYLE = CATDlgWndBtnOKCancelPreview|CATDlgGridLayout;
+  ROWRES = { 1 };
+  COLRES = { 0 };
+}
+
+CATDlgFrame FrameParams
+{
+  FATHER = PNXBomAnalysisDlg;
+  STYLE = CATDlgFraNoFrame|CATDlgGridLayout;
+  GRID = { 0, 0, 1, 1, CATGRID_4SIDES };
+  COLRES = { 1 };
+}
+
+CATDlgLabel LabelFirstProduct
+{
+  FATHER = FrameParams;
+  GRID = { 0, 0, 1, 1, CATGRID_4SIDES };
+}
+
+CATDlgSelectorList SelectorListFirstProduct
+{
+  FATHER = FrameParams;
+  TH = 1;
+  TW = 16;
+  GRID = { 0, 1, 1, 1, CATGRID_4SIDES };
+}
+
+CATDlgEditor EditorFirstPartNumber
+{
+  FATHER = FrameParams;
+  GRID = { 1, 1, 1, 1, CATGRID_4SIDES };
+}
+
+CATDlgLabel LabelFirstPartNumber
+{
+  FATHER = FrameParams;
+  GRID = { 1, 0, 1, 1, CATGRID_4SIDES };
+}
+
+CATDlgFrame FrameBom
+{
+  FATHER = PNXBomAnalysisDlg;
+  STYLE = CATDlgGridLayout;
+  GRID = { 1, 0, 1, 1, CATGRID_4SIDES };
+  ROWRES = { 0 };
+  COLRES = { 0 };
+}
+
+CATDlgMultiList MultiListPartBom
+{
+  FATHER = FrameBom;
+  TW = 22;
+  CC = 5;
+  VCC = 4;
+  GRID = { 0, 0, 1, 1, CATGRID_4SIDES };
+}
+
+CATDlgFrame FrameOutput
+{
+  FATHER = FrameBom;
+  STYLE = CATDlgFraNoFrame|CATDlgGridLayout;
+  GRID = { 1, 0, 1, 1, CATGRID_4SIDES };
+}
+
+CATDlgPushButton PushButtonJson
+{
+  FATHER = FrameOutput;
+  GRID = { 0, 0, 1, 1, CATGRID_4SIDES };
+}
+
+CATDlgPushButton PushButtonPrintMarkdown
+{
+  FATHER = FrameOutput;
+  GRID = { 0, 1, 1, 1, CATGRID_4SIDES };
+}
+
+CATDlgEditor EditorOutInfo
+{
+  FATHER = PNXBomAnalysisDlg;
+  STYLE = CATDlgEdtMultiline;
+  TH = 6;
+  GRID = { 2, 0, 1, 1, CATGRID_4SIDES };
+}
+
+// END WIZARD REPLACEMENT ZONE

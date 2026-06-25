@@ -1,0 +1,35 @@
+//======================================================================
+// @copyright   Shanghai Kuntai Software Technology Co., Ltd. 2025
+// @license     MIT
+// @author      Phoenix Wing
+// @checkout    PNXBomAnalysis.git 
+// @brief       Message catalog
+//======================================================================
+
+// DO NOT EDIT :: THE CAA2 WIZARD WILL REPLACE ALL THE CODE HERE
+Title = "PNX Bom Analysis";
+FrameParams.SelectorListFirstProduct.Help = "Select Base Curve";
+FrameParams.SelectorListFirstProduct.ShortHelp = "Select Base Curve";
+FrameParams.SelectorListFirstProduct.LongHelp = "Select Base Curve";
+FrameParams.LabelFirstPartNumber.Title = "Part Number:";
+FrameParams.EditorFirstPartNumber.Help = "First Part Number";
+FrameParams.EditorFirstPartNumber.ShortHelp = "First Part Number";
+FrameParams.EditorFirstPartNumber.LongHelp = "First Part Number";
+FrameBom.Title = "Bom";
+FrameBom.MultiListPartBom.Help = "Part Bom";
+FrameBom.MultiListPartBom.ShortHelp = "Part Bom";
+FrameBom.MultiListPartBom.LongHelp = "Part Bom";
+FrameBom.MultiListPartBom.ColumnTitle1 = "name";
+FrameBom.MultiListPartBom.ColumnTitle2 = "revision";
+FrameBom.MultiListPartBom.ColumnTitle3 = "define";
+FrameBom.MultiListPartBom.ColumnTitle4 = "title03";
+FrameBom.MultiListPartBom.ColumnTitle5 = "title04";
+FrameBom.FrameOutput.PushButtonJson.Title = "Print Json";
+FrameBom.FrameOutput.PushButtonJson.Help = "Print Json";
+FrameBom.FrameOutput.PushButtonJson.ShortHelp = "Print Json";
+FrameBom.FrameOutput.PushButtonJson.LongHelp = "Print Json";
+FrameBom.FrameOutput.PushButtonPrintMarkdown.Title = "Print Markdown";
+FrameBom.FrameOutput.PushButtonPrintMarkdown.Help = "Print Markdown";
+FrameBom.FrameOutput.PushButtonPrintMarkdown.ShortHelp = "Print Markdown";
+FrameBom.FrameOutput.PushButtonPrintMarkdown.LongHelp = "Print Markdown";
+// END WIZARD REPLACEMENT ZONE

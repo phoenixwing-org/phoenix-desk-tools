@@ -1,0 +1,38 @@
+[
+  {
+    "key": "Title",
+    "value": "PNX Bom Analysis"
+  },
+  {
+    "key": "FrameParams.LabelFirstProduct.Title",
+    "value": "Root Product:"
+  },
+  {
+    "key": "FrameParams.SelectorListFirstProduct.Help",
+    "value": "Select Base Curve"
+  },
+  {
+    "key": "FrameParams.SelectorListFirstProduct.ShortHelp",
+    "value": "Select Base Curve"
+  },
+  {
+    "key": "FrameParams.SelectorListFirstProduct.LongHelp",
+    "value": "Select Base Curve"
+  },
+  {
+    "key": "FrameParams.LabelFirstPartNumber.Title",
+    "value": "Part Number:"
+  },
+  {
+    "key": "FrameParams.EditorFirstPartNumber.Help",
+    "value": "First Part Number"
+  },
+  {
+    "key": "FrameParams.EditorFirstPartNumber.ShortHelp",
+    "value": "First Part Number"
+  },
+  {
+    "key": "FrameParams.EditorFirstPartNumber.LongHelp",
+    "value": "First Part Number"
+  }
+]

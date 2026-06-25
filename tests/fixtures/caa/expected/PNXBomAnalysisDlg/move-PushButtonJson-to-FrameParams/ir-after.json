@@ -1,0 +1,252 @@
+{
+  "root": {
+    "id": "PNXBomAnalysisDlg",
+    "type": "CATDlgDialog",
+    "children": [
+      {
+        "id": "FrameParams",
+        "type": "CATDlgFrame",
+        "children": [
+          {
+            "id": "LabelFirstProduct",
+            "type": "CATDlgLabel",
+            "children": [],
+            "father": "FrameParams",
+            "grid": {
+              "row": 0,
+              "col": 0,
+              "rowSpan": 1,
+              "colSpan": 1,
+              "anchor": "CATGRID_4SIDES"
+            },
+            "nls": {
+              "title": "Root Product:"
+            }
+          },
+          {
+            "id": "SelectorListFirstProduct",
+            "type": "CATDlgSelectorList",
+            "children": [],
+            "father": "FrameParams",
+            "grid": {
+              "row": 0,
+              "col": 1,
+              "rowSpan": 1,
+              "colSpan": 1,
+              "anchor": "CATGRID_4SIDES"
+            },
+            "size": {
+              "textHeight": 1,
+              "textWidth": 16
+            },
+            "nls": {
+              "help": "Select Base Curve",
+              "shortHelp": "Select Base Curve",
+              "longHelp": "Select Base Curve"
+            }
+          },
+          {
+            "id": "LabelFirstPartNumber",
+            "type": "CATDlgLabel",
+            "children": [],
+            "father": "FrameParams",
+            "grid": {
+              "row": 1,
+              "col": 0,
+              "rowSpan": 1,
+              "colSpan": 1,
+              "anchor": "CATGRID_4SIDES"
+            },
+            "nls": {
+              "title": "Part Number:"
+            }
+          },
+          {
+            "id": "EditorFirstPartNumber",
+            "type": "CATDlgEditor",
+            "children": [],
+            "father": "FrameParams",
+            "grid": {
+              "row": 1,
+              "col": 1,
+              "rowSpan": 1,
+              "colSpan": 1,
+              "anchor": "CATGRID_4SIDES"
+            },
+            "nls": {
+              "help": "First Part Number",
+              "shortHelp": "First Part Number",
+              "longHelp": "First Part Number"
+            }
+          },
+          {
+            "id": "PushButtonJson",
+            "type": "CATDlgPushButton",
+            "children": [],
+            "father": "FrameParams",
+            "grid": {
+              "row": 0,
+              "col": 2,
+              "rowSpan": 1,
+              "colSpan": 1
+            },
+            "nls": {
+              "title": "Print Json",
+              "help": "Print Json",
+              "shortHelp": "Print Json",
+              "longHelp": "Print Json"
+            }
+          }
+        ],
+        "father": "PNXBomAnalysisDlg",
+        "style": [
+          "CATDlgFraNoFrame",
+          "CATDlgGridLayout"
+        ],
+        "grid": {
+          "row": 0,
+          "col": 0,
+          "rowSpan": 1,
+          "colSpan": 1,
+          "anchor": "CATGRID_4SIDES"
+        },
+        "gridLayout": {
+          "colResizable": [
+            1
+          ]
+        }
+      },
+      {
+        "id": "FrameBom",
+        "type": "CATDlgFrame",
+        "children": [
+          {
+            "id": "MultiListPartBom",
+            "type": "CATDlgMultiList",
+            "children": [],
+            "father": "FrameBom",
+            "grid": {
+              "row": 0,
+              "col": 0,
+              "rowSpan": 1,
+              "colSpan": 1,
+              "anchor": "CATGRID_4SIDES"
+            },
+            "size": {
+              "textWidth": 22,
+              "columnCount": 5,
+              "visibleColumnCount": 4
+            },
+            "nls": {
+              "help": "Part Bom",
+              "shortHelp": "Part Bom",
+              "longHelp": "Part Bom",
+              "columnTitles": [
+                "name",
+                "revision",
+                "define",
+                "title03",
+                "title04"
+              ]
+            }
+          },
+          {
+            "id": "FrameOutput",
+            "type": "CATDlgFrame",
+            "children": [
+              {
+                "id": "PushButtonPrintMarkdown",
+                "type": "CATDlgPushButton",
+                "children": [],
+                "father": "FrameOutput",
+                "grid": {
+                  "row": 0,
+                  "col": 1,
+                  "rowSpan": 1,
+                  "colSpan": 1,
+                  "anchor": "CATGRID_4SIDES"
+                },
+                "nls": {
+                  "title": "Print Markdown",
+                  "help": "Print Markdown",
+                  "shortHelp": "Print Markdown",
+                  "longHelp": "Print Markdown"
+                }
+              }
+            ],
+            "father": "FrameBom",
+            "style": [
+              "CATDlgFraNoFrame",
+              "CATDlgGridLayout"
+            ],
+            "grid": {
+              "row": 1,
+              "col": 0,
+              "rowSpan": 1,
+              "colSpan": 1,
+              "anchor": "CATGRID_4SIDES"
+            }
+          }
+        ],
+        "father": "PNXBomAnalysisDlg",
+        "style": [
+          "CATDlgGridLayout"
+        ],
+        "grid": {
+          "row": 1,
+          "col": 0,
+          "rowSpan": 1,
+          "colSpan": 1,
+          "anchor": "CATGRID_4SIDES"
+        },
+        "gridLayout": {
+          "rowResizable": [
+            0
+          ],
+          "colResizable": [
+            0
+          ]
+        },
+        "nls": {
+          "title": "Bom"
+        }
+      },
+      {
+        "id": "EditorOutInfo",
+        "type": "CATDlgEditor",
+        "children": [],
+        "father": "PNXBomAnalysisDlg",
+        "style": [
+          "CATDlgEdtMultiline"
+        ],
+        "grid": {
+          "row": 2,
+          "col": 0,
+          "rowSpan": 1,
+          "colSpan": 1,
+          "anchor": "CATGRID_4SIDES"
+        },
+        "size": {
+          "textHeight": 6
+        }
+      }
+    ],
+    "style": [
+      "CATDlgWndBtnOKCancelPreview",
+      "CATDlgGridLayout"
+    ],
+    "gridLayout": {
+      "rowResizable": [
+        1
+      ],
+      "colResizable": [
+        0
+      ]
+    },
+    "nls": {
+      "title": "PNX Bom Analysis"
+    }
+  },
+  "title": "PNX Bom Analysis",
+  "dialogName": "PNXBomAnalysisDlg"
+}

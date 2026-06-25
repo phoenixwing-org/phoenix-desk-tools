@@ -1,7 +1,7 @@
 import type { ComputedRef, InjectionKey, Ref } from "vue";
 import type { NlsStringProp } from "@phoenix/catdlg-core";
 import type { CaaDialogNode } from "../types/caaDialogIr";
-import type { DropEdge } from "../utils/caaDropZone";
+import type { DropEdge, BuilderRecord } from "../utils/caaDropZone";
 
 /** 右键菜单项 */
 export interface CaaContextMenuItem {
@@ -65,6 +65,10 @@ export interface CaaControlContext {
   dropIndicator: Ref<{ rect: { left: number; top: number; width: number; height: number } | null; edge: DropEdge }>;
   /** Builder：原子替换容器子节点（批量操作入口） */
   setChildren: (containerId: string, children: CaaDialogNode[], selectId?: string) => void;
+  /** Builder 操作历史记录（供撤销/重做消费，目前记录最近一次） */
+  lastBuilderRecord: Ref<BuilderRecord | null>;
+  /** 拖拽刚结束标记：控件 onClick 检查此标记跳过选中（防止拖拽后误触发 click） */
+  dragJustEnded: Ref<boolean>;
 }
 
 export const CAA_CONTROL_KEY: InjectionKey<CaaControlContext> = Symbol("caaControl");

@@ -149,6 +149,28 @@ export function isContainerNode(node: CaaDialogNode): boolean {
     node.type === "CATDlgTabPage";
 }
 
+/** 纯函数：从 children 数组中移除指定 ID 的子节点，不修改原数组 */
+export function removeChildNode(
+  children: readonly CaaDialogNode[],
+  nodeId: string,
+): { removed: CaaDialogNode | null; newChildren: CaaDialogNode[] } {
+  const idx = children.findIndex((c) => c.id === nodeId);
+  if (idx < 0) return { removed: null, newChildren: [...children] };
+  const removed = children[idx];
+  const newChildren = children.filter((_, i) => i !== idx);
+  return { removed, newChildren };
+}
+
+/** 递归收集节点的所有后代 ID（深度优先，不含自身） */
+export function collectDescendantIds(node: CaaDialogNode): string[] {
+  const ids: string[] = [];
+  for (const child of node.children) {
+    ids.push(child.id);
+    ids.push(...collectDescendantIds(child));
+  }
+  return ids;
+}
+
 /** 压缩空白行/列：移除没有任何控件的行和列，重新编号 */
 export function renumberGrid(container: CaaDialogNode): void {
   if (!container.children.length) return;

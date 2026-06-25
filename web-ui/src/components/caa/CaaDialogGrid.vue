@@ -5,8 +5,8 @@ import CaaDialogNodeView from "./CaaDialogNodeView.vue";
 import CaaGridSettingsPopover from "./CaaGridSettingsPopover.vue";
 import { CAA_CONTROL_KEY, type CaaContextMenuItem } from "../../composables/useCaaControlContext";
 import { caaGridFillTrackTemplate, caaGridTrackTemplate } from "../../utils/caaControlMetrics";
-import { findCaaNode, renumberGrid, generateNodeId, createControlNode } from "../../utils/caaDialogTree";
-import { resolveDropEdgeFromRect, applyDropTransform, findOverlaps } from "../../utils/caaDropZone";
+import { findCaaNode, renumberGrid, generateNodeId, createControlNode, removeChildNode } from "../../utils/caaDialogTree";
+import { resolveDropEdgeFromRect, applyDropTransform, findOverlaps, buildBuilderRecord } from "../../utils/caaDropZone";
 import type { ContainerResizeResult } from "./controls/useCaaContainerResize";
 
 const props = withDefaults(
@@ -114,24 +114,44 @@ function cellOccupied(row: number, col: number): boolean {
 }
 
 /** 根据实际渲染的 cell DOM 元素计算鼠标所在位置（使用纯函数规则）；返回 cell 矩形供 overlay 定位 */
-function cellFromPoint(_gridEl: HTMLElement, clientX: number, clientY: number): { row: number; col: number; edge: "inside" | "right" | "bottom" | "left" | "top"; rect: DOMRect } | null {
-  const hasChildren = props.node.children.length > 0;
+function cellFromPoint(gridEl: HTMLElement, clientX: number, clientY: number): { row: number; col: number; edge: "inside" | "right" | "bottom" | "left" | "top"; rect: DOMRect } | null {
+  const gridId = gridEl.getAttribute("data-grid-host") ?? props.node.id;
+  const hasChildren = props.node.children.length > 0 || gridId !== props.node.id;
 
-  if (hasChildren) {
-    const cells = document.querySelectorAll(`[data-grid-host="${props.node.id}"] .caa-grid-cell`);
-    for (const cell of cells) {
-      const r = cell.getBoundingClientRect();
-      if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) {
-        const row = parseInt((cell as HTMLElement).dataset.gridRow ?? "0");
-        const col = parseInt((cell as HTMLElement).dataset.gridCol ?? "0");
-        const occupied = cellOccupied(row, col);
-        const edge = resolveDropEdgeFromRect(occupied, r, clientX, clientY);
-        return { row, col, edge, rect: r };
-      }
+  // 先尝试精确 hit-test
+  const cells = gridEl.querySelectorAll(".caa-grid-cell");
+  let bestCell: HTMLElement | null = null;
+  let bestRect: DOMRect | null = null;
+  let bestDist = Infinity;
+
+  for (const cell of cells) {
+    const r = cell.getBoundingClientRect();
+    if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) {
+      const row = parseInt((cell as HTMLElement).dataset.gridRow ?? "0");
+      const col = parseInt((cell as HTMLElement).dataset.gridCol ?? "0");
+      const occupied = cellOccupied(row, col);
+      const edge = resolveDropEdgeFromRect(occupied, r, clientX, clientY);
+      return { row, col, edge, rect: r };
     }
+    // 同时记录最近 cell（兜底用）
+    const cx = (r.left + r.right) / 2;
+    const cy = (r.top + r.bottom) / 2;
+    const dist = (clientX - cx) ** 2 + (clientY - cy) ** 2;
+    if (dist < bestDist) { bestDist = dist; bestCell = cell as HTMLElement; bestRect = r; }
   }
 
-  // 兜底：返回 null（没有找到匹配的 cell，不在任何 cell 上方）
+  // 兜底：鼠标在 grid 内但不在任何 cell 上 → 找最近 cell 的最近边
+  const gr = gridEl.getBoundingClientRect();
+  const inGrid = clientX >= gr.left && clientX <= gr.right && clientY >= gr.top && clientY <= gr.bottom;
+  if (inGrid && bestCell && bestRect) {
+    const row = parseInt(bestCell.dataset.gridRow ?? "0");
+    const col = parseInt(bestCell.dataset.gridCol ?? "0");
+    const occupied = cellOccupied(row, col);
+    // 判断鼠标在 bestCell 的哪一侧，用对应 edge
+    const edge = resolveDropEdgeFromRect(occupied, bestRect, clientX, clientY);
+    return { row, col, edge, rect: bestRect };
+  }
+
   return null;
 }
 
@@ -181,16 +201,17 @@ function onGridDragLeave(e: DragEvent) {
   }
 }
 
-function doDrop(row: number, col: number, edge: string, payload: string) {
-  const targetId = props.node.id;
+function doDrop(row: number, col: number, edge: string, payload: string, targetIdOverride?: string) {
+  const targetId = targetIdOverride || props.node.id;
   const root = ctx!.dialogRoot;
   if (!root) return;
 
   const targetContainer = findCaaNode(root, targetId);
   if (!targetContainer) return;
 
-  console.log("[CAA drop] ═══ doDrop ═══ row=%d col=%d edge=%s payload=%s container=%s children=%d",
-    row, col, edge, payload, targetId, targetContainer.children.length);
+  const isCross = targetId !== (payload.startsWith("MOVE:") ? payload.slice(5).split(":").pop() : "");
+  console.log("[CAA drop] ═══ doDrop ═══ row=%d col=%d edge=%s payload=%s target=%s isCross=%s children=%d",
+    row, col, edge, payload, targetId, isCross, targetContainer.children.length);
   console.log("[CAA drop] 现有控件：", targetContainer.children.map(c => ({ id: c.id, grid: c.grid })));
 
   // ── ① 快照（用于回退）──
@@ -287,13 +308,37 @@ function doDrop(row: number, col: number, edge: string, payload: string) {
   // ── ⑤ 原子替换 ──
   ctx!.setChildren(targetId, newChildren);
 
-  // 跨容器 MOVE：更新源容器
+  // 跨容器 MOVE：更新源容器（使用纯函数移除）
   if (sourceNodeId && sourceContainerId !== targetId) {
     const srcCtr = findCaaNode(root, sourceContainerId);
     if (srcCtr) {
-      srcCtr.children = srcCtr.children.filter((c) => c.id !== sourceNodeId);
+      const { newChildren } = removeChildNode(srcCtr.children, sourceNodeId);
+      srcCtr.children = newChildren;
       renumberGrid(srcCtr);
     }
+  }
+
+  // ── ⑥ 记录 Builder 操作 ──
+  if (ctx) {
+    const isCopy = payload.startsWith("COPY:");
+    const affectedId = isCopy ? (newChildren.find(c => !snapChildren.find(s => s.id === c.id))?.id ?? "") : sourceNodeId;
+    const affectedType = isCopy ? payload.slice(5) : (sourceNode?.type ?? "");
+    const record = buildBuilderRecord({
+      operation: isCopy ? "COPY" : "MOVE",
+      sourceContainerId: sourceContainerId || null,
+      targetContainerId: targetId,
+      sourceChildrenBefore: sourceSnapChildren,
+      targetChildrenBefore: snapChildren,
+      targetChildrenAfter: newChildren,
+      sourceChildrenAfter: sourceNodeId && sourceContainerId !== targetId
+        ? (findCaaNode(root, sourceContainerId)?.children.map(c => ({...c, grid: c.grid ? {...c.grid} : undefined, children: c.children})) ?? null)
+        : null,
+      affectedNodeId: affectedId,
+      affectedNodeType: affectedType,
+    });
+    console.log("[CAA drop] Record: op=%s affected=%s type=%s",
+      record.operation, record.affectedNodeId, record.affectedNodeType);
+    ctx.lastBuilderRecord.value = record;
   }
 
   if (sourceNodeId) ctx!.select(sourceNodeId);
@@ -336,25 +381,31 @@ function clearDragState() {
 //      状态泄漏（指示器残留跟随鼠标）
 //   4. Escape 键取消拖拽
 //   5. finishInternalDrag 中关闭状态 + 解绑全局事件 + 清除指示器
+//   6. 跨容器拖动：onWindowMouseMove 用 elementsFromPoint 搜索所有 grid host
 
-const internalDrag = ref<{ sourceNodeId: string; sourceContainerId: string; startX: number; startY: number; active: boolean } | null>(null);
+const internalDrag = ref<{ sourceNodeId: string; sourceContainerId: string; startX: number; startY: number; active: boolean; dragOverGridId: string | null } | null>(null);
 
 function onCellMouseDown(e: MouseEvent, child: CaaDialogNode) {
-  // 仅记录拖拽起点，不阻止默认行为（input 仍可聚焦、button 仍可点击）
-  // 规则：5px 阈值在 onGridMouseMove 中区分点击和拖拽，不再按 tagName 过滤
+  // 仅记录拖拽起点。
+  // stopPropagation 防止嵌套容器场景下事件冒泡到父 grid cell，
+  // 导致父容器 hijack 拖拽（把整个容器移动而非目标控件）。
   if (e.button !== 0) return;
+  e.stopPropagation();
+  console.log("[CAA drag] mousedown: node=%s container=%s type=%s", child.id, props.node.id, child.type);
   internalDrag.value = {
     sourceNodeId: child.id,
     sourceContainerId: props.node.id,
     startX: e.clientX,
     startY: e.clientY,
     active: false,
+    dragOverGridId: null,
   };
 }
 
 function cancelInternalDrag() {
   internalDrag.value = null;
   clearDragState();
+  if (ctx) ctx.dragJustEnded.value = true;
   window.removeEventListener("mouseup", onWindowMouseUp);
   window.removeEventListener("mousemove", onWindowMouseMove);
   window.removeEventListener("keydown", onWindowKeyDown);
@@ -362,11 +413,20 @@ function cancelInternalDrag() {
 
 function finishInternalDrag() {
   const d = internalDrag.value;
-  if (!d) return;
-  if (d.active && dragOverCell.value && ctx) {
+  if (d && d.active && dragOverCell.value && ctx) {
     const { row, col, edge } = dragOverCell.value;
-    doDrop(row, col, edge, `MOVE:${d.sourceNodeId}:${d.sourceContainerId}`);
+    const targetId = d.dragOverGridId || props.node.id;
+    const srcNode = ctx.dialogRoot ? findCaaNode(ctx.dialogRoot, d.sourceNodeId) : null;
+    console.log("[CAA drag] finishInternalDrag: sourceNode=%s grid=(%d,%d) srcCtr=%s -> target=%s cell=(%d,%d) edge=%s%s",
+      d.sourceNodeId,
+      srcNode?.grid?.row ?? -1, srcNode?.grid?.col ?? -1,
+      d.sourceContainerId,
+      targetId, row, col, edge,
+      targetId !== d.sourceContainerId ? " ★跨容器" : "");
+    doDrop(row, col, edge, `MOVE:${d.sourceNodeId}:${d.sourceContainerId}`, targetId);
   }
+  // 无论是否完成拖放，都抑制后续 click（防止拖拽后误触发选中）
+  if (ctx) ctx.dragJustEnded.value = true;
   internalDrag.value = null;
   clearDragState();
   window.removeEventListener("mouseup", onWindowMouseUp);
@@ -380,10 +440,28 @@ function onWindowMouseMove(e: MouseEvent) {
   if (!(e.buttons & 1)) { cancelInternalDrag(); return; }
   const d = internalDrag.value;
   if (!d) return;
-  // 用 grid host 元素做 hit-test（window 上没有 currentTarget）
-  const gridEl = document.querySelector(`[data-grid-host="${props.node.id}"]`) as HTMLElement | null;
-  if (!gridEl) return;
+  // 跨容器 hit-test：搜索鼠标下所有元素，找到第一个 grid host（不限于源容器）
+  const els = document.elementsFromPoint(e.clientX, e.clientY);
+  const gridEl = els.find((el) => el.hasAttribute("data-grid-host")) as HTMLElement | null;
+  if (!gridEl) {
+    dragOverCell.value = null;
+    if (ctx) ctx.dropIndicator.value.rect = null;
+    d.dragOverGridId = null;
+    return;
+  }
+  const foundId = gridEl.getAttribute("data-grid-host") || "";
+  const prevGridId = d.dragOverGridId;
+  d.dragOverGridId = foundId;
   const cell = cellFromPoint(gridEl, e.clientX, e.clientY);
+  // 只在进入新 grid 时打一次（减少刷屏）
+  if (foundId !== prevGridId) {
+    const srcNode = ctx?.dialogRoot ? findCaaNode(ctx.dialogRoot, d.sourceNodeId) : null;
+    console.log("[CAA drag] 切换目标: %s -> %s  cell=(%d,%d) edge=%s",
+      prevGridId || "(none)", foundId,
+      cell?.row ?? -1, cell?.col ?? -1, cell?.edge ?? "?");
+  }
+  dragOverCell.value = cell;
+  writeDropIndicator(cell, gridEl, e.clientX, e.clientY);
   dragOverCell.value = cell;
   writeDropIndicator(cell, gridEl, e.clientX, e.clientY);
 }
@@ -399,15 +477,32 @@ function onGridMouseMove(e: MouseEvent) {
   }
   const d = internalDrag.value;
   if (!d) return;
-  e.stopPropagation();
+
   const dx = Math.abs(e.clientX - d.startX);
   const dy = Math.abs(e.clientY - d.startY);
+
+  // 阈值前不阻止冒泡（区分点击和拖拽）
   if (dx < 5 && dy < 5) return;
+
+  // 跨容器：检查鼠标是否实际落在另一个 grid host 内（嵌套容器场景）
+  const els = document.elementsFromPoint(e.clientX, e.clientY);
+  const firstGrid = els.find((el) => el.hasAttribute("data-grid-host")) as HTMLElement | null;
+  if (firstGrid) {
+    const hitId = firstGrid.getAttribute("data-grid-host") || "";
+    if (hitId !== props.node.id) {
+      console.log("[CAA drag] onGridMouseMove 检测到跨容器: source=%s target=%s (放行)", props.node.id, hitId);
+      // 鼠标在子容器内 → 不放行 stopPropagation，让事件冒泡到 onWindowMouseMove
+      return;
+    }
+  }
+
+  e.stopPropagation();
 
   // 首次跨越阈值：激活拖拽 + 绑定全局事件
   if (!d.active) {
     d.active = true;
     dragOverGrid.value = true;
+    console.log("[CAA drag] 激活: sourceNode=%s sourceContainer=%s", d.sourceNodeId, d.sourceContainerId);
     window.addEventListener("mouseup", onWindowMouseUp);
     window.addEventListener("mousemove", onWindowMouseMove);
     window.addEventListener("keydown", onWindowKeyDown);
@@ -420,6 +515,8 @@ function onGridMouseMove(e: MouseEvent) {
 }
 
 function onGridMouseUp(e: MouseEvent) {
+  // 只有本组件有活跃拖拽时才处理；否则放行冒泡给 window → 源组件的 finishInternalDrag
+  if (!internalDrag.value) return;
   e.stopPropagation();
   finishInternalDrag();
 }

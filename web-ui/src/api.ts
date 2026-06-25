@@ -2120,6 +2120,7 @@ export type UnitTestSuiteInfo = {
   description: string;
   module_count: number;
   modules: string[];
+  backend: "python" | "vitest";
 };
 
 export type UnitTestCaseResult = {
@@ -2166,6 +2167,14 @@ export type UnitTestRunResult = {
 
 export function fetchUnitTestSuites() {
   return jsonFetch<{ suites: UnitTestSuiteInfo[] }>("/api/unit-tests/suites");
+}
+
+/** vitest 测试列表（Node.js 后端） */
+/** vitest 测试列表（Node.js 后端，返回 {modules: [{file, count, tests}]}） */
+export function fetchVitestTestList() {
+  return jsonFetch<{ modules: { file: string; count: number; tests: string[] }[] }>(
+    "/api/caa/unit-tests/suites",
+  );
 }
 
 export type UnitTestPlanCase = {

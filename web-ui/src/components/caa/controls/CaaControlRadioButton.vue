@@ -18,7 +18,7 @@ const { isSelected, onClick, onContextmenu, titleBinding } = useCaaControl(props
     @click="onClick"
     @contextmenu="onContextmenu($event)"
   >
-    <input type="radio" disabled />
+    <input type="radio" @click.prevent />
     <CaaInlineNlsText
       :text="titleBinding.text"
       :nls-key="titleBinding.key"

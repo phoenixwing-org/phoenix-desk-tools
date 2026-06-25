@@ -444,3 +444,48 @@ export function compactChildren(children: GridChild[]): void {
     c.grid.col = colMap.get(c.grid.col) ?? c.grid.col;
   }
 }
+
+// ── Builder 操作记录（为撤销/重做准备结构化数据）──
+
+export type BuilderRecordType = "COPY" | "MOVE" | "DELETE";
+
+export interface BuilderRecord {
+  /** 操作类型 */
+  operation: BuilderRecordType;
+  /** 源容器 ID（COPY 和 DELETE 为 null） */
+  sourceContainerId: string | null;
+  /** 目标容器 ID */
+  targetContainerId: string;
+  /** 源容器删除前 children 快照（仅第一层，COPY/DELETE 为 null） */
+  sourceChildrenBefore: readonly GridChild[] | null;
+  /** 目标容器操作前 children 快照（仅第一层） */
+  targetChildrenBefore: readonly GridChild[];
+  /** 目标容器操作后 children（仅第一层） */
+  targetChildrenAfter: readonly GridChild[];
+  /** 源容器删除后 children 快照（仅第一层，COPY/DELETE 为 null） */
+  sourceChildrenAfter: readonly GridChild[] | null;
+  /** 受影响的控件 ID */
+  affectedNodeId: string;
+  /** 受影响的控件类型 */
+  affectedNodeType: string;
+  /** ISO 时间戳 */
+  timestamp: string;
+}
+
+/** 纯工厂函数：构造 BuilderRecord */
+export function buildBuilderRecord(input: {
+  operation: BuilderRecordType;
+  sourceContainerId: string | null;
+  targetContainerId: string;
+  sourceChildrenBefore: readonly GridChild[] | null;
+  targetChildrenBefore: readonly GridChild[];
+  targetChildrenAfter: readonly GridChild[];
+  sourceChildrenAfter: readonly GridChild[] | null;
+  affectedNodeId: string;
+  affectedNodeType: string;
+}): BuilderRecord {
+  return {
+    ...input,
+    timestamp: new Date().toISOString(),
+  };
+}

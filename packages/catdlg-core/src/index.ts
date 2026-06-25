@@ -10,4 +10,5 @@ export * from "./lightMeta.js";
 export * from "./nlsKeys.js";
 export * from "./patchCatNls.js";
 export * from "./patchCatDlg.js";
+export * from "./emitCatDlg.js";
 export * from "./nlsLocales.js";
