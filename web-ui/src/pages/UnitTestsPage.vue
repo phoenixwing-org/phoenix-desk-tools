@@ -46,6 +46,7 @@ import {
   sortPlanModules,
   type ModuleHistoryMap,
 } from "../utils/unitTestModuleHistory";
+import { mergeSuites } from "../utils/unitTestBackendSplit";
 
 const shell = useAppShell();
 const pageStore = useUnitTestsPageStore();
@@ -543,24 +544,7 @@ async function loadSuites() {
       fetchVitestTestList().catch(() => ({ modules: [] as { file: string; count: number; tests: string[] }[] })),
     ]);
 
-    // Python 套件 + vitest 套件合并
-    const pySuites = pyData.suites;
-    const vitestModules = vitestData.modules ?? [];
-    const caaFromVitest = vitestModules.length > 0
-      ? [{
-          id: "caa",
-          label: "CAA 模块",
-          description: "对话框编辑器：解析/emit/拖放/NLS/保存（vitest）",
-          module_count: vitestModules.length,
-          modules: vitestModules.map((m) => m.file),
-          backend: "vitest" as const,
-        }]
-      : [];
-    suites.value = [
-      // Python 套件，但 vitest 有数据时跳过 Python 的 vitest 套件（由 Node 数据替代）
-      ...pySuites.filter((s) => !(caaFromVitest.length > 0 && s.backend === "vitest")),
-      ...caaFromVitest,
-    ];
+    suites.value = mergeSuites(pyData.suites, vitestData.modules ?? []);
     void loadRunPlan();
   } catch (e) {
     loadError.value = String(e);

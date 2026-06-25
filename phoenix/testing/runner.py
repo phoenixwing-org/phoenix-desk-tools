@@ -218,11 +218,12 @@ def _load_modules_plan(module_names: List[str]) -> tuple[List[tuple[str, unittes
 
 def _is_vitest_module(module_name: str) -> bool:
     """判断是否为 vitest 前端测试模块（非 Python unittest）"""
-    from phoenix.testing.suite_registry import VITEST_MODULES
-    all_vitest: set[str] = set()
-    for mods in VITEST_MODULES.values():
-        all_vitest.update(mods)
-    return module_name in all_vitest
+    # 前端 TypeScript 测试路径（web-ui/src/...test.ts）和 packages
+    if "/" in module_name and ".test.ts" in module_name:
+        return True
+    if module_name.startswith("packages/"):
+        return True
+    return False
 
 
 def _get_vitest_suite_ids() -> frozenset[str]:
@@ -412,6 +413,46 @@ def iter_unit_test_run_events(
 ):
     """Yield NDJSON-friendly progress dicts while running tests."""
     opts = options or UnitTestRunOptions()
+
+    # vitest-only 套件：通过子进程运行（无流式进度，一次性返回）
+    vitest_ids = _get_vitest_suite_ids()
+    is_vitest_only = all(sid in vitest_ids for sid in suite_ids if sid != "all")
+    if is_vitest_only and suite_ids:
+        from phoenix.testing.vitest_runner import run_vitest_suite
+
+        suite_id = "+".join(suite_ids)
+        result_dict = run_vitest_suite(suite_id)
+        label = result_dict.get("suite_label", suite_id)
+        modules_list = result_dict.get("modules", [])
+        cases = result_dict.get("cases", [])
+        total = result_dict.get("summary", {}).get("tests_run", len(cases))
+        yield {
+            "type": "start",
+            "suite_id": suite_id,
+            "suite_label": label,
+            "total_modules": len(modules_list),
+            "total_cases": total,
+            "ignored_cases": 0,
+            "modules": [m.get("module", "") for m in modules_list],
+            "load_errors": [],
+        }
+        for m in modules_list:
+            m_name = m.get("module", "")
+            yield {
+                "type": "module_start",
+                "module": m_name,
+                "module_index": modules_list.index(m) + 1,
+                "module_total": len(modules_list),
+                "suite_id": suite_id,
+            }
+            yield {
+                "type": "module_done",
+                "module": m_name,
+                "summary": {"tests_run": m.get("tests_run", 0), "passed": m.get("passed", 0), "failed": m.get("failed", 0), "errors": m.get("errors", 0), "skipped": m.get("skipped", 0)},
+            }
+        yield {"type": "done", "result": result_dict}
+        return
+
     _, load_errors, modules, suite_id, label, planned, ignored = _resolve_run_context(suite_ids, opts)
     total_cases = len(planned)
     started = time.perf_counter()
