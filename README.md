@@ -10,10 +10,17 @@
 
 ```bash
 pip install -e ".[web]"
-pnpm install                   # 需 Node.js；--dev 必需
+pnpm install                   # 需 Node.js
 
-python -m phoenix.web --dev    # 开发：Vite 热更新 + API
-python -m phoenix.web          # 日常：API + 前端，http://127.0.0.1:5173
+# Python API 后端
+python -m phoenix.web --dev    # 开发：仅 API 热重载（端口 8765）
+python -m phoenix.web          # 日常：API + 静态前端，http://127.0.0.1:5173
+
+# 前端 + CAA Node（pnpm）
+pnpm dev          # 全栈：Vite (:5173) + CAA Node (:5180)
+pnpm dev:ui       # 仅 Vite 前端 (:5173)
+pnpm dev:caa      # 仅 CAA Node 后端 (:5180)
+
 python -m phoenix              # 启动器：配置工作空间后打开 Web
 ```
 

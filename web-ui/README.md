@@ -1,11 +1,16 @@
 # Phoenix 桌面辅助工具（Web · 单端口 / 开发双进程）
 
-## 两种启动方式
+## 快速启动
 
-| 模式 | 命令 | 端口 | 适用 |
-| --- | --- | --- | --- |
-| **单服务（默认）** | `python -m phoenix.web` | **5173**（API + `dist` 静态页） | 日常使用、验收 |
-| **开发热更新** | `python -m phoenix.web --dev` | **5173** Vite + **8765** API | 改 Vue/TS，无需 build |
+| 命令 | 启动内容 | 端口 |
+| --- | --- | --- |
+| `python -m phoenix.web` | API + 静态前端（生产） | **5173** |
+| `python -m phoenix.web --dev` | 仅 API 热重载（开发） | **8765** |
+| `pnpm dev` | Vite + CAA Node（全栈） | **5173** + **5180** |
+| `pnpm dev:ui` | 仅 Vite 前端 | **5173** |
+| `pnpm dev:caa` | 仅 CAA Node 后端 | **5180** |
+
+`pnpm dev` / `pnpm build` / `pnpm preview` 可在**仓库根目录**直接运行（转发至 `web-ui`）。
 
 ## 首次
 
@@ -13,8 +18,6 @@
 pip install -e ".[web]"
 pnpm install    # 仓库根目录；依赖装在 web-ui
 ```
-
-`pnpm dev` / `pnpm build` / `pnpm preview` 可在**仓库根目录**直接运行（转发至 `web-ui`）；在 `web-ui/` 下执行同样有效。
 
 ## 单服务启动（正式）
 
@@ -35,31 +38,35 @@ pnpm build
 
 ## 开发模式（Vite 热更新）
 
-**一条命令**（推荐）：
+需要**两个终端**：
 
 ```bash
+# 终端 1：Python API
 python -m phoenix.web --dev -w /path/to/CAD/workspace
+
+# 终端 2：Vite 前端（如需 CAA 则用 pnpm dev）
+pnpm dev:ui
 ```
 
 - 浏览器打开 **http://127.0.0.1:5173**（Vite）
 - `/api` 自动代理到 **http://127.0.0.1:8765**
 - 修改 `web-ui/src/**` 即时刷新，**不用** `pnpm build`
 
-**或手动双终端**：
+或全栈一键启动（Vite + CAA Node）：
 
 ```bash
-# 终端 1：仅 API
-python -m phoenix.web --api-only --port 8765 -w /path/to/CAD/workspace
+# 终端 1：Python API
+python -m phoenix.web --dev -w /path/to/CAD/workspace
 
-# 终端 2：Vite（需与 API 端口一致）
-PHOENIX_API_PORT=8765 pnpm dev
+# 终端 2：全栈前端
+pnpm dev
 ```
 
-换 API 端口：`python -m phoenix.web --dev --api-port 9000`（Vite 读 `PHOENIX_API_PORT` 或 `PHOENIX_API_PORT`）。
+换 API 端口：`python -m phoenix.web --dev --api-port 9000`（Vite 读 `PHOENIX_API_PORT`）。
 
 ## 浏览器
 
-单服务 / `--dev` 默认在 **Cursor / VS Code 内置浏览器**打开，不是系统 Safari/Chrome。
+单服务模式默认在 **Cursor / VS Code 内置浏览器**打开，不是系统 Safari/Chrome。
 
 - 依赖：终端里能调用 `cursor` 或 `code` CLI
 - 不要自动打开：加 `--no-open`
@@ -71,18 +78,23 @@ PHOENIX_API_PORT=8765 pnpm dev
 
 ```bash
 python -m phoenix.web --api-only --port 8765
+# 或开发模式（同上）
+python -m phoenix.web --dev
 ```
 
-## 备忘：5173 端口被占用
+## 备忘：端口被占用
+
+| 端口 | 占用方 |
+| --- | --- |
+| 5173 | Vite 前端 / 生产 Python |
+| 5180 | CAA Node 服务 |
+| 8765 | Python API（开发模式） |
 
 ```bash
-lsof -nP -iTCP:5173 -sTCP:LISTEN
-kill <PID>
+# Windows
+netstat -ano | findstr 5173
+taskkill /PID <PID> /F
 ```
-
-开发模式下 5173 由 Vite 占用，8765 由 Python API 占用；单服务模式下 5173 由 Python 独占。
-
-换单服务端口：`python -m phoenix.web --port 8765`
 
 ## 新手指引
 

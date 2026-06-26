@@ -104,12 +104,9 @@ class AppShell(ctk.CTk):
         self.destroy()
 
     def _refresh_window_title(self) -> None:
-        from phoenix.config.user_prefs import format_absolute_config_path
+        from phoenix import __version__
 
-        self.title(
-            f"{self._app_title_base} — "
-            f"{self.app_state.repo_root.name if self.app_state.repo_root else '未设置'}"
-        )
+        self.title(f"{self._app_title_base} v{__version__}")
 
     def _render_status_bar(self) -> None:
         from phoenix.config.user_prefs import format_absolute_config_path

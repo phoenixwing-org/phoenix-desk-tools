@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import argparse
-import os
 import subprocess
 import sys
 import threading
-import time
 from pathlib import Path
 
 import uvicorn
@@ -17,12 +15,9 @@ from phoenix.web.browser_open import find_ide_cli, open_in_ide_browser, print_te
 from phoenix.web.paths import (
     build_web_ui,
     default_api_dev_port,
-    default_static_dir,
     default_web_port,
     default_workspace_path,
-    repo_root,
     resolve_static_dir,
-    run_pnpm,
 )
 
 
@@ -72,72 +67,6 @@ def _print_workspace_banner(ws_path: Path | None) -> None:
     print(f"工作空间: {ws_path}")
 
 
-def _run_dev_mode(
-    *,
-    ws_path: Path | None,
-    host: str,
-    api_port: int,
-    vite_port: int,
-    no_open: bool,
-    open_system: bool,
-) -> None:
-    root = repo_root()
-    ui_dir = root / "web-ui"
-    if not (ui_dir / "package.json").is_file():
-        print(f"未找到前端工程: {ui_dir}", file=sys.stderr)
-        sys.exit(1)
-    pnpm_cwd = root if (root / "package.json").is_file() else ui_dir
-
-    if ws_path is not None:
-        try:
-            ws = set_workspace(ws_path)
-        except ValueError as exc:
-            print(str(exc), file=sys.stderr)
-            sys.exit(2)
-    else:
-        ws = None
-    app = create_app(static_dir=None)
-    api_url = f"http://{host}:{api_port}"
-    vite_url = f"http://{host}:{vite_port}"
-
-    api_error: list[BaseException] = []
-
-    def _serve_api() -> None:
-        try:
-            uvicorn.run(app, host=host, port=api_port, log_level="warning", access_log=False)
-        except BaseException as exc:
-            api_error.append(exc)
-
-    api_thread = threading.Thread(target=_serve_api, daemon=True)
-    api_thread.start()
-    time.sleep(0.6)
-    if api_error:
-        print(f"API 启动失败: {api_error[0]}", file=sys.stderr)
-        sys.exit(1)
-
-    _print_workspace_banner(ws)
-    print(f"API:  {api_url}/api/health")
-    print(f"Vite: {vite_url} （热更新，/api 代理到 {api_port}）")
-    print("改 Vue/TS 即时刷新，无需 pnpm build。Ctrl+C 退出。")
-
-    if not no_open:
-        _schedule_open_browser(vite_url, use_system=open_system)
-
-    env = os.environ.copy()
-    env["PHOENIX_API_PORT"] = str(api_port)
-    env["PHOENIX_API_PORT"] = str(api_port)  # 兼容 Vite 旧环境变量名
-    try:
-        run_pnpm(["dev"], cwd=pnpm_cwd, env=env)
-    except KeyboardInterrupt:
-        print("\n开发模式已停止。")
-    except FileNotFoundError:
-        print(
-            "未找到 pnpm（未在 PATH 中）。请先安装 Node.js / pnpm，并在仓库根目录执行: pnpm install",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Phoenix 桌面辅助工具（Web：单服务 API + 静态前端，默认端口 5173）",
@@ -168,13 +97,13 @@ def main() -> None:
     parser.add_argument(
         "--dev",
         action="store_true",
-        help="开发模式：API 8765 + Vite 5173 热更新（无需 build，双进程）",
+        help="开发模式：同 --api-only，但默认端口改为 8765。前端使用 pnpm dev / pnpm dev:ui",
     )
     parser.add_argument(
         "--api-port",
         type=int,
         default=default_api_dev_port(),
-        help=f"--dev 时 API 端口（默认 {default_api_dev_port()}；Vite 固定 5173）",
+        help=f"--dev 时 API 端口（默认 {default_api_dev_port()}）",
     )
     parser.add_argument(
         "--no-open",
@@ -188,21 +117,13 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    ws_path = _resolve_workspace_path(args.workspace)
-
+    # --dev 等价于 --api-only + 端口切到 api_port（除非用户显式指定了 --port）
     if args.dev:
-        if args.build or args.api_only:
-            print("--dev 与 --build / --api-only 不能同时使用", file=sys.stderr)
-            sys.exit(2)
-        _run_dev_mode(
-            ws_path=ws_path,
-            host=args.host,
-            api_port=args.api_port,
-            vite_port=default_web_port(),
-            no_open=args.no_open,
-            open_system=args.open_system,
-        )
-        return
+        args.api_only = True
+        if args.port == default_web_port():
+            args.port = args.api_port
+
+    ws_path = _resolve_workspace_path(args.workspace)
 
     static_dir: Path | None = None
     if not args.api_only:
@@ -238,11 +159,11 @@ def main() -> None:
         _schedule_open_browser(url, use_system=args.open_system)
         target = "系统浏览器" if args.open_system else "Cursor/VS Code 内置浏览器"
         print(f"将自动打开（{target}）: {url}")
+    elif args.dev:
+        print(f"API:  {url}/api/health")
+        print("开发模式：仅 API 热重载。前端请另外运行 pnpm dev 或 pnpm dev:ui。Ctrl+C 退出。")
     else:
-        print(f"打开浏览器: {url}")
-    if static_dir:
-        print(f"前端: {static_dir}")
-    print(f"API: {url}/api/health")
+        print(f"API:  {url}/api/health")
 
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning", access_log=False)
 

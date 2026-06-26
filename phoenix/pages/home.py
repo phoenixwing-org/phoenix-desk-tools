@@ -17,14 +17,47 @@ from phoenix.pages.base import BasePage
 from phoenix.pages import form_widgets as fw
 from phoenix.shell.native_dialog import pick_workspace_directory
 from phoenix.shell.state import AppState
-from phoenix.shell.web_launcher import open_web_ui, stop_web_ui, web_server_status
+from phoenix.shell.web_launcher import (
+    SERVICES,
+    ServiceDef,
+    check_service,
+    start_service,
+    stop_service,
+    stop_all_services,
+    open_web_ui,
+    stop_web_ui,
+    web_server_status,
+)
 
 _LABEL_W = 72
 _PAD = 12
 
+# 列宽（服务表）
+_COL_NAME = 120
+_COL_STATUS = 60
+_COL_PORT = 56
+# 操作列自动填充
+
+# 颜色
+_GREEN = "#22c55e"
+_GRAY = "#94a3b8"
+_RED = "#ef4444"
+
+
+def _status_dot(running: bool) -> str:
+    return "●" if running else "○"
+
+
+def _status_color(running: bool) -> str:
+    return _GREEN if running else _GRAY
+
+
+def _status_text(running: bool) -> str:
+    return "运行中" if running else "已停止"
+
 
 class HomePage(BasePage):
-    """启动器：工作空间 / FreeCAD，打开 Web 版。"""
+    """启动器：服务管理 + 工作空间 / FreeCAD。"""
 
     page_id = "home"
 
@@ -47,112 +80,246 @@ class HomePage(BasePage):
         self._recent_path_map: dict[str, Path] = {}
         self._recent_var = ctk.StringVar(value="")
 
+        # 服务行 widgets（按 port 索引）
+        self._svc_dot: dict[int, ctk.CTkLabel] = {}
+        self._svc_label: dict[int, ctk.CTkLabel] = {}
+        self._svc_btn: dict[int, ctk.CTkButton] = {}
+
         outer = ctk.CTkFrame(self, fg_color="transparent")
         outer.grid(row=0, column=0, sticky="nsew", padx=_PAD, pady=_PAD)
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
-        outer.grid_columnconfigure(1, weight=1)
+        outer.grid_columnconfigure(3, weight=1)
 
         r = 0
-        web_row = ctk.CTkFrame(outer, fg_color="transparent")
-        web_row.grid(row=r, column=0, columnspan=3, sticky="ew", pady=(0, 4))
-        web_row.grid_columnconfigure(0, weight=1)
-        web_row.grid_columnconfigure(1, weight=1)
-        ctk.CTkButton(
-            web_row,
-            text="打开 Web 版",
-            height=32,
-            font=ctk.CTkFont(size=13, weight="bold"),
-            command=self._open_web,
-        ).grid(row=0, column=0, sticky="ew", padx=(0, 4))
-        self._stop_web_btn = ctk.CTkButton(
-            web_row,
-            text="关闭 Web 服务",
-            height=32,
-            fg_color=("gray75", "gray35"),
-            command=self._stop_web,
+
+        # ════ 服务状态表 ════
+        svc_section = ctk.CTkFrame(outer)
+        svc_section.grid(row=r, column=0, columnspan=4, sticky="ew", pady=(0, 12))
+        svc_section.grid_columnconfigure(3, weight=1)
+
+        # 表头
+        _hdr_font = ctk.CTkFont(size=11, weight="bold")
+        _hdr_color = ("#475569", "#94a3b8")
+        headers = [("服务", _COL_NAME), ("状态", _COL_STATUS), ("端口", _COL_PORT), ("", 0)]
+        for ci, (text, w) in enumerate(headers):
+            lbl = ctk.CTkLabel(svc_section, text=text, font=_hdr_font, text_color=_hdr_color, anchor="w")
+            if w:
+                lbl.grid(row=0, column=ci, sticky="w", padx=(10 if ci == 0 else 4, 4), pady=(10, 4))
+            else:
+                lbl.grid(row=0, column=ci, sticky="w", padx=(4, 10), pady=(10, 4))
+
+        # 分隔线
+        sep1 = ctk.CTkFrame(svc_section, height=1, fg_color=("#e2e8f0", "#334155"))
+        sep1.grid(row=1, column=0, columnspan=4, sticky="ew", padx=10, pady=(0, 2))
+
+        # 服务行
+        self._svc_rows: dict[int, int] = {}  # port → row index
+        for i, svc in enumerate(SERVICES):
+            row = 2 + i
+            self._svc_rows[svc.port] = row
+
+            # 服务名
+            ctk.CTkLabel(svc_section, text=svc.name, font=ctk.CTkFont(size=12), anchor="w").grid(
+                row=row, column=0, sticky="w", padx=(10, 4), pady=5
+            )
+
+            # 状态：指示灯 + 文字
+            dot = ctk.CTkLabel(svc_section, text="○", font=ctk.CTkFont(size=14),
+                               text_color=_GRAY, width=20, anchor="center")
+            dot.grid(row=row, column=1, sticky="w", padx=(0, 2), pady=5)
+            self._svc_dot[svc.port] = dot
+
+            st_label = ctk.CTkLabel(svc_section, text="已停止", font=ctk.CTkFont(size=11),
+                                     text_color=_GRAY, anchor="w")
+            st_label.grid(row=row, column=1, sticky="w", padx=(22, 4), pady=5)
+            self._svc_label[svc.port] = st_label
+
+            # 端口
+            ctk.CTkLabel(svc_section, text=str(svc.port), font=ctk.CTkFont(size=12),
+                         text_color=("#64748b", "#94a3b8"), anchor="w").grid(
+                row=row, column=2, sticky="w", padx=(4, 4), pady=5
+            )
+
+            # 操作按钮
+            btn = ctk.CTkButton(svc_section, text="启动", width=64, height=26,
+                                font=ctk.CTkFont(size=11),
+                                command=lambda s=svc: self._toggle_service(s))
+            btn.grid(row=row, column=3, sticky="e", padx=(4, 10), pady=5)
+            self._svc_btn[svc.port] = btn
+
+        # 分隔线
+        sep2 = ctk.CTkFrame(svc_section, height=1, fg_color=("#e2e8f0", "#334155"))
+        sep2.grid(row=5, column=0, columnspan=4, sticky="ew", padx=10, pady=(4, 0))
+
+        # 统一起停行
+        action_row = ctk.CTkFrame(svc_section, fg_color="transparent")
+        action_row.grid(row=6, column=0, columnspan=4, sticky="ew", padx=10, pady=(8, 10))
+        action_row.grid_columnconfigure(2, weight=1)
+
+        ctk.CTkButton(action_row, text="▶  全部启动", width=100, height=28,
+                       font=ctk.CTkFont(size=12), command=self._start_all).grid(
+            row=0, column=0, padx=(0, 6)
         )
-        self._stop_web_btn.grid(row=0, column=1, sticky="ew", padx=(4, 0))
+        ctk.CTkButton(action_row, text="■  全部停止", width=100, height=28,
+                       fg_color=("#e2e8f0", "#334155"),
+                       text_color=("#1e293b", "#e2e8f0"),
+                       font=ctk.CTkFont(size=12), command=self._stop_all).grid(
+            row=0, column=1, padx=(0, 6)
+        )
+        ctk.CTkButton(action_row, text="🌐 打开浏览器", width=110, height=28,
+                       font=ctk.CTkFont(size=11),
+                       fg_color=("gray75", "gray35"),
+                       command=self._open_browser).grid(
+            row=0, column=3, sticky="e"
+        )
+
         r += 1
 
-        self._web_status = ctk.CTkLabel(
-            outer,
-            text="",
-            anchor="w",
-            font=ctk.CTkFont(size=11),
-            text_color=("#64748b", "#94a3b8"),
-        )
-        self._web_status.grid(row=r, column=0, columnspan=3, sticky="ew", pady=(0, 8))
-        r += 1
+        # ════ 工作空间配置 ════
+        ws_section = ctk.CTkFrame(outer)
+        ws_section.grid(row=r, column=0, columnspan=4, sticky="ew", pady=(0, 0))
+        ws_section.grid_columnconfigure(1, weight=1)
 
-        fw.form_row_label(outer, text="工作空间", width=_LABEL_W).grid(
-            row=r, column=0, sticky="w", padx=(0, 6)
+        wsr = 0
+        # 工作空间路径
+        fw.form_row_label(ws_section, text="工作空间", width=_LABEL_W).grid(
+            row=wsr, column=0, sticky="w", padx=(10, 6), pady=(10, 4)
         )
-        self._repo_entry = ctk.CTkEntry(outer, height=28, placeholder_text="项目根目录")
-        self._repo_entry.grid(row=r, column=1, sticky="ew", padx=(0, 6))
-        ctk.CTkButton(outer, text="…", width=36, height=28, command=self._browse_repo).grid(
-            row=r, column=2
+        self._repo_entry = ctk.CTkEntry(ws_section, height=28, placeholder_text="项目根目录")
+        self._repo_entry.grid(row=wsr, column=1, sticky="ew", padx=(0, 6), pady=(10, 4))
+        ctk.CTkButton(ws_section, text="…", width=36, height=28, command=self._browse_repo).grid(
+            row=wsr, column=2, padx=(0, 10), pady=(10, 4)
         )
-        r += 1
+        wsr += 1
 
-        fw.form_row_label(outer, text="最近", width=_LABEL_W).grid(
-            row=r, column=0, sticky="w", padx=(0, 6), pady=(6, 0)
+        # 最近
+        fw.form_row_label(ws_section, text="最近", width=_LABEL_W).grid(
+            row=wsr, column=0, sticky="w", padx=(10, 6), pady=(2, 4)
         )
         self._recent_menu = ctk.CTkOptionMenu(
-            outer,
+            ws_section,
             variable=self._recent_var,
             values=["（无记录）"],
             height=28,
             command=self._on_recent_picked,
         )
-        self._recent_menu.grid(row=r, column=1, columnspan=2, sticky="ew", pady=(6, 0))
-        r += 1
+        self._recent_menu.grid(row=wsr, column=1, columnspan=2, sticky="ew", padx=(0, 10), pady=(2, 4))
+        wsr += 1
 
-        fw.form_row_label(outer, text="FreeCAD", width=_LABEL_W).grid(
-            row=r, column=0, sticky="w", padx=(0, 6), pady=(6, 0)
+        # FreeCAD
+        fw.form_row_label(ws_section, text="FreeCAD", width=_LABEL_W).grid(
+            row=wsr, column=0, sticky="w", padx=(10, 6), pady=(2, 4)
         )
-        self._fc_entry = ctk.CTkEntry(outer, height=28, placeholder_text="可选")
-        self._fc_entry.grid(row=r, column=1, sticky="ew", padx=(0, 6), pady=(6, 0))
-        fc_btns = ctk.CTkFrame(outer, fg_color="transparent")
-        fc_btns.grid(row=r, column=2, sticky="e", pady=(6, 0))
+        self._fc_entry = ctk.CTkEntry(ws_section, height=28, placeholder_text="可选")
+        self._fc_entry.grid(row=wsr, column=1, sticky="ew", padx=(0, 6), pady=(2, 4))
+        fc_btns = ctk.CTkFrame(ws_section, fg_color="transparent")
+        fc_btns.grid(row=wsr, column=2, sticky="e", padx=(0, 10), pady=(2, 4))
         ctk.CTkButton(fc_btns, text="…", width=36, height=28, command=self._browse_freecad).pack(
             side="left", padx=(0, 4)
         )
         default_fc = default_freecad_install_dir()
         if default_fc:
             ctk.CTkButton(
-                fc_btns,
-                text="默认",
-                width=48,
-                height=28,
-                fg_color=("gray70", "gray40"),
-                command=self._fill_default_freecad,
+                fc_btns, text="默认", width=48, height=28,
+                fg_color=("gray70", "gray40"), command=self._fill_default_freecad,
             ).pack(side="left")
-        r += 1
+        wsr += 1
 
-        btn_bar = ctk.CTkFrame(outer, fg_color="transparent")
-        btn_bar.grid(row=r, column=0, columnspan=3, sticky="w", pady=(10, 0))
+        # 按钮栏
+        btn_bar = ctk.CTkFrame(ws_section, fg_color="transparent")
+        btn_bar.grid(row=wsr, column=0, columnspan=3, sticky="w", padx=(10, 10), pady=(6, 10))
         ctk.CTkButton(btn_bar, text="保存", width=64, height=28, command=self._save_prefs).pack(
             side="left", padx=(0, 6)
         )
-        ctk.CTkButton(
-            btn_bar,
-            text="关于",
-            width=64,
-            height=28,
-            fg_color=("gray75", "gray35"),
-            command=self._about_clicked,
-        ).pack(side="left")
+        ctk.CTkButton(btn_bar, text="关于", width=64, height=28,
+                       fg_color=("gray75", "gray35"), command=self._about_clicked).pack(side="left")
 
+        # 初始化
         self._sync_fields_from_state()
         self._refresh_recent_menu()
-        self._refresh_web_status()
-        self._schedule_web_status_poll()
+        self._refresh_all_services()
+        self._schedule_status_poll()
+
+    # ── 服务管理 ──
+
+    def _toggle_service(self, svc: ServiceDef) -> None:
+        st = check_service(svc)
+        if st["running"]:
+            stop_service(svc)
+        else:
+            start_service(svc)
+        self._refresh_all_services()
+
+    def _start_all(self) -> None:
+        for svc in SERVICES:
+            st = check_service(svc)
+            if not st["running"]:
+                start_service(svc)
+        self._refresh_all_services()
+        self._set_status("已启动全部服务")
+
+    def _stop_all(self) -> None:
+        if not messagebox.askyesno("全部停止", "确认停止全部三服务？", parent=self):
+            return
+        results = stop_all_services()
+        failed = [name for name, ok in results.items() if not ok]
+        if failed:
+            self._set_status(f"部分服务停止失败: {', '.join(failed)}")
+        else:
+            self._set_status("已停止全部服务")
+        self._refresh_all_services()
+
+    def _open_browser(self) -> None:
+        st = check_service(SERVICES[1])  # Vite 前端 :5173
+        if st["running"]:
+            import webbrowser
+            webbrowser.open("http://127.0.0.1:5173")
+            self._set_status("浏览器已打开 · http://127.0.0.1:5173")
+        else:
+            messagebox.showwarning("打开浏览器", "Vite 前端未运行，请先启动服务。", parent=self)
+
+    def _refresh_all_services(self) -> None:
+        all_running = True
+        for svc in SERVICES:
+            st = check_service(svc, timeout=1.0)
+            running = bool(st["running"])
+            port = svc.port
+            # 指示灯
+            dot = self._svc_dot.get(port)
+            if dot:
+                dot.configure(text=_status_dot(running), text_color=_status_color(running))
+            # 状态文字
+            lbl = self._svc_label.get(port)
+            if lbl:
+                lbl.configure(text=_status_text(running), text_color=_status_color(running))
+            # 按钮
+            btn = self._svc_btn.get(port)
+            if btn:
+                if running:
+                    btn.configure(text="停止", fg_color=("#fee2e2", "#7f1d1d"),
+                                  text_color=("#991b1b", "#fecaca"))
+                else:
+                    btn.configure(text="启动", fg_color=("#D1D5DB", "#374151"),
+                                  text_color=("#1F2937", "#D1D5DB"))
+            if not running:
+                all_running = False
+
+    def _schedule_status_poll(self) -> None:
+        try:
+            if not self.winfo_exists():
+                return
+        except TclError:
+            return
+        self._refresh_all_services()
+        self.after(3000, self._schedule_status_poll)
+
+    # ── 工作空间 ──
 
     def on_show(self) -> None:
         self._refresh_recent_menu()
         self._sync_fields_from_state()
-        self._refresh_web_status()
+        self._refresh_all_services()
 
     def _set_status(self, msg: str) -> None:
         top = self.winfo_toplevel()
@@ -163,69 +330,6 @@ class HomePage(BasePage):
         self._refresh_window_title()
         if self._on_workspace_changed:
             self._on_workspace_changed()
-
-    def _refresh_web_status(self) -> None:
-        st = web_server_status()
-        if st["running"]:
-            self._web_status.configure(text=f"Web 服务运行中 · {st['url']}")
-            self._stop_web_btn.configure(state="normal")
-        else:
-            self._web_status.configure(text="Web 服务未运行")
-            self._stop_web_btn.configure(state="disabled")
-
-    def _schedule_web_status_poll(self) -> None:
-        try:
-            if not self.winfo_exists():
-                return
-        except TclError:
-            return
-        self._refresh_web_status()
-        self.after(3000, self._schedule_web_status_poll)
-
-    def _open_web(self) -> None:
-        repo_s = self._repo_entry.get().strip()
-        if not repo_s:
-            messagebox.showwarning("打开 Web 版", "请先选择工作空间根目录。", parent=self)
-            return
-        rp = Path(repo_s).expanduser().resolve(strict=False)
-        if not rp.is_dir():
-            messagebox.showerror("打开 Web 版", "工作空间路径无效。", parent=self)
-            return
-        set_active_workspace(rp, self.state)
-        self._sync_fields_from_state()
-        self._refresh_recent_menu()
-        self._notify_workspace_changed()
-        try:
-            url = open_web_ui(rp)
-            self._set_status(f"Web 已打开 · {url}")
-        except (ValueError, RuntimeError, OSError) as exc:
-            messagebox.showerror("打开 Web 版", str(exc), parent=self)
-        finally:
-            self._refresh_web_status()
-
-    def _stop_web(self) -> None:
-        st = web_server_status()
-        if not st["running"]:
-            self._refresh_web_status()
-            return
-        if not messagebox.askyesno(
-            "关闭 Web 服务",
-            f"停止本地 Web 服务并释放端口？\n\n{st['url']}",
-            parent=self,
-        ):
-            return
-        try:
-            result = stop_web_ui()
-            if result.ok:
-                self._set_status(result.message)
-            else:
-                detail = "\n".join(result.logs[-6:]) if result.logs else result.message
-                messagebox.showerror("关闭 Web 服务", detail, parent=self)
-                self._set_status(result.message)
-        except OSError as exc:
-            messagebox.showerror("关闭 Web 服务", str(exc), parent=self)
-        finally:
-            self._refresh_web_status()
 
     def _refresh_recent_menu(self) -> None:
         recent = get_recent_workspaces()
@@ -274,9 +378,12 @@ class HomePage(BasePage):
             messagebox.showwarning("工作空间", "目录不存在或不可访问。", parent=self)
             self._refresh_recent_menu()
             return
-        if path == current:
-            return
-
+        current = self.state.repo_root
+        try:
+            if path == current.expanduser().resolve():
+                return
+        except (OSError, RuntimeError):
+            pass
         set_active_workspace(path, self.state)
         self._sync_fields_from_state()
         self._refresh_recent_menu()
@@ -292,10 +399,8 @@ class HomePage(BasePage):
 
     def _browse_repo(self) -> None:
         path = pick_workspace_directory(
-            self,
-            title="选择工作空间根目录",
-            repo_root=self.state.repo_root,
-            path_hint=self._repo_entry.get(),
+            self, title="选择工作空间根目录",
+            repo_root=self.state.repo_root, path_hint=self._repo_entry.get(),
         )
         if not path:
             return
@@ -307,10 +412,8 @@ class HomePage(BasePage):
 
     def _browse_freecad(self) -> None:
         path = pick_workspace_directory(
-            self,
-            title="选择 FreeCAD 目录",
-            repo_root=self.state.repo_root,
-            path_hint=self._fc_entry.get(),
+            self, title="选择 FreeCAD 目录",
+            repo_root=self.state.repo_root, path_hint=self._fc_entry.get(),
         )
         if not path:
             return
@@ -331,11 +434,9 @@ class HomePage(BasePage):
     def _save_prefs(self) -> None:
         repo_s = self._repo_entry.get().strip()
         fc_s = self._fc_entry.get().strip()
-
         if not repo_s:
             messagebox.showwarning("保存", "请填写工作空间根目录。", parent=self)
             return
-
         rp = Path(repo_s).expanduser().resolve()
         if not rp.is_dir():
             messagebox.showerror("保存", "工作空间路径无效。", parent=self)
@@ -345,7 +446,6 @@ class HomePage(BasePage):
         except ValueError as exc:
             messagebox.showerror("保存", str(exc), parent=self)
             return
-
         if fc_s:
             fp = Path(fc_s).expanduser().resolve()
             if not fp.is_dir():
@@ -356,7 +456,6 @@ class HomePage(BasePage):
         else:
             self.state.freecad_dir = None
             save_launcher_freecad_dir(None)
-
         self._refresh_recent_menu()
         self._notify_workspace_changed()
         self._set_status("偏好已保存")

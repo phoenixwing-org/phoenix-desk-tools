@@ -18,6 +18,111 @@ from phoenix.web.paths import default_static_dir, default_web_port, repo_root
 
 _DEFAULT_WEB_PAGE = "fcstd_map"
 _last_spawned_pid: int | None = None
+# 各服务 spawn 的 PID（用于启停追踪）
+_service_pids: dict[int, int] = {}  # port → pid
+
+
+# ═══════════════════════════════════════════════
+# 通用服务管理
+# ═══════════════════════════════════════════════
+
+@dataclass
+class ServiceDef:
+    name: str
+    port: int
+    health_path: str  # e.g. "/api/health" or "/"
+    start_cmd: list[str]
+
+
+# 三服务定义
+SERVICES: list[ServiceDef] = [
+    ServiceDef("Python API", 8765, "/api/health", [sys.executable, "-m", "phoenix.web", "--dev"]),
+    ServiceDef("Vite 前端", 5173, "/", ["pnpm", "dev:ui"]),
+    ServiceDef("CAA Node", 5180, "/api/caa/health", ["pnpm", "dev:caa"]),
+]
+
+
+def _http_ok(url: str, *, timeout: float = 1.5) -> bool:
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as resp:
+            return 200 <= int(getattr(resp, "status", 0)) < 400
+    except (urllib.error.URLError, TimeoutError, ValueError, OSError):
+        return False
+
+
+def check_service(svc: ServiceDef, *, timeout: float = 1.5) -> dict[str, object]:
+    """返回 {running, port, url, pid}。"""
+    url = f"http://127.0.0.1:{svc.port}{svc.health_path}"
+    running = _http_ok(url, timeout=timeout)
+    pid = _service_pids.get(svc.port)
+    if pid is not None and not _pid_alive(pid):
+        pid = None
+        _service_pids.pop(svc.port, None)
+    if not pid:
+        pids = find_listening_pids(svc.port)
+        pid = pids[0] if pids else None
+        if pid:
+            _service_pids[svc.port] = pid
+    return {"running": running, "port": svc.port, "url": f"http://127.0.0.1:{svc.port}", "pid": pid}
+
+
+def start_service(svc: ServiceDef) -> subprocess.Popen | None:
+    """启动服务；返回 Popen 或 None（已在运行）。"""
+    st = check_service(svc)
+    if st["running"]:
+        return None
+    proc = subprocess.Popen(
+        svc.start_cmd,
+        cwd=str(repo_root()),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    _service_pids[svc.port] = proc.pid
+    return proc
+
+
+def stop_service(svc: ServiceDef) -> bool:
+    """停止服务；返回是否成功释放端口。"""
+    pids = find_listening_pids(svc.port)
+    tracked = _service_pids.get(svc.port)
+    if tracked and tracked not in pids:
+        pids.append(tracked)
+    pids = sorted(set(pids))
+    if not pids:
+        _service_pids.pop(svc.port, None)
+        return True
+    for pid in pids:
+        if _pid_alive(pid):
+            try:
+                _terminate_pid(pid, force=False)
+            except RuntimeError:
+                pass
+    time.sleep(0.3)
+    for pid in pids:
+        if _pid_alive(pid):
+            try:
+                _terminate_pid(pid, force=True)
+            except RuntimeError:
+                pass
+    time.sleep(0.2)
+    if find_listening_pids(svc.port):
+        return False
+    _service_pids.pop(svc.port, None)
+    return True
+
+
+def stop_all_services() -> dict[str, bool]:
+    """停止全部三服务；返回各服务结果。"""
+    results: dict[str, bool] = {}
+    for svc in SERVICES:
+        results[svc.name] = stop_service(svc)
+    return results
+
+
+# ═══════════════════════════════════════════════
+# 原有 Web UI 管理（兼容保留）
+# ═══════════════════════════════════════════════
 
 
 @dataclass

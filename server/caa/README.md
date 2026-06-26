@@ -10,10 +10,16 @@ pnpm install
 pnpm dev:caa
 ```
 
-与 Phoenix 联调：
+与 Phoenix 联调（API + 前端 + CAA）：
 
 ```bash
-python -m phoenix.web --dev   # Vite :5173 + Python :8765
+# 终端 1：Python API（热更新 :8765）
+python -m phoenix.web --dev
+
+# 终端 2：前端 + CAA Node（Vite :5173 + 本服务 :5180）
+pnpm dev
+
+# 也可只启动 CAA Node（无前端界面）：
 pnpm dev:caa                  # 本服务 :5180
 ```
 

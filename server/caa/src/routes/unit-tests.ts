@@ -56,7 +56,7 @@ export function refreshVitestCatalog() {
   for (const pkg of pkgs) {
     try {
       const out = execSync(`cd "${pkg}" && pnpm vitest list`, {
-        cwd: REPO_ROOT, encoding: "utf8", timeout: 60_000, shell: "/bin/bash",
+        cwd: REPO_ROOT, encoding: "utf8", timeout: 60_000, shell: true,
         env: { ...process.env, CI: "true" },
       });
       allModules.push(...parseVitestList(out));
@@ -101,7 +101,7 @@ unitTestRoutes.post("/run", async (c) => {
       const pkgMods = mods.filter((m) => m.startsWith(pkg));
       const args = pkgMods.length > 0 ? pkgMods.join(" ") : "";
       const out = execSync(`cd "${pkg}" && pnpm vitest run --reporter verbose ${args}`, {
-        cwd: REPO_ROOT, encoding: "utf8", timeout: 120_000, shell: "/bin/bash",
+        cwd: REPO_ROOT, encoding: "utf8", timeout: 120_000, shell: true,
         env: { ...process.env, CI: "true" },
       });
       allOut += out + "\n";

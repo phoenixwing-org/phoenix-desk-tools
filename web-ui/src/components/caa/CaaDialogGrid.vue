@@ -121,6 +121,7 @@ function cellOccupied(row: number, col: number): boolean {
 /** 根据实际渲染的 cell DOM 元素计算鼠标所在位置（使用纯函数规则）；返回 cell 矩形供 overlay 定位 */
 function cellFromPoint(gridEl: HTMLElement, clientX: number, clientY: number): { row: number; col: number; edge: "inside" | "right" | "bottom" | "left" | "top"; rect: DOMRect } | null {
   const gridId = gridEl.getAttribute("data-grid-host") ?? props.node.id;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const hasChildren = props.node.children.length > 0 || gridId !== props.node.id;
 
   // 先尝试精确 hit-test
@@ -214,6 +215,9 @@ function doDrop(row: number, col: number, edge: string, payload: string, targetI
   const targetContainer = findCaaNode(root, targetId);
   if (!targetContainer) return;
 
+  const isCross = payload.startsWith("MOVE:")
+    ? payload.slice(payload.lastIndexOf(":") + 1) !== targetId
+    : false;
   console.log("[CAA drop] ═══ doDrop ═══ row=%d col=%d edge=%s payload=%s target=%s isCross=%s children=%d",
     row, col, edge, payload, targetId, isCross, targetContainer.children.length);
   console.log("[CAA drop] 现有控件：", targetContainer.children.map(c => ({ id: c.id, grid: c.grid })));
@@ -335,6 +339,7 @@ function doDrop(row: number, col: number, edge: string, payload: string, targetI
       record.operation, record.affectedNodeId, record.affectedNodeType);
     ctx.lastBuilderRecord.value = record;
   }
+}
 
 function onGridDrop(e: DragEvent) {
   e.preventDefault();
@@ -539,6 +544,7 @@ function onWindowMouseMove(e: MouseEvent) {
   const cell = cellFromPoint(gridEl, e.clientX, e.clientY);
   // 只在进入新 grid 时打一次（减少刷屏）
   if (foundId !== prevGridId) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const srcNode = ctx?.dialogRoot ? findCaaNode(ctx.dialogRoot, d.sourceNodeId) : null;
     console.log("[CAA drag] 切换目标: %s -> %s  cell=(%d,%d) edge=%s",
       prevGridId || "(none)", foundId,
