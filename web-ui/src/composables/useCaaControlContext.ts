@@ -55,7 +55,7 @@ export interface CaaControlContext {
   setGridRowResize: (containerId: string, rowIndex: number, enabled: boolean, opts?: { recordHistory?: boolean }) => void;
   /** Set COLRES flag directly; used by header drag batching. */
   setGridColResize: (containerId: string, colIndex: number, enabled: boolean, opts?: { recordHistory?: boolean }) => void;
-  /** 编辑模式：控制 grid bar / 辅助线 / 单元格边界显隐 */
+  /** 拖拽/插入模式：控制工具箱显示 + 拖放/span resize + grid 指示器 */
   editMode: Ref<boolean>;
   /** Builder 模式：向容器添加控件，返回新节点 ID */
   addControl: (containerId: string, type: string, row: number, col: number) => string;

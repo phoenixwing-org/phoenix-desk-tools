@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import sys
+import warnings
 from pathlib import Path
 from typing import Any
+
+warnings.filterwarnings("ignore", message=".*iCCP.*")
 
 import customtkinter as ctk
 import tkinter as tk
@@ -14,8 +17,6 @@ from phoenix.config.loader import DEFAULT_APP_TITLE, load_app_config
 from phoenix.config.user_prefs import apply_launcher_prefs_to_state
 from phoenix.pages.home import HomePage
 from phoenix.shell.state import AppState
-from phoenix.shell.window_geometry import clamp_window_geometry_for_screen
-
 _PYTHON_DIR = Path(__file__).resolve().parents[2]
 if str(_PYTHON_DIR) not in sys.path:
     sys.path.insert(0, str(_PYTHON_DIR))
@@ -36,25 +37,9 @@ class AppShell(ctk.CTk):
         ctk.set_appearance_mode(app_cfg.get("appearance_mode", "system"))
         ctk.set_default_color_theme(app_cfg.get("color_theme", "blue"))
 
-        min_width = int(app_cfg.get("min_width", 520))
-        min_height = int(app_cfg.get("min_height", 420))
+        min_width = int(app_cfg.get("min_width", 400))
+        min_height = int(app_cfg.get("min_height", 380))
         self.minsize(min_width, min_height)
-
-        fallback_geo = str(app_cfg.get("geometry", "640x520"))
-
-        self.update_idletasks()
-        sw = int(self.winfo_screenwidth())
-        sh = int(self.winfo_screenheight())
-        self.geometry(
-            clamp_window_geometry_for_screen(
-                fallback_geo,
-                screen_w=sw,
-                screen_h=sh,
-                min_w=min_width,
-                min_h=min_height,
-                fallback=fallback_geo,
-            )
-        )
 
         self.protocol("WM_DELETE_WINDOW", self.destroy)
 

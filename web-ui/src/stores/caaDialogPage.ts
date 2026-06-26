@@ -26,6 +26,11 @@ function emptyEditorState(): CaaEditorState {
 export const useCaaDialogPageStore = defineStore("caaDialogPage", () => {
   const activeEditorId = ref<string | null>(null);
   const editors = ref<Record<string, CaaEditorState>>({});
+  const indexViewMode = ref<"tree" | "table">("table");
+  // 工具箱：布局/密度/折叠，跨页面保持
+  const paletteCollapsed = ref(false);
+  const paletteLayout = ref<"vertical" | "horizontal">("vertical");
+  const paletteDensity = ref<"grid" | "ribbon">("grid");
 
   function editorId(id?: string | null): string {
     return id?.trim() || "__default__";
@@ -139,6 +144,10 @@ export const useCaaDialogPageStore = defineStore("caaDialogPage", () => {
     caaOnline,
     caaServicePort,
     caaServiceUrl,
+    indexViewMode,
+    paletteCollapsed,
+    paletteLayout,
+    paletteDensity,
     relatedFilesCollapsed,
     nlsColWidths,
     setCaaHealth,

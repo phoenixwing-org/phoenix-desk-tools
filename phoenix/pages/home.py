@@ -15,14 +15,16 @@ from phoenix.config.user_prefs import (
 from phoenix.freecad.default_install import default_freecad_install_dir
 from phoenix.pages.base import BasePage
 from phoenix.pages import form_widgets as fw
-from phoenix.shell.native_dialog import pick_workspace_directory
-from phoenix.shell.state import AppState
-from phoenix.shell.web_launcher import (
+from phoenix.services.service_manager import (
     SERVICES,
-    check_service,
+    ServiceDef,
+    ServiceMonitor,
+    kill_pids,
     open_service_terminal,
     open_all_terminals,
 )
+from phoenix.shell.native_dialog import pick_workspace_directory
+from phoenix.shell.state import AppState
 
 _LABEL_W = 72
 _PAD = 12
@@ -74,6 +76,9 @@ class HomePage(BasePage):
         self._on_workspace_changed = on_workspace_changed
         self._recent_path_map: dict[str, Path] = {}
         self._recent_var = ctk.StringVar(value="")
+
+        # 后台服务监控器
+        self._monitor = ServiceMonitor()
 
         # 服务行 widgets（按 port 索引）
         self._svc_dot: dict[int, ctk.CTkLabel] = {}
@@ -136,10 +141,10 @@ class HomePage(BasePage):
                 row=row, column=2, sticky="w", padx=(4, 4), pady=5
             )
 
-            # 操作按钮（始终弹终端，状态由轮询自动更新）
-            btn = ctk.CTkButton(svc_section, text="▶ 终端", width=72, height=26,
+            # 操作按钮：停止时=启动，运行时=终止
+            btn = ctk.CTkButton(svc_section, text="▶ 启动", width=72, height=26,
                                 font=ctk.CTkFont(size=11),
-                                command=lambda s=svc: open_service_terminal(s))
+                                command=lambda s=svc: self._toggle_start_stop(s))
             btn.grid(row=row, column=3, sticky="e", padx=(4, 10), pady=5)
             self._svc_btn[svc.port] = btn
 
@@ -148,20 +153,25 @@ class HomePage(BasePage):
         sep2.grid(row=5, column=0, columnspan=4, sticky="ew", padx=10, pady=(4, 0))
 
         # 统一操作行
-        # BUG: 全部停止待改为按端口查询进程，再询问勾选关闭
         action_row = ctk.CTkFrame(svc_section, fg_color="transparent")
         action_row.grid(row=6, column=0, columnspan=4, sticky="ew", padx=10, pady=(8, 10))
-        action_row.grid_columnconfigure(1, weight=1)
+        action_row.grid_columnconfigure(2, weight=1)
 
-        ctk.CTkButton(action_row, text="▶  全部启动 (3 Tab)", width=140, height=28,
+        ctk.CTkButton(action_row, text="▶  全部启动", width=130, height=28,
                        font=ctk.CTkFont(size=12), command=self._start_all).grid(
             row=0, column=0, padx=(0, 6)
+        )
+        ctk.CTkButton(action_row, text="■  全部关闭", width=100, height=28,
+                       fg_color=("#fee2e2", "#7f1d1d"),
+                       text_color=("#991b1b", "#fecaca"),
+                       font=ctk.CTkFont(size=12), command=self._stop_all).grid(
+            row=0, column=1, padx=(0, 6)
         )
         ctk.CTkButton(action_row, text="🌐 打开浏览器", width=110, height=28,
                        font=ctk.CTkFont(size=11),
                        fg_color=("gray75", "gray35"),
                        command=self._open_browser).grid(
-            row=0, column=2, sticky="e"
+            row=0, column=3, sticky="e"
         )
 
         r += 1
@@ -194,7 +204,7 @@ class HomePage(BasePage):
             height=28,
             command=self._on_recent_picked,
         )
-        self._recent_menu.grid(row=wsr, column=1, columnspan=2, sticky="ew", padx=(0, 10), pady=(2, 4))
+        self._recent_menu.grid(row=wsr, column=1, sticky="ew", padx=(0, 6), pady=(2, 4))
         wsr += 1
 
         # FreeCAD
@@ -228,8 +238,16 @@ class HomePage(BasePage):
         # 初始化
         self._sync_fields_from_state()
         self._refresh_recent_menu()
+        self._monitor.start()
         self._refresh_all_services()
-        self._schedule_status_poll()
+        self._schedule_ui_poll()
+
+    # ── 后台轮询 ──
+
+    def _schedule_ui_poll(self) -> None:
+        """UI 定时从 ServiceMonitor 读缓存刷新界面。"""
+        self._refresh_all_services()
+        self.after(3000, self._schedule_ui_poll)
 
     # ── 服务管理 ──
 
@@ -237,38 +255,95 @@ class HomePage(BasePage):
         open_all_terminals()
         self._set_status("已打开终端（3 Tab）")
 
+    def _toggle_start_stop(self, svc: ServiceDef) -> None:
+        """根据缓存状态切换：停→启动终端，运→弹出进程列表终止。"""
+        running = self._monitor.is_running.get(svc.port, False)
+        if running:
+            self._stop_service(svc)
+        else:
+            open_service_terminal(svc)
+
+    def _stop_service(self, svc: ServiceDef) -> None:
+        """弹出进程列表，确认后终止（PID 来自监控器缓存）。"""
+        pids = self._monitor.get_pids(svc.port)
+        if not pids:
+            messagebox.showinfo("终止服务",
+                f"{svc.name}（端口 {svc.port}）未检测到监听进程。\n\n如服务确实在运行，请稍候刷新。",
+                parent=self)
+            return
+        pid_list = ", ".join(f"PID {p}" for p in pids)
+        if not messagebox.askyesno(
+            "终止服务",
+            f"检测到 {svc.name}（:{svc.port}）监听进程：\n\n{pid_list}\n\n强制终止这些进程？",
+            parent=self,
+        ):
+            return
+        ok = kill_pids(svc.port, pids)
+        if ok:
+            self._set_status(f"已终止 {svc.name}")
+        else:
+            messagebox.showerror("终止失败",
+                f"无法终止 {svc.name}（:{svc.port}）的进程。\n\n"
+                f"PID: {pid_list}\n\n可能需要管理员权限。",
+                parent=self)
+        self._refresh_all_services()
+
+    def _stop_all(self) -> None:
+        """列出所有三服务进程（PID 来自缓存），确认后全部终止。"""
+        lines: list[str] = []
+        all_pids: list[int] = []
+        for svc in SERVICES:
+            pids = self._monitor.get_pids(svc.port)
+            status = f"PID {', '.join(str(p) for p in pids)}" if pids else "无进程"
+            lines.append(f"{svc.name} :{svc.port} → {status}")
+            all_pids.extend(pids)
+        if not all_pids:
+            messagebox.showinfo("全部关闭", "未检测到任何运行中的服务进程。", parent=self)
+            return
+        msg = "检测到以下服务进程：\n\n" + "\n".join(lines) + "\n\n强制终止全部？"
+        if not messagebox.askyesno("全部关闭", msg, parent=self):
+            return
+        results = {}
+        for svc in SERVICES:
+            pids = self._monitor.get_pids(svc.port)
+            results[svc.name] = kill_pids(svc.port, pids)
+        failed = [n for n, ok in results.items() if not ok]
+        if failed:
+            messagebox.showerror("全部关闭",
+                f"部分服务终止失败：{', '.join(failed)}\n\n可能需要管理员权限。",
+                parent=self)
+        else:
+            self._set_status("已全部终止")
+        self._refresh_all_services()
+
     def _open_browser(self) -> None:
-        vite = next((s for s in SERVICES if s.port == 5173), None)
-        if vite and check_service(vite)["running"]:
+        running = self._monitor.is_running.get(5173, False)
+        if running:
             import webbrowser
-            webbrowser.open("http://127.0.0.1:5173")
-            self._set_status("浏览器已打开 · http://127.0.0.1:5173")
+            webbrowser.open("http://localhost:5173")
+            self._set_status("浏览器已打开 · http://localhost:5173")
         else:
             messagebox.showwarning("打开浏览器", "Vite UI 未运行，请先启动服务。", parent=self)
 
     def _refresh_all_services(self) -> None:
+        cache = self._monitor.is_running
         for svc in SERVICES:
-            st = check_service(svc, timeout=1.0)
-            running = bool(st["running"])
+            running = cache.get(svc.port, False)
             port = svc.port
-            # 指示灯
             dot = self._svc_dot.get(port)
             if dot:
                 dot.configure(text=_status_dot(running), text_color=_status_color(running))
-            # 状态文字
             lbl = self._svc_label.get(port)
             if lbl:
                 lbl.configure(text=_status_text(running), text_color=_status_color(running))
-            # 按钮始终是 "▶ 终端"（不做启停切换）
-
-    def _schedule_status_poll(self) -> None:
-        try:
-            if not self.winfo_exists():
-                return
-        except TclError:
-            return
-        self._refresh_all_services()
-        self.after(3000, self._schedule_status_poll)
+            btn = self._svc_btn.get(port)
+            if btn:
+                if running:
+                    btn.configure(text="■ 终止", fg_color=("#fee2e2", "#7f1d1d"),
+                                  text_color=("#991b1b", "#fecaca"))
+                else:
+                    btn.configure(text="▶ 启动", fg_color=("#D1D5DB", "#374151"),
+                                  text_color=("#1F2937", "#D1D5DB"))
 
     # ── 工作空间 ──
 

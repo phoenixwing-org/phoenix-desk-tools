@@ -15,6 +15,7 @@ export type CaaControlCatalogEntry = {
     hasHelp: boolean;
   };
   defaultTitle: boolean;
+  icon: string;
 };
 
 export type CaaControlPaletteGroup = {
@@ -25,36 +26,36 @@ export type CaaControlPaletteGroup = {
 export const CAA_CONTROL_CATALOG_VERSION = 1;
 
 export const CAA_CONTROL_CATALOG: readonly CaaControlCatalogEntry[] = [
-  { type: "CATDlgDialog", label: "Dialog", group: "容器", priority: "P0", idPrefix: "Dialog", palette: false, canContainChildren: true, preview: "component", nls: { hasTitle: true, hasHelp: false }, defaultTitle: false },
-  { type: "CATDlgFrame", label: "Frame", group: "容器", priority: "P0", idPrefix: "Frame", palette: true, canContainChildren: true, preview: "component", nls: { hasTitle: false, hasHelp: true }, defaultTitle: false },
-  { type: "CATDlgTabContainer", label: "Tab", group: "容器", priority: "P1", idPrefix: "TabContainer", palette: true, canContainChildren: false, preview: "component", nls: { hasTitle: false, hasHelp: false }, defaultTitle: false },
-  { type: "CATDlgTabPage", label: "TabPage", group: "容器", priority: "P1", idPrefix: "TabPage", palette: false, canContainChildren: true, preview: "component", nls: { hasTitle: true, hasHelp: false }, defaultTitle: false },
-  { type: "CATDlgContainer", label: "Container", group: "容器", priority: "P2", idPrefix: "Container", palette: true, canContainChildren: true, preview: "component", nls: { hasTitle: false, hasHelp: false }, defaultTitle: false },
-  { type: "CATDlgSplitter", label: "Splitter", group: "容器", priority: "P2", idPrefix: "Splitter", palette: false, canContainChildren: true, preview: "grayBox", nls: { hasTitle: false, hasHelp: false }, defaultTitle: false },
-  { type: "CATDlgIconBox", label: "IconBox", group: "P2 灰盒", priority: "P2", idPrefix: "IconBox", palette: false, canContainChildren: false, preview: "grayBox", nls: { hasTitle: false, hasHelp: true }, defaultTitle: false },
-  { type: "CATDlgMenuBar", label: "MenuBar", group: "菜单/工具栏", priority: "P2", idPrefix: "MenuBar", palette: false, canContainChildren: true, preview: "grayBox", nls: { hasTitle: false, hasHelp: false }, defaultTitle: false },
-  { type: "CATDlgToolBar", label: "ToolBar", group: "菜单/工具栏", priority: "P2", idPrefix: "ToolBar", palette: false, canContainChildren: true, preview: "grayBox", nls: { hasTitle: false, hasHelp: false }, defaultTitle: false },
-  { type: "CATDlgStatusBar", label: "StatusBar", group: "菜单/工具栏", priority: "P2", idPrefix: "StatusBar", palette: false, canContainChildren: true, preview: "grayBox", nls: { hasTitle: false, hasHelp: false }, defaultTitle: false },
-  { type: "CATDlgSubMenu", label: "SubMenu", group: "菜单/工具栏", priority: "P2", idPrefix: "SubMenu", palette: false, canContainChildren: true, preview: "grayBox", nls: { hasTitle: true, hasHelp: true }, defaultTitle: false },
-  { type: "CATDlgMenuItem", label: "MenuItem", group: "菜单/工具栏", priority: "P2", idPrefix: "MenuItem", palette: false, canContainChildren: false, preview: "grayBox", nls: { hasTitle: true, hasHelp: true }, defaultTitle: false },
-  { type: "CATDlgToolBarItem", label: "ToolBarItem", group: "菜单/工具栏", priority: "P2", idPrefix: "ToolBarItem", palette: false, canContainChildren: false, preview: "grayBox", nls: { hasTitle: true, hasHelp: true }, defaultTitle: false },
-  { type: "CATDlgPushItem", label: "PushItem", group: "菜单/工具栏", priority: "P2", idPrefix: "PushItem", palette: false, canContainChildren: false, preview: "grayBox", nls: { hasTitle: true, hasHelp: true }, defaultTitle: false },
-  { type: "CATDlgCheckItem", label: "CheckItem", group: "菜单/工具栏", priority: "P2", idPrefix: "CheckItem", palette: false, canContainChildren: false, preview: "grayBox", nls: { hasTitle: true, hasHelp: true }, defaultTitle: false },
-  { type: "CATDlgRadioItem", label: "RadioItem", group: "菜单/工具栏", priority: "P2", idPrefix: "RadioItem", palette: false, canContainChildren: false, preview: "grayBox", nls: { hasTitle: true, hasHelp: true }, defaultTitle: false },
-  { type: "CATDlgSeparatorItem", label: "SeparatorItem", group: "菜单/工具栏", priority: "P2", idPrefix: "SeparatorItem", palette: false, canContainChildren: false, preview: "grayBox", nls: { hasTitle: false, hasHelp: false }, defaultTitle: false },
-  { type: "CATDlgLabel", label: "Label", group: "基础控件", priority: "P0", idPrefix: "Label", palette: true, canContainChildren: false, preview: "component", nls: { hasTitle: true, hasHelp: true }, defaultTitle: true },
-  { type: "CATDlgEditor", label: "Editor", group: "基础控件", priority: "P0", idPrefix: "Editor", palette: true, canContainChildren: false, preview: "component", nls: { hasTitle: false, hasHelp: true }, defaultTitle: true },
-  { type: "CATDlgPushButton", label: "Button", group: "基础控件", priority: "P0", idPrefix: "PushButton", palette: true, canContainChildren: false, preview: "component", nls: { hasTitle: true, hasHelp: true }, defaultTitle: true },
-  { type: "CATDlgCombo", label: "Combo", group: "基础控件", priority: "P1", idPrefix: "Combo", palette: true, canContainChildren: false, preview: "component", nls: { hasTitle: false, hasHelp: true }, defaultTitle: true },
-  { type: "CATDlgCheckButton", label: "Check", group: "基础控件", priority: "P1", idPrefix: "CheckButton", palette: true, canContainChildren: false, preview: "component", nls: { hasTitle: true, hasHelp: true }, defaultTitle: true },
-  { type: "CATDlgRadioButton", label: "Radio", group: "基础控件", priority: "P1", idPrefix: "RadioButton", palette: true, canContainChildren: false, preview: "component", nls: { hasTitle: true, hasHelp: true }, defaultTitle: true },
-  { type: "CATDlgSpinner", label: "Spinner", group: "基础控件", priority: "P0", idPrefix: "Spinner", palette: true, canContainChildren: false, preview: "component", nls: { hasTitle: false, hasHelp: true }, defaultTitle: true },
-  { type: "CATDlgSelectorList", label: "SelList", group: "基础控件", priority: "P0", idPrefix: "SelectorList", palette: true, canContainChildren: false, preview: "component", nls: { hasTitle: false, hasHelp: true }, defaultTitle: true },
-  { type: "CATDlgMultiList", label: "MultiList", group: "列表", priority: "P0", idPrefix: "MultiList", palette: true, canContainChildren: false, preview: "component", nls: { hasTitle: false, hasHelp: true }, defaultTitle: true },
-  { type: "CATDlgSeparator", label: "Separator", group: "装饰", priority: "P1", idPrefix: "Separator", palette: true, canContainChildren: false, preview: "component", nls: { hasTitle: false, hasHelp: false }, defaultTitle: false },
-  { type: "CATDlgProgress", label: "Progress", group: "P2 灰盒", priority: "P2", idPrefix: "Progress", palette: false, canContainChildren: false, preview: "grayBox", nls: { hasTitle: false, hasHelp: true }, defaultTitle: false },
-  { type: "CATDlgSlider", label: "Slider", group: "P2 灰盒", priority: "P2", idPrefix: "Slider", palette: false, canContainChildren: false, preview: "grayBox", nls: { hasTitle: false, hasHelp: true }, defaultTitle: false },
-  { type: "CATDlgScrollbar", label: "Scrollbar", group: "P2 灰盒", priority: "P2", idPrefix: "Scrollbar", palette: false, canContainChildren: false, preview: "grayBox", nls: { hasTitle: false, hasHelp: true }, defaultTitle: false },
+  { type: "CATDlgDialog", label: "Dialog", group: "容器", priority: "P0", idPrefix: "Dialog", palette: false, canContainChildren: true, preview: "component", nls: { hasTitle: true, hasHelp: false }, defaultTitle: false, icon: "Dialog" },
+  { type: "CATDlgFrame", label: "Frame", group: "容器", priority: "P0", idPrefix: "Frame", palette: true, canContainChildren: true, preview: "component", nls: { hasTitle: false, hasHelp: true }, defaultTitle: false, icon: "Frame" },
+  { type: "CATDlgTabContainer", label: "Tab", group: "容器", priority: "P1", idPrefix: "TabContainer", palette: true, canContainChildren: false, preview: "component", nls: { hasTitle: false, hasHelp: false }, defaultTitle: false, icon: "TabContainer" },
+  { type: "CATDlgTabPage", label: "TabPage", group: "容器", priority: "P1", idPrefix: "TabPage", palette: false, canContainChildren: true, preview: "component", nls: { hasTitle: true, hasHelp: false }, defaultTitle: false, icon: "TabPage" },
+  { type: "CATDlgContainer", label: "Container", group: "容器", priority: "P2", idPrefix: "Container", palette: true, canContainChildren: true, preview: "component", nls: { hasTitle: false, hasHelp: false }, defaultTitle: false, icon: "Container" },
+  { type: "CATDlgSplitter", label: "Splitter", group: "容器", priority: "P2", idPrefix: "Splitter", palette: false, canContainChildren: true, preview: "grayBox", nls: { hasTitle: false, hasHelp: false }, defaultTitle: false, icon: "Splitter" },
+  { type: "CATDlgIconBox", label: "IconBox", group: "P2 灰盒", priority: "P2", idPrefix: "IconBox", palette: false, canContainChildren: false, preview: "grayBox", nls: { hasTitle: false, hasHelp: true }, defaultTitle: false, icon: "IconBox" },
+  { type: "CATDlgMenuBar", label: "MenuBar", group: "菜单/工具栏", priority: "P2", idPrefix: "MenuBar", palette: false, canContainChildren: true, preview: "grayBox", nls: { hasTitle: false, hasHelp: false }, defaultTitle: false, icon: "MenuBar" },
+  { type: "CATDlgToolBar", label: "ToolBar", group: "菜单/工具栏", priority: "P2", idPrefix: "ToolBar", palette: false, canContainChildren: true, preview: "grayBox", nls: { hasTitle: false, hasHelp: false }, defaultTitle: false, icon: "ToolBar" },
+  { type: "CATDlgStatusBar", label: "StatusBar", group: "菜单/工具栏", priority: "P2", idPrefix: "StatusBar", palette: false, canContainChildren: true, preview: "grayBox", nls: { hasTitle: false, hasHelp: false }, defaultTitle: false, icon: "StatusBar" },
+  { type: "CATDlgSubMenu", label: "SubMenu", group: "菜单/工具栏", priority: "P2", idPrefix: "SubMenu", palette: false, canContainChildren: true, preview: "grayBox", nls: { hasTitle: true, hasHelp: true }, defaultTitle: false, icon: "SubMenu" },
+  { type: "CATDlgMenuItem", label: "MenuItem", group: "菜单/工具栏", priority: "P2", idPrefix: "MenuItem", palette: false, canContainChildren: false, preview: "grayBox", nls: { hasTitle: true, hasHelp: true }, defaultTitle: false, icon: "MenuItem" },
+  { type: "CATDlgToolBarItem", label: "ToolBarItem", group: "菜单/工具栏", priority: "P2", idPrefix: "ToolBarItem", palette: false, canContainChildren: false, preview: "grayBox", nls: { hasTitle: true, hasHelp: true }, defaultTitle: false, icon: "ToolBarItem" },
+  { type: "CATDlgPushItem", label: "PushItem", group: "菜单/工具栏", priority: "P2", idPrefix: "PushItem", palette: false, canContainChildren: false, preview: "grayBox", nls: { hasTitle: true, hasHelp: true }, defaultTitle: false, icon: "PushItem" },
+  { type: "CATDlgCheckItem", label: "CheckItem", group: "菜单/工具栏", priority: "P2", idPrefix: "CheckItem", palette: false, canContainChildren: false, preview: "grayBox", nls: { hasTitle: true, hasHelp: true }, defaultTitle: false, icon: "CheckItem" },
+  { type: "CATDlgRadioItem", label: "RadioItem", group: "菜单/工具栏", priority: "P2", idPrefix: "RadioItem", palette: false, canContainChildren: false, preview: "grayBox", nls: { hasTitle: true, hasHelp: true }, defaultTitle: false, icon: "RadioItem" },
+  { type: "CATDlgSeparatorItem", label: "SeparatorItem", group: "菜单/工具栏", priority: "P2", idPrefix: "SeparatorItem", palette: false, canContainChildren: false, preview: "grayBox", nls: { hasTitle: false, hasHelp: false }, defaultTitle: false, icon: "SeparatorItem" },
+  { type: "CATDlgLabel", label: "Label", group: "基础控件", priority: "P0", idPrefix: "Label", palette: true, canContainChildren: false, preview: "component", nls: { hasTitle: true, hasHelp: true }, defaultTitle: true, icon: "Label" },
+  { type: "CATDlgEditor", label: "Editor", group: "基础控件", priority: "P0", idPrefix: "Editor", palette: true, canContainChildren: false, preview: "component", nls: { hasTitle: false, hasHelp: true }, defaultTitle: true, icon: "Editor" },
+  { type: "CATDlgPushButton", label: "Button", group: "基础控件", priority: "P0", idPrefix: "PushButton", palette: true, canContainChildren: false, preview: "component", nls: { hasTitle: true, hasHelp: true }, defaultTitle: true, icon: "PushButton" },
+  { type: "CATDlgCombo", label: "Combo", group: "基础控件", priority: "P1", idPrefix: "Combo", palette: true, canContainChildren: false, preview: "component", nls: { hasTitle: false, hasHelp: true }, defaultTitle: true, icon: "Combo" },
+  { type: "CATDlgCheckButton", label: "Check", group: "基础控件", priority: "P1", idPrefix: "CheckButton", palette: true, canContainChildren: false, preview: "component", nls: { hasTitle: true, hasHelp: true }, defaultTitle: true, icon: "CheckButton" },
+  { type: "CATDlgRadioButton", label: "Radio", group: "基础控件", priority: "P1", idPrefix: "RadioButton", palette: true, canContainChildren: false, preview: "component", nls: { hasTitle: true, hasHelp: true }, defaultTitle: true, icon: "RadioButton" },
+  { type: "CATDlgSpinner", label: "Spinner", group: "基础控件", priority: "P0", idPrefix: "Spinner", palette: true, canContainChildren: false, preview: "component", nls: { hasTitle: false, hasHelp: true }, defaultTitle: true, icon: "Spinner" },
+  { type: "CATDlgSelectorList", label: "SelList", group: "基础控件", priority: "P0", idPrefix: "SelectorList", palette: true, canContainChildren: false, preview: "component", nls: { hasTitle: false, hasHelp: true }, defaultTitle: true, icon: "SelectorList" },
+  { type: "CATDlgMultiList", label: "MultiList", group: "列表", priority: "P0", idPrefix: "MultiList", palette: true, canContainChildren: false, preview: "component", nls: { hasTitle: false, hasHelp: true }, defaultTitle: true, icon: "MultiList" },
+  { type: "CATDlgSeparator", label: "Separator", group: "装饰", priority: "P1", idPrefix: "Separator", palette: true, canContainChildren: false, preview: "component", nls: { hasTitle: false, hasHelp: false }, defaultTitle: false, icon: "Separator" },
+  { type: "CATDlgProgress", label: "Progress", group: "P2 灰盒", priority: "P2", idPrefix: "Progress", palette: false, canContainChildren: false, preview: "grayBox", nls: { hasTitle: false, hasHelp: true }, defaultTitle: false, icon: "Progress" },
+  { type: "CATDlgSlider", label: "Slider", group: "P2 灰盒", priority: "P2", idPrefix: "Slider", palette: false, canContainChildren: false, preview: "grayBox", nls: { hasTitle: false, hasHelp: true }, defaultTitle: false, icon: "Slider" },
+  { type: "CATDlgScrollbar", label: "Scrollbar", group: "P2 灰盒", priority: "P2", idPrefix: "Scrollbar", palette: false, canContainChildren: false, preview: "grayBox", nls: { hasTitle: false, hasHelp: true }, defaultTitle: false, icon: "Scrollbar" },
 ];
 
 const CATALOG_BY_TYPE = new Map(CAA_CONTROL_CATALOG.map((entry) => [entry.type, entry]));

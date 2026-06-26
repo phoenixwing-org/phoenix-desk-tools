@@ -3,6 +3,7 @@ import { computed } from "vue";
 import SidebarBlock from "../shell/SidebarBlock.vue";
 import { useCaaDialogPageStore } from "../../stores/caaDialogPage";
 import { toCaaElTreeRoots, type CaaElTreeNode } from "../../utils/caaDialogTree";
+import { CONTROL_ICONS } from "../../assets/caa/controlIcons";
 
 const store = useCaaDialogPageStore();
 
@@ -14,6 +15,12 @@ const currentNodeKey = computed(() => store.selectedId ?? store.ir?.dialogName ?
 
 function onNodeClick(data: CaaElTreeNode) {
   store.setSelectedId(data.id);
+}
+
+const ICON_FALLBACK = CONTROL_ICONS.Dialog;
+
+function iconSrc(name?: string) {
+  return (name && CONTROL_ICONS[name]) || ICON_FALLBACK;
 }
 </script>
 
@@ -34,7 +41,14 @@ function onNodeClick(data: CaaElTreeNode) {
         highlight-current
         :current-node-key="currentNodeKey"
         @node-click="onNodeClick"
-      />
+      >
+        <template #default="{ data }">
+          <span class="caa-tree-node">
+            <img :src="iconSrc(data.icon)" class="caa-tree-icon" alt="" />
+            <span>{{ data.label }}</span>
+          </span>
+        </template>
+      </el-tree>
     </template>
     <template v-else #default>
       <p class="muted small caa-tree-empty">加载对话框后显示控件层次</p>
@@ -56,5 +70,18 @@ function onNodeClick(data: CaaElTreeNode) {
 
 .caa-tree-empty {
   margin: 8px 10px;
+}
+
+.caa-tree-node {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.caa-tree-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0.7;
 }
 </style>

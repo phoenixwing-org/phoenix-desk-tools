@@ -160,7 +160,7 @@ def sync_runtime_catalog(*, force: bool = False) -> dict[str, Any]:
 
         suites = [
             (sid, label, desc, idx)
-            for idx, (sid, (label, desc)) in enumerate(SUITE_META.items())
+            for idx, (sid, (label, desc, _)) in enumerate(SUITE_META.items())
         ]
         conn.executemany(
             """

@@ -1,19 +1,22 @@
 import type { CaaDialogIr, CaaDialogNode } from "../types/caaDialogIr";
 import {
   controlIdPrefix,
+  getCaaControlCatalogEntry,
   isCaaContainerType,
   shouldCreateDefaultTitle,
 } from "@phoenix/catdlg-core";
 
-export type CaaElTreeNode = { id: string; label: string; children?: CaaElTreeNode[] };
+export type CaaElTreeNode = { id: string; label: string; icon?: string; children?: CaaElTreeNode[] };
 
 export function toCaaElTreeNode(node: CaaDialogNode): CaaElTreeNode {
   const typeShort = node.type.replace(/^CATDlg/, "");
   const title = node.nls?.title;
   const label = title ? `${node.id} (${typeShort}) — ${title}` : `${node.id} (${typeShort})`;
+  const entry = getCaaControlCatalogEntry(node.type);
   return {
     id: node.id,
     label,
+    icon: entry?.icon,
     children: node.children.length ? node.children.map(toCaaElTreeNode) : undefined,
   };
 }

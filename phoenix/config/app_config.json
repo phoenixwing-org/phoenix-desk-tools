@@ -1,9 +1,8 @@
 {
     "app": {
         "title": "Phoenix 桌面工具",
-        "geometry": "400x450",
         "min_width": 400,
-        "min_height": 430,
+        "min_height": 360,
         "appearance_mode": "system",
         "color_theme": "blue"
     },

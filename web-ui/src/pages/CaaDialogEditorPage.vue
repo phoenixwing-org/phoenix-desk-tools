@@ -549,7 +549,7 @@ function isActiveTab(): boolean {
 
 const irDirty = ref(false);
 const irWriteMode = ref<IrWriteMode>("none");
-const editMode = ref(true);
+const editMode = ref(false);
 const undoStack = ref<CaaIrHistoryEntry[]>([]);
 const redoStack = ref<CaaIrHistoryEntry[]>([]);
 const writePreviewOpen = ref(false);
@@ -1083,7 +1083,7 @@ function hydrateDraftSnapshot(snapshot?: Record<string, unknown>): boolean {
   localSelectedId.value = state.selectedId?.trim() || state.ir.root.id;
   irDirty.value = state.irDirty ?? true;
   irWriteMode.value = normalizeIrWriteMode(state.irWriteMode, irDirty.value ? "full" : "none");
-  editMode.value = state.editMode ?? true;
+  editMode.value = state.editMode ?? false;
   restoreHistoryFromSnapshot(state);
   hasParsed.value = true;
   openIsDemo.value = false;
@@ -1146,7 +1146,7 @@ async function parseDialog() {
       restoreNlsCurrentFromSnapshot(restoredState);
       applyCurrentNlsFlatToIr();
       localSelectedId.value = restoredState?.selectedId?.trim() || localIr.value?.dialogName || null;
-      editMode.value = restoredState?.editMode ?? true;
+      editMode.value = restoredState?.editMode ?? false;
       irDirty.value = restoredState?.irDirty ?? true;
       irWriteMode.value = normalizeIrWriteMode(restoredState?.irWriteMode, irDirty.value ? "full" : "none");
       restoreHistoryFromSnapshot(restoredState);
@@ -1184,7 +1184,7 @@ async function parseDialog() {
     localIr.value = restoreDirtyIr && restoredIr ? clonePlain(restoredIr) : ir;
     applyCurrentNlsFlatToIr();
     localSelectedId.value = restoredState?.selectedId?.trim() || localIr.value.dialogName;
-    editMode.value = restoredState?.editMode ?? true;
+    editMode.value = restoredState?.editMode ?? false;
     if (restoreDirtyIr) {
       irDirty.value = true;
       irWriteMode.value = normalizeIrWriteMode(restoredState?.irWriteMode, "full");
@@ -1710,10 +1710,10 @@ onActivated(() => {
             v-if="hasParsed"
             size="small"
             :type="editMode ? 'primary' : 'default'"
-            :title="editMode ? '编辑模式' : '预览模式'"
+            :title="editMode ? '拖拽/插入模式 ⇅ — 点击切回编辑' : '编辑模式 — 点击切换拖拽/插入'"
             @click="editMode = !editMode"
           >
-            {{ editMode ? '✎' : '◉' }}
+            {{ editMode ? '⇅' : '✎' }}
           </el-button>
           <el-button
             v-if="hasParsed"

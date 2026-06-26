@@ -18,11 +18,12 @@ export type ParseDialogFullOpts = {
   catNlsRel?: string;
 };
 
-function pushProbeLogs(logs: string[], discovered: DiscoveredDialogResources): void {
-  for (const p of discovered.pathProbes) {
-    logs.push(`[${p.exists ? "OK" : "MISS"}] ${p.kind}: ${p.rel}`);
-    logs.push(`       → ${p.abs}`);
-  }
+function pushProbeLogs(_logs: string[], _discovered: DiscoveredDialogResources): void {
+  // 静默：probe 日志已屏蔽，需要时取消注释
+  // for (const p of discovered.pathProbes) {
+  //   logs.push(`[${p.exists ? "OK" : "MISS"}] ${p.kind}: ${p.rel}`);
+  //   logs.push(`       → ${p.abs}`);
+  // }
 }
 
 function collectControlIds(node: CaaDialogIr["root"]): string[] {
@@ -39,11 +40,11 @@ export async function parseDialogFull(opts: ParseDialogFullOpts): Promise<CaaDia
   const { readUtf8, resolveAbs, catDlgRel, catDlgAbs, workspaceRoot } = opts;
   const logs: string[] = [];
 
-  logs.push(`工作空间根: ${workspaceRoot ?? "(demo/仓库)"}`);
-  logs.push(`.CATDlg 相对: ${catDlgRel}`);
-  logs.push(`.CATDlg 绝对: ${catDlgAbs}`);
+  // logs.push(`工作空间根: ${workspaceRoot ?? "(demo/仓库)"}`);
+  // logs.push(`.CATDlg 相对: ${catDlgRel}`);
+  // logs.push(`.CATDlg 绝对: ${catDlgAbs}`);
 
-  caaLog("parse 开始", { catDlgRel, catDlgAbs, workspaceRoot });
+  // caaLog("parse 开始", { catDlgRel, catDlgAbs, workspaceRoot });
 
   const discovered = await discoverDialogResources(resolveAbs, catDlgRel);
   const warnings = [...discovered.warnings];
@@ -83,11 +84,11 @@ export async function parseDialogFull(opts: ParseDialogFullOpts): Promise<CaaDia
         keyCount,
         sourceText: text,
       });
-      logs.push(`已读 .CATNls [${ref.locale}] ${keyCount} 键 → ${abs}`);
+      // logs.push(`已读 .CATNls [${ref.locale}] ${keyCount} 键 → ${abs}`);
       if (keyCount > 0) {
-        logs.push(`       键名: ${keyPreview}${keyCount > 12 ? " …" : ""}`);
+        // logs.push(`       键名: ${keyPreview}${keyCount > 12 ? " …" : ""}`);
       }
-      caaLog(`read catNls [${ref.locale}]`, { rel: ref.catNlsRel, abs, keyCount, keys: Object.keys(parsed) });
+      // caaLog(`read catNls [${ref.locale}]`, { rel: ref.catNlsRel, abs, keyCount, keys: Object.keys(parsed) });
       if (ref.locale === "default" || ref.catNlsRel === primaryNlsRel) {
         catNlsText = text;
         catNlsAbs = abs;
@@ -114,8 +115,8 @@ export async function parseDialogFull(opts: ParseDialogFullOpts): Promise<CaaDia
       const rsc = parseCatNls(catRscText);
       rscKeyCount = Object.keys(rsc).length;
       sources.catRsc = discovered.catRscRel;
-      logs.push(`已读 .CATRsc ${rscKeyCount} 键 → ${catRscAbs}`);
-      caaLog("read catRsc", { rel: discovered.catRscRel, abs: catRscAbs, rscKeyCount });
+      // logs.push(`已读 .CATRsc ${rscKeyCount} 键 → ${catRscAbs}`);
+      // caaLog("read catRsc", { rel: discovered.catRscRel, abs: catRscAbs, rscKeyCount });
       for (const v of Object.values(rsc)) {
         if (v && !imageRefs.includes(v)) imageRefs.push(v);
       }
@@ -130,8 +131,8 @@ export async function parseDialogFull(opts: ParseDialogFullOpts): Promise<CaaDia
   let catDlgText: string;
   try {
     catDlgText = await readUtf8(catDlgAbs);
-    logs.push(`已读 .CATDlg ${catDlgText.length} 字符`);
-    caaLog("read catDlg OK", { bytes: catDlgText.length });
+    // logs.push(`已读 .CATDlg ${catDlgText.length} 字符`);
+    // caaLog("read catDlg OK", { bytes: catDlgText.length });
   } catch (err) {
     const msg = `无法读取 .CATDlg：${catDlgRel}`;
     logs.push(`${msg} → ${catDlgAbs}`);
@@ -145,8 +146,8 @@ export async function parseDialogFull(opts: ParseDialogFullOpts): Promise<CaaDia
     cppAbs = resolveAbs(discovered.cppRel);
     try {
       cppText = await readUtf8(cppAbs);
-      logs.push(`Read .cpp ${cppText.length} chars -> ${cppAbs}`);
-      caaLog("read cpp OK", { rel: discovered.cppRel, abs: cppAbs, bytes: cppText.length });
+      // logs.push(`Read .cpp ${cppText.length} chars -> ${cppAbs}`);
+      // caaLog("read cpp OK", { rel: discovered.cppRel, abs: cppAbs, bytes: cppText.length });
     } catch (err) {
       const msg = `Cannot read .cpp: ${discovered.cppRel}`;
       warnings.push(msg);
@@ -199,23 +200,23 @@ export async function parseDialogFull(opts: ParseDialogFullOpts): Promise<CaaDia
     parseMeta,
   });
 
-  logs.push(
-    `合并 IR：dialog=${ir.dialogName} 控件树子节点=${ir.root.children.length} title=${ir.title ?? "(无)"}`,
-  );
-  caaLog("parse 完成", {
-    dialogName: ir.dialogName,
-    title: ir.title,
-    childCount: ir.root.children.length,
-    localeCount: localeMeta.length,
-    warnings: warnings.length,
-  });
+  // logs.push(
+  //   `合并 IR：dialog=${ir.dialogName} 控件树子节点=${ir.root.children.length} title=${ir.title ?? "(无)"}`,
+  // );
+  // caaLog("parse 完成", {
+  //   dialogName: ir.dialogName,
+  //   title: ir.title,
+  //   childCount: ir.root.children.length,
+  //   localeCount: localeMeta.length,
+  //   warnings: warnings.length,
+  // });
   if (cppText && ir.parseMeta) {
     const bindings = extractWizardBindingsFromCpp(cppText, {
       knownControlIds: collectControlIds(ir.root),
     });
     if (bindings.length > 0) ir.parseMeta.bindings = bindings;
-    logs.push(`Parsed cpp field bindings: ${bindings.length}`);
-    caaLog("parse cpp bindings", { bindingCount: bindings.length });
+    // logs.push(`Parsed cpp field bindings: ${bindings.length}`);
+    // caaLog("parse cpp bindings", { bindingCount: bindings.length });
   }
   caaLogLines(logs);
 

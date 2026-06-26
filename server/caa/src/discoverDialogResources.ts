@@ -116,7 +116,7 @@ async function probePath(
   const abs = resolveAbs(rel);
   const ok = await exists(abs);
   probes.push({ kind, rel, abs, exists: ok });
-  caaLog(`probe ${kind}: ${ok ? "OK" : "MISS"} ${rel}`, { abs });
+  // caaLog(`probe ${kind}: ${ok ? "OK" : "MISS"} ${rel}`, { abs });
   return ok;
 }
 
@@ -134,7 +134,7 @@ export async function discoverDialogResources(
   let primaryNlsRel: string | undefined;
   let catRscRel: string | undefined;
 
-  caaLog(`discover: CATNls 候选 ${nlsCandidates.length} 条`, { candidates: nlsCandidates });
+  // caaLog(`discover: CATNls 候选 ${nlsCandidates.length} 条`, { candidates: nlsCandidates });
 
   for (const cand of nlsCandidates) {
     if (await probePath(resolveAbs, pathProbes, "catNls", cand)) {
@@ -180,7 +180,7 @@ export async function discoverDialogResources(
     });
     try {
       const entries = await fs.readdir(msgAbs, { withFileTypes: true });
-      caaLog(`msgcatalog 目录可读：${msgDirRel}（${entries.length} 项）`);
+      // caaLog(`msgcatalog 目录可读：${msgDirRel}（${entries.length} 项）`);
       if (!primaryNlsRel && nlsName) {
         const rootNls = `${msgDirRel}/${nlsName}`.replace(/\\/g, "/");
         if (await probePath(resolveAbs, pathProbes, "catNls", rootNls)) {
@@ -256,24 +256,24 @@ export async function discoverDialogResources(
       });
     }
     if (files.length) {
-      caaLog(`graphicDir OK: ${dirRel}（${files.length} 个图片）`);
+      // caaLog(`graphicDir OK: ${dirRel}（${files.length} 个图片）`);
     } else {
-      caaLog(`graphicDir OK: ${dirRel}（无图片文件）`);
+      // caaLog(`graphicDir OK: ${dirRel}（无图片文件）`);
     }
   }
   const bitmapFileCount = bitmapFiles.length;
 
-  caaLog("discover 完成", {
-    primaryNlsRel,
-    nlsLocaleCount: nlsLocales.length,
-    catRscRel,
-    headerRel,
-    cppRel,
-    bitmapDirs,
-    bitmapFileCount,
-    bitmapFiles: bitmapFiles.map((f) => f.repoRelPath),
-    warningCount: warnings.length,
-  });
+  // caaLog("discover 完成", {
+  //   primaryNlsRel,
+  //   nlsLocaleCount: nlsLocales.length,
+  //   catRscRel,
+  //   headerRel,
+  //   cppRel,
+  //   bitmapDirs,
+  //   bitmapFileCount,
+  //   bitmapFiles: bitmapFiles.map((f) => f.repoRelPath),
+  //   warningCount: warnings.length,
+  // });
 
   return {
     primaryNlsRel,

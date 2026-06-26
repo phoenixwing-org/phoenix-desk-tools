@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { storeToRefs } from "pinia";
 import { useCaaDialogPageStore } from "../../stores/caaDialogPage";
 import CaaControlPalette from "./CaaControlPalette.vue";
@@ -12,6 +12,7 @@ const store = useCaaDialogPageStore();
 const { ir } = storeToRefs(store);
 
 const showPalette = computed(() => props.hasParsed);
+const paletteLayout = ref<"vertical" | "horizontal">(store.paletteLayout);
 </script>
 
 <template>
@@ -27,8 +28,8 @@ const showPalette = computed(() => props.hasParsed);
       description="点击「解析」加载 .CATDlg、多语言 .CATNls、.CATRsc 与位图目录"
       :image-size="72"
     />
-    <div v-else class="caa-workspace">
-      <CaaControlPalette v-if="showPalette" />
+    <div v-else class="caa-workspace" :class="{ 'caa-workspace--horizontal': paletteLayout === 'horizontal' }">
+      <CaaControlPalette v-if="showPalette" @layout-change="paletteLayout = $event" />
       <CaaDialogCanvas class="caa-main" :ir="ir" />
     </div>
   </div>
@@ -48,6 +49,11 @@ const showPalette = computed(() => props.hasParsed);
   flex: 1;
   min-height: 0;
   gap: 0;
+  position: relative;
+}
+
+.caa-workspace--horizontal {
+  flex-direction: column;
 }
 
 .banner {

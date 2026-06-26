@@ -22,7 +22,7 @@ const props = withDefaults(
 
 const ctx = inject(CAA_CONTROL_KEY, null);
 
-const editMode = computed(() => ctx?.editMode.value ?? true);
+const editMode = computed(() => ctx?.editMode.value ?? false);
 
 const gridMetrics = computed(() => {
   let maxRow = 0;
@@ -180,6 +180,7 @@ function writeDropIndicator(cell: ReturnType<typeof cellFromPoint>, gridEl: HTML
 }
 
 function onGridDragOver(e: DragEvent) {
+  if (!editMode.value) return;
   e.preventDefault();
   e.stopPropagation();
   if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
@@ -342,6 +343,7 @@ function doDrop(row: number, col: number, edge: string, payload: string, targetI
 }
 
 function onGridDrop(e: DragEvent) {
+  if (!editMode.value) return;
   e.preventDefault();
   e.stopPropagation();
   const raw = e.dataTransfer?.getData("text/plain") ?? "";
@@ -395,9 +397,7 @@ const spanResize = ref<{
 const resizeFlagDrag = ref<{ axis: "row" | "col"; enabled: boolean; touched: Set<number> } | null>(null);
 
 function onCellMouseDown(e: MouseEvent, child: CaaDialogNode) {
-  // 仅记录拖拽起点。
-  // stopPropagation 防止嵌套容器场景下事件冒泡到父 grid cell，
-  // 导致父容器 hijack 拖拽（把整个容器移动而非目标控件）。
+  if (!editMode.value) return;
   if (e.button !== 0) return;
   e.stopPropagation();
   console.log("[CAA drag] mousedown: node=%s container=%s type=%s", child.id, props.node.id, child.type);
@@ -412,6 +412,7 @@ function onCellMouseDown(e: MouseEvent, child: CaaDialogNode) {
 }
 
 function onSpanResizePointerDown(e: PointerEvent, child: CaaDialogNode) {
+  if (!editMode.value) return;
   if (e.button !== 0 || !child.grid || !ctx) return;
   e.preventDefault();
   e.stopPropagation();

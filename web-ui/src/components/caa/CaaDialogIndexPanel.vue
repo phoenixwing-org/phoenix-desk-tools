@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { Grid, Folder } from "@element-plus/icons-vue";
 import SidebarBlock from "../shell/SidebarBlock.vue";
 import { fetchCaaIndexGroups, scanCaaIndex } from "../../api/caaDialog";
 import { useAppShell } from "../../composables/useAppShell";
+import { useCaaDialogPageStore } from "../../stores/caaDialogPage";
 import type { CaaDialogListGroup, CaaDialogListItem } from "../../types/caaDialogList";
 
 const shell = useAppShell();
+const store = useCaaDialogPageStore();
 
 const expanded = defineModel<boolean>("expanded", { default: true });
 
@@ -21,6 +24,24 @@ const workspaceReady = computed(() => Boolean(shell.workspacePath.value.trim()))
 
 const visibleCount = computed(() => count.value);
 const filteredGroups = computed(() => groups.value);
+
+/** table 模式：平铺列表 + 序号 */
+const flatRows = computed(() => {
+  const rows: (CaaDialogListItem & { _idx: number })[] = [];
+  let i = 1;
+  for (const g of groups.value) {
+    for (const item of g.items) {
+      rows.push({ ...item, _idx: i++ });
+    }
+  }
+  return rows;
+});
+
+/** 去掉 .CATDlg 后缀 */
+function shortName(fileName: string) {
+  return fileName.replace(/\.CATDlg$/i, "");
+}
+
 let searchTimer: ReturnType<typeof window.setTimeout> | null = null;
 
 async function loadIndex(q = query.value) {
@@ -119,24 +140,9 @@ onBeforeUnmount(() => {
       <span>{{ query.trim() ? `${visibleCount}/${count}` : count }}</span>
     </template>
     <template #actions>
-      <el-button
-        size="small"
-        text
-        :loading="loading"
-        title="重新加载索引"
-        @click.stop="loadIndex"
-      >
-        刷新
-      </el-button>
-      <el-button
-        size="small"
-        text
-        :loading="scanning"
-        title="扫描工作空间 .CATDlg 并更新索引库"
-        @click.stop="rescan"
-      >
-        扫描
-      </el-button>
+      <el-button size="small" text class="act-btn" :title="store.indexViewMode === 'tree' ? '列表视图' : '分组视图'" @click.stop="store.indexViewMode = store.indexViewMode === 'tree' ? 'table' : 'tree'">{{ store.indexViewMode === 'tree' ? '📋' : '🌳' }}</el-button>
+      <el-button size="small" text class="act-btn" :loading="loading" title="刷新索引" @click.stop="loadIndex()">🔄</el-button>
+      <el-button size="small" text class="act-btn" :loading="scanning" title="扫描 .CATDlg" @click.stop="rescan">🔍</el-button>
     </template>
 
     <div class="caa-index-body">
@@ -157,23 +163,43 @@ onBeforeUnmount(() => {
       </p>
 
       <div v-if="indexed" class="caa-index-list">
-        <template v-if="filteredGroups.length">
-          <section v-for="group in filteredGroups" :key="group.groupKey" class="caa-index-group">
-            <header>{{ group.label || group.groupKey }}</header>
-            <button
-              v-for="item in group.items"
-              :key="item.catDlgRel"
-              type="button"
-              class="caa-index-row"
-              :title="item.catDlgRel"
-              @click="openDialog(item)"
-            >
-              <span class="caa-index-file">{{ item.fileName }}</span>
-              <span class="caa-index-name">{{ item.dialogName }}</span>
-            </button>
-          </section>
+        <!-- tree 模式：分组 -->
+        <template v-if="store.indexViewMode === 'tree'">
+          <template v-if="filteredGroups.length">
+            <section v-for="group in filteredGroups" :key="group.groupKey" class="caa-index-group">
+              <header><el-icon><Folder /></el-icon> {{ group.label || group.groupKey }}</header>
+              <button
+                v-for="item in group.items"
+                :key="item.catDlgRel"
+                type="button"
+                class="caa-index-row"
+                :title="item.catDlgRel"
+                @click="openDialog(item)"
+              >
+                <el-icon class="caa-file-icon"><Grid /></el-icon>
+                <span class="caa-index-file">{{ shortName(item.fileName) }}</span>
+              </button>
+            </section>
+          </template>
+          <p v-else class="muted small caa-index-empty">无匹配对话框</p>
         </template>
-        <p v-else class="muted small caa-index-empty">无匹配对话框</p>
+
+        <!-- table 模式：平铺序号 + 文件名（去 .CATDlg） -->
+        <table v-else class="caa-index-table">
+          <tbody>
+            <tr
+              v-for="row in flatRows"
+              :key="row.catDlgRel"
+              class="caa-index-table-row"
+              :title="row.catDlgRel"
+              @click="openDialog(row)"
+            >
+              <td class="caa-idx-num">{{ row._idx }}</td>
+              <td class="caa-idx-icon"><el-icon><Grid /></el-icon></td>
+              <td class="caa-idx-file">{{ shortName(row.fileName) }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </SidebarBlock>
@@ -216,17 +242,24 @@ onBeforeUnmount(() => {
 }
 
 .caa-index-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  display: flex;
+  align-items: center;
+  gap: 1px;
   width: 100%;
   margin: 0;
-  padding: 5px 6px;
+  padding: 4px 6px;
   border: none;
   border-radius: 4px;
   background: transparent;
   color: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+.caa-file-icon {
+  flex-shrink: 0;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 
 .caa-index-row:hover {
@@ -260,5 +293,64 @@ onBeforeUnmount(() => {
 .caa-index-error {
   color: var(--el-color-danger);
   font-size: 12px;
+}
+
+/* ── table 模式 ── */
+
+.caa-index-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.caa-index-table-row {
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.caa-index-table-row:hover {
+  background: var(--el-fill-color-light);
+}
+
+.caa-index-table-row td {
+  padding: 3px 4px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.caa-idx-num {
+  width: 24px;
+  color: var(--el-text-color-placeholder);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.caa-idx-icon {
+  width: 20px;
+  text-align: center;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+}
+
+.caa-idx-file {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #2563eb;
+  font-weight: 600;
+}
+</style>
+
+<style>
+.caa-dialog-index-panel .sidebar-block-actions {
+  gap: 2px;
+  padding-left: 3px;
+}
+.caa-dialog-index-panel .sidebar-block-actions .act-btn {
+  padding: 2px 3px !important;
+}
+.caa-dialog-index-panel .sidebar-block-actions .act-btn:hover {
+  color: #3b82f6 !important;
+  background: rgba(59,130,246,0.08) !important;
 }
 </style>

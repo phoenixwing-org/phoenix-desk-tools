@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, unref } from "vue";
+import { Grid, ChatLineSquare, Picture, Document } from "@element-plus/icons-vue";
 import { useCaaDialogPageStore } from "../../stores/caaDialogPage";
 import { ElMessage } from "element-plus";
 import type { CaaDialogIr } from "../../types/caaDialogIr";
@@ -7,6 +8,16 @@ import { buildCaaDialogRelatedFiles } from "../../utils/caaDialogRelatedFiles";
 import { useCaaRelatedFilePreview } from "../../composables/useCaaRelatedFilePreview";
 import { CAA_NLS_SESSION_KEY } from "../../composables/caaNlsEdit";
 import { useAppShell } from "../../composables/useAppShell";
+
+/** 根据 kindLabel 返回文件类型图标组件 */
+function fileIcon(kind: string) {
+  if (kind.startsWith(".CATDlg")) return Grid;
+  if (kind.startsWith(".CATNls")) return ChatLineSquare;
+  if (kind.startsWith(".CATRsc")) return Picture;
+  if (kind.startsWith(".h") || kind.startsWith(".cpp")) return Document;
+  if (kind.startsWith("位图")) return Picture;
+  return Document;
+}
 
 const props = defineProps<{
   ir: CaaDialogIr;
@@ -81,6 +92,7 @@ function toggleCollapse() { store.toggleRelatedFiles(); }
     >
       <el-table-column label="文件名" min-width="140" show-overflow-tooltip>
         <template #default="{ row }">
+          <el-icon class="file-type-icon"><component :is="fileIcon(row.kindLabel)" /></el-icon>
           <span class="mono cell-name">{{ row.filename }}</span>
         </template>
       </el-table-column>
@@ -154,6 +166,16 @@ function toggleCollapse() { store.toggleRelatedFiles(); }
 
 .caa-related-table :deep(.col-actions .cell) {
   padding: 0 4px;
+}
+
+.caa-related-table :deep(.el-table__row:hover .file-type-icon) {
+  color: var(--accent, #3b82f6);
+}
+
+.file-type-icon {
+  margin-right: 2px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
 }
 
 .cell-name {
