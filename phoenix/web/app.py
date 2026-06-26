@@ -83,6 +83,10 @@ from phoenix.services.code_index_service import (
     save_code_index_extra_extensions,
     search_code_index_entries,
 )
+from phoenix.services.caa_index_service import (
+    load_caa_index_groups,
+    run_caa_index_scan,
+)
 from phoenix.services.code_ignore_service import (
     get_code_ignore_prefs,
     list_process_dir_suggestions,
@@ -1580,6 +1584,17 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
             return run_sw_step_export(ws, patch or None)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.get("/api/caa/index/groups")
+    def api_caa_index_groups(q: str | None = Query(None)) -> dict:
+        return load_caa_index_groups(get_workspace(), q=q)
+
+    @app.post("/api/caa/index/scan")
+    def api_caa_index_scan() -> dict:
+        try:
+            return run_caa_index_scan(get_workspace())
+        except OSError as e:
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
     @app.get("/api/code/index")
     def api_code_index_get() -> dict:

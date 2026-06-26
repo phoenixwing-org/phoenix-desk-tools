@@ -51,6 +51,10 @@ export interface CaaControlContext {
   toggleGridRowResize: (containerId: string, rowIndex: number) => void;
   /** Grid 列伸缩开关（按 container nodeId + col index） */
   toggleGridColResize: (containerId: string, colIndex: number) => void;
+  /** Set ROWRES flag directly; used by header drag batching. */
+  setGridRowResize: (containerId: string, rowIndex: number, enabled: boolean, opts?: { recordHistory?: boolean }) => void;
+  /** Set COLRES flag directly; used by header drag batching. */
+  setGridColResize: (containerId: string, colIndex: number, enabled: boolean, opts?: { recordHistory?: boolean }) => void;
   /** 编辑模式：控制 grid bar / 辅助线 / 单元格边界显隐 */
   editMode: Ref<boolean>;
   /** Builder 模式：向容器添加控件，返回新节点 ID */
@@ -63,6 +67,8 @@ export interface CaaControlContext {
   removeControl: (containerId: string, nodeId: string) => void;
   /** Builder 拖放指示器状态：顶层 overlay 读取（唯一的拖拽视觉反馈） */
   dropIndicator: Ref<{ rect: { left: number; top: number; width: number; height: number } | null; edge: DropEdge }>;
+  /** Builder：在即将修改 IR 前记录 undo 快照 */
+  recordHistory: () => void;
   /** Builder：原子替换容器子节点（批量操作入口） */
   setChildren: (containerId: string, children: CaaDialogNode[], selectId?: string) => void;
   /** Builder 操作历史记录（供撤销/重做消费，目前记录最近一次） */

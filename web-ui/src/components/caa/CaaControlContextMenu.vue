@@ -35,7 +35,7 @@ function onAction(item: CaaContextMenuItem) {
 }
 
 /** 点击外部关闭 */
-function onWindowClick(e: MouseEvent) {
+function onWindowClick() {
   if (!visible.value) return;
   ctx?.hideContextMenu();
 }

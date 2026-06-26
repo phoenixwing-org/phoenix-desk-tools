@@ -3,55 +3,12 @@
  * Builder 控件面板 —— 左侧工具箱，分组展示可拖拽控件。
  */
 import { inject } from "vue";
+import { caaControlPaletteGroups } from "@phoenix/catdlg-core";
 import { CAA_CONTROL_KEY } from "../../composables/useCaaControlContext";
 
 const ctx = inject(CAA_CONTROL_KEY, null);
 
-interface PaletteItem {
-  type: string;
-  label: string;
-}
-
-interface PaletteGroup {
-  label: string;
-  items: PaletteItem[];
-}
-
-const groups: PaletteGroup[] = [
-  {
-    label: "基础控件",
-    items: [
-      { type: "CATDlgLabel", label: "Label" },
-      { type: "CATDlgEditor", label: "Editor" },
-      { type: "CATDlgPushButton", label: "Button" },
-      { type: "CATDlgCombo", label: "Combo" },
-      { type: "CATDlgCheckButton", label: "Check" },
-      { type: "CATDlgRadioButton", label: "Radio" },
-      { type: "CATDlgSpinner", label: "Spinner" },
-      { type: "CATDlgSelectorList", label: "SelList" },
-    ],
-  },
-  {
-    label: "列表",
-    items: [
-      { type: "CATDlgMultiList", label: "MultiList" },
-    ],
-  },
-  {
-    label: "容器",
-    items: [
-      { type: "CATDlgFrame", label: "Frame" },
-      { type: "CATDlgTabContainer", label: "Tab" },
-      { type: "CATDlgContainer", label: "Container" },
-    ],
-  },
-  {
-    label: "装饰",
-    items: [
-      { type: "CATDlgSeparator", label: "Separator" },
-    ],
-  },
-];
+const groups = caaControlPaletteGroups();
 
 function onDragStart(e: DragEvent, type: string) {
   if (!e.dataTransfer) return;

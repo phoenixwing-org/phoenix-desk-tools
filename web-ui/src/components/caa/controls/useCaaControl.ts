@@ -149,10 +149,11 @@ export function useCaaControl(
     }
 
     // ── 删除（仅非根节点）──
-    if (node.father) {
+    // 注意：删除前先选中父容器，方便用户感知删除后的上下文变化
+    if (!isDialog.value && node.father) {
       items.push({ divider: true, label: "", action: () => {} });
       items.push({
-        label: "删除",
+        label: "删除控件",
         action: () => {
           if (ctx && node.father) {
             ctx.select(node.father);

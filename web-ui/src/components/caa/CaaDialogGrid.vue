@@ -4,9 +4,10 @@ import type { CaaDialogNode } from "../../types/caaDialogIr";
 import CaaDialogNodeView from "./CaaDialogNodeView.vue";
 import CaaGridSettingsPopover from "./CaaGridSettingsPopover.vue";
 import { CAA_CONTROL_KEY, type CaaContextMenuItem } from "../../composables/useCaaControlContext";
-import { caaGridFillTrackTemplate, caaGridTrackTemplate } from "../../utils/caaControlMetrics";
+import { caaGridEditRowTrackTemplate, caaGridFillTrackTemplate, caaGridTrackTemplate } from "../../utils/caaControlMetrics";
 import { findCaaNode, renumberGrid, generateNodeId, createControlNode, removeChildNode } from "../../utils/caaDialogTree";
 import { resolveDropEdgeFromRect, applyDropTransform, findOverlaps, buildBuilderRecord } from "../../utils/caaDropZone";
+import { resolveSpanResize, type SpanGrid } from "../../utils/caaSpanResize";
 import type { ContainerResizeResult } from "./controls/useCaaContainerResize";
 
 const props = withDefaults(
@@ -66,11 +67,15 @@ const gridStyle = computed(() => {
     : props.fillParent
       ? caaGridFillTrackTemplate(m.cols, m.colResizable)
       : caaGridTrackTemplate(m.cols);
+  const baseRows = hasResize
+    ? props.resize!.rowTemplate
+    : props.fillParent
+      ? caaGridFillTrackTemplate(m.rows, m.rowResizable)
+      : caaGridTrackTemplate(m.rows);
+  const editRows = caaGridEditRowTrackTemplate(m.rows, m.rowResizable, props.fillParent || hasResize);
   return {
     display: "grid",
-    gridTemplateRows: e
-      ? `14px ${caaGridTrackTemplate(m.rows)}`
-      : caaGridTrackTemplate(m.rows),
+    gridTemplateRows: e ? `14px ${editRows}` : baseRows,
     gridTemplateColumns: e
       ? `14px ${baseCols}`
       : baseCols,
@@ -209,7 +214,6 @@ function doDrop(row: number, col: number, edge: string, payload: string, targetI
   const targetContainer = findCaaNode(root, targetId);
   if (!targetContainer) return;
 
-  const isCross = targetId !== (payload.startsWith("MOVE:") ? payload.slice(5).split(":").pop() : "");
   console.log("[CAA drop] ═══ doDrop ═══ row=%d col=%d edge=%s payload=%s target=%s isCross=%s children=%d",
     row, col, edge, payload, targetId, isCross, targetContainer.children.length);
   console.log("[CAA drop] 现有控件：", targetContainer.children.map(c => ({ id: c.id, grid: c.grid })));
@@ -253,9 +257,6 @@ function doDrop(row: number, col: number, edge: string, payload: string, targetI
     ? targetContainer.children.filter((c) => c.id !== sourceNodeId)
     : targetContainer.children;
 
-  console.log("[CAA drop] applyDropTransform 输入：children=%d target=(%d,%d) edge=%s",
-    computeInput.length, row, col, edge);
-
   const result = applyDropTransform({
     children: computeInput,
     targetRow: row,
@@ -263,19 +264,14 @@ function doDrop(row: number, col: number, edge: string, payload: string, targetI
     edge: edge as "inside" | "right" | "bottom" | "left" | "top",
   });
 
-  console.log("[CAA drop] applyDropTransform 结果：success=%s placed=(%d,%d) insertCol=%s insertRow=%s %s",
-    result.success, result.placedRow, result.placedCol,
-    result.insertColBefore ?? "-", result.insertRowBefore ?? "-",
-    result.error ? "error=" + result.error : "");
-
   if (!result.success) {
-    console.warn("[CAA drop] 拒绝放置：", result.error);
     return;
   }
 
+  ctx!.recordHistory();
+
   // ── ③ 构建最终子节点列表 ──
   const newChildren: CaaDialogNode[] = result.children as CaaDialogNode[];
-  console.log("[CAA drop] 变换后 children：", newChildren.map(c => ({ id: c.id, grid: c.grid })));
 
   if (payload.startsWith("COPY:")) {
     const type = payload.slice(5);
@@ -292,7 +288,6 @@ function doDrop(row: number, col: number, edge: string, payload: string, targetI
   // ── ④ 验证：无重叠 ──
   const overlaps = findOverlaps(newChildren as any);
   if (overlaps.length > 0) {
-    console.warn("[CAA drop] 检测到重叠，回退：", overlaps.map((o) => o.cell).join(", "));
     targetContainer.children = snapChildren;
     renumberGrid(targetContainer);
     if (sourceSnapChildren) {
@@ -305,8 +300,8 @@ function doDrop(row: number, col: number, edge: string, payload: string, targetI
     return;
   }
 
-  // ── ⑤ 原子替换 ──
-  ctx!.setChildren(targetId, newChildren);
+  // ── ⑤ 原子替换目标容器 + 跨容器 MOVE ──
+  ctx!.setChildren(targetId, newChildren, sourceNodeId || undefined);
 
   // 跨容器 MOVE：更新源容器（使用纯函数移除）
   if (sourceNodeId && sourceContainerId !== targetId) {
@@ -340,9 +335,6 @@ function doDrop(row: number, col: number, edge: string, payload: string, targetI
       record.operation, record.affectedNodeId, record.affectedNodeType);
     ctx.lastBuilderRecord.value = record;
   }
-
-  if (sourceNodeId) ctx!.select(sourceNodeId);
-}
 
 function onGridDrop(e: DragEvent) {
   e.preventDefault();
@@ -384,6 +376,18 @@ function clearDragState() {
 //   6. 跨容器拖动：onWindowMouseMove 用 elementsFromPoint 搜索所有 grid host
 
 const internalDrag = ref<{ sourceNodeId: string; sourceContainerId: string; startX: number; startY: number; active: boolean; dragOverGridId: string | null } | null>(null);
+const spanResize = ref<{
+  childId: string;
+  startX: number;
+  startY: number;
+  startGrid: SpanGrid;
+  cellWidth: number;
+  cellHeight: number;
+  lastRowSpan: number;
+  lastColSpan: number;
+  historyRecorded: boolean;
+} | null>(null);
+const resizeFlagDrag = ref<{ axis: "row" | "col"; enabled: boolean; touched: Set<number> } | null>(null);
 
 function onCellMouseDown(e: MouseEvent, child: CaaDialogNode) {
   // 仅记录拖拽起点。
@@ -400,6 +404,86 @@ function onCellMouseDown(e: MouseEvent, child: CaaDialogNode) {
     active: false,
     dragOverGridId: null,
   };
+}
+
+function onSpanResizePointerDown(e: PointerEvent, child: CaaDialogNode) {
+  if (e.button !== 0 || !child.grid || !ctx) return;
+  e.preventDefault();
+  e.stopPropagation();
+  cancelInternalDrag();
+  ctx.select(child.id);
+
+  const cellEl = (e.currentTarget as HTMLElement).closest(".caa-grid-cell") as HTMLElement | null;
+  const rect = cellEl?.getBoundingClientRect();
+  const cellWidth = rect ? rect.width / Math.max(1, child.grid.colSpan) : 32;
+  const cellHeight = rect ? rect.height / Math.max(1, child.grid.rowSpan) : 24;
+  spanResize.value = {
+    childId: child.id,
+    startX: e.clientX,
+    startY: e.clientY,
+    startGrid: { ...child.grid },
+    cellWidth,
+    cellHeight,
+    lastRowSpan: child.grid.rowSpan,
+    lastColSpan: child.grid.colSpan,
+    historyRecorded: false,
+  };
+  document.body.classList.add("caa-span-resize-active");
+  window.addEventListener("pointermove", onWindowSpanResizeMove);
+  window.addEventListener("pointerup", onWindowSpanResizeUp);
+  window.addEventListener("keydown", onWindowSpanResizeKeyDown);
+}
+
+function cancelSpanResize() {
+  spanResize.value = null;
+  document.body.classList.remove("caa-span-resize-active");
+  window.removeEventListener("pointermove", onWindowSpanResizeMove);
+  window.removeEventListener("pointerup", onWindowSpanResizeUp);
+  window.removeEventListener("keydown", onWindowSpanResizeKeyDown);
+}
+
+function onWindowSpanResizeMove(e: PointerEvent) {
+  if (!(e.buttons & 1)) { cancelSpanResize(); return; }
+  const d = spanResize.value;
+  if (!d || !ctx) return;
+  e.preventDefault();
+  const result = resolveSpanResize({
+    children: props.node.children,
+    nodeId: d.childId,
+    startGrid: d.startGrid,
+    deltaX: e.clientX - d.startX,
+    deltaY: e.clientY - d.startY,
+    cellWidth: d.cellWidth,
+    cellHeight: d.cellHeight,
+  });
+  if (!result.success) return;
+  if (result.rowSpan === d.lastRowSpan && result.colSpan === d.lastColSpan) return;
+  if (!d.historyRecorded) {
+    ctx.recordHistory();
+    d.historyRecorded = true;
+  }
+  d.lastRowSpan = result.rowSpan;
+  d.lastColSpan = result.colSpan;
+  const children = props.node.children.map((candidate) => {
+    if (candidate.id !== d.childId || !candidate.grid) return candidate;
+    return {
+      ...candidate,
+      grid: {
+        ...candidate.grid,
+        rowSpan: result.rowSpan,
+        colSpan: result.colSpan,
+      },
+    };
+  });
+  ctx.setChildren(props.node.id, children, d.childId);
+}
+
+function onWindowSpanResizeUp() {
+  cancelSpanResize();
+}
+
+function onWindowSpanResizeKeyDown(e: KeyboardEvent) {
+  if (e.key === "Escape") cancelSpanResize();
 }
 
 function cancelInternalDrag() {
@@ -541,12 +625,61 @@ function toggleRowResize(row: number) {
 
 // ── grid settings popover ──
 
-const settingsOpen = ref(false);
-
-function openGridSettings() {
-  ctx?.select(props.node.id);
-  settingsOpen.value = true;
+function startResizeFlagDrag(axis: "row" | "col", index: number, enabled: boolean) {
+  if (!ctx) return;
+  ctx.recordHistory();
+  resizeFlagDrag.value = { axis, enabled, touched: new Set<number>() };
+  applyResizeFlagDrag(axis, index);
+  window.addEventListener("pointerup", finishResizeFlagDrag);
+  window.addEventListener("keydown", onResizeFlagDragKeyDown);
 }
+
+function applyResizeFlagDrag(axis: "row" | "col", index: number) {
+  const d = resizeFlagDrag.value;
+  if (!ctx || !d || d.axis !== axis || d.touched.has(index)) return;
+  d.touched.add(index);
+  if (axis === "row") {
+    ctx.setGridRowResize(props.node.id, index, d.enabled, { recordHistory: false });
+  } else {
+    ctx.setGridColResize(props.node.id, index, d.enabled, { recordHistory: false });
+  }
+}
+
+function finishResizeFlagDrag() {
+  resizeFlagDrag.value = null;
+  window.removeEventListener("pointerup", finishResizeFlagDrag);
+  window.removeEventListener("keydown", onResizeFlagDragKeyDown);
+}
+
+function onResizeFlagDragKeyDown(e: KeyboardEvent) {
+  if (e.key === "Escape") finishResizeFlagDrag();
+}
+
+function onColResizePointerDown(e: PointerEvent, col: number) {
+  if (e.button !== 0 || !ctx) return;
+  e.preventDefault();
+  e.stopPropagation();
+  startResizeFlagDrag("col", col, !colSet.value.has(col));
+}
+
+function onRowResizePointerDown(e: PointerEvent, row: number) {
+  if (e.button !== 0 || !ctx) return;
+  e.preventDefault();
+  e.stopPropagation();
+  startResizeFlagDrag("row", row, !rowSet.value.has(row));
+}
+
+function onColResizePointerEnter(e: PointerEvent, col: number) {
+  if (!(e.buttons & 1)) return;
+  applyResizeFlagDrag("col", col);
+}
+
+function onRowResizePointerEnter(e: PointerEvent, row: number) {
+  if (!(e.buttons & 1)) return;
+  applyResizeFlagDrag("row", row);
+}
+
+const settingsOpen = ref(false);
 
 // ── right-click context menu ──
 
@@ -611,7 +744,11 @@ function onGridContextmenu(e: MouseEvent) {
           class="caa-col-indicator"
           :class="{ 'caa-col-indicator--resizable': colSet.has(c - 1) }"
           :title="`列 ${c - 1}：${colSet.has(c - 1) ? '伸缩' : '固定'}`"
-          @click="toggleColResize(c - 1)"
+          @pointerdown="onColResizePointerDown($event, c - 1)"
+          @pointerenter="onColResizePointerEnter($event, c - 1)"
+          @click.stop.prevent
+          @keydown.enter.prevent="toggleColResize(c - 1)"
+          @keydown.space.prevent="toggleColResize(c - 1)"
         >
           <span v-if="colSet.has(c - 1)" class="spr spr-col-resize"></span>
           <span v-else class="spr spr-col-fixed"></span>
@@ -627,7 +764,13 @@ function onGridContextmenu(e: MouseEvent) {
           :class="{ 'caa-row-indicator--resizable': rowSet.has(r - 1) }"
           :style="{ gridRow: `${r + 1}`, gridColumn: '1' }"
           :title="`行 ${r - 1}：${rowSet.has(r - 1) ? '伸缩' : '固定'}`"
-          @click="toggleRowResize(r - 1)"
+          role="button"
+          tabindex="0"
+          @pointerdown="onRowResizePointerDown($event, r - 1)"
+          @pointerenter="onRowResizePointerEnter($event, r - 1)"
+          @click.stop.prevent
+          @keydown.enter.prevent="toggleRowResize(r - 1)"
+          @keydown.space.prevent="toggleRowResize(r - 1)"
         >
           <span v-if="rowSet.has(r - 1)" class="spr spr-row-resize"></span>
           <span v-else class="spr spr-row-fixed"></span>
@@ -641,7 +784,7 @@ function onGridContextmenu(e: MouseEvent) {
         class="caa-grid-cell"
         :data-grid-row="child.grid?.row"
         :data-grid-col="child.grid?.col"
-        :class="{ 'caa-grid-cell--edit': editMode, 'caa-grid-cell--dragging': dragOverGrid }"
+        :class="{ 'caa-grid-cell--edit': editMode, 'caa-grid-cell--dragging': dragOverGrid, 'caa-grid-cell--span-resizing': spanResize?.childId === child.id }"
         :style="itemStyle(child, editMode)"
         @dragstart.stop="onCellDragStart($event, child)"
         @mousedown="onCellMouseDown($event, child)"
@@ -651,6 +794,16 @@ function onGridContextmenu(e: MouseEvent) {
           :fill-parent="fillParent"
           :dialog-root="dialogRoot"
           :width-style="childResizeStyle(child)"
+        />
+        <button
+          v-if="editMode && child.grid"
+          type="button"
+          class="caa-span-resize-handle"
+          title="拖拽调整控件跨行/跨列"
+          aria-label="拖拽调整控件跨行/跨列"
+          @pointerdown="onSpanResizePointerDown($event, child)"
+          @mousedown.stop.prevent
+          @click.stop.prevent
         />
       </div>
 
@@ -804,6 +957,7 @@ function onGridContextmenu(e: MouseEvent) {
 
 /* ── 单元格 ── */
 .caa-grid-cell {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -821,6 +975,44 @@ function onGridContextmenu(e: MouseEvent) {
 }
 
 /* 空格子占位：编辑模式下显示虚线边界，让用户看到 grid 结构 */
+.caa-grid-cell--span-resizing {
+  outline: 1px solid #2563eb;
+  outline-offset: -1px;
+}
+
+.caa-span-resize-handle {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 11px;
+  height: 11px;
+  padding: 0;
+  border: 1px solid #64748b;
+  border-radius: 2px;
+  background:
+    linear-gradient(135deg, transparent 50%, #64748b 50%) right bottom / 7px 7px no-repeat,
+    #f8fafc;
+  cursor: nwse-resize;
+  opacity: 0;
+  transition: opacity 0.12s, border-color 0.12s, background-color 0.12s;
+}
+
+.caa-grid-cell--edit:hover > .caa-span-resize-handle,
+.caa-grid-cell--span-resizing > .caa-span-resize-handle,
+.caa-span-resize-handle:focus-visible {
+  opacity: 1;
+}
+
+.caa-span-resize-handle:hover,
+.caa-span-resize-handle:focus-visible {
+  border-color: #2563eb;
+  background-color: #eff6ff;
+}
+
+:global(body.caa-span-resize-active) {
+  cursor: nwse-resize;
+}
+
 .caa-grid-cell--empty {
   background: transparent;
   min-height: 24px;

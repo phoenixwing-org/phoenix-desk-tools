@@ -60,6 +60,9 @@ export function buildShellSearchParams(opts: {
   if ((pageId === "file_detail" || pageId === "bom_apply") && rel) {
     params.set("rel", rel);
   }
+  if (pageId === "caa_dialog" && rel && !rel.startsWith("draft:")) {
+    params.set("rel", rel);
+  }
   if (pageId === "part_key_detail" && rel) {
     params.set("part", rel);
   }

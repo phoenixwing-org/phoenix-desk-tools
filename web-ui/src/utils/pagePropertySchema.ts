@@ -129,6 +129,7 @@ export function propPath(
     onChange?: (value: string) => void;
     placeholder?: string;
     browse?: boolean;
+    mono?: boolean;
     hint?: string;
     disabled?: MaybeHidden;
     hidden?: MaybeHidden;
@@ -147,6 +148,7 @@ export function propReadonly(
     multiline?: boolean;
     hint?: string;
     hidden?: MaybeHidden;
+    labelTone?: "default" | "emphasis";
   },
 ): PagePropertyInfoField {
   return { id, label, kind: "info", ...opts };

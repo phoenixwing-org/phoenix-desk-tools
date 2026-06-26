@@ -14,6 +14,7 @@ import CaaControlCheckButton from "./CaaControlCheckButton.vue";
 import CaaControlRadioButton from "./CaaControlRadioButton.vue";
 import CaaControlCombo from "./CaaControlCombo.vue";
 import CaaControlSeparator from "./CaaControlSeparator.vue";
+import CaaControlCatalogBox from "./CaaControlCatalogBox.vue";
 import CaaControlUnknown from "./CaaControlUnknown.vue";
 
 /**
@@ -36,6 +37,21 @@ const caaControlMap: Record<string, Component> = {
   CATDlgRadioButton: CaaControlRadioButton,
   CATDlgCombo: CaaControlCombo,
   CATDlgSeparator: CaaControlSeparator,
+  CATDlgSplitter: CaaControlCatalogBox,
+  CATDlgIconBox: CaaControlCatalogBox,
+  CATDlgProgress: CaaControlCatalogBox,
+  CATDlgSlider: CaaControlCatalogBox,
+  CATDlgScrollbar: CaaControlCatalogBox,
+  CATDlgMenuBar: CaaControlCatalogBox,
+  CATDlgToolBar: CaaControlCatalogBox,
+  CATDlgStatusBar: CaaControlCatalogBox,
+  CATDlgSubMenu: CaaControlCatalogBox,
+  CATDlgMenuItem: CaaControlCatalogBox,
+  CATDlgToolBarItem: CaaControlCatalogBox,
+  CATDlgPushItem: CaaControlCatalogBox,
+  CATDlgCheckItem: CaaControlCatalogBox,
+  CATDlgRadioItem: CaaControlCatalogBox,
+  CATDlgSeparatorItem: CaaControlCatalogBox,
 };
 
 /** 按 CAA 类型名解析对应的 Vue 组件，未注册返回 CaaControlUnknown */

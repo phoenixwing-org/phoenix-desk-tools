@@ -16,7 +16,7 @@ async function loadDrafts() {
   loading.value = true;
   try {
     const { drafts: list } = await fetchCaaDrafts(workspacePath.value);
-    drafts.value = (list as CaaDialogDraft[]).sort(
+    drafts.value = (list as unknown as CaaDialogDraft[]).sort(
       (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
     );
   } catch {

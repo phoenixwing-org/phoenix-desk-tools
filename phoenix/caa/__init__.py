@@ -1,0 +1,2 @@
+"""CAA lightweight workspace index."""
+

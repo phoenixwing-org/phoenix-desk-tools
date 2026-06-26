@@ -6,6 +6,7 @@ import FileWorksetPanel from "../components/FileWorksetPanel.vue";
 import ShellLogPanel from "./ShellLogPanel.vue";
 import PagePropertiesPanel from "../components/PagePropertiesPanel.vue";
 import GitCommitPanel from "../components/shell/GitCommitPanel.vue";
+import CaaDialogIndexPanel from "../components/caa/CaaDialogIndexPanel.vue";
 import CaaDialogTreePanel from "../components/caa/CaaDialogTreePanel.vue";
 import { usePagePropertiesHost, setPropertiesActivePage } from "../composables/pagePropertiesHost";
 import { fetchTree, type TreeNode } from "../api";
@@ -408,6 +409,7 @@ onUnmounted(() => {
     :style="{ width: panelWidth }"
   >
     <div v-if="showCaaTree" class="ws-body ws-caa-tree-body" :style="bodyStyle">
+      <CaaDialogIndexPanel />
       <CaaDialogTreePanel />
     </div>
 

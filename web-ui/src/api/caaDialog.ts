@@ -10,6 +10,38 @@ export type CaaHealthPayload = {
   proxyPath?: string;
 };
 
+export type CaaControlTypeCoverageRow = {
+  type: string;
+  count: number;
+  dialog_count: number;
+  known: boolean;
+};
+
+export type CaaControlTypeCoverage = {
+  catalog_type_count: number;
+  total_types: number;
+  known_types: number;
+  unknown_types: number;
+  total_controls: number;
+  unknown_controls: number;
+  types: CaaControlTypeCoverageRow[];
+  unknown: CaaControlTypeCoverageRow[];
+};
+
+export type CaaIndexStats = {
+  dialogs?: number;
+  total?: number;
+  control_type_coverage?: CaaControlTypeCoverage;
+};
+
+export type CaaIndexListResult = CaaDialogListResponse & {
+  indexed: boolean;
+  indexFallback?: boolean;
+  last_scan_at?: string | null;
+  stats?: CaaIndexStats;
+  summary?: string;
+};
+
 export async function fetchCaaHealth(): Promise<CaaHealthPayload> {
   const res = await fetch("/api/caa/health");
   if (!res.ok) throw new Error(`CAA health ${res.status}`);
@@ -34,6 +66,88 @@ export async function fetchCaaDialogList(
     throw new Error(data?.error ?? `list failed ${res.status}`);
   }
   return data as CaaDialogListResponse;
+}
+
+function filterDialogGroups(groups: CaaDialogListResponse["groups"], q?: string): CaaDialogListResponse["groups"] {
+  const needle = q?.trim().toLowerCase();
+  if (!needle) return groups;
+  return groups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter(
+        (item) =>
+          item.dialogName.toLowerCase().includes(needle) ||
+          item.fileName.toLowerCase().includes(needle) ||
+          item.groupKey.toLowerCase().includes(needle) ||
+          item.catDlgRel.toLowerCase().includes(needle),
+      ),
+    }))
+    .filter((group) => group.items.length > 0);
+}
+
+function countDialogGroups(groups: CaaDialogListResponse["groups"]): number {
+  return groups.reduce((sum, group) => sum + group.items.length, 0);
+}
+
+async function fallbackCaaIndexGroups(workspaceRoot: string, q?: string): Promise<CaaIndexListResult> {
+  const data = await fetchCaaDialogList(workspaceRoot, { includeDemo: false });
+  const groups = filterDialogGroups(data.groups, q);
+  const count = countDialogGroups(groups);
+  return {
+    workspaceRoot: data.workspaceRoot,
+    count,
+    groups,
+    indexed: true,
+    indexFallback: true,
+    last_scan_at: null,
+    summary: `CAA index API is unavailable; loaded ${count} .CATDlg from live scan`,
+  };
+}
+
+export async function fetchCaaIndexGroups(
+  q?: string,
+  opts?: { fallbackWorkspaceRoot?: string },
+): Promise<CaaIndexListResult> {
+  const params = new URLSearchParams();
+  if (q?.trim()) params.set("q", q.trim());
+  const res = await fetch(`/api/caa/index/groups${params.toString() ? `?${params.toString()}` : ""}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const fallbackRoot = opts?.fallbackWorkspaceRoot?.trim();
+    if (res.status === 404 && fallbackRoot) {
+      return fallbackCaaIndexGroups(fallbackRoot, q);
+    }
+    throw new Error(data?.detail ?? data?.error ?? `caa index groups failed ${res.status}`);
+  }
+  return {
+    workspaceRoot: "",
+    count: Number(data.count ?? 0),
+    groups: data.groups ?? [],
+    indexed: Boolean(data.indexed),
+    last_scan_at: data.last_scan_at ?? null,
+    stats: data.stats,
+  };
+}
+
+export async function scanCaaIndex(opts?: { fallbackWorkspaceRoot?: string }): Promise<CaaIndexListResult> {
+  const res = await fetch("/api/caa/index/scan", { method: "POST" });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const fallbackRoot = opts?.fallbackWorkspaceRoot?.trim();
+    if (res.status === 404 && fallbackRoot) {
+      return fallbackCaaIndexGroups(fallbackRoot);
+    }
+    throw new Error(data?.detail ?? data?.error ?? `caa index scan failed ${res.status}`);
+  }
+  return {
+    workspaceRoot: "",
+    count: Number(data.count ?? 0),
+    groups: data.groups ?? [],
+    indexed: Boolean(data.indexed),
+    last_scan_at: data.last_scan_at ?? null,
+    summary: data.summary,
+    stats: data.stats,
+  };
 }
 
 export async function parseCaaDialogDemo(): Promise<CaaDialogIr> {
@@ -106,6 +220,48 @@ export async function saveCaaDialog(opts: {
   if (!res.ok) throw new Error(data?.error ?? `save-dialog failed ${res.status}`);
   return data as { ok: boolean; absPath: string };
 }
+
+export async function writeCaaDialogFromIr(opts: {
+  workspaceRoot: string;
+  catDlgRel: string;
+  ir: Record<string, unknown>;
+  dryRun?: boolean;
+}): Promise<CaaDialogWriteResult> {
+  const res = await fetch("/api/caa/dialog/write", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(opts),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error ?? `write dialog failed ${res.status}`);
+  return data as CaaDialogWriteResult;
+}
+
+export type CaaDialogWriteValidation = {
+  errors?: string[];
+  warnings?: string[];
+};
+
+export type CaaDialogWritePreview = {
+  catDlg?: { before: string; after: string };
+  catNls?: { before: string; after: string };
+  header?: { before: string; after: string };
+  cpp?: { before: string; after: string };
+};
+
+export type CaaDialogWriteResult = {
+  ok: boolean;
+  dryRun?: boolean;
+  catDlgRel?: string;
+  catNlsRel?: string;
+  headerRel?: string;
+  cppRel?: string;
+  absPath: string;
+  bytes: number;
+  changed: { catDlg: boolean; catNls: boolean; header?: boolean; cpp?: boolean };
+  validation?: CaaDialogWriteValidation;
+  preview?: CaaDialogWritePreview;
+};
 
 export async function fetchCaaDialogFilePreview(opts: {
   workspaceRoot: string;

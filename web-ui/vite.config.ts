@@ -24,6 +24,10 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: {
+      "/api/caa/index": {
+        target: `http://127.0.0.1:${apiPort}`,
+        changeOrigin: true,
+      },
       "/api/caa": {
         target: `http://127.0.0.1:${caaPort}`,
         changeOrigin: true,

@@ -1,4 +1,5 @@
 import {
+  extractWizardBindingsFromCpp,
   mergeDialogIr,
   parseCatNls,
   type CaaDialogIr,
@@ -24,6 +25,16 @@ function pushProbeLogs(logs: string[], discovered: DiscoveredDialogResources): v
   }
 }
 
+function collectControlIds(node: CaaDialogIr["root"]): string[] {
+  const out: string[] = [];
+  const visit = (n: CaaDialogIr["root"]) => {
+    if (n.id && !out.includes(n.id)) out.push(n.id);
+    for (const child of n.children ?? []) visit(child);
+  };
+  visit(node);
+  return out;
+}
+
 export async function parseDialogFull(opts: ParseDialogFullOpts): Promise<CaaDialogIr> {
   const { readUtf8, resolveAbs, catDlgRel, catDlgAbs, workspaceRoot } = opts;
   const logs: string[] = [];
@@ -46,6 +57,8 @@ export async function parseDialogFull(opts: ParseDialogFullOpts): Promise<CaaDia
       : [];
 
   const sources: CaaDialogIr["sources"] = { catDlg: catDlgRel };
+  if (discovered.headerRel) sources.header = discovered.headerRel;
+  if (discovered.cppRel) sources.cpp = discovered.cppRel;
   const nlsLocalePaths: Record<string, string> = {};
   for (const ref of nlsLocales) {
     nlsLocalePaths[ref.locale] = ref.catNlsRel;
@@ -126,6 +139,22 @@ export async function parseDialogFull(opts: ParseDialogFullOpts): Promise<CaaDia
     throw new Error(`${msg}（${catDlgAbs}）`);
   }
 
+  let cppText: string | undefined;
+  let cppAbs: string | undefined;
+  if (discovered.cppRel) {
+    cppAbs = resolveAbs(discovered.cppRel);
+    try {
+      cppText = await readUtf8(cppAbs);
+      logs.push(`Read .cpp ${cppText.length} chars -> ${cppAbs}`);
+      caaLog("read cpp OK", { rel: discovered.cppRel, abs: cppAbs, bytes: cppText.length });
+    } catch (err) {
+      const msg = `Cannot read .cpp: ${discovered.cppRel}`;
+      warnings.push(msg);
+      logs.push(`${msg} -> ${cppAbs}`);
+      caaLog(`warn: ${msg}`, { abs: cppAbs, err: String(err) });
+    }
+  }
+
   const msgCatalogDirRel = primaryNlsRel
     ? primaryNlsRel.replace(/\\/g, "/").replace(/\/[^/]+$/, "")
     : discovered.pathProbes.find((p) => p.kind === "msgcatalogDir" && p.exists)?.rel;
@@ -155,6 +184,8 @@ export async function parseDialogFull(opts: ParseDialogFullOpts): Promise<CaaDia
       catDlg: catDlgAbs,
       catNls: catNlsAbs,
       catRsc: catRscAbs,
+      header: discovered.headerRel ? resolveAbs(discovered.headerRel) : undefined,
+      cpp: cppAbs,
       msgCatalogDir: msgCatalogDirRel ? resolveAbs(msgCatalogDirRel) : undefined,
     },
   };
@@ -178,6 +209,14 @@ export async function parseDialogFull(opts: ParseDialogFullOpts): Promise<CaaDia
     localeCount: localeMeta.length,
     warnings: warnings.length,
   });
+  if (cppText && ir.parseMeta) {
+    const bindings = extractWizardBindingsFromCpp(cppText, {
+      knownControlIds: collectControlIds(ir.root),
+    });
+    if (bindings.length > 0) ir.parseMeta.bindings = bindings;
+    logs.push(`Parsed cpp field bindings: ${bindings.length}`);
+    caaLog("parse cpp bindings", { bindingCount: bindings.length });
+  }
   caaLogLines(logs);
 
   return ir;

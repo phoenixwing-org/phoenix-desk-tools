@@ -5,6 +5,7 @@ import SidebarBlock from "./shell/SidebarBlock.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { usePagePropertiesHost } from "../composables/pagePropertiesHost";
 import { bindPointerDrag } from "../utils/pointerDrag";
+import type { PagePropertyGroup } from "../types/pageProperties";
 
 const NAME_COL_MIN = 72;
 const NAME_COL_MAX = 240;
@@ -37,7 +38,7 @@ watch(
 
 const sheetGroups = computed(() => activeSheet.value?.groups ?? []);
 
-function visibleFields(group: { fields: Array<{ hidden?: { value: boolean } }> }) {
+function visibleFields(group: PagePropertyGroup) {
   return group.fields.filter((f) => !(f.hidden && unref(f.hidden)));
 }
 

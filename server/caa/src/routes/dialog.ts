@@ -4,7 +4,6 @@ import {
   caaDialogGroupKey,
   caaDialogGroupLabel,
   extractCatDlgDialogName,
-  findRepoRoot,
   patchCatNls,
   emitCatDlg,
   PNX_BOM_ANALYSIS_DEMO,
@@ -13,7 +12,14 @@ import {
   inferLocaleCatNlsRel,
   CAA_NLS_LOCALE_SIMPLIFIED_CHINESE,
   parseCatNls,
+  emitCatDlgText,
+  collectCatNlsKeysFromNode,
+  patchWizardHeaderDeclarations,
+  patchWizardCppConstruction,
+  validateCaaDialogIrRoot,
+  type CaaDialogNode,
 } from "@phoenix/catdlg-core";
+import { findRepoRoot } from "@phoenix/catdlg-core/node";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { parseDialogFull } from "../parseDialogFull.js";
@@ -525,7 +531,153 @@ dialogRoutes.delete("/drafts/:id", async (c) => {
   }
 });
 
-// ── 从 IR 创建对话框文件到磁盘 ──
+dialogRoutes.post("/write", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as {
+    workspaceRoot?: string;
+    catDlgRel?: string;
+    catNlsRel?: string;
+    headerRel?: string;
+    cppRel?: string;
+    ir?: {
+      root?: unknown;
+      dialogName?: string;
+      sources?: { catDlg?: string; catNls?: string; header?: string; cpp?: string };
+    };
+    dryRun?: boolean;
+    nlsKeys?: Record<string, string>;
+    sourceText?: string;
+  };
+
+  const root = body.workspaceRoot?.trim();
+  const ir = body.ir;
+  const rootNode = ir?.root as CaaDialogNode | undefined;
+  const catDlgRel = (body.catDlgRel || ir?.sources?.catDlg || "").trim().replace(/\\/g, "/");
+  const catNlsRel = (body.catNlsRel || ir?.sources?.catNls || "").trim().replace(/\\/g, "/");
+  const headerRel = (body.headerRel || ir?.sources?.header || "").trim().replace(/\\/g, "/");
+  const cppRel = (body.cppRel || ir?.sources?.cpp || "").trim().replace(/\\/g, "/");
+  const dryRun = Boolean(body.dryRun);
+  if (!root || !catDlgRel || !rootNode) {
+    return c.json({ error: "workspaceRoot, catDlgRel, ir.root 必填" }, 400);
+  }
+
+  const validation = validateCaaDialogIrRoot(rootNode);
+  if (validation.errors.length) {
+    return c.json({ error: validation.errors.join("；"), validation }, 400);
+  }
+
+  try {
+    const catDlgAbs = resolveUnderRoot(root, catDlgRel);
+    if (!(await pathExists(catDlgAbs))) {
+      return c.json({ error: `.CATDlg 不存在：${catDlgRel}` }, 404);
+    }
+
+    const nextCatDlgText = emitCatDlgText(rootNode, { dialogName: ir?.dialogName || rootNode.id });
+    const prevCatDlgText = await readUtf8(catDlgAbs);
+    const catDlgChanged = prevCatDlgText !== nextCatDlgText;
+
+    let catNlsAbs = "";
+    let nextCatNlsText = "";
+    let prevCatNlsText = "";
+    let catNlsChanged = false;
+    if (catNlsRel && body.nlsKeys && Object.keys(body.nlsKeys).length > 0) {
+      catNlsAbs = resolveUnderRoot(root, catNlsRel);
+      if (!(await pathExists(catNlsAbs))) {
+        return c.json({ error: `.CATNls 不存在：${catNlsRel}` }, 404);
+      }
+      prevCatNlsText = body.sourceText?.length ? body.sourceText : await readUtf8(catNlsAbs);
+      nextCatNlsText = patchCatNls(prevCatNlsText, body.nlsKeys);
+      catNlsChanged = prevCatNlsText !== nextCatNlsText;
+    }
+
+    let headerAbs = "";
+    let nextHeaderText = "";
+    let prevHeaderText = "";
+    let headerChanged = false;
+    if (headerRel) {
+      headerAbs = resolveUnderRoot(root, headerRel);
+      if (await pathExists(headerAbs)) {
+        prevHeaderText = await readUtf8(headerAbs);
+        const patchedHeader = patchWizardHeaderDeclarations(prevHeaderText, rootNode);
+        nextHeaderText = patchedHeader.text;
+        headerChanged = patchedHeader.changed;
+        validation.warnings.push(...patchedHeader.warnings);
+      } else {
+        validation.warnings.push(`Wizard .h 不存在，跳过声明段写回：${headerRel}`);
+        headerAbs = "";
+      }
+    }
+
+    let cppAbs = "";
+    let nextCppText = "";
+    let prevCppText = "";
+    let cppChanged = false;
+    if (cppRel) {
+      cppAbs = resolveUnderRoot(root, cppRel);
+      if (await pathExists(cppAbs)) {
+        prevCppText = await readUtf8(cppAbs);
+        const patchedCpp = patchWizardCppConstruction(prevCppText, rootNode);
+        nextCppText = patchedCpp.text;
+        cppChanged = patchedCpp.changed;
+        validation.warnings.push(...patchedCpp.warnings);
+      } else {
+        validation.warnings.push(`Wizard .cpp 不存在，跳过构造段写回：${cppRel}`);
+        cppAbs = "";
+      }
+    }
+
+    if (!dryRun) {
+      if (catDlgChanged) await fs.writeFile(catDlgAbs, nextCatDlgText, "utf8");
+      if (catNlsAbs && catNlsChanged) await fs.writeFile(catNlsAbs, nextCatNlsText, "utf8");
+      if (headerAbs && headerChanged) await fs.writeFile(headerAbs, nextHeaderText, "utf8");
+      if (cppAbs && cppChanged) await fs.writeFile(cppAbs, nextCppText, "utf8");
+    }
+
+    caaLog("write OK", {
+      catDlgAbs,
+      catDlgChanged,
+      catNlsAbs: catNlsAbs || undefined,
+      catNlsChanged,
+      headerAbs: headerAbs || undefined,
+      headerChanged,
+      cppAbs: cppAbs || undefined,
+      cppChanged,
+      dryRun,
+      warnings: validation.warnings.length,
+    });
+
+    return c.json({
+      ok: true,
+      dryRun,
+      validation,
+      catDlgRel,
+      catNlsRel: catNlsRel || undefined,
+      headerRel: headerRel || undefined,
+      cppRel: cppRel || undefined,
+      absPath: catDlgAbs,
+      bytes: nextCatDlgText.length,
+      changed: {
+        catDlg: catDlgChanged,
+        catNls: catNlsChanged,
+        header: headerChanged,
+        cpp: cppChanged,
+      },
+      preview: dryRun
+        ? {
+            catDlg: { before: prevCatDlgText, after: nextCatDlgText },
+            catNls: catNlsAbs ? { before: prevCatNlsText, after: nextCatNlsText } : undefined,
+            header: headerAbs ? { before: prevHeaderText, after: nextHeaderText } : undefined,
+            cpp: cppAbs ? { before: prevCppText, after: nextCppText } : undefined,
+          }
+        : undefined,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    caaLog(`write 异常: ${msg}`);
+    return c.json({ error: msg }, 500);
+  }
+});
+
+// ── 从 IR 写回 / 创建对话框文件到磁盘 ──
 
 dialogRoutes.post("/create", async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as {
@@ -554,39 +706,30 @@ dialogRoutes.post("/create", async (c) => {
       return c.json({ error: `文件已存在：${dialogName}.CATDlg 或 .CATNls` }, 409);
     }
 
-    // 生成合法的 .CATDlg
-    const style = (ir.root as Record<string, unknown>)?.style as string[] | undefined;
-    const styleStr = style?.length ? style.join("|") : "CATDlgWndBtn";
-    const catDlgLines: string[] = [];
-    catDlgLines.push(`${dialogName} CATDlgDialog`);
-    catDlgLines.push("{");
-    catDlgLines.push(`  STYLE = ${styleStr};`);
-    catDlgLines.push("}");
-    catDlgLines.push("");
-    await fs.writeFile(catDlgAbs, catDlgLines.join("\n"), "utf8");
-
-    // 生成 .CATNls（从 IR 收集 NLS 键）
-    const nlsKeys: Record<string, string> = {};
-    function collectNls(node: Record<string, unknown>) {
-      const nls = node.nls as Record<string, string> | undefined;
-      if (nls) {
-        for (const [k, v] of Object.entries(nls)) {
-          if (v?.trim()) nlsKeys[k] = v.trim();
-        }
-      }
-      const children = node.children as Record<string, unknown>[] | undefined;
-      if (children) for (const child of children) collectNls(child);
+    const rootNode = ir.root as unknown as CaaDialogNode | undefined;
+    if (!rootNode || typeof rootNode !== "object") {
+      return c.json({ error: "ir.root 必须是 CAA 对话框 IR 节点" }, 400);
     }
-    if (ir.root) collectNls(ir.root as Record<string, unknown>);
-    const defaultTitleKey = `${dialogName}.Title`;
-    if (!nlsKeys[defaultTitleKey]) nlsKeys[defaultTitleKey] = dialogName;
+
+    const validation = validateCaaDialogIrRoot({ ...rootNode, id: dialogName, type: "CATDlgDialog" });
+    if (validation.errors.length) {
+      return c.json({ error: validation.errors.join("；"), validation }, 400);
+    }
+
+    // 生成合法且可被 parseCatDlg 读回的 .CATDlg。根节点名称以用户输入为准。
+    const catDlgText = emitCatDlgText(rootNode, { dialogName });
+    await fs.writeFile(catDlgAbs, catDlgText, "utf8");
+
+    // 生成 .CATNls（从 IR 树收集标准 NLS 键）
+    const nlsKeys = collectCatNlsKeysFromNode(rootNode);
+    if (!nlsKeys.Title) nlsKeys.Title = dialogName;
     const catNlsText = emitCatNlsFile(nlsKeys, {
       headerLines: ["// auto-generated"],
     });
     await fs.writeFile(catNlsAbs, catNlsText, "utf8");
 
-    caaLog("create OK", { catDlgAbs, catNlsAbs });
-    return c.json({ ok: true, catDlgRel, catNlsRel });
+    caaLog("create OK", { catDlgAbs, catNlsAbs, warnings: validation.warnings.length });
+    return c.json({ ok: true, catDlgRel, catNlsRel, validation });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     caaLog(`create 异常: ${msg}`);

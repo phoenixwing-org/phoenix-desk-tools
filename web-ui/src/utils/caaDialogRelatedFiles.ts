@@ -38,6 +38,8 @@ export function buildCaaDialogRelatedFiles(ir: CaaDialogIr): CaaDialogRelatedFil
   pushFile(".CATDlg", ir.sources.catDlg);
   if (ir.sources.catNls) pushFile(".CATNls", ir.sources.catNls);
   if (ir.sources.catRsc) pushFile(".CATRsc", ir.sources.catRsc);
+  if (ir.sources.header) pushFile(".h Wizard", ir.sources.header);
+  if (ir.sources.cpp) pushFile(".cpp Wizard", ir.sources.cpp);
 
   const extraNls = new Map<string, string>();
   if (ir.sources.nlsLocales) {

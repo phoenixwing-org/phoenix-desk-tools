@@ -4,7 +4,13 @@
  * 树表格列：控件属性 | 英文 | 中文，对齐。
  */
 import { computed, nextTick, ref, watch } from "vue";
-import { nlsKeyForProp, nlsPathSegments, type NlsStringProp } from "@phoenix/catdlg-core";
+import {
+  controlIdPrefix,
+  nlsKeyForProp,
+  nlsPathSegments,
+  shouldCreateDefaultTitle,
+  type NlsStringProp,
+} from "@phoenix/catdlg-core";
 import type { CaaDialogNode } from "../../types/caaDialogIr";
 import { hasTitle, hasHelp } from "../../utils/caaControlBehaviors";
 import { useCaaDialogPageStore } from "../../stores/caaDialogPage";
@@ -21,6 +27,8 @@ interface NlsTreeLeaf {
   prop: NlsStringProp;
   nodeId: string;
   columnIndex?: number;
+  placeholderText?: string;
+  placeholderRawValues?: string[];
 }
 
 interface NlsTreeGroup {
@@ -50,6 +58,7 @@ const props = withDefaults(
     compareMode?: boolean;
     dirty?: boolean;
     /** 滚动到指定控件 nodeId */
+    focusNodeId?: string | null;
     /** 初始 locale 模式 */
     initialLocaleMode?: LocaleMode;
     /** 是否可添加简体中文 */
@@ -71,9 +80,24 @@ const emit = defineEmits<{
 
 /** 显示模式：en=仅英文, cn=仅中文, both=中英对照 */
 type LocaleMode = "en" | "cn" | "both";
-const localeMode = ref<LocaleMode>(props.initialLocaleMode ?? (props.cnFlat ? "both" : "en"));
+function normalizeLocaleMode(mode?: LocaleMode): LocaleMode {
+  if (!props.cnFlat && (mode === "cn" || mode === "both")) return "en";
+  return mode ?? (props.cnFlat ? "both" : "en");
+}
+
+const localeMode = ref<LocaleMode>(normalizeLocaleMode(props.initialLocaleMode));
 
 watch(localeMode, (mode) => emit("locale-change", mode));
+
+watch(
+  () => [props.open, props.initialLocaleMode, props.cnFlat != null] as const,
+  ([open, mode]) => {
+    if (!open) return;
+    const next = normalizeLocaleMode(mode);
+    if (localeMode.value !== next) localeMode.value = next;
+  },
+  { immediate: true },
+);
 
 /** auto-fill 中英空白值 */
 function autoFill() {
@@ -90,6 +114,33 @@ function autoFill() {
 }
 
 const store = useCaaDialogPageStore();
+const panelRef = ref<HTMLElement | null>(null);
+
+function titlePlaceholderForNode(node: CaaDialogNode): string | undefined {
+  if (node.type === "CATDlgEditor") return "（输入框）";
+  if (node.type === "CATDlgSelectorList") return "（选择列表）";
+  return undefined;
+}
+
+function isPlaceholderValue(leaf: NlsTreeLeaf | undefined, value: string | undefined, loc: NlsTreeLocale): boolean {
+  if (!leaf?.placeholderText) return false;
+  const raw = (value ?? "").trim();
+  const enRaw = leaf.value.trim();
+  const rawValues = leaf.placeholderRawValues ?? [];
+  const enIsPlaceholder = !enRaw || rawValues.includes(enRaw);
+  if (loc === "cn" && !enIsPlaceholder) return false;
+  return !raw || rawValues.includes(raw);
+}
+
+function displayLeafValue(leaf: NlsTreeLeaf | undefined, value: string | undefined, loc: NlsTreeLocale): string {
+  if (isPlaceholderValue(leaf, value, loc)) return leaf?.placeholderText ?? "";
+  return value ?? "";
+}
+
+function editLeafValue(leaf: NlsTreeLeaf | undefined, value: string | undefined, loc: NlsTreeLocale): string {
+  if (isPlaceholderValue(leaf, value, loc)) return "";
+  return value ?? "";
+}
 
 // ── column resize ──
 
@@ -151,11 +202,20 @@ function collectLeaves(
   const leaves: NlsTreeLeaf[] = [];
   const groups: NlsTreeGroup[] = [];
 
-  // Title（仅适用类型）
-  if (hasTitle(node.type)) {
+  // Title（显式 Title + Builder 默认 Title 占位）
+  if (hasTitle(node.type) || shouldCreateDefaultTitle(node.type)) {
     const titleKey = nlsKeyForProp(segments, "title");
-    const titleVal = flat[titleKey] ?? "";
-    leaves.push({ kind:"leaf", key:titleKey, value:titleVal, prop:"title", nodeId:node.id });
+    const titleVal = flat[titleKey] ?? node.nls?.title ?? "";
+    const placeholderText = titlePlaceholderForNode(node);
+    leaves.push({
+      kind:"leaf",
+      key:titleKey,
+      value:titleVal,
+      prop:"title",
+      nodeId:node.id,
+      placeholderText,
+      placeholderRawValues: placeholderText ? [controlIdPrefix(node.type), node.id] : undefined,
+    });
   }
 
   // Help/ShortHelp/LongHelp（仅适用类型，且只显示有值的）
@@ -317,6 +377,7 @@ const tableRows = computed((): TableRow[] => {
 
 const collapsedControls = ref<Set<string>>(new Set());
 const collapsedGroups = ref<Set<string>>(new Set());
+const focusedNodeId = ref<string | null>(null);
 
 watch(() => props.open, (on) => {
   if (!on) return;
@@ -342,16 +403,64 @@ function toggleGroup(key: string) {
   collapsedGroups.value = s;
 }
 
+function findControlRow(nodeId: string): HTMLElement | null {
+  const panel = panelRef.value;
+  if (!panel) return null;
+  const rows = panel.querySelectorAll<HTMLElement>("[data-nls-ctrl]");
+  for (const row of rows) {
+    if (row.dataset.nlsCtrl === nodeId) return row;
+  }
+  return null;
+}
+
+async function focusControlNode(nodeId?: string | null) {
+  if (!props.open || !nodeId) return;
+  editorMode.value = "tree";
+  const collapsed = new Set(collapsedControls.value);
+  collapsed.delete(nodeId);
+  collapsedControls.value = collapsed;
+  focusedNodeId.value = nodeId;
+  await nextTick();
+  findControlRow(nodeId)?.scrollIntoView({ block: "center", behavior: "smooth" });
+  window.setTimeout(() => {
+    if (focusedNodeId.value === nodeId) focusedNodeId.value = null;
+  }, 1600);
+}
+
+watch(
+  () => [props.open, props.focusNodeId] as const,
+  ([open, nodeId]) => {
+    if (open) void focusControlNode(nodeId);
+  },
+  { immediate: true },
+);
+
 // ── inline edit ──
 
 const editingKey = ref<string | null>(null);
 const editingLocale = ref<NlsTreeLocale>("en");
+const editingGroupKey = ref<string | null>(null);
+const editingGroup = ref<NlsTreeGroup | null>(null);
+const editingGroupLocale = ref<NlsTreeLocale>("en");
 const draft = ref("");
 const inputRef = ref<HTMLInputElement | null>(null);
 
 function isEditing(key: string, loc: NlsTreeLocale) { return editingKey.value === key && editingLocale.value === loc; }
+function isEditingGroup(row: TreeRow, loc: NlsTreeLocale) {
+  return Boolean(row.group?.allSameValue && editingGroupKey.value === row.collapseKey && editingGroupLocale.value === loc);
+}
 function startEdit(key: string, value: string, loc: NlsTreeLocale) {
+  editingGroupKey.value = null; editingGroup.value = null;
   editingKey.value = key; editingLocale.value = loc; draft.value = value;
+  void nextTick(() => { inputRef.value?.focus(); inputRef.value?.select(); });
+}
+function startGroupEdit(row: TreeRow, value: string, loc: NlsTreeLocale) {
+  if (!row.group?.allSameValue) return;
+  editingKey.value = null;
+  editingGroupKey.value = row.collapseKey;
+  editingGroup.value = row.group;
+  editingGroupLocale.value = loc;
+  draft.value = value;
   void nextTick(() => { inputRef.value?.focus(); inputRef.value?.select(); });
 }
 function commitEdit() {
@@ -359,13 +468,26 @@ function commitEdit() {
   emit("update:value", editingKey.value, draft.value, editingLocale.value !== "en" ? editingLocale.value : undefined);
   editingKey.value = null;
 }
-function cancelEdit() { editingKey.value = null; }
-function onEditKeydown(e: KeyboardEvent) {
-  if (e.key === "Enter") { e.preventDefault(); commitEdit(); }
-  else if (e.key === "Escape") { e.preventDefault(); cancelEdit(); }
+function commitGroupEdit() {
+  const group = editingGroup.value;
+  if (!group) return;
+  const locale = editingGroupLocale.value !== "en" ? editingGroupLocale.value : undefined;
+  for (const leaf of group.members) emit("update:value", leaf.key, draft.value, locale);
+  editingGroupKey.value = null;
+  editingGroup.value = null;
 }
-function commitGroupEdit(group: NlsTreeGroup, value: string) {
-  for (const leaf of group.members) emit("update:value", leaf.key, value);
+function commitActiveEdit() {
+  if (editingGroup.value) commitGroupEdit();
+  else commitEdit();
+}
+function cancelEdit() {
+  editingKey.value = null;
+  editingGroupKey.value = null;
+  editingGroup.value = null;
+}
+function onEditKeydown(e: KeyboardEvent) {
+  if (e.key === "Enter") { e.preventDefault(); commitActiveEdit(); }
+  else if (e.key === "Escape") { e.preventDefault(); cancelEdit(); }
 }
 
 // ── helpers ──
@@ -384,7 +506,7 @@ const title = computed(() => {
 </script>
 
 <template>
-  <div v-if="open" class="caa-nls-panel">
+  <div v-if="open" ref="panelRef" class="caa-nls-panel">
     <!-- header bar -->
     <div class="caa-nls-panel-header">
       <span class="caa-nls-panel-title">{{ title }}</span>
@@ -432,7 +554,12 @@ const title = computed(() => {
         <tbody>
           <template v-for="(row, ri) in treeRows" :key="ri">
             <!-- control header -->
-            <tr v-if="row.indent === 0" class="row-ctrl-header" :data-nls-ctrl="row.control.nodeId">
+            <tr
+              v-if="row.indent === 0"
+              class="row-ctrl-header"
+              :class="{ focused: focusedNodeId === row.control.nodeId }"
+              :data-nls-ctrl="row.control.nodeId"
+            >
               <td :colspan="(showEn ? 1 : 0) + (showCn ? 1 : 0) + 2">
                 <button class="ctrl-toggle-btn" @click="toggleControl(row.control.nodeId)">
                   <span class="arrow" :class="{ expanded: !collapsedControls.has(row.control.nodeId) }">▸</span>
@@ -445,22 +572,36 @@ const title = computed(() => {
             <!-- leaf row -->
             <tr v-else class="row-leaf" :class="`indent-${row.indent}`" :data-collapse-key="row.collapseKey">
               <td class="col-row-num cell-num">{{ ri + 1 }}</td>
-              <td v-if="showEn" class="col-en" @click="row.group?.allSameValue && row.group.members.length > 1 ? commitGroupEdit(row.group, row.leaf?.value ?? '') : startEdit(row.leaf?.key ?? '', row.leaf?.value ?? '', 'en')">
-                <template v-if="!row.group?.allSameValue && row.leaf && isEditing(row.leaf.key, 'en')">
-                  <input ref="inputRef" v-model="draft" class="edit-input" @keydown="onEditKeydown" @blur="commitEdit" />
+              <td v-if="showEn" class="col-en" @click="row.group?.allSameValue && row.group.members.length > 1 ? startGroupEdit(row, row.leaf?.value ?? '', 'en') : startEdit(row.leaf?.key ?? '', editLeafValue(row.leaf, row.leaf?.value, 'en'), 'en')">
+                <template v-if="row.group?.allSameValue && isEditingGroup(row, 'en')">
+                  <input ref="inputRef" v-model="draft" class="edit-input" @click.stop @keydown="onEditKeydown" @blur="commitActiveEdit" />
+                </template>
+                <template v-else-if="!row.group?.allSameValue && row.leaf && isEditing(row.leaf.key, 'en')">
+                  <input ref="inputRef" v-model="draft" class="edit-input" @click.stop @keydown="onEditKeydown" @blur="commitActiveEdit" />
                 </template>
                 <template v-else>
-                  <span class="cell-value">
-                    {{ row.leaf?.value || '' }}
+                  <span class="cell-value" :class="{ placeholder: isPlaceholderValue(row.leaf, row.leaf?.value, 'en') }">
+                    {{ displayLeafValue(row.leaf, row.leaf?.value, 'en') }}
                   </span>
                 </template>
               </td>
-              <td v-if="showCn" class="col-cn" @click="row.group?.allSameValue && row.group.members.length > 1 ? row.group.members.forEach(m => emit('update:value', m.key, row.cnValue ?? '', 'cn')) : startEdit(row.leaf?.key ?? '', row.cnValue ?? '', 'cn')">
-                <template v-if="!row.group?.allSameValue && row.leaf && isEditing(row.leaf.key, 'cn')">
-                  <input ref="inputRef" v-model="draft" class="edit-input" @keydown="onEditKeydown" @blur="commitEdit" />
+              <td v-if="showCn" class="col-cn" @click="row.group?.allSameValue && row.group.members.length > 1 ? startGroupEdit(row, row.cnValue ?? '', 'cn') : startEdit(row.leaf?.key ?? '', editLeafValue(row.leaf, row.cnValue, 'cn'), 'cn')">
+                <template v-if="row.group?.allSameValue && isEditingGroup(row, 'cn')">
+                  <input ref="inputRef" v-model="draft" class="edit-input" @click.stop @keydown="onEditKeydown" @blur="commitActiveEdit" />
+                </template>
+                <template v-else-if="!row.group?.allSameValue && row.leaf && isEditing(row.leaf.key, 'cn')">
+                  <input ref="inputRef" v-model="draft" class="edit-input" @click.stop @keydown="onEditKeydown" @blur="commitActiveEdit" />
                 </template>
                 <template v-else>
-                  <span class="cell-value" :class="{ empty: !row.cnValue }">{{ row.cnValue || '（空）' }}</span>
+                  <span
+                    class="cell-value"
+                    :class="{
+                      empty: !row.cnValue && !isPlaceholderValue(row.leaf, row.cnValue, 'cn'),
+                      placeholder: isPlaceholderValue(row.leaf, row.cnValue, 'cn'),
+                    }"
+                  >
+                    {{ isPlaceholderValue(row.leaf, row.cnValue, 'cn') ? displayLeafValue(row.leaf, row.cnValue, 'cn') : (row.cnValue || '（空）') }}
+                  </span>
                 </template>
               </td>
               <td class="col-ctrl">
@@ -497,13 +638,13 @@ const title = computed(() => {
             <td class="col-row-num cell-num">{{ ri + 1 }}</td>
             <td v-if="showEn" class="col-en" @click="startEdit(row.key, row.enValue, 'en')">
               <template v-if="isEditing(row.key, 'en')">
-                <input ref="inputRef" v-model="draft" class="edit-input" @keydown="onEditKeydown" @blur="commitEdit" />
+                <input ref="inputRef" v-model="draft" class="edit-input" @click.stop @keydown="onEditKeydown" @blur="commitActiveEdit" />
               </template>
               <span v-else class="cell-value">{{ row.enValue || '（空）' }}</span>
             </td>
             <td v-if="showCn" class="col-cn" @click="startEdit(row.key, row.cnValue, 'cn')">
               <template v-if="isEditing(row.key, 'cn')">
-                <input ref="inputRef" v-model="draft" class="edit-input" @keydown="onEditKeydown" @blur="commitEdit" />
+                <input ref="inputRef" v-model="draft" class="edit-input" @click.stop @keydown="onEditKeydown" @blur="commitActiveEdit" />
               </template>
               <span v-else class="cell-value" :class="{ empty: !row.cnValue }">{{ row.cnValue || '（空）' }}</span>
             </td>
@@ -576,6 +717,7 @@ td.col-key { white-space: nowrap; }
 /* 树表格：属性名右对齐 */
 .prop-label { text-align: right; }
 .row-ctrl-header td { padding: 2px 4px; background: #f8fafc; border-bottom: 1px solid var(--border, #e2e8f0); }
+.row-ctrl-header.focused td { background: #dbeafe; box-shadow: inset 3px 0 0 var(--accent, #3b82f6); }
 .ctrl-toggle-btn { display: flex; align-items: center; gap: 4px; width: 100%; border: none; background: transparent; cursor: pointer; font-size: 0.78rem; padding: 3px 4px; text-align: left; }
 .ctrl-toggle-btn:hover { background: #f1f5f9; }
 .ctrl-name { font-weight: 600; }

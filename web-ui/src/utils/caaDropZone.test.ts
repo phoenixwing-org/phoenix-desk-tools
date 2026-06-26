@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   resolveDropEdge, resolveDropEdgeFromRect, isCellOccupied,
-  getSpanningChild, computeDropPlacement, type DropEdge,
+  getSpanningChild, computeDropPlacement, applyDropTransform, findOverlaps,
 } from "./caaDropZone";
 
 // ── helpers ──
@@ -463,5 +463,65 @@ describe("computeDropPlacement", () => {
       expect(r.reason).toContain("(3,7)");
       expect(r.reason).toContain("占据");
     });
+  });
+});
+
+describe("applyDropTransform", () => {
+  it("拒绝 inside 覆盖已有控件，并且不修改输入 children", () => {
+    const child = c(0, 0);
+    const result = applyDropTransform({
+      children: [child],
+      targetRow: 0,
+      targetCol: 0,
+      edge: "inside",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("占据");
+    expect(child.grid).toEqual({ row: 0, col: 0, rowSpan: 1, colSpan: 1 });
+  });
+
+  it("right 放到 spanning 控件后方，并移动右侧列避免重叠", () => {
+    const children = [c(0, 0, 1, 2), c(0, 2)];
+    const result = applyDropTransform({
+      children,
+      targetRow: 0,
+      targetCol: 1,
+      edge: "right",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.placedRow).toBe(0);
+    expect(result.placedCol).toBe(2);
+    expect(result.children[0].grid).toEqual({ row: 0, col: 0, rowSpan: 1, colSpan: 2 });
+    expect(result.children[1].grid).toEqual({ row: 0, col: 3, rowSpan: 1, colSpan: 1 });
+    expect(
+      findOverlaps([
+        ...result.children,
+        { grid: { row: result.placedRow, col: result.placedCol, rowSpan: 1, colSpan: 1 } },
+      ]),
+    ).toEqual([]);
+  });
+
+  it("bottom 放到 spanning 控件下方，并移动下方行避免重叠", () => {
+    const children = [c(0, 0, 2, 1), c(2, 0)];
+    const result = applyDropTransform({
+      children,
+      targetRow: 1,
+      targetCol: 0,
+      edge: "bottom",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.placedRow).toBe(2);
+    expect(result.placedCol).toBe(0);
+    expect(result.children[0].grid).toEqual({ row: 0, col: 0, rowSpan: 2, colSpan: 1 });
+    expect(result.children[1].grid).toEqual({ row: 3, col: 0, rowSpan: 1, colSpan: 1 });
+    expect(
+      findOverlaps([
+        ...result.children,
+        { grid: { row: result.placedRow, col: result.placedCol, rowSpan: 1, colSpan: 1 } },
+      ]),
+    ).toEqual([]);
   });
 });
