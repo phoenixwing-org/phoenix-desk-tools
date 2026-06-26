@@ -18,8 +18,6 @@ from phoenix.web.paths import default_static_dir, default_web_port, repo_root
 
 _DEFAULT_WEB_PAGE = "fcstd_map"
 _last_spawned_pid: int | None = None
-# 各服务 spawn 的 PID（用于启停追踪）
-_service_pids: dict[int, int] = {}  # port → pid
 
 
 # ═══════════════════════════════════════════════
@@ -31,14 +29,14 @@ class ServiceDef:
     name: str
     port: int
     health_path: str  # e.g. "/api/health" or "/"
-    start_cmd: list[str]
+    terminal_cmd: str  # 在终端中运行的命令
 
 
 # 三服务定义
 SERVICES: list[ServiceDef] = [
-    ServiceDef("Python API", 8765, "/api/health", [sys.executable, "-m", "phoenix.web", "--dev"]),
-    ServiceDef("Vite 前端", 5173, "/", ["pnpm", "dev:ui"]),
-    ServiceDef("CAA Node", 5180, "/api/caa/health", ["pnpm", "dev:caa"]),
+    ServiceDef("Python API", 8765, "/api/health", f"{sys.executable} -m phoenix.web --dev"),
+    ServiceDef("CAA Node", 5180, "/api/caa/health", "pnpm dev:caa"),
+    ServiceDef("Vite UI", 5173, "/", "pnpm dev:ui"),
 ]
 
 
@@ -51,46 +49,91 @@ def _http_ok(url: str, *, timeout: float = 1.5) -> bool:
 
 
 def check_service(svc: ServiceDef, *, timeout: float = 1.5) -> dict[str, object]:
-    """返回 {running, port, url, pid}。"""
+    """纯 HTTP 健康检查，无子进程（Tkinter 安全）。"""
     url = f"http://127.0.0.1:{svc.port}{svc.health_path}"
     running = _http_ok(url, timeout=timeout)
-    pid = _service_pids.get(svc.port)
-    if pid is not None and not _pid_alive(pid):
-        pid = None
-        _service_pids.pop(svc.port, None)
-    if not pid:
+    pid = None
+    if running:
         pids = find_listening_pids(svc.port)
         pid = pids[0] if pids else None
-        if pid:
-            _service_pids[svc.port] = pid
     return {"running": running, "port": svc.port, "url": f"http://127.0.0.1:{svc.port}", "pid": pid}
 
 
-def start_service(svc: ServiceDef) -> subprocess.Popen | None:
-    """启动服务；返回 Popen 或 None（已在运行）。"""
-    st = check_service(svc)
-    if st["running"]:
-        return None
-    proc = subprocess.Popen(
-        svc.start_cmd,
-        cwd=str(repo_root()),
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
-    _service_pids[svc.port] = proc.pid
-    return proc
+def _wt_available() -> bool:
+    """检查 Windows Terminal 是否可用。"""
+    if sys.platform != "win32":
+        return False
+    try:
+        subprocess.run(["where", "wt"], capture_output=True, check=False)
+        return True
+    except OSError:
+        return False
 
 
-def stop_service(svc: ServiceDef) -> bool:
-    """停止服务；返回是否成功释放端口。"""
-    pids = find_listening_pids(svc.port)
-    tracked = _service_pids.get(svc.port)
-    if tracked and tracked not in pids:
-        pids.append(tracked)
-    pids = sorted(set(pids))
+def open_service_terminal(svc: ServiceDef) -> None:
+    """弹出终端窗口运行服务（Windows Terminal 优先）。"""
+    root = str(repo_root())
+    title = f"{svc.name} :{svc.port}"
+    if _wt_available():
+        subprocess.Popen(
+            f'wt -d "{root}" --suppressApplicationTitle --title "{title}" '
+            f'cmd /k "echo [{svc.name}] :{svc.port} && {svc.terminal_cmd}"',
+            shell=True,
+        )
+    elif sys.platform == "win32":
+        subprocess.Popen(
+            f'start "{svc.name}" cmd /k "cd /d {root} && {svc.terminal_cmd}"',
+            shell=True,
+        )
+    else:
+        subprocess.Popen(
+            ["osascript", "-e",
+             f'tell app "Terminal" to do script "cd {root} && echo {title} && {svc.terminal_cmd}"'],
+        )
+
+
+def open_all_terminals() -> None:
+    """弹出 Windows Terminal 多 Tab（后端先启动，5s 后启动前端）。"""
+    root = str(repo_root())
+    _VITE_DELAY = 5  # 秒
+    if _wt_available():
+        cmd_parts = [f'wt -d "{root}"']
+        for i, svc in enumerate(SERVICES):
+            if i > 0:
+                cmd_parts.append(";")
+                cmd_parts.append("new-tab")
+                cmd_parts.append(f'-d "{root}"')
+            cmd_parts.append("--suppressApplicationTitle")
+            cmd_parts.append(f'--title "{svc.name} :{svc.port}"')
+            if svc.port == 5173:
+                msg = f'echo [{svc.name}] :{svc.port} (waiting {_VITE_DELAY}s for backends...) && timeout /t {_VITE_DELAY} /nobreak >nul && {svc.terminal_cmd}'
+            else:
+                msg = f'echo [{svc.name}] :{svc.port} && {svc.terminal_cmd}'
+            cmd_parts.append(f'cmd /k "{msg}"')
+        subprocess.Popen(" ".join(cmd_parts), shell=True)
+    elif sys.platform == "win32":
+        subprocess.Popen(
+            f'start "Phoenix" cmd /k "cd /d {root} && '
+            f'echo === Vite + CAA === && pnpm dev"',
+            shell=True,
+        )
+        subprocess.Popen(
+            f'start "Python API" cmd /k "cd /d {root} && '
+            f'echo === Python API :8765 === && {SERVICES[0].terminal_cmd}"',
+            shell=True,
+        )
+    else:
+        for svc in SERVICES:
+            subprocess.Popen(
+                ["osascript", "-e",
+                 f'tell app "Terminal" to do script "cd {root} && echo {svc.name} :{svc.port} && {svc.terminal_cmd}"'],
+            )
+
+
+def stop_service_by_port(port: int) -> bool:
+    """按端口终止进程；返回是否成功释放。"""
+    pids = find_listening_pids(port)
     if not pids:
-        _service_pids.pop(svc.port, None)
         return True
     for pid in pids:
         if _pid_alive(pid):
@@ -106,17 +149,14 @@ def stop_service(svc: ServiceDef) -> bool:
             except RuntimeError:
                 pass
     time.sleep(0.2)
-    if find_listening_pids(svc.port):
-        return False
-    _service_pids.pop(svc.port, None)
-    return True
+    return not bool(find_listening_pids(port))
 
 
 def stop_all_services() -> dict[str, bool]:
     """停止全部三服务；返回各服务结果。"""
     results: dict[str, bool] = {}
     for svc in SERVICES:
-        results[svc.name] = stop_service(svc)
+        results[svc.name] = stop_service_by_port(svc.port)
     return results
 
 
@@ -180,6 +220,20 @@ def web_server_status(*, host: str = "127.0.0.1", port: int | None = None) -> di
     }
 
 
+def _run_cmd_no_threads(args: list[str]) -> str:
+    """运行命令返回 stdout（无 communicate 线程，Tkinter 安全）。"""
+    try:
+        p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        out, _ = p.communicate(timeout=8)
+        return out.decode("utf-8", errors="replace")
+    except (OSError, subprocess.TimeoutExpired):
+        try:
+            p.kill()
+        except Exception:
+            pass
+        return ""
+
+
 def find_listening_pids(port: int) -> list[int]:
     """查找监听指定 TCP 端口的进程 PID。"""
     pids = _find_listening_pids_lsof(port)
@@ -195,17 +249,9 @@ def find_listening_pids(port: int) -> list[int]:
 def _find_listening_pids_lsof(port: int) -> list[int]:
     if sys.platform == "win32":
         return []
-    try:
-        proc = subprocess.run(
-            ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError:
-        return []
+    out = _run_cmd_no_threads(["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"])
     pids: list[int] = []
-    for line in proc.stdout.splitlines():
+    for line in out.splitlines():
         s = line.strip()
         if s.isdigit():
             pids.append(int(s))
@@ -213,18 +259,10 @@ def _find_listening_pids_lsof(port: int) -> list[int]:
 
 
 def _find_listening_pids_netstat_darwin(port: int) -> list[int]:
-    try:
-        proc = subprocess.run(
-            ["netstat", "-anv", "-p", "tcp"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError:
-        return []
+    out = _run_cmd_no_threads(["netstat", "-anv", "-p", "tcp"])
     needle = f".{port} "
     pids: list[int] = []
-    for line in proc.stdout.splitlines():
+    for line in out.splitlines():
         if "LISTEN" not in line or needle not in line:
             continue
         parts = line.split()
@@ -234,18 +272,10 @@ def _find_listening_pids_netstat_darwin(port: int) -> list[int]:
 
 
 def _find_listening_pids_windows(port: int) -> list[int]:
-    try:
-        proc = subprocess.run(
-            ["netstat", "-ano", "-p", "tcp"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError:
-        return []
+    out = _run_cmd_no_threads(["netstat", "-ano", "-p", "tcp"])
     needle = f":{port}"
     pids: list[int] = []
-    for line in proc.stdout.splitlines():
+    for line in out.splitlines():
         if "LISTENING" not in line or needle not in line:
             continue
         parts = line.split()

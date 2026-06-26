@@ -11,10 +11,7 @@ import tkinter as tk
 from tkinter import messagebox
 
 from phoenix.config.loader import DEFAULT_APP_TITLE, load_app_config
-from phoenix.config.user_prefs import (
-    apply_launcher_prefs_to_state,
-    save_launcher_window_geometry,
-)
+from phoenix.config.user_prefs import apply_launcher_prefs_to_state
 from phoenix.pages.home import HomePage
 from phoenix.shell.state import AppState
 from phoenix.shell.window_geometry import clamp_window_geometry_for_screen
@@ -44,17 +41,13 @@ class AppShell(ctk.CTk):
         self.minsize(min_width, min_height)
 
         fallback_geo = str(app_cfg.get("geometry", "640x520"))
-        from phoenix.config.user_prefs import load_launcher_prefs
-
-        wg_save = load_launcher_prefs().get("window_geometry")
-        candidate_geo = wg_save if isinstance(wg_save, str) and wg_save.strip() else fallback_geo
 
         self.update_idletasks()
         sw = int(self.winfo_screenwidth())
         sh = int(self.winfo_screenheight())
         self.geometry(
             clamp_window_geometry_for_screen(
-                candidate_geo,
+                fallback_geo,
                 screen_w=sw,
                 screen_h=sh,
                 min_w=min_width,
@@ -63,7 +56,7 @@ class AppShell(ctk.CTk):
             )
         )
 
-        self.protocol("WM_DELETE_WINDOW", self._quit_with_saved_geometry)
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
 
         self.grid_rowconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=0)
@@ -94,14 +87,6 @@ class AppShell(ctk.CTk):
 
         self._refresh_window_title()
         self._render_status_bar()
-
-    def _quit_with_saved_geometry(self) -> None:
-        try:
-            if self.wm_state() == "normal":
-                save_launcher_window_geometry(self.winfo_geometry())
-        except tk.TclError:
-            pass
-        self.destroy()
 
     def _refresh_window_title(self) -> None:
         from phoenix import __version__

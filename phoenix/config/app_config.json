@@ -1,193 +1,228 @@
 {
-  "app": {
-    "title": "Phoenix 桌面工具",
-    "geometry": "580x520",
-    "min_width": 500,
-    "min_height": 420,
-    "appearance_mode": "system",
-    "color_theme": "blue"
-  },
-  "toolbar": {
-    "items": []
-  },
-  "navigation": [
-    {
-      "id": "welcome",
-      "label": "欢迎",
-      "page": "welcome",
-      "description": "最近工程与快速入门"
+    "app": {
+        "title": "Phoenix 桌面工具",
+        "geometry": "400x450",
+        "min_width": 400,
+        "min_height": 430,
+        "appearance_mode": "system",
+        "color_theme": "blue"
     },
-    {
-      "id": "home",
-      "label": "主页",
-      "page": "home",
-      "description": "简介与功能入口"
+    "toolbar": {
+        "items": []
     },
-    {
-      "id": "fcstd_map",
-      "label": "CAD 索引",
-      "page": "fcstd_map",
-      "module": "cad",
-      "description": "扫描 FCStd、MD、PDF、图片、DXF/DWG 等写入索引库"
-    },
-    {
-      "id": "bom_export",
-      "label": "BOM 列表",
-      "page": "bom_export",
-      "module": "cad",
-      "description": "按装配列出 XLink 子件 BOM 表（属性来自 CAD 索引）"
-    },
-    {
-      "id": "part_catalog",
-      "label": "零件目录",
-      "page": "part_catalog",
-      "module": "cad",
-      "description": "PartKey 零件库与关联文件"
-    },
-    {
-      "id": "part_key_detail",
-      "label": "零件详情",
-      "page": "part_key_detail",
-      "module": "cad",
-      "description": "PartKey 属性与关联文件（从零件目录或索引打开，可多 Tab）"
-    },
-    {
-      "id": "bom_apply",
-      "label": "文件详情",
-      "page": "file_detail",
-      "module": "cad",
-      "description": "FCStd 文件详情：属性回写、引用关系、改名与引用写回（页内子 Tab）"
-    },
-    {
-      "id": "file_rename",
-      "label": "改名分析",
-      "page": "file_rename",
-      "module": "cad",
-      "description": "改名历史的引用影响分析与写回（磁盘改名在文件详情 · 改名子 Tab）"
-    },
-    {
-      "id": "xlink_fix",
-      "label": "链接路径修正",
-      "page": "xlink_fix",
-      "module": "cad",
-      "description": "修正 Document.xml / FCStd 内 XLink"
-    },
-    {
-      "id": "part_dedup",
-      "label": "编号查重",
-      "page": "part_dedup",
-      "module": "cad",
-      "description": "文件名和编号+版本查重"
-    },
-    {
-      "id": "step_batch",
-      "label": "STEP 批量",
-      "page": "step_batch",
-      "module": "cad",
-      "description": "STEP → FCStd 批量转换（FreeCADCmd）"
-    },
-    {
-      "id": "sw_step_export",
-      "label": "SW→STEP",
-      "page": "sw_step_export",
-      "module": "cad",
-      "description": "SolidWorks 三维模型批量导出 STEP（COM，Windows）"
-    },
-    {
-      "id": "code_index",
-      "label": "Code 索引",
-      "page": "code_index",
-      "module": "code",
-      "description": "扫描源文件、配置、文档与资源写入 phoenix_code_* 索引表"
-    },
-    {
-      "id": "code_ignore",
-      "label": "Code 忽略设定",
-      "page": "code_ignore",
-      "module": "code",
-      "description": "Code 模块共用忽略：code.ignore 文件 + 工作空间自定义（CAA 等）"
-    },
-    {
-      "id": "reorder_members",
-      "label": "C++ 成员排序",
-      "page": "reorder_members",
-      "module": "code",
-      "description": "按 cxx-code-style 重排选定模块下 .h/.cpp 类成员"
-    },
-    {
-      "id": "caa_dialog_home",
-      "label": "CAA 对话框",
-      "page": "caa_dialog_home",
-      "module": "code",
-      "description": "扫描工作空间 .CATDlg 列表；点击在新 Tab 打开编辑器"
-    },
-    {
-      "id": "code_rename",
-      "label": "Code 批量改名",
-      "page": "code_rename",
-      "module": "code",
-      "description": "工作空间内文件夹 / 文件 / 文本精确匹配改名"
-    },
-    {
-      "id": "code_uuid",
-      "label": "Code UUID 替换",
-      "page": "code_uuid",
-      "module": "code",
-      "description": "扫描并勾选替换 UUID 形态字符串"
-    },
-    {
-      "id": "config",
-      "label": "配置",
-      "page": "config",
-      "description": "工作空间、FreeCAD 目录与偏好"
-    },
-    {
-      "id": "git",
-      "label": "Git",
-      "page": "git",
-      "description": "工作空间 Git 更改与暂存（壳层插件 · 仅工作空间根）"
-    },
-    {
-      "id": "unit_tests",
-      "label": "单元测试",
-      "page": "unit_tests",
-      "description": "在本机运行 tests/ 下 unittest（Code / CAD / 平台套件）"
-    },
-    {
-      "id": "test_fixtures",
-      "label": "引用测试工程",
-      "page": "test_fixtures",
-      "description": "系统内置开源 C++ 样例；本机 git 检出并链接到 tests/fixtures"
+    "navigation": [
+        {
+            "id": "welcome",
+            "label": "欢迎",
+            "page": "welcome",
+            "description": "最近工程与快速入门"
+        },
+        {
+            "id": "home",
+            "label": "主页",
+            "page": "home",
+            "description": "简介与功能入口"
+        },
+        {
+            "id": "fcstd_map",
+            "label": "CAD 索引",
+            "page": "fcstd_map",
+            "module": "cad",
+            "description": "扫描 FCStd、MD、PDF、图片、DXF/DWG 等写入索引库"
+        },
+        {
+            "id": "bom_export",
+            "label": "BOM 列表",
+            "page": "bom_export",
+            "module": "cad",
+            "description": "按装配列出 XLink 子件 BOM 表（属性来自 CAD 索引）"
+        }, {
+            "id": "part_catalog",
+            "label": "零件目录",
+            "page": "part_catalog",
+            "module": "cad",
+            "description": "PartKey 零件库与关联文件"
+        }, {
+            "id": "part_key_detail",
+            "label": "零件详情",
+            "page": "part_key_detail",
+            "module": "cad",
+            "description": "PartKey 属性与关联文件（从零件目录或索引打开，可多 Tab）"
+        }, {
+            "id": "bom_apply",
+            "label": "文件详情",
+            "page": "file_detail",
+            "module": "cad",
+            "description": "FCStd 文件详情：属性回写、引用关系、改名与引用写回（页内子 Tab）"
+        }, {
+            "id": "file_rename",
+            "label": "改名分析",
+            "page": "file_rename",
+            "module": "cad",
+            "description": "改名历史的引用影响分析与写回（磁盘改名在文件详情 · 改名子 Tab）"
+        }, {
+            "id": "xlink_fix",
+            "label": "链接路径修正",
+            "page": "xlink_fix",
+            "module": "cad",
+            "description": "修正 Document.xml / FCStd 内 XLink"
+        }, {
+            "id": "part_dedup",
+            "label": "编号查重",
+            "page": "part_dedup",
+            "module": "cad",
+            "description": "文件名和编号+版本查重"
+        }, {
+            "id": "step_batch",
+            "label": "STEP 批量",
+            "page": "step_batch",
+            "module": "cad",
+            "description": "STEP → FCStd 批量转换（FreeCADCmd）"
+        }, {
+            "id": "sw_step_export",
+            "label": "SW→STEP",
+            "page": "sw_step_export",
+            "module": "cad",
+            "description": "SolidWorks 三维模型批量导出 STEP（COM，Windows）"
+        }, {
+            "id": "code_index",
+            "label": "Code 索引",
+            "page": "code_index",
+            "module": "code",
+            "description": "扫描源文件、配置、文档与资源写入 phoenix_code_* 索引表"
+        }, {
+            "id": "code_ignore",
+            "label": "Code 忽略设定",
+            "page": "code_ignore",
+            "module": "code",
+            "description": "Code 模块共用忽略：code.ignore 文件 + 工作空间自定义（CAA 等）"
+        }, {
+            "id": "reorder_members",
+            "label": "C++ 成员排序",
+            "page": "reorder_members",
+            "module": "code",
+            "description": "按 cxx-code-style 重排选定模块下 .h/.cpp 类成员"
+        }, {
+            "id": "caa_dialog_home",
+            "label": "CAA 对话框",
+            "page": "caa_dialog_home",
+            "module": "code",
+            "description": "扫描工作空间 .CATDlg 列表；点击在新 Tab 打开编辑器"
+        }, {
+            "id": "code_rename",
+            "label": "Code 批量改名",
+            "page": "code_rename",
+            "module": "code",
+            "description": "工作空间内文件夹 / 文件 / 文本精确匹配改名"
+        }, {
+            "id": "code_uuid",
+            "label": "Code UUID 替换",
+            "page": "code_uuid",
+            "module": "code",
+            "description": "扫描并勾选替换 UUID 形态字符串"
+        }, {
+            "id": "config",
+            "label": "配置",
+            "page": "config",
+            "description": "工作空间、FreeCAD 目录与偏好"
+        }, {
+            "id": "git",
+            "label": "Git",
+            "page": "git",
+            "description": "工作空间 Git 更改与暂存（壳层插件 · 仅工作空间根）"
+        }, {
+            "id": "unit_tests",
+            "label": "单元测试",
+            "page": "unit_tests",
+            "description": "在本机运行 tests/ 下 unittest（Code / CAD / 平台套件）"
+        }, {
+            "id": "test_fixtures",
+            "label": "引用测试工程",
+            "page": "test_fixtures",
+            "description": "系统内置开源 C++ 样例；本机 git 检出并链接到 tests/fixtures"
+        }
+    ],
+    "workbench": {
+        "tab_bar": "main_content_top",
+        "default_max_tabs": 1,
+        "pages": {
+            "bom_apply": {
+                "max_tabs": 8,
+                "tab_enabled": true
+            },
+            "file_detail": {
+                "max_tabs": 8,
+                "tab_enabled": true
+            },
+            "file_rename": {
+                "max_tabs": 8,
+                "tab_enabled": true
+            },
+            "part_key_detail": {
+                "max_tabs": 8,
+                "tab_enabled": true
+            },
+            "fcstd_map": {
+                "max_tabs": 1
+            },
+            "part_catalog": {
+                "max_tabs": 1
+            },
+            "xlink_fix": {
+                "max_tabs": 1
+            },
+            "part_dedup": {
+                "max_tabs": 1
+            },
+            "step_batch": {
+                "max_tabs": 1
+            },
+            "sw_step_export": {
+                "max_tabs": 1
+            },
+            "reorder_members": {
+                "max_tabs": 1
+            },
+            "caa_dialog_home": {
+                "max_tabs": 1
+            },
+            "caa_dialog": {
+                "max_tabs": 8,
+                "tab_enabled": true
+            },
+            "code_index": {
+                "max_tabs": 1
+            },
+            "code_ignore": {
+                "max_tabs": 1
+            },
+            "code_rename": {
+                "max_tabs": 1
+            },
+            "code_uuid": {
+                "max_tabs": 1
+            },
+            "bom_export": {
+                "max_tabs": 1
+            },
+            "welcome": {
+                "max_tabs": 1
+            },
+            "home": {
+                "max_tabs": 1
+            },
+            "config": {
+                "max_tabs": 1
+            },
+            "git": {
+                "max_tabs": 1
+            },
+            "unit_tests": {
+                "max_tabs": 1
+            },
+            "test_fixtures": {
+                "max_tabs": 1
+            }
+        }
     }
-  ],
-  "workbench": {
-    "tab_bar": "main_content_top",
-    "default_max_tabs": 1,
-    "pages": {
-      "bom_apply": { "max_tabs": 8, "tab_enabled": true },
-      "file_detail": { "max_tabs": 8, "tab_enabled": true },
-      "file_rename": { "max_tabs": 8, "tab_enabled": true },
-      "part_key_detail": { "max_tabs": 8, "tab_enabled": true },
-      "fcstd_map": { "max_tabs": 1 },
-      "part_catalog": { "max_tabs": 1 },
-      "xlink_fix": { "max_tabs": 1 },
-      "part_dedup": { "max_tabs": 1 },
-      "step_batch": { "max_tabs": 1 },
-      "sw_step_export": { "max_tabs": 1 },
-      "reorder_members": { "max_tabs": 1 },
-      "caa_dialog_home": { "max_tabs": 1 },
-      "caa_dialog": { "max_tabs": 8, "tab_enabled": true },
-      "code_index": { "max_tabs": 1 },
-      "code_ignore": { "max_tabs": 1 },
-      "code_rename": { "max_tabs": 1 },
-      "code_uuid": { "max_tabs": 1 },
-      "bom_export": { "max_tabs": 1 },
-      "welcome": { "max_tabs": 1 },
-      "home": { "max_tabs": 1 },
-      "config": { "max_tabs": 1 },
-      "git": { "max_tabs": 1 },
-      "unit_tests": { "max_tabs": 1 },
-      "test_fixtures": { "max_tabs": 1 }
-    }
-  }
 }

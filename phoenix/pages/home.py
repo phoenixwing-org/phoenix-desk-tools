@@ -19,14 +19,9 @@ from phoenix.shell.native_dialog import pick_workspace_directory
 from phoenix.shell.state import AppState
 from phoenix.shell.web_launcher import (
     SERVICES,
-    ServiceDef,
     check_service,
-    start_service,
-    stop_service,
-    stop_all_services,
-    open_web_ui,
-    stop_web_ui,
-    web_server_status,
+    open_service_terminal,
+    open_all_terminals,
 )
 
 _LABEL_W = 72
@@ -141,10 +136,10 @@ class HomePage(BasePage):
                 row=row, column=2, sticky="w", padx=(4, 4), pady=5
             )
 
-            # 操作按钮
-            btn = ctk.CTkButton(svc_section, text="启动", width=64, height=26,
+            # 操作按钮（始终弹终端，状态由轮询自动更新）
+            btn = ctk.CTkButton(svc_section, text="▶ 终端", width=72, height=26,
                                 font=ctk.CTkFont(size=11),
-                                command=lambda s=svc: self._toggle_service(s))
+                                command=lambda s=svc: open_service_terminal(s))
             btn.grid(row=row, column=3, sticky="e", padx=(4, 10), pady=5)
             self._svc_btn[svc.port] = btn
 
@@ -152,26 +147,21 @@ class HomePage(BasePage):
         sep2 = ctk.CTkFrame(svc_section, height=1, fg_color=("#e2e8f0", "#334155"))
         sep2.grid(row=5, column=0, columnspan=4, sticky="ew", padx=10, pady=(4, 0))
 
-        # 统一起停行
+        # 统一操作行
+        # BUG: 全部停止待改为按端口查询进程，再询问勾选关闭
         action_row = ctk.CTkFrame(svc_section, fg_color="transparent")
         action_row.grid(row=6, column=0, columnspan=4, sticky="ew", padx=10, pady=(8, 10))
-        action_row.grid_columnconfigure(2, weight=1)
+        action_row.grid_columnconfigure(1, weight=1)
 
-        ctk.CTkButton(action_row, text="▶  全部启动", width=100, height=28,
+        ctk.CTkButton(action_row, text="▶  全部启动 (3 Tab)", width=140, height=28,
                        font=ctk.CTkFont(size=12), command=self._start_all).grid(
             row=0, column=0, padx=(0, 6)
-        )
-        ctk.CTkButton(action_row, text="■  全部停止", width=100, height=28,
-                       fg_color=("#e2e8f0", "#334155"),
-                       text_color=("#1e293b", "#e2e8f0"),
-                       font=ctk.CTkFont(size=12), command=self._stop_all).grid(
-            row=0, column=1, padx=(0, 6)
         )
         ctk.CTkButton(action_row, text="🌐 打开浏览器", width=110, height=28,
                        font=ctk.CTkFont(size=11),
                        fg_color=("gray75", "gray35"),
                        command=self._open_browser).grid(
-            row=0, column=3, sticky="e"
+            row=0, column=2, sticky="e"
         )
 
         r += 1
@@ -243,44 +233,20 @@ class HomePage(BasePage):
 
     # ── 服务管理 ──
 
-    def _toggle_service(self, svc: ServiceDef) -> None:
-        st = check_service(svc)
-        if st["running"]:
-            stop_service(svc)
-        else:
-            start_service(svc)
-        self._refresh_all_services()
-
     def _start_all(self) -> None:
-        for svc in SERVICES:
-            st = check_service(svc)
-            if not st["running"]:
-                start_service(svc)
-        self._refresh_all_services()
-        self._set_status("已启动全部服务")
-
-    def _stop_all(self) -> None:
-        if not messagebox.askyesno("全部停止", "确认停止全部三服务？", parent=self):
-            return
-        results = stop_all_services()
-        failed = [name for name, ok in results.items() if not ok]
-        if failed:
-            self._set_status(f"部分服务停止失败: {', '.join(failed)}")
-        else:
-            self._set_status("已停止全部服务")
-        self._refresh_all_services()
+        open_all_terminals()
+        self._set_status("已打开终端（3 Tab）")
 
     def _open_browser(self) -> None:
-        st = check_service(SERVICES[1])  # Vite 前端 :5173
-        if st["running"]:
+        vite = next((s for s in SERVICES if s.port == 5173), None)
+        if vite and check_service(vite)["running"]:
             import webbrowser
             webbrowser.open("http://127.0.0.1:5173")
             self._set_status("浏览器已打开 · http://127.0.0.1:5173")
         else:
-            messagebox.showwarning("打开浏览器", "Vite 前端未运行，请先启动服务。", parent=self)
+            messagebox.showwarning("打开浏览器", "Vite UI 未运行，请先启动服务。", parent=self)
 
     def _refresh_all_services(self) -> None:
-        all_running = True
         for svc in SERVICES:
             st = check_service(svc, timeout=1.0)
             running = bool(st["running"])
@@ -293,17 +259,7 @@ class HomePage(BasePage):
             lbl = self._svc_label.get(port)
             if lbl:
                 lbl.configure(text=_status_text(running), text_color=_status_color(running))
-            # 按钮
-            btn = self._svc_btn.get(port)
-            if btn:
-                if running:
-                    btn.configure(text="停止", fg_color=("#fee2e2", "#7f1d1d"),
-                                  text_color=("#991b1b", "#fecaca"))
-                else:
-                    btn.configure(text="启动", fg_color=("#D1D5DB", "#374151"),
-                                  text_color=("#1F2937", "#D1D5DB"))
-            if not running:
-                all_running = False
+            # 按钮始终是 "▶ 终端"（不做启停切换）
 
     def _schedule_status_poll(self) -> None:
         try:
