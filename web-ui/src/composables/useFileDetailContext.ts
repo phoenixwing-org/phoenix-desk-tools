@@ -14,8 +14,8 @@ export type FileDetailContext = {
   incomingCount: Ref<number>;
   outgoingCount: Ref<number>;
   switchSubTab: (tab: FileDetailSubTab) => void;
-  /** 打开改名 Tab；target 为属性里填写的目标文件名（可与磁盘当前名不同） */
-  openRenameTab: (target?: string) => boolean;
+  /** 触发打开改名弹窗；target 可选指定目标文件名 */
+  triggerRename: (target?: string) => void;
   reloadFile: (targetRel?: string) => Promise<void>;
   refreshXrefCounts: () => Promise<void>;
   /** 按 rel 缓存「引用」Tab 已拉取的 JSON（切换 Tab 不重复请求） */

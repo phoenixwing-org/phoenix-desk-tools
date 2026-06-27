@@ -903,8 +903,9 @@ export function provideAppShell(): AppShellContext {
     baseline: Partial<BomFields>,
   ) {
     const preferred = String(form.filename ?? "").trim() || undefined;
+    // 改名已从子 Tab 移至弹窗，直接打开文件详情页，preferredNewFilename 可预填弹窗
     openFileDetailForRel(repoRelPath, {
-      subTab: "rename",
+      subTab: "overview",
       preferredNewFilename: preferred,
       form,
       baseline,
@@ -1315,7 +1316,7 @@ export function provideAppShell(): AppShellContext {
       return;
     }
     if (pageId === "file_rename" && rel) {
-      openFileDetailForRel(rel, { subTab: "rename" });
+      openFileDetailForRel(rel, { subTab: "overview" });
       return;
     }
     if (pageId === "rename_analysis" || pageId === "file_rename") {

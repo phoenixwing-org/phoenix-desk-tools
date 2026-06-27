@@ -116,6 +116,7 @@ declare module 'vue' {
     PanelSideIcon: typeof import('./src/components/PanelSideIcon.vue')['default']
     ReferenceLabelSyncBar: typeof import('./src/components/ReferenceLabelSyncBar.vue')['default']
     RenameAnalysisPanel: typeof import('./src/components/RenameAnalysisPanel.vue')['default']
+    RenameDialog: typeof import('./src/components/RenameDialog.vue')['default']
     ResizableDataTable: typeof import('./src/components/ResizableDataTable.vue')['default']
     ShellPanelToggleBar: typeof import('./src/components/ShellPanelToggleBar.vue')['default']
     SidebarBlock: typeof import('./src/components/shell/SidebarBlock.vue')['default']

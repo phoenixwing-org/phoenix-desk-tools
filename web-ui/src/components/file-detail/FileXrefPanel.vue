@@ -356,7 +356,7 @@ async function onSyncIncomingLabels() {
       <el-button size="small" :loading="loading" :disabled="rebuilding" @click="loadTables(true, true)">
         刷新列表
       </el-button>
-      <el-button size="small" @click="ctx.switchSubTab('rename')">改名后修正 XLink…</el-button>
+      <el-button size="small" @click="ctx.triggerRename()">改名后修正 XLink…</el-button>
     </div>
     <p v-if="indexSummary" class="index-summary">{{ indexSummary }}</p>
 

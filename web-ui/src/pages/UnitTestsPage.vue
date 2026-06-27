@@ -20,6 +20,7 @@ import {
 } from "../api";
 import PageHeader from "../components/PageHeader.vue";
 import { useUnitTestsPropertySheet } from "../composables/useUnitTestsPropertySheet";
+import { promptChoice } from "../composables/choiceDialog";
 import { useAppShell } from "../composables/useAppShell";
 import {
   UNIT_TEST_RUNNABLE_SUITE_IDS,
@@ -27,6 +28,7 @@ import {
   type UnitTestsPageTab,
 } from "../stores/unitTestsPage";
 import {
+  clearWatchlist,
   excludeCaseIdsForFullRun,
   includeCaseIdsForWatchlistRun,
   loadWatchlist,
@@ -92,8 +94,11 @@ const moduleCatalog = ref<Record<string, TestModuleCatalogEntry>>({});
 const caseCatalog = ref<Record<string, TestCaseCatalogEntry>>({});
 const watchlist = ref<UnitTestWatchlistEntry[]>(loadWatchlist());
 const filterWatchlistOnly = ref(false);
+const filterReTestedOnly = ref(false);
+const lastReTestedCaseIds = ref<Set<string>>(new Set());
 const lastIgnoredCount = ref(0);
 const runProgressIgnored = ref(0);
+const runScopeCollapsed = ref(false);
 const rerunningWatchlistId = ref<string | null>(null);
 const rerunningModule = ref<string | null>(null);
 const moduleHistory = ref<ModuleHistoryMap>(loadModuleHistory());
@@ -249,7 +254,9 @@ function caseMatchesStatus(c: UnitTestCaseResult) {
 
 const filteredCases = computed(() => {
   let cases = result.value?.cases ?? [];
-  if (filterWatchlistOnly.value) {
+  if (filterReTestedOnly.value && lastReTestedCaseIds.value.size) {
+    cases = cases.filter((c) => lastReTestedCaseIds.value.has(c.id));
+  } else if (filterWatchlistOnly.value) {
     const ids = watchlistIdSet.value;
     cases = cases.filter((c) => ids.has(c.id));
   }
@@ -501,16 +508,44 @@ function formatWatchlistTime(iso: string): string {
   });
 }
 
-function removeFromWatchlist(entry: UnitTestWatchlistEntry) {
-  const ok = window.confirm(
-    `移出关注列表？\n\n${entry.method}\n累计失败 ${entry.fail_count} 次`,
-  );
-  if (!ok) return;
+async function removeFromWatchlist(entry: UnitTestWatchlistEntry) {
+  const result = await promptChoice({
+    title: "移出关注列表",
+    message: `${entry.method}\n累计失败 ${entry.fail_count} 次`,
+    choices: [
+      { id: "remove", label: "移出", variant: "danger" },
+      { id: "cancel", label: "取消" },
+    ],
+    defaultChoiceId: "cancel",
+  });
+  if (result.choiceId !== "remove") return;
   watchlist.value = removeWatchlistEntry(entry.id);
 }
 
+async function clearAllWatchlist() {
+  const result = await promptChoice({
+    title: "清空关注列表",
+    message: `确定移除全部 ${watchlistCount.value} 条失败关注？\n此操作不可恢复`,
+    choices: [
+      { id: "clear", label: "全部移除", variant: "danger" },
+      { id: "cancel", label: "取消" },
+    ],
+    defaultChoiceId: "cancel",
+  });
+  if (result.choiceId !== "clear") return;
+  watchlist.value = clearWatchlist();
+}
+
 function filterResultsToWatchlist() {
+  filterReTestedOnly.value = false;
   filterWatchlistOnly.value = true;
+  resultStatusChecked.value = new Set(["failed", "error", "passed", "skipped"]);
+  activeTab.value = "results";
+}
+
+function filterResultsToReTested() {
+  filterWatchlistOnly.value = false;
+  filterReTestedOnly.value = true;
   resultStatusChecked.value = new Set(["failed", "error", "passed", "skipped"]);
   activeTab.value = "results";
 }
@@ -720,6 +755,7 @@ async function executeRun(args: {
   runOptions?: UnitTestRunOptions;
   logLabel: string;
   lastRunSuiteIds?: string[];
+  runMode?: RunMode;
 }) {
   running.value = true;
   result.value = null;
@@ -746,6 +782,7 @@ async function executeRun(args: {
     resultSuiteChecked.value = new Set(lastRunSuites.value.length ? lastRunSuites.value : RUNNABLE_SUITE_IDS);
     resultStatusChecked.value = new Set(["passed", "failed", "error", "skipped"]);
     filterWatchlistOnly.value = false;
+    filterReTestedOnly.value = false;
     const msg = formatRunSummary(result.value);
     shell.appendLog(msg, { source: "unit_tests" });
     shell.setStatus(msg);
@@ -754,7 +791,15 @@ async function executeRun(args: {
         shell.appendLog(`  ✗ ${f.id}: ${f.message}`, { source: "unit_tests" });
       }
     }
-    if (result.value.failures.length && !cancelled) {
+    if (args.runMode === "watchlist") {
+      const ids = args.runOptions?.include_cases;
+      if (ids?.length) {
+        lastReTestedCaseIds.value = new Set(ids);
+        filterReTestedOnly.value = true;
+      } else {
+        filterWatchlistOnly.value = true;
+      }
+    } else if (result.value.failures.length && !cancelled) {
       activeTab.value = "watchlist";
     }
   } catch (e) {
@@ -814,6 +859,7 @@ async function onRun(mode: RunMode = "full") {
     runOptions,
     logLabel,
     lastRunSuiteIds: mode === "watchlist" ? [...runChecked.value] : ids,
+    runMode: mode,
   });
 }
 
@@ -826,6 +872,7 @@ async function onRunWatchlistSelected() {
     suiteIds: ["all"],
     runOptions: { include_cases: [...watchlistChecked.value] },
     logLabel: `复测勾选 ${watchlistChecked.value.size} 条`,
+    runMode: "watchlist",
   });
 }
 
@@ -837,6 +884,7 @@ async function onRerunWatchlistEntry(entry: UnitTestWatchlistEntry) {
       suiteIds: ["all"],
       runOptions: { include_cases: [entry.id] },
       logLabel: `复测 ${entry.method}`,
+      runMode: "watchlist",
     });
   } finally {
     rerunningWatchlistId.value = null;
@@ -908,19 +956,6 @@ onMounted(() => {
     <PageHeader title="单元测试" page-id="unit_tests">
       <template #actions>
         <div class="toolbar-group">
-          <el-checkbox
-            :model-value="showRunScopeList"
-            :disabled="running"
-            size="small"
-            class="toolbar-toggle scope-list-btn"
-            @change="showRunScopeList = Boolean($event)"
-          >
-            列出运行范围
-            <span v-if="runScopeButtonModuleCount" class="suite-count">{{ runScopeButtonModuleCount }}</span>
-          </el-checkbox>
-        </div>
-        <span class="toolbar-divider" aria-hidden="true" />
-        <div class="toolbar-group">
           <el-button-group size="small">
             <el-button :disabled="running" @click="selectAllRun">全选</el-button>
             <el-button :disabled="running" @click="clearAllRun">清空</el-button>
@@ -958,9 +993,18 @@ onMounted(() => {
     <p v-if="loadError" class="error-text">{{ loadError }}</p>
 
     <section class="card run-card" data-tour-page-unit-tests-suites>
-      <div class="run-toolbar">
-        <h2 class="section-label">运行范围</h2>
-        <div class="run-chips">
+      <div
+        class="run-toolbar"
+        :class="{ 'run-toolbar-collapsed': runScopeCollapsed }"
+        role="button"
+        :aria-expanded="!runScopeCollapsed"
+        @click="runScopeCollapsed = !runScopeCollapsed"
+      >
+        <h2 class="section-label">
+          <span class="collapse-arrow">{{ runScopeCollapsed ? '▸' : '▾' }}</span>
+          运行范围
+        </h2>
+        <div class="run-chips" @click.stop>
           <el-checkbox
             v-for="suite in runnableSuites"
             :key="suite.id"
@@ -976,10 +1020,21 @@ onMounted(() => {
           </el-checkbox>
         </div>
       </div>
-      <div v-if="showRunScopeList" class="run-scope-controls">
-        <el-checkbox v-model="showRunScopeCases" :disabled="running || runPlanLoading">
-          展开用例
+      <template v-if="!runScopeCollapsed">
+      <div class="run-scope-controls">
+        <el-checkbox
+          :model-value="showRunScopeList"
+          :disabled="running"
+          size="small"
+          @change="showRunScopeList = Boolean($event)"
+        >
+          列出运行范围
+          <span v-if="runScopeButtonModuleCount" class="suite-count">{{ runScopeButtonModuleCount }}</span>
         </el-checkbox>
+        <template v-if="showRunScopeList">
+          <el-checkbox v-model="showRunScopeCases" :disabled="running || runPlanLoading">
+            展开用例
+          </el-checkbox>
         <el-radio-group
           v-if="runPlan?.modules.length"
           :model-value="moduleSortBy"
@@ -1004,6 +1059,7 @@ onMounted(() => {
         </span>
         <span v-if="runPlanLoading" class="muted small">加载计划…</span>
         <span v-if="runPlanError" class="error-text small">{{ runPlanError }}</span>
+        </template>
       </div>
       <div v-if="showRunScopeList && runPlan?.modules.length" class="run-scope-list">
         <el-table
@@ -1140,6 +1196,7 @@ onMounted(() => {
           <template v-if="lastIgnoredCount"> · 忽略 {{ lastIgnoredCount }}</template>
         </span>
       </p>
+      </template>
     </section>
 
     <el-radio-group
@@ -1158,7 +1215,7 @@ onMounted(() => {
     <section v-if="activeTab === 'watchlist'" class="card watchlist-card">
       <div class="watchlist-head">
         <p class="watchlist-desc muted">
-          失败/错误用例记入本机（localStorage），<strong>累计失败次数</strong>；通过不会自动移出，需逐条「移除」。勾选后点「复测勾选」，或行内「复测」；需跑全部时点「全部复测」。
+          失败/错误用例记入本机（localStorage），<strong>累计失败次数</strong>；通过不会自动移出，可逐条「移除」或「全部移除」。勾选后点「复测勾选」，或行内「复测」；需跑全部时点「全部复测」。
         </p>
         <div class="watchlist-actions">
           <span v-if="watchlistCount" class="watchlist-stats muted small">
@@ -1191,6 +1248,9 @@ onMounted(() => {
             </el-button>
             <el-button link size="small" :disabled="running || !watchlistCount" @click="onRun('watchlist')">
               全部复测
+            </el-button>
+            <el-button link size="small" :disabled="running || !watchlistCount" @click="clearAllWatchlist">
+              全部移除
             </el-button>
           </div>
         </div>
@@ -1371,11 +1431,15 @@ onMounted(() => {
             <el-button v-if="watchlistCount" link size="small" @click="filterResultsToWatchlist">
               仅关注项
             </el-button>
+            <el-button v-if="lastReTestedCaseIds.size" link size="small" @click="filterResultsToReTested">
+              仅复测项
+            </el-button>
           </div>
         </div>
         <span class="count">
           显示 <strong>{{ filteredCases.length }}</strong> / {{ result.cases.length }} 条用例
-          <template v-if="filterWatchlistOnly">（已筛关注）</template>
+          <template v-if="filterReTestedOnly">（已筛复测项）</template>
+          <template v-if="filterWatchlistOnly && !filterReTestedOnly">（已筛关注）</template>
           <template v-if="lastIgnoredCount"> · 本次忽略 {{ lastIgnoredCount }} 条</template>
         </span>
       </div>
