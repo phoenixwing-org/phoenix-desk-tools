@@ -35,6 +35,12 @@ def _norm_rel_path(raw: Any) -> str | None:
     return s
 
 
+def normalize_workset_paths(paths: list[Any] | None) -> list[str]:
+    """规范化路径列表 → 去重排序（兼容旧接口，内部委托 normalize_workset_entries）。"""
+    entries = normalize_workset_entries(paths)
+    return [e["path"] for e in entries]
+
+
 def normalize_workset_entries(raw_entries: list[Any] | Any | None) -> list[dict[str, str]]:
     """规范化条目列表 → [{"path": ..., "type": "file"|"dir"}]，去重排序。"""
     out: list[dict[str, str]] = []
@@ -75,7 +81,7 @@ def _normalize_workset(raw: dict[str, Any]) -> dict[str, Any] | None:
     raw_entries = raw.get("entries") if isinstance(raw.get("entries"), list) else None
     if raw_entries is None:
         raw_paths = raw.get("paths") if isinstance(raw.get("paths"), list) else []
-        entries = [{"path": str(p), "type": "file"} for p in normalize_workset_entries([str(p) for p in raw_paths])]
+        entries = normalize_workset_entries(raw_paths)
     else:
         entries = normalize_workset_entries(raw_entries)
     source = str(raw.get("source") or "").strip()

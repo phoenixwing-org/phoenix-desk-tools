@@ -221,11 +221,17 @@ def sync_runtime_catalog(*, force: bool = False) -> dict[str, Any]:
         )
         if module_names:
             placeholders = ",".join("?" for _ in module_names)
+            # 先删子表再删主表，避免 FOREIGN KEY 约束
+            conn.execute(
+                f"DELETE FROM test_case WHERE module_name NOT IN ({placeholders})",
+                list(module_names),
+            )
             conn.execute(
                 f"DELETE FROM test_module WHERE module_name NOT IN ({placeholders})",
                 list(module_names),
             )
         else:
+            conn.execute("DELETE FROM test_case")
             conn.execute("DELETE FROM test_module")
 
         conn.executemany(

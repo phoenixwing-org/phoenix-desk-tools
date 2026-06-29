@@ -232,6 +232,11 @@ def _terminate_pid(pid: int) -> None:
                 return
 
 
+def stop_service_pids(port: int, pids: list[int]) -> bool:
+    """终止服务进程（kill_pids 别名）。"""
+    return kill_pids(port, pids)
+
+
 def kill_pids(port: int, pids: list[int]) -> bool:
     """终止指定 PID 列表；返回是否成功释放端口。"""
     print(f"[service_manager] kill port={port} pids={pids}")

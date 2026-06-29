@@ -19,6 +19,14 @@ from phoenix.services.file_workset_service import (
 )
 
 
+def _paths(ws: dict) -> list[str]:
+    """从 entries 或旧 paths 格式提取路径列表。"""
+    entries = ws.get("entries") or []
+    if entries:
+        return [e["path"] for e in entries]
+    return ws.get("paths") or []
+
+
 class TestFileWorksetService(unittest.TestCase):
     def test_normalize_workset_paths_dedup_and_sort(self) -> None:
         out = normalize_workset_paths(["b/a.cpp", "./b/a.cpp", "z.h", "../evil.cpp"])
@@ -43,7 +51,7 @@ class TestFileWorksetService(unittest.TestCase):
             loaded = load_file_worksets(root)
             self.assertEqual(len(loaded["worksets"]), 1)
             self.assertEqual(loaded["worksets"][0]["name"], "测试集")
-            self.assertEqual(loaded["worksets"][0]["paths"], ["src/bar.h", "src/foo.cpp"])
+            self.assertEqual(_paths(loaded["worksets"][0]), ["src/bar.h", "src/foo.cpp"])
 
     def test_import_legacy_json_once(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -71,7 +79,7 @@ class TestFileWorksetService(unittest.TestCase):
             )
             self.assertEqual(out.get("storage"), "sqlite")
             self.assertIn("workspace_path", out)
-            self.assertEqual(out["worksets"][0]["paths"], ["x.cpp"])
+            self.assertEqual(_paths(out["worksets"][0]), ["x.cpp"])
             again = get_file_worksets_api(root)
             self.assertEqual(json.loads(json.dumps(again))["worksets"][0]["id"], "a")
 
@@ -90,7 +98,7 @@ class TestFileWorksetService(unittest.TestCase):
                     ]
                 },
             )
-            self.assertEqual(out["worksets"][0]["paths"], ["ok.cpp"])
+            self.assertEqual(_paths(out["worksets"][0]), ["ok.cpp"])
 
     def test_load_multiple_worksets_single_query(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -106,8 +114,8 @@ class TestFileWorksetService(unittest.TestCase):
             )
             loaded = load_file_worksets(root)
             by_id = {w["id"]: w for w in loaded["worksets"]}
-            self.assertEqual(by_id["a"]["paths"], ["x.cpp", "y.h"])
-            self.assertEqual(by_id["b"]["paths"], ["z.cpp"])
+            self.assertEqual(_paths(by_id["a"]), ["x.cpp", "y.h"])
+            self.assertEqual(_paths(by_id["b"]), ["z.cpp"])
 
     def test_prune_missing_workset_paths(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -128,7 +136,7 @@ class TestFileWorksetService(unittest.TestCase):
             )
             out = prune_missing_workset_paths(root)
             self.assertEqual(out["prune_removed"], 1)
-            self.assertEqual(out["worksets"][0]["paths"], ["keep.cpp"])
+            self.assertEqual(_paths(out["worksets"][0]), ["keep.cpp"])
 
 
 if __name__ == "__main__":
