@@ -20,7 +20,7 @@ from phoenix.services.reorder_members_service import (
     run_reorder_members_batch,
 )
 
-KT_ALARM_CLOCK_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "KtAlarmClock"
+KT_ALARM_CLOCK_FIXTURE = Path(__file__).resolve().parent.parent.parent / "KtAlarmClock"
 
 
 class TestReorderMembersService(unittest.TestCase):
@@ -155,7 +155,7 @@ class TestReorderMembersService(unittest.TestCase):
 
     @unittest.skipUnless(
         KT_ALARM_CLOCK_FIXTURE.is_dir(),
-        "tests/fixtures/KtAlarmClock 未链接（ln -s /path/to/KtAlarmClock tests/fixtures/KtAlarmClock）",
+        "KtAlarmClock 未检出到 phoenix-desk-tools 同级目录",
     )
     def test_kt_alarm_clock_fixture_batch(self) -> None:
         ws = KT_ALARM_CLOCK_FIXTURE.resolve()

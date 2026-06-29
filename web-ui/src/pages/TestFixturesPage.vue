@@ -60,7 +60,7 @@ async function applySync(triggerName?: string, opts?: { silent?: boolean }) {
   syncing.value = true;
   busyName.value = triggerName ?? null;
   if (!opts?.silent) {
-    shell.appendLog("[引用测试工程] 检出并链接（git clone + 目录链接）…", { source: "test_fixtures", open: true });
+    shell.appendLog("[检出测试工程] 检出（git clone）…", { source: "test_fixtures", open: true });
   }
   try {
     const data = await syncTestFixtures({
@@ -79,7 +79,7 @@ async function applySync(triggerName?: string, opts?: { silent?: boolean }) {
       return false;
     }
     if (!opts?.silent) {
-      ElMessage.success(triggerName ? `${triggerName} 已完成` : "检出并链接完成");
+      ElMessage.success(triggerName ? `${triggerName} 已完成` : "检出完成");
     }
     return true;
   } catch (e) {
@@ -134,54 +134,34 @@ async function syncAndLink() {
 }
 
 function statusTagType(item: TestFixtureItem) {
-  if (item.link_status === "ok" || item.link_status === "linked") return "success";
-  if (item.link_status === "missing" || item.link_status === "stale") return "info";
-  if (item.link_status === "skipped" && item.checkout_exists) return "info";
-  if (item.link_status === "skipped" || item.link_status === "error") return "warning";
+  if (item.checkout_exists) return "success";
   return "info";
 }
 
-function linkStatusLabel(item: TestFixtureItem) {
-  if (item.link_status === "ok" || item.link_status === "linked") return "已链接";
-  if (item.link_status === "missing") return item.checkout_exists ? "待链接" : "未链接";
-  if (item.link_status === "stale") return "残留文件";
-  if (item.link_status === "skipped") {
-    return item.checkout_exists ? "待链接" : "目录冲突";
-  }
-  if (item.link_status === "error") return "链接异常";
-  return item.link_status;
+function checkoutLabel(item: TestFixtureItem) {
+  return item.checkout_exists ? "已检出" : "未检出";
 }
 
-function fixtureRel(name: string) {
-  return `tests/fixtures/${name}`;
+function checkoutPath(name: string) {
+  const root = checkoutRootInput.value.trim() || payload.value?.default_checkout_root || "…";
+  return `${root}/${name}`;
 }
 
-function isLinked(row: TestFixtureItem) {
-  return row.link_status === "ok" || row.link_status === "linked";
+function isCheckedOut(row: TestFixtureItem) {
+  return row.checkout_exists;
 }
 
 function needsSetup(row: TestFixtureItem) {
-  return isEnabled(row.name) && !isLinked(row);
+  return isEnabled(row.name) && !isCheckedOut(row);
 }
 
-function cardActionLabel(row: TestFixtureItem) {
-  if (row.checkout_exists && !isLinked(row)) return "建立链接";
-  return "检出并链接";
-}
-
-const linkedCount = computed(() => items.value.filter((i) => isLinked(i)).length);
-const pendingSetupCount = computed(() => items.value.filter((i) => needsSetup(i)).length);
+const checkedOutCount = computed(() => items.value.filter((i) => isCheckedOut(i)).length);
 const enabledCount = computed(() => enabledSet.value.size);
 
 const primaryActionLabel = computed(() => {
-  if (!enabledCount.value) return "检出并链接";
-  if (pendingSetupCount.value) return `检出并链接（${pendingSetupCount.value} 项）`;
-  return "重新同步已勾选";
+  if (!enabledCount.value) return "检出任选";
+  return "检出已勾选";
 });
-
-function needsLink(row: TestFixtureItem) {
-  return needsSetup(row);
-}
 
 const checkoutRootDisplay = computed(
   () => checkoutRootInput.value.trim() || payload.value?.default_checkout_root || "",
@@ -197,7 +177,7 @@ useTestFixturesPropertySheet("test_fixtures", {
   checkoutRoot: checkoutRootDisplay,
   enabledCount,
   totalCount: computed(() => items.value.length),
-  linkedCount,
+  checkedOutCount,
   loading,
   syncing,
 });
@@ -205,7 +185,7 @@ useTestFixturesPropertySheet("test_fixtures", {
 
 <template>
   <div class="page tool-page test-fixtures-page">
-    <PageHeader title="引用测试工程" page-id="test_fixtures">
+    <PageHeader title="检出测试工程" page-id="test_fixtures">
       <template #actions>
         <el-button
           type="primary"
@@ -240,12 +220,12 @@ useTestFixturesPropertySheet("test_fixtures", {
       <div class="section-head">
         <h2 class="section-title">可引用的测试工程</h2>
         <span class="section-meta">
-          系统内置 {{ items.length }} 项 · 已勾选 {{ enabledCount }} · 已链接 {{ linkedCount }}
+          系统内置 {{ items.length }} 项 · 已勾选 {{ enabledCount }} · 已检出 {{ checkedOutCount }}
         </span>
       </div>
       <p class="section-hint muted small">
-        清单由产品配置，不可在本页增删。勾选表示「要引用」；需点击「检出并链接」才会 git clone 并建立
-        tests/fixtures 目录链接。
+        清单由产品配置，不可在本页增删。勾选表示「要引用」；需点击「检出」才会 git clone 并建立
+        phoenix-desk-tools 同级目录。
       </p>
 
       <div v-loading="loading" class="fixture-list">
@@ -253,7 +233,7 @@ useTestFixturesPropertySheet("test_fixtures", {
           v-for="row in items"
           :key="row.name"
           class="fixture-card"
-          :class="{ enabled: isEnabled(row.name), linked: row.link_status === 'ok' || row.link_status === 'linked' }"
+          :class="{ enabled: isEnabled(row.name), checkedOut: row.checkout_exists }"
         >
           <div class="fixture-card-head">
             <el-checkbox
@@ -268,16 +248,14 @@ useTestFixturesPropertySheet("test_fixtures", {
               <el-tag type="info" size="small" effect="plain">系统内置</el-tag>
               <el-tag v-if="isEnabled(row.name)" type="primary" size="small" effect="plain">要引用</el-tag>
               <el-tag v-else type="info" size="small" effect="plain">未启用</el-tag>
-              <el-tag :type="statusTagType(row)" size="small" effect="plain">{{ linkStatusLabel(row) }}</el-tag>
-              <el-tag v-if="row.checkout_exists" type="success" size="small" effect="plain">已检出</el-tag>
-              <el-tag v-else type="info" size="small" effect="plain">未检出</el-tag>
+              <el-tag :type="statusTagType(row)" size="small" effect="plain">{{ checkoutLabel(row) }}</el-tag>
             </div>
           </div>
           <p class="fixture-desc">{{ row.description }}</p>
           <dl class="fixture-meta">
             <div class="meta-row">
-              <dt>fixture 链接</dt>
-              <dd><code>{{ fixtureRel(row.name) }}</code></dd>
+              <dt>检出路径</dt>
+              <dd><code>{{ checkoutPath(row.name) }}</code></dd>
             </div>
             <div v-if="row.target_path" class="meta-row">
               <dt>当前指向</dt>
@@ -293,14 +271,14 @@ useTestFixturesPropertySheet("test_fixtures", {
                 <a :href="row.clone_url" target="_blank" rel="noopener noreferrer">{{ row.clone_url }}</a>
               </dd>
             </div>
-            <div v-if="row.link_detail && needsLink(row)" class="meta-row">
+            <div v-if="row.link_detail && needsSetup(row)" class="meta-row">
               <dt>说明</dt>
               <dd class="muted">{{ row.link_detail }}</dd>
             </div>
           </dl>
           <div v-if="needsSetup(row)" class="card-actions">
             <el-button size="small" type="primary" :loading="syncing && busyName === row.name" :disabled="syncing && busyName !== row.name" @click="applySync(row.name)">
-              {{ cardActionLabel(row) }}
+              {{ checkoutLabel(row) }}
             </el-button>
           </div>
         </article>
@@ -359,7 +337,7 @@ useTestFixturesPropertySheet("test_fixtures", {
   background: #f8fbff;
 }
 
-.fixture-card.linked {
+.fixture-card.checkedOut {
   box-shadow: inset 3px 0 0 #22c55e;
 }
 

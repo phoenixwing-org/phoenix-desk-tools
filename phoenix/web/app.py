@@ -577,13 +577,6 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
             sync_runtime_catalog_now()
         except Exception as exc:
             logging.getLogger("phoenix.runtime").warning("runtime catalog sync failed: %s", exc)
-        try:
-            from phoenix.testing.fixture_links import ensure_fixture_links_logged
-
-            ensure_fixture_links_logged()
-        except Exception as exc:
-            logging.getLogger("phoenix.testing").warning("fixture link setup failed: %s", exc)
-
     @app.get("/api/config/app")
     def api_config_app() -> dict:
         return app_config_payload()

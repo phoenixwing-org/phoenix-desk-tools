@@ -18,22 +18,13 @@ from phoenix.code.reorder_members import reorder_cpp_file, reorder_header_file
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "reorder_members"
 PNX_BOM_CMD_MIN = FIXTURES / "pnx_bom_analysis_cmd_min.cpp"
-KT_PARAM_H = (
-    Path(__file__).resolve().parent
-    / "fixtures"
-    / "KtAlarmClock"
-    / "KtAlarmClockUI"
-    / "KtAlarmClockParam.h"
-)
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+KT_PARAM_H = _REPO_ROOT / "KtAlarmClock" / "KtAlarmClockUI" / "KtAlarmClockParam.h"
 KT_PARAM_CPP = KT_PARAM_H.with_suffix(".cpp")
 PNX_CURVE_DIVISION_H = (
-    Path(__file__).resolve().parent
-    / "fixtures"
-    / "PNXCaaStudy"
-    / "PNXCurveDivisionWsp"
-    / "PNXCurveDivisionFrm"
-    / "PNXCurveDivisionUI.m"
-    / "LocalInterfaces"
+    _REPO_ROOT / "PNXCaaStudy"
+    / "PNXCurveDivisionWsp" / "PNXCurveDivisionFrm"
+    / "PNXCurveDivisionUI.m" / "LocalInterfaces"
     / "PNXCurveDivisionDlg.h"
 )
 

@@ -16,7 +16,12 @@ from phoenix.config.user_prefs import (
     load_launcher_prefs,
     save_launcher_prefs,
 )
-from phoenix.testing.fixture_links import default_checkout_root, repo_root
+def _default_checkout_root() -> Path:
+    return Path(__file__).resolve().parent.parent.parent.parent
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parent.parent.parent
 
 
 def _normalize_enabled(raw: Any) -> list[str]:
@@ -49,7 +54,7 @@ def load_test_fixture_prefs() -> dict[str, Any]:
             checkout_root = None
     return {
         "checkout_root": str(checkout_root) if checkout_root else "",
-        "default_checkout_root": str(default_checkout_root()),
+        "default_checkout_root": str(_default_checkout_root()),
         "enabled": _normalize_enabled(block.get("enabled")),
     }
 

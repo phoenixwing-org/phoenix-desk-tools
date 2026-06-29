@@ -1,60 +1,66 @@
-"""Web API：引用测试工程（manifest / git clone / symlink）。"""
+"""Web API：引用测试工程（检出状态展示，不再管理 symlink）。"""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
-from phoenix.testing.fixture_links import (
-    catalog_path,
-    checkout_path_for_link,
-    clone_url_for_link,
-    default_checkout_root,
-    manifest_links,
-    repo_root,
-    resolve_checkout_root,
-    sync_fixture_links,
-    symlink_status,
-)
 from phoenix.testing.fixture_prefs import (
     load_test_fixture_prefs,
     save_test_fixture_prefs,
 )
 
 
+def _catalog_path() -> Path:
+    return Path(__file__).resolve().parent.parent / "config" / "test_fixture_catalog.json"
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parent.parent.parent
+
+
+def _default_checkout_root() -> Path:
+    return _repo_root().parent
+
+
+def _load_catalog() -> dict[str, Any]:
+    with open(_catalog_path(), encoding="utf-8") as fh:
+        return json.load(fh)
+
+
 def test_fixtures_payload() -> dict[str, Any]:
     prefs = load_test_fixture_prefs()
     enabled_set = set(prefs["enabled"])
-    try:
-        checkout_root = resolve_checkout_root(prefs.get("checkout_root") or None)
-    except ValueError:
-        checkout_root = default_checkout_root()
+    checkout_root = _default_checkout_root()
+    if prefs.get("checkout_root"):
+        cr = Path(prefs["checkout_root"]).expanduser().resolve()
+        if cr.is_dir():
+            checkout_root = cr
 
+    catalog = _load_catalog()
     items: list[dict[str, Any]] = []
-    for link in manifest_links():
-        name = str(link.get("name") or "").strip()
-        checkout = checkout_path_for_link(link, checkout_root)
-        sym = symlink_status(name)
-        items.append(
-            {
-                "name": name,
-                "description": str(link.get("description") or ""),
-                "clone_url": clone_url_for_link(link),
-                "enabled": name in enabled_set,
-                "checkout_path": str(checkout),
-                "checkout_exists": checkout.is_dir(),
-                "link_status": sym["status"],
-                "link_detail": sym["detail"],
-                "symlink_path": sym["symlink_path"],
-                "target_path": sym.get("target_path") or "",
-            }
-        )
+    for entry in catalog.get("projects", []):
+        name = str(entry.get("name") or "").strip()
+        target = checkout_root / name
+        items.append({
+            "name": name,
+            "description": str(entry.get("description") or ""),
+            "clone_url": str(entry.get("clone_url") or ""),
+            "enabled": name in enabled_set,
+            "checkout_path": str(target),
+            "checkout_exists": target.is_dir(),
+            "link_status": "ok" if target.is_dir() else "missing",
+            "link_detail": f"检出到 {target}" if target.is_dir() else f"未检出：clone 到 phoenix-desk-tools 同级目录",
+            "symlink_path": "",
+            "target_path": str(target),
+        })
 
     return {
         **prefs,
         "checkout_root": str(checkout_root),
-        "repo_root": str(repo_root()),
-        "catalog_path": str(catalog_path()),
+        "repo_root": str(_repo_root()),
+        "catalog_path": str(_catalog_path()),
         "catalog_kind": "builtin",
         "user_prefs_path_hint": "launcher.json → test_fixtures",
         "items": items,
@@ -76,16 +82,9 @@ def sync_test_fixtures(
     checkout_root: str | None = None,
     enabled: list[str] | None = None,
 ) -> dict[str, Any]:
+    """废弃：不再执行 git clone / symlink。仅保存偏好并返回状态。"""
     if enabled is not None or checkout_root is not None:
         save_test_fixture_prefs(checkout_root=checkout_root, enabled=enabled)
-    prefs = load_test_fixture_prefs()
-    enabled_set = set(prefs["enabled"])
-    if not enabled_set:
-        raise ValueError("请至少勾选一个测试工程")
-    resolved_root = resolve_checkout_root(prefs.get("checkout_root") or None)
-    results = sync_fixture_links(enabled=enabled_set, clone=clone, checkout_root=resolved_root)
     payload = test_fixtures_payload()
-    payload["sync_results"] = [
-        {"name": r.name, "status": r.status, "detail": r.detail} for r in results
-    ]
+    payload["sync_results"] = []
     return payload
