@@ -47,6 +47,9 @@ int KtAlarmClockCore::calculate() {
 }
 """
 
+# 回归用例 fixture 目录
+_FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "reorder_members"
+
 
 class TestReorderMembersCpp(unittest.TestCase):
     def test_qdebug_in_body_does_not_split_blocks(self) -> None:
@@ -85,15 +88,74 @@ class TestReorderMembersCpp(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "GbSample.cpp"
             body = (
-                "// comment with Chinese: \u4e2d\u6587\n"
+                "// comment with Chinese: 中文\n"
                 "void GbSample::run() {}\n"
                 "void GbSample::init() {}\n"
             )
             raw = body.encode("gbk")
             path.write_bytes(raw)
-            # 可读且不因 UTF-8 硬解码而 400；无类体块时可能无变更
             self.assertIsNotNone(reorder_cpp_file(path, dry_run=True))
             self.assertEqual(path.read_bytes(), raw)
+
+    # ------------------------------------------------------------------
+    # 回归：注释分隔线 / 内部调用（fixture 隔离，不泄露 Xy 代码）
+    # ------------------------------------------------------------------
+
+    def test_annotation_sep_comments_not_absorbed(self) -> None:
+        """注释分隔线（//---static---... 等）应保留为分隔线，不被吸收进函数块。"""
+        src = (_FIXTURE_DIR / "annotation_sep.cpp").read_text(encoding="utf-8")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "annotation_sep.cpp"
+            path.write_text(src, encoding="utf-8")
+            reorder_cpp_file(path, dry_run=False)
+            text = path.read_text(encoding="utf-8")
+            # 跳过 Doxygen 头注释后检查排序结果
+            doxy_end = text.index("*/")
+            code_text = text[doxy_end + 2:]
+            # 注释分隔线应保留在输出中作为函数间分隔（不因排序丢失）
+            self.assertIn("//---static---", code_text)
+            self.assertIn("//---INSIDE FUNCTION---", code_text)
+            # 排序后 alpha 应在 compare 之前（字母序）
+            alpha_pos = text.index("FooString::alpha()")
+            compare_pos = text.index("FooString::compare(const")
+            self.assertLess(alpha_pos, compare_pos)
+            # 不应出现双分隔线（连续两条 //---...）
+            lines = text.splitlines()
+            for i in range(len(lines) - 1):
+                if lines[i].startswith("//---") and lines[i + 1].startswith("//---"):
+                    self.fail(
+                        f"double separator at line {i}: {lines[i]!r} / {lines[i+1]!r}"
+                    )
+            # 幂等性：二次运行无变更
+            self.assertFalse(reorder_cpp_file(path, dry_run=True))
+
+    def test_internal_calls_not_extracted(self) -> None:
+        """函数体内的 ClassName::method() 调用不应被提取为独立函数块。"""
+        src = (_FIXTURE_DIR / "internal_calls.cpp").read_text(encoding="utf-8")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "internal_calls.cpp"
+            path.write_text(src, encoding="utf-8")
+            reorder_cpp_file(path, dry_run=False)
+            text = path.read_text(encoding="utf-8")
+            # ctor 体内调用 FooString::init(nullptr) + void FooString::init(…) 定义 = 共 2 处
+            # 如果 init 被错误提取为独立块，会出现 3+ 处
+            init_count = text.count("FooString::init")
+            self.assertEqual(
+                init_count, 2,
+                f"expected 2 FooString::init (ctor body call + definition), got {init_count}",
+            )
+            # ctor 体内调用 safeDelete + safeDelete 定义 = 共 2 处
+            safe_delete_count = text.count("FooString::safeDelete")
+            self.assertEqual(
+                safe_delete_count, 2,
+                f"expected 2 FooString::safeDelete, got {safe_delete_count}",
+            )
+            # 三个真实函数定义都应在（函数定义行特征：返回值 + ClassName::name(）
+            self.assertIn("FooString::FooString()", text)
+            self.assertIn("void FooString::init(", text)
+            self.assertIn("void FooString::safeDelete(", text)
+            # 幂等性：二次运行无变更
+            self.assertFalse(reorder_cpp_file(path, dry_run=True))
 
 
 if __name__ == "__main__":

@@ -58,6 +58,8 @@ def format_changed_file_log_line(rel_path: str, *, indent: str = "  ") -> str:
 
 
 SEP_LINE_RE = re.compile(r"^//-+\s*$", re.MULTILINE)
+# 注释分隔线：//---static--- 或 //---INSIDE FUNCTION--- — 应等同 //---... 分隔线
+ANNOTATION_SEP_RE = re.compile(r"^//-{2,}\s*[A-Za-z].*-{2,}\s*$")
 ACCESS_RE = re.compile(
     r"^(\s*)((?:public|private|protected)(?:\s+slots)?|signals)[ \t]*:[ \t]*(?://[^\r\n]*)?\s*$",
     re.MULTILINE,
@@ -223,6 +225,8 @@ def _clean_block_text(text: str) -> str:
     text = re.sub(r"\}(//-+\s*)$", "}\n", text.rstrip("\r\n"))
     text = re.sub(r"^(//-+\s*\n)+", "", text)
     text = re.sub(r"(//-+\s*\n)+$", "", text.rstrip("\r\n"))
+    # 兜底：清除可能残留的注释分隔线（//---static---... / //---INSIDE FUNCTION---...）
+    text = re.sub(r"^(//-{2,}\s*[A-Za-z].*-{2,}\s*\n)+", "", text)
     if not text:
         return ""
     if not text.endswith("\n"):
@@ -473,6 +477,13 @@ def _walk_back_block_start(
                 continue
             break
 
+        # 注释分隔线（//---static--- 等）等效于纯破折号分隔线，纳入 sep 并继续向上
+        if ANNOTATION_SEP_RE.match(stripped):
+            if not sep:
+                sep = _normalize_sep_line(stripped)
+            pos = line_start
+            continue
+
         if stripped.startswith("//"):
             block_start = line_start
             pos = line_start
@@ -503,11 +514,18 @@ def _scan_cpp_blocks(body: str, class_name: str) -> List[Tuple[str, str, str]]:
     for m in pat.finditer(body):
         if not _is_cpp_code_position(body, m.start()):
             continue
+        # 跳过已处理函数体内的内部调用（如 copy() 内调用 safeDelete()）
+        if m.start() < prev_end:
+            continue
         impl_name = m.group(1)
         func_line_start = body.rfind("\n", 0, m.start()) + 1
         block_start, sep = _walk_back_block_start(body, func_line_start, prev_end, class_name)
         func_end = _find_function_body_end(body, m.start())
         text = _clean_block_text(body[block_start:func_end])
+        # 过滤非定义匹配（孤儿调用 / 声明）；真正 .cpp 函数定义必含 {
+        if "{" not in text and "= delete" not in text and "= default" not in text:
+            prev_end = func_end  # 仍需推进 prev_end 避免后续重复命中
+            continue
         blocks.append((impl_name, text, sep))
         prev_end = func_end
 
