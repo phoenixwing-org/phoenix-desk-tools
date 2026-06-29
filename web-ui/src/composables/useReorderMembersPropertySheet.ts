@@ -46,7 +46,8 @@ export function useReorderMembersPropertySheet(
         }),
         propReadonly("workset_path_count", "工作集文件数", {
           value: computed(() => {
-            const n = worksetStore.activeWorkset?.paths.length ?? 0;
+            const ws = worksetStore.activeWorkset;
+            const n = (ws?.entries ?? ws?.paths)?.length ?? 0;
             return n ? String(n) : "—";
           }),
         }),

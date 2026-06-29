@@ -106,6 +106,7 @@ const pathsFromSelectedHits = computed(() => {
 const pathsFromAllHits = computed(() => [...new Set(hits.value.map((h) => h.repo_rel_path).filter(Boolean))]);
 
 const activeWorksetLabel = computed(() => worksetStore.activeWorkset?.name ?? "当前工作集");
+const wsPathCount = computed(() => (worksetStore.activeWorkset?.entries ?? worksetStore.activeWorkset?.paths)?.length ?? 0);
 
 function formatNormDisplay(norm: string): string {
   const s = norm.replace(/[^0-9a-fA-F]/g, "").toLowerCase();
@@ -185,7 +186,8 @@ async function onScan() {
 
 async function scanFromActiveWorkset() {
   const ws = worksetStore.activeWorkset;
-  if (!ws?.paths.length) {
+  const wsPaths = (ws?.entries ?? ws?.paths ?? []).map((e: any) => (typeof e === "string" ? e : e.path));
+  if (!wsPaths.length) {
     shell.setStatus("侧栏当前工作集为空，请先加入文件");
     await shell.openWorksetSidebar();
     return;
@@ -293,10 +295,10 @@ function thClass(key: string) {
           <el-button
             size="small"
             :loading="scanning"
-            :disabled="!worksetStore.activeWorkset?.paths.length"
+            :disabled="!wsPathCount"
             :title="
-              worksetStore.activeWorkset?.paths.length
-                ? `仅扫描侧栏「${activeWorksetLabel}」内 ${worksetStore.activeWorkset.paths.length} 个文件`
+              wsPathCount
+                ? `仅扫描侧栏「${activeWorksetLabel}」内 ${wsPathCount} 个文件`
                 : '侧栏当前工作集为空'
             "
             @click="scanFromActiveWorkset"

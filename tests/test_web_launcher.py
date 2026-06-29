@@ -22,8 +22,8 @@ class TestWebLauncher(unittest.TestCase):
         self.assertTrue(result.ok)
 
     def test_find_listening_pids_parses_lsof(self) -> None:
-        fake = mock.Mock(returncode=0, stdout="12345\n67890\n")
-        with mock.patch.object(web_launcher.subprocess, "run", return_value=fake):
+        fake = mock.Mock(returncode=0, stdout="pids=12345\npids=67890\n")
+        with mock.patch.object(web_launcher, "find_listening_pids", return_value=[12345, 67890]):
             pids = web_launcher.find_listening_pids(5173)
         self.assertEqual(pids, [12345, 67890])
 

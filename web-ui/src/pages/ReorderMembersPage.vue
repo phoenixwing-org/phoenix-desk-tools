@@ -83,7 +83,12 @@ const pagedChangedFiles = computed(() => {
   return changedFileRows.value.slice(start, start + CHANGED_PAGE_SIZE);
 });
 
-const activeWorksetPathCount = computed(() => worksetStore.activeWorkset?.paths.length ?? 0);
+const activeWorksetPathCount = computed(() => {
+  const ws = worksetStore.activeWorkset;
+  if (!ws) return 0;
+  const list = ws.entries ?? ws.paths;
+  return list?.length ?? 0;
+});
 const canSelectFromWorkset = computed(
   () => activeWorksetPathCount.value > 0 && entries.value.length > 0 && !loading.value,
 );
@@ -257,12 +262,13 @@ function toggleAll(checked: boolean) {
 
 function selectFromWorkset() {
   const ws = worksetStore.activeWorkset;
-  if (!ws?.paths.length) {
+  const wsPaths = (ws?.entries ?? ws?.paths ?? []).map((e: any) => (typeof e === "string" ? e : e.path));
+  if (!wsPaths.length) {
     shell.setStatus("侧栏活动工作集为空，请先在索引/树中归集文件");
     return;
   }
   const derived = deriveReorderTopLevelFromWorkset(
-    ws.paths,
+    wsPaths,
     entries.value.map((e) => e.name),
   );
   if (!derived.length) {
