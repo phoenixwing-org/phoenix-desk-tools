@@ -5,6 +5,7 @@ import {
   saveFileWorksets,
   type FileWorkset,
   type FileWorksetPayload,
+  type WorksetEntry,
 } from "../api";
 
 const UI_STORAGE_KEY = "phoenix-file-worksets-ui-v1";
@@ -104,16 +105,28 @@ function newWorksetId(): string {
   return `ws-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function mergePaths(existing: string[], incoming: string[]): { merged: string[]; added: number } {
-  const set = new Set(existing.map((p) => p.replace(/\\/g, "/")));
+function worksetEntries(ws: FileWorkset): WorksetEntry[] {
+  if (ws.entries?.length) return ws.entries;
+  // 旧格式兼容：paths → entries(type="file")
+  return (ws.paths || []).map((p) => ({ path: p, type: "file" as const }));
+}
+
+function mergeEntries(
+  existing: WorksetEntry[],
+  incoming: (string | WorksetEntry)[],
+): { merged: WorksetEntry[]; added: number } {
+  const seen = new Set(existing.map((e) => e.path));
   let added = 0;
   for (const raw of incoming) {
-    const p = raw.trim().replace(/\\/g, "/").replace(/^\.\//, "");
-    if (!p || p.includes("..") || set.has(p)) continue;
-    set.add(p);
+    const p = (typeof raw === "string" ? raw : raw.path).trim().replace(/\\/g, "/").replace(/^\.\//, "");
+    const t = (typeof raw === "string" ? "file" : raw.type || "file") as WorksetEntry["type"];
+    if (!p || p.includes("..") || seen.has(p)) continue;
+    seen.add(p);
+    existing.push({ path: p, type: t });
     added += 1;
   }
-  return { merged: [...set].sort(), added };
+  existing.sort((a, b) => a.path.localeCompare(b.path));
+  return { merged: existing, added };
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -140,7 +153,7 @@ export const useFileWorksetsStore = defineStore("fileWorksets", {
       return state.worksets.map((w) => ({
         id: w.id,
         label: w.name,
-        count: w.paths.length,
+        count: worksetEntries(w).length,
       }));
     },
   },
@@ -276,7 +289,7 @@ export const useFileWorksetsStore = defineStore("fileWorksets", {
       const ws: FileWorkset = {
         id: newWorksetId(),
         name,
-        paths: [],
+        entries: [],
         source: "",
         updated_at: new Date().toISOString(),
       };
@@ -292,7 +305,7 @@ export const useFileWorksetsStore = defineStore("fileWorksets", {
       const ws: FileWorkset = {
         id: newWorksetId(),
         name: n,
-        paths: [],
+        entries: [],
         source: "",
         updated_at: new Date().toISOString(),
       };
@@ -332,7 +345,7 @@ export const useFileWorksetsStore = defineStore("fileWorksets", {
         w.id === worksetId
           ? {
               ...w,
-              paths: w.paths.filter((p) => p !== norm),
+              entries: worksetEntries(w).filter((e) => e.path !== norm),
               updated_at: new Date().toISOString(),
             }
           : w,
@@ -340,9 +353,9 @@ export const useFileWorksetsStore = defineStore("fileWorksets", {
       this.scheduleSave();
     },
 
-    addPathsToWorkset(
+    addEntriesToWorkset(
       worksetId: string | null,
-      paths: string[],
+      entries: (string | WorksetEntry)[],
       source?: string,
     ): { workset: FileWorkset; added: number } {
       const targetId = worksetId ?? this.activeId;
@@ -350,12 +363,12 @@ export const useFileWorksetsStore = defineStore("fileWorksets", {
       if (!ws) {
         ws = this.ensureActiveWorkset();
       }
-      const { merged, added } = mergePaths(ws.paths, paths);
+      const { merged, added } = mergeEntries([...worksetEntries(ws)], entries);
       this.worksets = this.worksets.map((w) =>
         w.id === ws!.id
           ? {
               ...w,
-              paths: merged,
+              entries: merged,
               source: source ?? w.source,
               updated_at: new Date().toISOString(),
             }
@@ -365,14 +378,15 @@ export const useFileWorksetsStore = defineStore("fileWorksets", {
       this.persistUiPrefs();
       this.scheduleSave();
       const updated = this.worksetById(ws.id)!;
+      const entryCount = worksetEntries(updated).length;
       this.lastMessage = added
-        ? `已加入「${updated.name}」+${added}（共 ${updated.paths.length}）`
-        : `「${updated.name}」无新增（共 ${updated.paths.length}）`;
+        ? `已加入「${updated.name}」+${added}（共 ${entryCount}）`
+        : `「${updated.name}」无新增（共 ${entryCount}）`;
       return { workset: updated, added };
     },
 
     addPathsToActive(paths: string[], source?: string) {
-      return this.addPathsToWorkset(this.activeId, paths, source);
+      return this.addEntriesToWorkset(this.activeId, paths, source);
     },
   },
 });

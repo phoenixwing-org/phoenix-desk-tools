@@ -20,6 +20,7 @@ import {
 } from "../api";
 import PageHeader from "../components/PageHeader.vue";
 import { useUnitTestsPropertySheet } from "../composables/useUnitTestsPropertySheet";
+import { useAsyncProgress } from "../composables/useAsyncProgress";
 import { promptChoice } from "../composables/choiceDialog";
 import { useAppShell } from "../composables/useAppShell";
 import {
@@ -67,29 +68,13 @@ const STATUS_FILTER_OPTIONS = [
 
 const suites = ref<UnitTestSuiteInfo[]>([]);
 const running = ref(false);
+const testProgressUI = useAsyncProgress("unit-test");
 const loadError = ref("");
 const result = ref<UnitTestRunResult | null>(null);
 const lastRunSuites = ref<string[]>([]);
 const resultSuiteChecked = ref<Set<string>>(new Set());
 const resultStatusChecked = ref<Set<string>>(new Set(["passed", "failed", "error", "skipped"]));
 const expandedCase = ref<string | null>(null);
-const runProgress = ref<{
-  suiteLabel: string;
-  totalModules: number;
-  totalCases: number;
-  completedCases: number;
-  moduleIndex: number;
-  moduleTotal: number;
-  currentModule: string;
-  currentSuiteId: string;
-  currentCase: string;
-  passed: number;
-  failed: number;
-  skipped: number;
-  recentCases: UnitTestCaseResult[];
-  startedAt: number;
-} | null>(null);
-const runTick = ref(0);
 const moduleCatalog = ref<Record<string, TestModuleCatalogEntry>>({});
 const caseCatalog = ref<Record<string, TestCaseCatalogEntry>>({});
 const watchlist = ref<UnitTestWatchlistEntry[]>(loadWatchlist());
@@ -97,7 +82,6 @@ const filterWatchlistOnly = ref(false);
 const filterReTestedOnly = ref(false);
 const lastReTestedCaseIds = ref<Set<string>>(new Set());
 const lastIgnoredCount = ref(0);
-const runProgressIgnored = ref(0);
 const runScopeCollapsed = ref(false);
 const rerunningWatchlistId = ref<string | null>(null);
 const rerunningModule = ref<string | null>(null);
@@ -205,32 +189,6 @@ const canRunFull = computed(() => {
     return runScopeModuleCheckedCount.value > 0;
   }
   return true;
-});
-
-const runProgressPct = computed(() => {
-  const p = runProgress.value;
-  if (!p || !p.totalCases) return 0;
-  return Math.round((p.completedCases / p.totalCases) * 100);
-});
-
-const runElapsedMs = computed(() => {
-  runTick.value;
-  const p = runProgress.value;
-  if (!p) return 0;
-  return Date.now() - p.startedAt;
-});
-
-const runProgressHeadline = computed(() => {
-  const p = runProgress.value;
-  if (!p) return "";
-  const suite = suiteLabelById.value.get(p.currentSuiteId) ?? p.currentSuiteId;
-  if (p.currentCase) {
-    return `${suite} · ${shortModule(p.currentModule)} · ${p.currentCase}`;
-  }
-  if (p.currentModule) {
-    return `${suite} · ${shortModule(p.currentModule)}`;
-  }
-  return p.suiteLabel;
 });
 
 const passRate = computed(() => {
@@ -462,12 +420,18 @@ function formatRunSummary(r: UnitTestRunResult): string {
 }
 
 function cancelRun() {
-  if (!running.value || !currentRunId.value) return;
+  if (!running.value) return;
   shell.appendLog("[单元测试] 请求终止…（当前用例结束后停止）", { source: "unit_tests" });
   shell.setStatus("正在终止…");
-  void cancelUnitTestRun(currentRunId.value).catch((e) => {
-    shell.setStatus(String(e));
-  });
+  if (currentRunId.value) {
+    void cancelUnitTestRun(currentRunId.value).catch((e) => {
+      shell.setStatus(String(e));
+    });
+  }
+  // 同时 abort stream
+  if (runAbortController) {
+    runAbortController.abort();
+  }
 }
 
 function onWatchlistRunOnFullChange(entry: UnitTestWatchlistEntry, checked: boolean) {
@@ -674,82 +638,6 @@ async function loadRunPlan() {
   }
 }
 
-function handleRunStreamEvent(event: UnitTestStreamEvent) {
-  if (event.type === "start") {
-    currentRunId.value = event.run_id ?? null;
-    runProgressIgnored.value = event.ignored_cases ?? 0;
-    runProgress.value = {
-      suiteLabel: event.suite_label,
-      totalModules: event.total_modules,
-      totalCases: event.total_cases,
-      completedCases: 0,
-      moduleIndex: 0,
-      moduleTotal: event.total_modules,
-      currentModule: "",
-      currentSuiteId: "",
-      currentCase: "",
-      passed: 0,
-      failed: 0,
-      skipped: 0,
-      recentCases: [],
-      startedAt: Date.now(),
-    };
-    if (event.load_errors.length) {
-      for (const err of event.load_errors) {
-        shell.appendLog(`  ✗ 加载 ${err}`, { source: "unit_tests" });
-      }
-    }
-    return;
-  }
-
-  const p = runProgress.value;
-  if (!p) return;
-
-  if (event.type === "module_start") {
-    p.moduleIndex = event.module_index;
-    p.moduleTotal = event.module_total;
-    p.currentModule = event.module;
-    p.currentSuiteId = event.suite_id;
-    p.currentCase = "";
-    const suite = suiteLabelById.value.get(event.suite_id) ?? event.suite_id;
-    shell.appendLog(`  → [${suite}] ${shortModule(event.module)} (${event.module_index}/${event.module_total})`, {
-      source: "unit_tests",
-    });
-    return;
-  }
-
-  if (event.type === "case_start") {
-    p.currentModule = event.module;
-    p.currentSuiteId = event.suite_id;
-    p.currentCase = `${event.class_name}.${event.method}`;
-    return;
-  }
-
-  if (event.type === "case_done") {
-    p.completedCases = event.completed;
-    p.currentCase = "";
-    const c = event.case;
-    if (c.status === "passed") p.passed += 1;
-    else if (c.status === "failed" || c.status === "error") p.failed += 1;
-    else if (c.status === "skipped") p.skipped += 1;
-    p.recentCases = [c, ...p.recentCases].slice(0, 8);
-    syncWatchlistFromCase(c);
-    if (c.status === "failed" || c.status === "error") {
-      shell.appendLog(`  ✗ ${c.method}: ${c.message || c.status}`, { source: "unit_tests" });
-    }
-    return;
-  }
-
-  if (event.type === "module_done") {
-    p.currentCase = "";
-    const s = event.summary;
-    shell.appendLog(
-      `  ✓ ${shortModule(event.module)}：${s.passed}/${s.tests_run} 通过`,
-      { source: "unit_tests" },
-    );
-  }
-}
-
 async function executeRun(args: {
   suiteIds: string[];
   runOptions?: UnitTestRunOptions;
@@ -759,21 +647,37 @@ async function executeRun(args: {
 }) {
   running.value = true;
   result.value = null;
-  runProgress.value = null;
   expandedCase.value = null;
   currentRunId.value = null;
   activeTab.value = "results";
   shell.appendLog(`[单元测试] 运行 ${args.logLabel}…`, { source: "unit_tests", open: true });
   runAbortController = new AbortController();
-  const tickTimer = window.setInterval(() => {
-    runTick.value += 1;
-  }, 500);
   let cancelled = false;
   try {
-    result.value = await runUnitTestsStream(args.suiteIds, handleRunStreamEvent, {
-      ...args.runOptions,
-      signal: runAbortController.signal,
-    });
+    // 进度统一走 AsyncProgressOverlay（新架构），仅保留 watchlist/结果同步
+    result.value = (await testProgressUI.startStreaming(
+      (onEvent) =>
+        runUnitTestsStream(args.suiteIds, (event) => {
+          // 副作用：watchlist 同步 + 运行 id 捕获
+          if (event.type === "start") {
+            currentRunId.value = event.run_id ?? null;
+            if (event.load_errors.length) {
+              for (const err of event.load_errors) {
+                shell.appendLog(`  ✗ 加载 ${err}`, { source: "unit_tests" });
+              }
+            }
+          }
+          if (event.type === "case_done") {
+            syncWatchlistFromCase(event.case);
+          }
+          onEvent(event); // → overlay 处理全部进度展示
+        }, {
+          ...args.runOptions,
+          signal: runAbortController.signal,
+        }),
+      (runId) => cancelUnitTestRun(runId),
+      { taskName: "单元测试" },
+    )) ?? null as unknown as UnitTestRunResult;
     cancelled = !!result.value.summary.cancelled;
     recordRunHistoryFromResult(result.value);
     lastRunSuites.value = args.lastRunSuiteIds ?? [...runChecked.value];
@@ -812,11 +716,9 @@ async function executeRun(args: {
       shell.setStatus(msg);
     }
   } finally {
-    window.clearInterval(tickTimer);
     runAbortController = null;
     currentRunId.value = null;
     running.value = false;
-    runProgress.value = null;
   }
 }
 
@@ -834,14 +736,21 @@ async function onRun(mode: RunMode = "full") {
     shell.setStatus("失败关注列表为空");
     return;
   }
+  if (mode === "watchlist" && !watchlistCheckedCount.value) {
+    shell.setStatus("请至少勾选一条用例后再复测");
+    return;
+  }
 
   let runOptions: UnitTestRunOptions | undefined;
   let suiteIds = ids;
   let logLabel: string;
   if (mode === "watchlist") {
-    runOptions = { include_cases: includeCaseIdsForWatchlistRun(watchlist.value) };
+    const targetIds = watchlistCheckedCount.value
+      ? [...watchlistChecked.value]
+      : watchlist.value.map((e) => e.id);
+    runOptions = { include_cases: targetIds };
     suiteIds = ids.length ? ids : ["all"];
-    logLabel = `全部复测 ${watchlist.value.length} 条`;
+    logLabel = `全部复测 ${targetIds.length} 条`;
   } else {
     runOptions = mergeRunOptions();
     const modCount = runScopeModuleCheckedCount.value;
@@ -1153,41 +1062,7 @@ onMounted(() => {
           </el-table-column>
         </el-table>
       </div>
-      <div v-if="running && runProgress" class="run-progress">
-        <div class="run-progress-head">
-          <span class="run-progress-title">{{ runProgressHeadline }}</span>
-          <span class="run-progress-stats">
-            {{ runProgress.completedCases }}/{{ runProgress.totalCases || "?" }}
-            · {{ runElapsedMs }} ms
-          </span>
-          <el-button type="danger" plain size="small" @click="cancelRun">终止</el-button>
-        </div>
-        <div class="progress-bar run-progress-bar">
-          <div
-            class="progress-pass"
-            :style="{ width: `${runProgressPct}%` }"
-          />
-        </div>
-        <div class="run-progress-meta">
-          <span>模块 {{ runProgress.moduleIndex }}/{{ runProgress.moduleTotal }}</span>
-          <span>通过 {{ runProgress.passed }}</span>
-          <span v-if="runProgress.failed">失败 {{ runProgress.failed }}</span>
-          <span v-if="runProgress.skipped">跳过 {{ runProgress.skipped }}</span>
-          <span v-if="runProgressIgnored">忽略 {{ runProgressIgnored }}</span>
-        </div>
-        <ul v-if="runProgress.recentCases.length" class="run-progress-recent">
-          <li
-            v-for="c in runProgress.recentCases"
-            :key="c.id"
-            :class="statusClass(c.status)"
-          >
-            <span class="case-status">{{ statusLabel(c.status) }}</span>
-            <span class="case-name">{{ c.method }}</span>
-            <span class="case-ms">{{ c.duration_ms }} ms</span>
-          </li>
-        </ul>
-      </div>
-      <p v-else-if="watchlistSkipCount || result" class="run-foot">
+      <p v-if="watchlistSkipCount || result" class="run-foot">
         <span v-if="watchlistSkipCount && !running" class="run-foot-hint">
           全量时将忽略 {{ watchlistSkipCount }} 条关注项
         </span>
@@ -1682,73 +1557,6 @@ onMounted(() => {
   content: none;
 }
 
-.run-progress {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
-}
-
-.run-progress-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 6px;
-}
-
-.run-progress-title {
-  flex: 1;
-  min-width: 0;
-  font-size: 0.78rem;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.run-progress-stats {
-  flex-shrink: 0;
-  font-size: 0.72rem;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.run-progress-bar {
-  height: 6px;
-  margin-bottom: 6px;
-}
-
-.run-progress-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  font-size: 0.72rem;
-  color: var(--muted);
-}
-
-.run-progress-recent {
-  list-style: none;
-  margin: 6px 0 0;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  max-height: 140px;
-  overflow-y: auto;
-}
-
-.run-progress-recent li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
-  border-top: 1px solid var(--border);
-  font-size: 0.72rem;
-}
-
-.run-progress-recent li:first-child {
-  border-top: none;
-}
-
 .run-meta {
   font-size: 0.72rem;
   color: var(--muted);
@@ -1767,11 +1575,6 @@ onMounted(() => {
 
 .btn-cancel:hover {
   background: #fee2e2;
-}
-
-.run-progress-head .btn-cancel {
-  flex-shrink: 0;
-  align-self: center;
 }
 
 .compact-hint {

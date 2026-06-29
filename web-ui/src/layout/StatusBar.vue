@@ -8,14 +8,9 @@ const shell = useAppShell();
 const line = computed(() => {
   const parts: string[] = [];
   const nav = shell.currentNavItem.value;
-  parts.push(`当前: ${nav?.label ?? shell.currentPage.value}`);
-  parts.push(`工作空间: ${shell.workspacePath.value || "—"}`);
-  const fc = shell.launcher.value?.freecad_dir;
-  if (fc) parts.push(`FreeCAD: ${fc}`);
-  if (shell.pageSummary.value) parts.push(shell.pageSummary.value);
-  if (shell.navHover.value) parts.push(`（${shell.navHover.value}）`);
+  parts.push(`【${nav?.label ?? shell.currentPage.value}】`);
   if (shell.statusText.value) parts.push(shell.statusText.value);
-  return parts.join("  |  ");
+  return parts.join("  ·  ") || "phoenix-desk-tools";
 });
 </script>
 

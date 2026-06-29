@@ -18,12 +18,21 @@ const activeIdSelect = computed({
   set: (id: string) => onSelectWorkset(id),
 });
 
-const filteredPaths = computed(() => {
-  const paths = active.value?.paths ?? [];
+function _activePaths(ws: typeof active.value): string[] {
+  if (!ws) return [];
+  return (ws.entries ?? ws.paths ?? []).map((e: any) => (typeof e === "string" ? e : e.path));
+}
+
+const activeEntryCount = computed(() => _activePaths(active.value).length);
+
+const filteredEntries = computed(() => {
+  const entries = active.value?.entries ?? (active.value?.paths ?? []).map((p: string) => ({ path: p, type: "file" as const }));
   const q = pathFilter.value.trim().toLowerCase();
-  if (!q) return paths;
-  return paths.filter((p) => p.toLowerCase().includes(q));
+  if (!q) return entries;
+  return entries.filter((e: any) => e.path.toLowerCase().includes(q));
 });
+const dirCount = computed(() => (active.value?.entries ?? []).filter((e: any) => e.type === "dir").length);
+const fileCount = computed(() => (active.value?.entries ?? []).filter((e: any) => e.type === "file").length);
 
 watch(
   () => shell.workspacePath.value,
@@ -53,7 +62,8 @@ function onRename() {
 async function onDelete() {
   if (!active.value) return;
   const ws = active.value;
-  const pathHint = ws.paths.length ? `（含 ${ws.paths.length} 个文件路径）` : "";
+  const cnt = _activePaths(ws).length;
+  const pathHint = cnt ? `（含 ${cnt} 个条目）` : "";
   const choice = await promptChoice({
     title: "删除工作集",
     defaultChoiceId: "cancel",
@@ -73,7 +83,7 @@ function onRemovePath(path: string) {
 }
 
 async function onPruneMissing() {
-  if (!active.value?.paths.length) return;
+  if (!activeEntryCount.value) return;
   pruning.value = true;
   try {
     const removed = await store.pruneMissing(active.value.id);
@@ -125,13 +135,13 @@ function pathHasDir(rel: string): boolean {
 
     <div v-if="active" class="ws-body">
       <div class="summary-row">
-        <span class="summary">{{ active.paths.length }} 个文件</span>
+        <span class="summary">{{ activeEntryCount }} 个条目 · 📁{{ dirCount }} 📄{{ fileCount }}</span>
         <el-button
           size="small"
           link
           type="primary"
           :loading="pruning"
-          :disabled="!active.paths.length || store.saving"
+          :disabled="!activeEntryCount || store.saving"
           title="移除磁盘上已不存在的路径"
           @click="onPruneMissing"
         >
@@ -146,21 +156,22 @@ function pathHasDir(rel: string): boolean {
           placeholder="筛选路径…"
         />
       </div>
-      <ul v-if="filteredPaths.length" class="path-list">
-        <li v-for="p in filteredPaths" :key="p" class="path-item">
-          <button type="button" class="path-link" :title="p" @click="openFile(p)">
-            <span class="path-file mono">{{ basenameFromRel(p) }}</span>
-            <template v-if="pathHasDir(p)">
+      <ul v-if="filteredEntries.length" class="path-list">
+        <li v-for="e in filteredEntries" :key="e.path" class="path-item" :class="{ 'is-dir': e.type === 'dir' }">
+          <span class="entry-type-icon">{{ e.type === 'dir' ? '📁' : '📄' }}</span>
+          <button type="button" class="path-link" :title="e.path" @click="e.type === 'file' ? openFile(e.path) : undefined">
+            <span class="path-file mono">{{ basenameFromRel(e.path) }}</span>
+            <template v-if="e.type === 'file' && pathHasDir(e.path)">
               <span class="path-at">@</span>
-              <span class="path-dir mono">{{ pathDir(p) }}</span>
+              <span class="path-dir mono">{{ pathDir(e.path) }}</span>
             </template>
           </button>
-          <el-button size="small" link type="danger" class="path-remove" title="移出工作集" @click="onRemovePath(p)">
+          <el-button size="small" link type="danger" class="path-remove" title="移出工作集" @click="onRemovePath(e.path)">
             ×
           </el-button>
         </li>
       </ul>
-      <el-empty v-else :image-size="48" :description="active.paths.length ? '无匹配路径' : '从 Code 索引或工作空间树加入文件'" />
+      <el-empty v-else :image-size="48" :description="activeEntryCount ? '无匹配条目' : '从工作空间树 pick 目录或添加文件'" />
     </div>
     <el-empty
       v-else-if="!store.loading"
@@ -259,6 +270,17 @@ function pathHasDir(rel: string): boolean {
   gap: 4px;
   padding: 2px 0;
   border-bottom: 1px solid var(--border);
+}
+
+.path-item.is-dir {
+  background: #f8fafc;
+}
+
+.entry-type-icon {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  width: 16px;
+  text-align: center;
 }
 
 .path-link {

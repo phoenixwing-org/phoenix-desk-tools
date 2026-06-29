@@ -40,6 +40,7 @@ const props = withDefaults(
     showLog?: boolean;
     showProps?: boolean;
     showGitCommit?: boolean;
+    showWorksetBlock?: boolean;
   }>(),
   {
     dockSide: "right",
@@ -53,6 +54,7 @@ const props = withDefaults(
 
 const shell = useAppShell();
 const worksetStore = useFileWorksetsStore();
+const worksetBlockMode = computed(() => props.showWorksetBlock ?? false);
 const { hasProperties } = usePagePropertiesHost();
 const sidebarRef = ref<HTMLElement | null>(null);
 const sidebarHeight = ref(0);
@@ -68,6 +70,7 @@ const tree = ref<TreeNode | null>(null);
 const fileCount = ref(0);
 const selectedRel = ref<string | null>(null);
 const treeFilterQuery = ref("");
+const dirOnlyFilter = ref(false);
 const loading = ref(false);
 
 const filterProfile = computed(() =>
@@ -94,11 +97,22 @@ const sidebarTab = computed({
   },
 });
 
+function keepDirsOnly(node: TreeNode): TreeNode | null {
+  if (node.type !== "dir") return null;
+  const children = (node.children || []).map(keepDirsOnly).filter(Boolean) as TreeNode[];
+  return { ...node, children };
+}
+
 const displayTree = computed((): TreeNode | null => {
-  if (!tree.value) return null;
+  let t = tree.value;
+  if (!t) return null;
+  if (dirOnlyFilter.value) {
+    t = keepDirsOnly(t);
+    if (!t) return null;
+  }
   const q = treeFilterQuery.value.trim();
-  if (!q) return tree.value;
-  return filterTreeNode(tree.value, q);
+  if (!q) return t;
+  return filterTreeNode(t, q);
 });
 
 const displayFileCount = computed(() => {
@@ -259,6 +273,14 @@ function onAddVisibleToWorkset() {
   const { added } = worksetStore.addPathsToActive(paths, "tree:visible");
   shell.setStatus(worksetStore.lastMessage);
   if (added > 0) sidebarTab.value = "workset";
+}
+
+function onPickDir(rel: string) {
+  shell.dispatchDirPick(rel);
+  const name = rel.replace(/\/+$/, "").split("/").filter(Boolean).pop() || rel || "?";
+  const { added } = worksetStore.addEntriesToWorkset(null, [{ path: rel, type: "dir" }], "tree:pick");
+  const msg = added > 0 ? `📌 【${name}】已添加到工作集` : `📌 【${name}】已在工作集中`;
+  shell.setStatus(msg);
 }
 
 function onPropsResizeStart(e: PointerEvent) {
@@ -436,6 +458,12 @@ onUnmounted(() => {
           工作集
         </button>
         <button
+          type="button"
+          class="ws-tab ws-tab-icon"
+          title="弹出为独立面板（可和树同时显示）"
+          @click="shell.toggleWorksetPanel()"
+        >⇲</button>
+        <button
           v-if="showCodeFilters"
           type="button"
           role="tab"
@@ -473,6 +501,10 @@ onUnmounted(() => {
                   .h/.hpp
                 </label>
               </template>
+              <label class="chk dir-only-chk">
+                <input v-model="dirOnlyFilter" type="checkbox" />
+                仅目录
+              </label>
             </div>
           </div>
           <div class="ws-search-row">
@@ -508,14 +540,15 @@ onUnmounted(() => {
         </div>
         <div class="ws-tree">
           <div v-if="displayTree" class="ws-tree-scroll">
-            <TreeBranch :node="displayTree" :selected="selectedRel" @select-file="onSelect" />
+            <TreeBranch :node="displayTree" :selected="selectedRel" @select-file="onSelect" @pick-dir="(p) => onPickDir(p)" />
           </div>
           <p v-else-if="tree && treeFilterQuery.trim()" class="muted">无匹配文件</p>
           <p v-else class="muted">{{ loading ? "扫描中…" : "无数据" }}</p>
         </div>
       </div>
 
-      <div v-show="sidebarTab === 'workset'" class="ws-workset-section">
+      <!-- 工作集（Tab 模式） -->
+      <div v-show="!worksetBlockMode && sidebarTab === 'workset'" class="ws-workset-section">
         <FileWorksetPanel />
       </div>
 
@@ -523,6 +556,15 @@ onUnmounted(() => {
         <CodeIgnorePanel layout="sidebar" />
       </div>
     </div>
+
+    <!-- 工作集（Block 模式 — 独立堆叠区块） -->
+    <template v-if="worksetBlockMode">
+      <div class="panel-resizer" title="拖拽调节工作集高度" @pointerdown="onPropsResizeStart" />
+      <div class="ws-props-wrap" :style="{ height: '200px' }">
+        <div class="ws-props-stack-head">工作集</div>
+        <div style="flex:1;overflow:auto;padding:4px"><FileWorksetPanel /></div>
+      </div>
+    </template>
 
     <template v-if="showGitCommitStandalone">
       <div
@@ -749,6 +791,17 @@ onUnmounted(() => {
   font-weight: 600;
   border-bottom-color: var(--accent);
   background: var(--sidebar-bg);
+}
+
+.ws-tab-icon {
+  flex: 0 0 auto;
+  padding: 7px 8px;
+  font-size: 0.78rem;
+  opacity: 0.5;
+}
+
+.ws-tab-icon:hover {
+  opacity: 1;
 }
 
 .ws-ignore-section,

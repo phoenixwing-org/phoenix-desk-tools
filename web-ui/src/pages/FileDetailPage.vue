@@ -238,12 +238,14 @@ async function onTreeSelect(targetRel: string): Promise<boolean> {
 
 function registerTreeHandler() {
   if (!props.workbenchTabId) return;
-  shell.registerTreeSelect(props.workbenchTabId, (path) => onTreeSelect(path));
+  shell.registerPageMessages(props.workbenchTabId, (msg) => {
+    if (msg.type === "tree:select-file") return onTreeSelect(msg.path);
+  });
 }
 
 function unregisterTreeHandler() {
   if (!props.workbenchTabId) return;
-  shell.registerTreeSelect(props.workbenchTabId, null);
+  shell.registerPageMessages(props.workbenchTabId, null);
 }
 
 function applyOpenPayload(): boolean {

@@ -185,11 +185,21 @@ def _pid_alive(pid: int) -> bool:
             return str(pid) in r.stdout
         except OSError:
             return True
+    # macOS / Linux: signal-0 探活 + ps 兜底
     try:
         os.kill(pid, 0)
-    except OSError:
+        return True
+    except Exception:
+        pass
+    # macOS 上某些进程 os.kill(0) 可能抛非 OSError；ps 兜底
+    try:
+        r = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "pid="],
+            capture_output=True, text=True, check=False,
+        )
+        return str(pid) in r.stdout
+    except Exception:
         return False
-    return True
 
 
 def _terminate_pid(pid: int) -> None:
@@ -201,13 +211,22 @@ def _terminate_pid(pid: int) -> None:
         if r.returncode != 0:
             raise RuntimeError(r.stderr.strip() or r.stdout.strip() or f"exit {r.returncode}")
     else:
+        # macOS / Linux：先 os.kill，失败则 fallback 到 /bin/kill
         for sig in (signal.SIGTERM, signal.SIGKILL):
             try:
                 os.kill(pid, sig)
             except ProcessLookupError:
                 return
-            except OSError as exc:
-                raise RuntimeError(f"无法结束进程 {pid}: {exc}") from exc
+            except Exception:
+                # macOS 上 os.kill 有时抛非预期异常，fallback 到系统 kill 命令
+                sig_name = "KILL" if sig == signal.SIGKILL else "TERM"
+                try:
+                    subprocess.run(
+                        ["/bin/kill", f"-{sig_name}", str(pid)],
+                        capture_output=True, check=False,
+                    )
+                except Exception as exc:
+                    raise RuntimeError(f"无法结束进程 {pid}: {exc}") from exc
             time.sleep(0.3)
             if not _pid_alive(pid):
                 return

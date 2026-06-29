@@ -22,12 +22,14 @@ export function useWorkspaceFileQuery(workbenchTabId?: string) {
     handler: (rel: string) => void | boolean | Promise<void | boolean>,
   ) {
     if (!workbenchTabId) return;
-    shell.registerTreeSelect(workbenchTabId, (rel) => handler(rel));
+    shell.registerPageMessages(workbenchTabId, (msg) => {
+      if (msg.type === "tree:select-file") return handler(msg.path);
+    });
   }
 
   function unregisterTreeSelectHandler() {
     if (!workbenchTabId) return;
-    shell.registerTreeSelect(workbenchTabId, null);
+    shell.registerPageMessages(workbenchTabId, null);
   }
 
   return {

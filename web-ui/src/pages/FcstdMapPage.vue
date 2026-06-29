@@ -1,18 +1,23 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import {
+  cancelFcstdMapScan,
   exportFcstdMapJson,
   fetchFcstdMap,
   fetchFcstdMapEntries,
+  fetchFcstdMapScanProgress,
   purgeMissingFcstdMap,
   saveFcstdMapPrefs,
   scanFcstdMap,
+  startFcstdMapScan,
   type FcstdMapEntry,
   type FcstdMapPayload,
 } from "../api";
 import { promptChoice } from "../composables/choiceDialog";
 import { useAppShell } from "../composables/useAppShell";
+import { useAsyncProgress } from "../composables/useAsyncProgress";
 import { useFcstdMapPropertySheet } from "../composables/useFcstdMapPropertySheet";
+import { useFileWorksetsStore } from "../stores/fileWorksets";
 import { useOnboardingStore } from "../stores/onboarding";
 import { usePageSession } from "../composables/usePageSession";
 import { usePageSummary } from "../composables/usePageSummary";
@@ -60,7 +65,11 @@ const KIND_OPTIONS = [
 type KindFilter = (typeof KIND_OPTIONS)[number]["value"];
 
 const activeSubTab = ref<PageSubTab>("index");
+const worksetStore = useFileWorksetsStore();
 const forceUpdatePartName = ref(false);
+const scanWorksetId = ref(localStorage.getItem("fcstd-scan-workset-id") || "");  // 空=全部
+watch(scanWorksetId, (v) => localStorage.setItem("fcstd-scan-workset-id", v || ""));
+const scanScopeDirs = ref<string[]>([]);
 const loading = ref(false);
 const scanning = ref(false);
 const saving = ref(false);
@@ -90,6 +99,8 @@ usePageSummary(pageSummary);
 useFcstdMapPropertySheet("fcstd_map", {
   data,
   forceUpdatePartName,
+  scanWorksetId,
+  worksetName: computed(() => worksetStore.worksetById(scanWorksetId.value)?.name || ""),
   onSaveScanOptions,
 });
 
@@ -187,28 +198,134 @@ async function onSaveScanOptions() {
   }
 }
 
+// 异步扫描 — 委托给 useAsyncProgress
+const scanProgressUI = useAsyncProgress("fcstd-scan");
+
 async function onScan() {
+  if (scanning.value) return; // 已在扫描中，防重复点击
   scanning.value = true;
   const ws = shell.workspacePath.value || "（工作空间）";
-  shell.appendLog(`工程内搜索：工作空间根 ${ws}`, { source: "fcstd_map", open: true });
-  try {
-    const scanned = await scanFcstdMap(forceUpdatePartName.value);
-    data.value = { ...scanned, entries: [] };
-    shell.appendLog(data.value.scan_log ?? "", { source: "fcstd_map" });
-    setStatus(
-      `扫描完成：存在 ${data.value.stats.present} · CAD ${data.value.stats.cad_file_count}`,
-    );
-    activeSubTab.value = "index";
-    pageOffset.value = 0;
-    await loadEntries();
-    await onboarding.refreshStatus();
+  const scopeLabel = scanWorksetId.value ? `工作集「${worksetStore.worksetById(scanWorksetId.value)?.name || "?"}」` : "全部";
+  shell.appendLog(`工程内搜索：${scopeLabel}`, { source: "fcstd_map", open: true });
+
+    try {
+      try {
+        await scanProgressUI.startPolling(
+          () => startFcstdMapScan(forceUpdatePartName.value, scanWorksetId.value || undefined),
+          (id) => fetchFcstdMapScanProgress(id),
+          (id) => cancelFcstdMapScan(id),
+          { taskName: scanWorksetId.value ? `工程内搜索 · ${worksetStore.worksetById(scanWorksetId.value)?.name || "工作集"}` : "FCStd 工程内搜索", singleton: true },
+        );
+        // startPolling 返回了但没启动新任务 → singleton 拒绝了
+        if (!scanProgressUI.isRunning.value) {
+          scanning.value = false;
+          setStatus("扫描已在运行中，详情见浮层面板");
+          return;
+        }
+      } catch (e: unknown) {
+        if (e && typeof e === "object" && "__conflict" in e) {
+          const ce = e as { __conflict: true; taskId: string; taskName: string; status?: string };
+          const isDone = ce.status === "done" || ce.status === "error" || ce.status === "cancelled";
+          const choice = await promptChoice({
+            title: isDone ? "上次任务已完成" : "上次扫描未完成",
+            defaultChoiceId: "view",
+            message: isDone
+              ? `上次「${ce.taskName}」已完成，可以查看结果或开始新搜索。`
+              : `检测到上次「${ce.taskName}」未完成。BOM 缓存已保留，继续扫描会跳过已读取的文件。`,
+            choices: isDone
+              ? [
+                  { id: "view", label: "查看上次结果", variant: "primary" },
+                  { id: "new", label: "新搜索", variant: "default" },
+                ]
+              : [
+                  { id: "cancel", label: "取消", variant: "default" },
+                  { id: "continue", label: "继续上次扫描", variant: "primary" },
+                  { id: "restart", label: "放弃缓存，重新开始", variant: "danger" },
+                ],
+          });
+          if (isDone) {
+            if (!choice.choiceId) {
+              // X 关闭 → 不操作
+              scanning.value = false;
+              return;
+            }
+            if (choice.choiceId === "view") {
+              // 展开浮层让用户查看
+              scanProgressUI.store.setFullscreen(true);
+            } else {
+              // 新搜索 → 确认旧任务 + 启动新扫描
+              scanProgressUI.store.confirmTask(ce.taskId);
+            }
+            scanning.value = false;
+            if (choice.choiceId !== "view") await onScan();
+            return;
+          }
+          // orphaned 逻辑不变
+          if (!choice.choiceId || choice.choiceId === "cancel") {
+            scanning.value = false;
+            return;
+          }
+          scanProgressUI.store.removeTask(ce.taskId);
+          scanning.value = false;
+          await onScan();
+          return;
+        }
+        throw e; // 非冲突异常 → 外层 catch 处理
+      }
+
+    // 轮询结束 → 检查结果
+    const finalState = scanProgressUI.state.value;
+    if (finalState?.status === "done") {
+      const result = await fetchFcstdMap();
+      data.value = { ...result, entries: [] };
+      shell.appendLog(
+        `扫描完成：CAD ${result.stats.cad_file_count} · FCStd ${result.stats.fcstd_count ?? result.stats.present}`,
+        { source: "fcstd_map" },
+      );
+      setStatus(
+        `扫描完成：存在 ${result.stats.present} · CAD ${result.stats.cad_file_count}`,
+      );
+      activeSubTab.value = "index";
+      pageOffset.value = 0;
+      await loadEntries();
+      await onboarding.refreshStatus();
+    } else if (finalState?.status === "error") {
+      shell.appendLog(`[CAD 索引] 扫描出错: ${finalState.error}`, { source: "fcstd_map" });
+      setStatus(finalState.error || "扫描出错");
+      await promptChoice({
+        title: "扫描出错",
+        defaultChoiceId: "ok",
+        message: finalState.error || "扫描过程中发生未知错误",
+        choices: [{ id: "ok", label: "确认", variant: "primary" }],
+      });
+    } else if (finalState?.status === "cancelled") {
+      shell.appendLog("[CAD 索引] 扫描已取消", { source: "fcstd_map" });
+      setStatus("扫描已取消");
+    }
   } catch (e) {
-    shell.appendLog(String(e), { source: "fcstd_map" });
-    setStatus(String(e));
+    const msg = String(e);
+    shell.appendLog(msg, { source: "fcstd_map" });
+    setStatus(msg);
+    await promptChoice({
+      title: "扫描失败",
+      defaultChoiceId: "ok",
+      message: msg || "扫描请求失败，请检查后端是否正常运行",
+      choices: [{ id: "ok", label: "确认", variant: "primary" }],
+    });
   } finally {
     scanning.value = false;
   }
 }
+
+async function onCancelScan() {
+  await scanProgressUI.cancel();
+  scanning.value = false;
+  setStatus("扫描已取消");
+}
+
+onMounted(async () => {
+  await scanProgressUI.resume();
+});
 
 async function onExportJson() {
   exporting.value = true;
@@ -403,7 +520,22 @@ watch([forceUpdatePartName, statusFilter, kindFilter, searchQuery, pageOffset, p
 watch([statusFilter, kindFilter], () => scheduleEntriesReload(true));
 watch(searchQuery, () => scheduleEntriesReload(true));
 
-onMounted(() => applyInitialTabState());
+onMounted(() => {
+  applyInitialTabState();
+  // 注册页面消息：从工作空间树 pick 的目录加入扫描范围列表
+  shell.registerPageMessages("fcstd_map", (msg) => {
+    if (msg.type === "tree:pick-dir") {
+      if (!scanScopeDirs.value.includes(msg.path)) {
+        scanScopeDirs.value = [...scanScopeDirs.value, msg.path];
+        shell.toast(`已添加扫描目录: ${msg.path.split("/").filter(Boolean).pop() || msg.path}`, "success");
+      }
+      return true;
+    }
+  });
+});
+onUnmounted(() => {
+  shell.registerPageMessages("fcstd_map", null);
+});
 </script>
 
 <template>
@@ -411,7 +543,20 @@ onMounted(() => applyInitialTabState());
     <PageHeader title="CAD 索引" page-id="fcstd_map">
       <template #actions>
         <div data-tour-page-fcstd-scan class="head-actions-inner">
+          <el-select v-model="scanWorksetId" size="small" placeholder="全部" clearable style="width:140px" :disabled="scanning">
+            <el-option label="全部" value="" />
+            <el-option v-for="w in worksetStore.worksets" :key="w.id" :label="w.name" :value="w.id" />
+          </el-select>
           <el-button type="primary" size="small" :loading="scanning" @click="onScan">工程内搜索</el-button>
+          <el-button
+            v-if="scanning"
+            size="small"
+            type="danger"
+            plain
+            @click="onCancelScan"
+          >
+            取消
+          </el-button>
           <el-button size="small" :loading="loading" @click="refresh">刷新</el-button>
           <el-button
             size="small"
@@ -427,6 +572,11 @@ onMounted(() => applyInitialTabState());
         </div>
       </template>
     </PageHeader>
+
+    <!-- 扫描状态（详细进度见浮层面板） -->
+    <div v-if="scanning" class="scan-status-bar">
+      <span class="scan-status-text">扫描中… 进度详情见右侧浮层</span>
+    </div>
 
     <el-radio-group v-model="activeSubTab" size="small" class="sub-tabs">
       <el-radio-button value="index">索引列表</el-radio-button>
@@ -928,5 +1078,18 @@ onMounted(() => applyInitialTabState());
 
 code {
   font-size: 0.9em;
+}
+
+/* 扫描状态条（详细进度见浮层面板） */
+.scan-status-bar {
+  margin-bottom: 16px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  background: var(--accent-soft, #ecf5ff);
+}
+
+.scan-status-text {
+  font-size: 0.82rem;
+  color: var(--accent, #409eff);
 }
 </style>

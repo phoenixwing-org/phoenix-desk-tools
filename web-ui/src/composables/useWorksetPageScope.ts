@@ -61,7 +61,8 @@ export function useWorksetPageScope(pageId: string) {
       wsId = store.activeId;
     }
     const ws = store.worksetById(wsId);
-    return buildPathScopeBody(prefs.value, ws?.paths);
+    const entryPaths = (ws?.entries ?? ws?.paths ?? []).map((e: any) => (typeof e === "string" ? e : e.path));
+    return buildPathScopeBody(prefs.value, entryPaths);
   }
 
   return {

@@ -563,6 +563,8 @@ def save_launcher_shell_layout(
     properties_name_col_width_px: int | None = None,
     git_commit_panel_open: bool | None = None,
     git_commit_panel_dock: str | None = None,
+    workset_panel_dock: str | None = None,
+    workset_panel_open: bool | None = None,
 ) -> None:
     """将左侧导航宽窄 / 右栏开合 / 中右分割 sash / 运行日志窗 写入 launcher JSON。"""
     launcher = load_launcher_prefs()
@@ -603,6 +605,10 @@ def save_launcher_shell_layout(
         cur["git_commit_panel_open"] = bool(git_commit_panel_open)
     if git_commit_panel_dock in ("left", "right"):
         cur["git_commit_panel_dock"] = str(git_commit_panel_dock)
+    if workset_panel_dock in ("left", "right"):
+        cur["workset_panel_dock"] = str(workset_panel_dock)
+    if workset_panel_open is not None:
+        cur["workset_panel_open"] = bool(workset_panel_open)
     launcher["shell_layout"] = cur
     save_launcher_prefs(launcher)
 

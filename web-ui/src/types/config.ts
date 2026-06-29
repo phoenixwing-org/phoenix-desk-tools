@@ -65,6 +65,10 @@ export type ShellLayout = {
   properties_panel_dock: SideDock;
   /** 属性表「名称」列宽（px） */
   properties_name_col_width_px: number;
+  /** 工作集独立面板 dock 侧 */
+  workset_panel_dock: SideDock;
+  /** 工作集独立面板是否展开（false=Tab 模式） */
+  workset_panel_open: boolean;
 };
 
 export type RecentWorkspaceEntry = {

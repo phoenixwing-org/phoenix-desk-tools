@@ -12,6 +12,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   selectFile: [path: string];
+  pickDir: [path: string];
 }>();
 
 const expanded = ref((props.depth ?? 0) < 2);
@@ -61,6 +62,11 @@ function treeKindTag(kind?: string) {
       </el-icon>
       <span class="tree-label tree-dir-name" :title="node.path || node.name">{{ node.name || "/" }}</span>
       <span v-if="hasChildren" class="tree-dir-count">{{ childCount }}</span>
+      <span
+        class="tree-dir-pick"
+        title="pick 此目录"
+        @click.stop="emit('pickDir', node.path)"
+      >📌</span>
     </button>
     <div v-show="expanded && hasChildren" class="tree-children">
       <TreeBranch
@@ -70,6 +76,7 @@ function treeKindTag(kind?: string) {
         :selected="selected"
         :depth="(depth ?? 0) + 1"
         @select-file="(p) => emit('selectFile', p)"
+        @pick-dir="(p) => emit('pickDir', p)"
       />
     </div>
   </div>
@@ -128,11 +135,30 @@ function treeKindTag(kind?: string) {
 
 .tree-dir-count {
   flex-shrink: 0;
-  margin-left: auto;
   padding-left: 6px;
   font-size: 0.68rem;
   font-weight: 500;
   color: #94a3b8;
+}
+
+.tree-dir-pick {
+  flex-shrink: 0;
+  margin-left: 4px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.68rem;
+  padding: 0 2px;
+  opacity: 0.35;
+  transition: opacity 0.15s;
+}
+
+.tree-dir-pick:hover {
+  opacity: 1;
+}
+
+.tree-dir-label:hover .tree-dir-pick {
+  opacity: 0.7;
 }
 
 .tree-file {
