@@ -5,6 +5,7 @@ import RibbonShell from "./ribbon/RibbonShell.vue";
 import { useRibbonTabs } from "./ribbon/useRibbonTabs";
 import StatusBar from "./StatusBar.vue";
 import WorkspaceTreeSidebar from "./WorkspaceTreeSidebar.vue";
+import FileWorksetPanel from "../components/FileWorksetPanel.vue";
 import HomePage from "../pages/HomePage.vue";
 import WelcomePage from "../pages/WelcomePage.vue";
 import ConfigPage from "../pages/ConfigPage.vue";
@@ -42,6 +43,7 @@ import ChoiceDialogHost from "../components/ChoiceDialogHost.vue";
 import GitDiffPreviewHost from "../components/git/GitDiffPreviewHost.vue";
 import CaaRelatedFilePreviewHost from "../components/caa/CaaRelatedFilePreviewHost.vue";
 import AppModalOverlay from "../components/AppModalOverlay.vue";
+import AsyncProgressOverlay from "../components/AsyncProgressOverlay.vue";
 
 const shell = provideAppShell();
 const { workspacePath, workspaceShort } = useWorkspaceSwitcher(shell);
@@ -201,7 +203,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   for (const tab of shell.tabs.value) {
-    shell.registerTreeSelect(tab.id, null);
+    shell.registerPageMessages(tab.id, null);
   }
 });
 </script>
@@ -276,6 +278,7 @@ onUnmounted(() => {
         :show-log="dockVis.leftShowLog"
         :show-props="dockVis.leftShowProps"
         :show-git-commit="dockVis.leftShowGitCommit"
+        :show-workset-block="dockVis.leftShowWorkset"
       />
       <div
         v-if="!isWelcomeFullscreen && dockVis.rightVisible"
@@ -291,8 +294,10 @@ onUnmounted(() => {
         :show-log="dockVis.rightShowLog"
         :show-props="dockVis.rightShowProps"
         :show-git-commit="dockVis.rightShowGitCommit"
+        :show-workset-block="dockVis.rightShowWorkset"
       />
     </div>
+
     <StatusBar v-if="!isWelcomeFullscreen" />
     <ChoiceDialogHost />
     <GitDiffPreviewHost />
@@ -305,6 +310,7 @@ onUnmounted(() => {
     >
       <ConfigPage />
     </AppModalOverlay>
+    <AsyncProgressOverlay />
   </div>
 </template>
 
@@ -457,6 +463,34 @@ onUnmounted(() => {
 
 .shell-pages-welcome :deep(> div) {
   overflow: hidden;
+}
+
+/* 工作集独立面板 */
+.ws-workset-panel {
+  position: absolute;
+  top: 0;
+  bottom: 32px;
+  display: flex;
+  flex-direction: column;
+  background: var(--phoenix-bg-toolbar, #fff);
+  border-left: 1px solid var(--phoenix-border, #e5e7eb);
+  z-index: 10;
+  overflow: hidden;
+}
+
+.ws-panel-head {
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--phoenix-border, #e5e7eb);
+  flex-shrink: 0;
+}
+
+.ws-panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px;
 }
 </style>
 

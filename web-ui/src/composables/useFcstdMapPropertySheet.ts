@@ -28,22 +28,22 @@ export function useFcstdMapPropertySheet(
   opts: {
     data: Ref<FcstdMapPayload | null>;
     forceUpdatePartName: Ref<boolean>;
+    scanWorksetId: Ref<string>;
+    worksetName: Ref<string>;
     onSaveScanOptions: () => void | Promise<void>;
   },
 ) {
-  const { data, forceUpdatePartName, onSaveScanOptions } = opts;
+  const { data, forceUpdatePartName, scanWorksetId, worksetName, onSaveScanOptions } = opts;
 
   const hasIndex = computed(() => Boolean(data.value?.exists));
 
   usePagePropertySheet(pageId, () =>
     propSheet(
       [
-        propGroup("intro", "介绍", [
-          propReadonly("intro", "说明", {
-            value: computed(() => PAGE_INTRO),
-          }),
-        ]),
         propGroup("scan_opts", "扫描选项", [
+          propReadonly("scan_scope", "扫描范围", {
+            value: computed(() => scanWorksetId.value ? `工作集 · ${worksetName.value}` : "全部"),
+          }),
           propBool("force_update_part_name", "强制更新零件名", {
             value: forceUpdatePartName,
             hint: "重新扫描时覆盖索引中已有零件名（不写回 FCStd）；变更后自动保存",
@@ -98,6 +98,11 @@ export function useFcstdMapPropertySheet(
             hidden: computed(() => !data.value?.map_path_display),
           }),
         ], { hidden: computed(() => !hasIndex.value) }),
+        propGroup("intro", "介绍", [
+          propReadonly("intro", "说明", {
+            value: computed(() => PAGE_INTRO),
+          }),
+        ]),
       ],
       { title: "CAD 索引", schemaVersion: 1 },
     ),

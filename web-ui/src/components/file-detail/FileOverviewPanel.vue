@@ -4,7 +4,7 @@ import { useFileDetailContext } from "../../composables/useFileDetailContext";
 import { useDrawingBomReadonly } from "../../composables/useDrawingBomReadonly";
 import { useAppShell } from "../../composables/useAppShell";
 
-const { preview, form, incomingCount, outgoingCount, switchSubTab } = useFileDetailContext();
+const { preview, form, incomingCount, outgoingCount, switchSubTab, triggerRename } = useFileDetailContext();
 const shell = useAppShell();
 const { canOpenSourceModel, editSubTabLabel, openSourceModel } = useDrawingBomReadonly(preview);
 
@@ -95,7 +95,7 @@ const summaryRows = computed(() => {
       <el-button v-if="incomingCount + outgoingCount" size="small" @click="switchSubTab('xref')">
         查看引用
       </el-button>
-      <el-button size="small" @click="switchSubTab('rename')">改名</el-button>
+      <el-button size="small" @click="triggerRename()">改名</el-button>
     </section>
   </div>
 </template>

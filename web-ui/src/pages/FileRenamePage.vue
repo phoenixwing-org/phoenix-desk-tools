@@ -515,7 +515,7 @@ onUnmounted(() => {
           </el-select>
         </label>
         <p v-if="!renameLogs.length" class="field-hint">
-          尚无记录。请先在文件详情 · 改名 Tab 执行磁盘改名。
+          尚无记录。请在文件详情页头点「改名」按钮（弹出对话框）执行磁盘改名。
         </p>
       </div>
 
@@ -568,7 +568,7 @@ onUnmounted(() => {
       <summary class="help-summary">说明</summary>
       <ul class="help-list">
         <li>改名写回：先修正 XLink 路径；显示名（Label）可在「文件详情 → 引用」随时同步，改名页亦可操作。</li>
-        <li>手填模式用于无历史时的预览；日常请在文件详情中对当前文件改名。</li>
+        <li>手填模式用于无历史时的预览；日常请在文件详情页头点「改名」按钮（弹出对话框）改名。</li>
         <li>右侧树选文件时会自动带入路径，被改名文件本身不会作为宿主。</li>
       </ul>
     </details>

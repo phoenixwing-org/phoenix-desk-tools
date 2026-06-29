@@ -35,17 +35,31 @@ def _norm_rel_path(raw: Any) -> str | None:
     return s
 
 
-def normalize_workset_paths(paths: list[Any] | None) -> list[str]:
-    out: list[str] = []
+def normalize_workset_entries(raw_entries: list[Any] | Any | None) -> list[dict[str, str]]:
+    """规范化条目列表 → [{"path": ..., "type": "file"|"dir"}]，去重排序。"""
+    out: list[dict[str, str]] = []
     seen: set[str] = set()
-    for item in paths or []:
-        rel = _norm_rel_path(item)
+    for item in raw_entries or []:
+        if isinstance(item, str):
+            rel = _norm_rel_path(item)
+            etype = "file"
+        elif isinstance(item, dict):
+            rel = _norm_rel_path(item.get("path"))
+            etype = str(item.get("type") or "file").strip()
+            if etype not in ("file", "dir"):
+                etype = "file"
+        else:
+            continue
         if not rel or rel in seen:
             continue
         seen.add(rel)
-        out.append(rel)
-    out.sort()
+        out.append({"path": rel, "type": etype})
+    out.sort(key=lambda e: e["path"])
     return out
+
+
+def _entries_to_legacy_paths(entries: list[dict[str, str]]) -> list[str]:
+    return [e["path"] for e in entries]
 
 
 def _empty_payload() -> dict[str, Any]:
@@ -57,13 +71,19 @@ def _normalize_workset(raw: dict[str, Any]) -> dict[str, Any] | None:
     if not wid:
         wid = str(uuid.uuid4())
     name = str(raw.get("name") or "").strip() or "未命名"
-    paths = normalize_workset_paths(raw.get("paths") if isinstance(raw.get("paths"), list) else [])
+    # 兼容：新 entries 优先，旧 paths 回退
+    raw_entries = raw.get("entries") if isinstance(raw.get("entries"), list) else None
+    if raw_entries is None:
+        raw_paths = raw.get("paths") if isinstance(raw.get("paths"), list) else []
+        entries = [{"path": str(p), "type": "file"} for p in normalize_workset_entries([str(p) for p in raw_paths])]
+    else:
+        entries = normalize_workset_entries(raw_entries)
     source = str(raw.get("source") or "").strip()
     updated_at = str(raw.get("updated_at") or "").strip() or _utc_now_iso()
     return {
         "id": wid,
         "name": name,
-        "paths": paths,
+        "entries": entries,
         "source": source,
         "updated_at": updated_at,
     }
@@ -152,9 +172,10 @@ def put_file_worksets_api(repo_root: Path, body: dict[str, Any]) -> dict[str, An
     return get_file_worksets_api(repo_root) | {"worksets": saved["worksets"]}
 
 
-def _path_exists_in_workspace(repo_root: Path, repo_rel: str) -> bool:
+def _entry_exists_in_workspace(repo_root: Path, repo_rel: str, etype: str = "file") -> bool:
     try:
-        return (repo_root / repo_rel).is_file()
+        p = repo_root / repo_rel
+        return p.is_dir() if etype == "dir" else p.is_file()
     except OSError:
         return False
 
@@ -164,7 +185,7 @@ def prune_missing_workset_paths(
     *,
     workset_id: str | None = None,
 ) -> dict[str, Any]:
-    """从工作集移除磁盘上已不存在的文件路径。"""
+    """从工作集移除磁盘上已不存在的条目。"""
     rr = repo_root.expanduser().resolve(strict=False)
     if not rr.is_dir():
         raise ValueError(f"工作空间不是有效目录: {rr}")
@@ -178,21 +199,22 @@ def prune_missing_workset_paths(
         if workset_id and str(ws.get("id") or "") != workset_id:
             worksets.append(ws)
             continue
-        paths = ws.get("paths") if isinstance(ws.get("paths"), list) else []
-        kept: list[str] = []
-        for rel in paths:
-            rel_s = str(rel or "").strip()
-            if not rel_s:
+        entries = ws.get("entries") if isinstance(ws.get("entries"), list) else []
+        kept: list[dict[str, str]] = []
+        for e in entries:
+            rel = str(e.get("path") or "").strip() if isinstance(e, dict) else str(e or "").strip()
+            etype = str(e.get("type") or "file") if isinstance(e, dict) else "file"
+            if not rel:
                 continue
-            if _path_exists_in_workspace(rr, rel_s):
-                kept.append(rel_s)
+            if _entry_exists_in_workspace(rr, rel, etype):
+                kept.append({"path": rel, "type": etype})
             else:
                 removed += 1
-        if len(kept) != len(paths):
+        if len(kept) != len(entries):
             changed = True
             ws = {
                 **ws,
-                "paths": normalize_workset_paths(kept),
+                "entries": kept,
                 "updated_at": _utc_now_iso(),
             }
         worksets.append(ws)

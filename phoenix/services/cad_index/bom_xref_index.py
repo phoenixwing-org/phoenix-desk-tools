@@ -132,6 +132,57 @@ def bom_xref_edges_for_host(
     return edges
 
 
+def bom_xref_edges_from_cached(
+    repo_root: Path,
+    asset: dict[str, Any],
+    *,
+    basename_map: dict[str, list[str]],
+    path_to_id: dict[str, int],
+    xlinks: list[dict[str, str]],
+) -> list[dict[str, Any]]:
+    """从 Step B 缓存数据构建 XLink 边（不打开 ZIP）。
+
+    ``xlinks`` 来自 ``_read_fcstd_bom_and_xlinks`` 的输出，
+    每项包含 ``{"file": ..., "label": ...}``。
+    """
+    host_rel = asset["repo_rel_path"]
+    edges: list[dict[str, Any]] = []
+    for xl in xlinks:
+        file_attr = xl.get("file", "").strip()
+        if not file_attr.lower().endswith(".fcstd"):
+            continue
+        target_base = Path(file_attr.replace("\\", "/")).name
+        resolved = resolve_xlink_target(
+            repo_root=repo_root,
+            host_repo_rel=host_rel,
+            xlink_file_attr=file_attr,
+            basename_map=basename_map,
+        )
+        target_rel = resolved.target_repo_rel_path
+        target_id = path_to_id.get(target_rel) if target_rel else None
+        if target_id is None and target_rel:
+            target_id = get_file_asset_id(repo_root, target_rel)
+
+        detail = None
+        if resolved.candidate_paths:
+            detail = {"candidates": list(resolved.candidate_paths)}
+
+        edges.append(
+            {
+                "host_file_asset_id": asset["id"],
+                "host_repo_rel_path": host_rel,
+                "xlink_file_attr": file_attr,
+                "link_label": xl.get("label", ""),
+                "target_basename": target_base,
+                "target_file_asset_id": target_id,
+                "target_repo_rel_path": target_rel,
+                "resolve_status": resolved.resolve_status,
+                "detail_json": detail,
+            }
+        )
+    return edges
+
+
 def discover_fcstd_subtree_hosts(
     repo_root: Path,
     root_host: str,
@@ -183,25 +234,71 @@ def discover_fcstd_subtree_hosts(
     return order
 
 
-def rebuild_bom_xrefs(repo_root: Path, *, scan_id: int, scan_root: Path) -> dict[str, Any]:
-    """在 CAD 索引扫描后，从各 FCStd 提取 XLink 并写入 ``bom_xref`` 表。"""
+def rebuild_bom_xrefs(
+    repo_root: Path,
+    *,
+    scan_id: int,
+    scan_root: Path,
+    progress: Any = None,
+    progress_phase: str = "xref",
+    basename_map: dict[str, list[str]] | None = None,
+    bom_json_cache: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """在 CAD 索引扫描后，从各 FCStd 提取 XLink 并写入 ``bom_xref`` 表。
+
+    若提供 ``bom_json_cache``（Step B 的输出），则直接使用缓存数据，
+    不再重复打开 ZIP 读取 Document.xml。
+    """
+    import json as _json
+
     rr = repo_root.expanduser().resolve(strict=False)
     root = scan_root.expanduser().resolve(strict=False)
     prev = load_bom_xref_meta(rr)
-    basename_map = scan_cad_basename_map(root, anchor=rr)
+    if basename_map is None:
+        basename_map = scan_cad_basename_map(root, anchor=rr)
     assets = list_present_fcstd_file_assets(rr)
     path_to_id = {a["repo_rel_path"]: a["id"] for a in assets}
 
+    # 预处理缓存 → {repo_rel_path: [xlink dicts]}
+    cache_map: dict[str, list[dict[str, str]]] = {}
+    if bom_json_cache:
+        for rel, json_str in bom_json_cache.items():
+            if not json_str:
+                continue
+            try:
+                data = _json.loads(json_str)
+                xlinks = data.get("xlinks")
+                if xlinks:
+                    cache_map[rel] = xlinks
+            except (_json.JSONDecodeError, KeyError):
+                pass
+
     edges: list[dict[str, Any]] = []
     for asset in assets:
-        edges.extend(
-            bom_xref_edges_for_host(
-                rr,
-                asset,
-                basename_map=basename_map,
-                path_to_id=path_to_id,
+        host_rel = asset["repo_rel_path"]
+        cached_xlinks = cache_map.get(host_rel)
+        if cached_xlinks is not None:
+            edges.extend(
+                bom_xref_edges_from_cached(
+                    rr, asset,
+                    basename_map=basename_map,
+                    path_to_id=path_to_id,
+                    xlinks=cached_xlinks,
+                )
             )
-        )
+        else:
+            edges.extend(
+                bom_xref_edges_for_host(
+                    rr, asset,
+                    basename_map=basename_map,
+                    path_to_id=path_to_id,
+                )
+            )
+        if progress is not None:
+            progress.increment(
+                progress_phase,
+                file_rel=host_rel,
+            )
 
     hosts_with_xlink = len({e["host_repo_rel_path"] for e in edges})
     stats = replace_bom_xrefs(rr, scan_id=scan_id, edges=edges)
@@ -231,7 +328,7 @@ def rebuild_bom_xrefs(repo_root: Path, *, scan_id: int, scan_root: Path) -> dict
     }
 
 
-def refresh_bom_xrefs_for_hosts(repo_root: Path, host_repo_rel_paths: list[str]) -> dict[str, Any]:
+def refresh_bom_xrefs_for_hosts(repo_root: Path, host_repo_rel_paths: list[str], *, progress: Any = None) -> dict[str, Any]:
     """XLink 写回后，从磁盘重读指定宿主的引用边并更新 ``bom_xref``。"""
     rr = repo_root.expanduser().resolve(strict=False)
     hosts = [norm_xref_path(p) or str(p).strip() for p in host_repo_rel_paths if str(p).strip()]
@@ -244,10 +341,15 @@ def refresh_bom_xrefs_for_hosts(repo_root: Path, host_repo_rel_paths: list[str])
     if scan_id is None:
         return {"updated_hosts": 0, "edge_count": 0}
 
+    if progress is not None:
+        progress.set_phase("xref", total=len(hosts))
+
     delete_bom_xrefs_for_hosts(rr, hosts)
     edges: list[dict[str, Any]] = []
     updated = 0
     for host_rel in hosts:
+        if progress is not None and progress.cancelled:
+            break
         asset_id = get_file_asset_id(rr, host_rel)
         if asset_id is None:
             continue
@@ -261,6 +363,8 @@ def refresh_bom_xrefs_for_hosts(repo_root: Path, host_repo_rel_paths: list[str])
         if host_edges:
             updated += 1
         edges.extend(host_edges)
+        if progress is not None:
+            progress.increment("xref", file_rel=host_rel)
 
     stats = insert_bom_xref_edges(rr, scan_id=scan_id, edges=edges)
     return {"updated_hosts": updated, **stats}
@@ -272,6 +376,7 @@ def refresh_bom_xref_index_for_host(
     *,
     recursive: bool = True,
     max_hosts: int = 64,
+    progress: Any = None,
 ) -> dict[str, Any]:
     """仅重建指定宿主（及可选下级 FCStd）的出向引用索引，不重扫 CAD 属性表。"""
     rr = repo_root.expanduser().resolve(strict=False)
@@ -285,6 +390,9 @@ def refresh_bom_xref_index_for_host(
     if not is_fcstd_filename(host_path.name):
         raise ValueError("宿主须为 .FCStd 文件")
 
+    if progress is not None:
+        progress.set_phase("walk", total=1)
+
     ensure_bom_xref_built(rr)
     ctx = load_bom_xref_index_context(rr)
 
@@ -296,7 +404,12 @@ def refresh_bom_xref_index_for_host(
         recursive=recursive,
         max_hosts=max_hosts,
     )
-    refresh_stats = refresh_bom_xrefs_for_hosts(rr, hosts)
+
+    if progress is not None:
+        progress.increment("walk")
+        progress.set_phase("xref", total=len(hosts))
+
+    refresh_stats = refresh_bom_xrefs_for_hosts(rr, hosts, progress=progress)
 
     root_rows, _ = query_bom_xrefs_outgoing(rr, host, limit=500)
     status_counts: dict[str, int] = {}

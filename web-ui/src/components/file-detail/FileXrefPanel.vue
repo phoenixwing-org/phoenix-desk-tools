@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import type { BomXrefEdge, BomXrefHost, FileDetailXrefsPayload } from "../../api";
-import { fetchFileDetailXrefs, refreshBomXrefHostIndex } from "../../api";
+import { cancelBomXrefRebuild, fetchBomXrefRebuildProgress, fetchFileDetailXrefs, startBomXrefRebuild } from "../../api";
+import { useAsyncProgress } from "../../composables/useAsyncProgress";
 import { useFileDetailContext } from "../../composables/useFileDetailContext";
 import { useReferenceLabelSync } from "../../composables/useReferenceLabelSync";
 import { useAppShell } from "../../composables/useAppShell";
@@ -15,6 +16,7 @@ import XlinkReplaceDialog from "../XlinkReplaceDialog.vue";
 
 const ctx = useFileDetailContext();
 const shell = useAppShell();
+const rebuildUI = useAsyncProgress("xref-rebuild");
 const loading = ref(false);
 const rebuilding = ref(false);
 const indexSummary = ref("");
@@ -254,22 +256,49 @@ async function onRebuildIndex() {
   rebuilding.value = true;
   indexSummary.value = "";
   shell.appendLog(`[文件详情] 重建引用索引 ${ctx.rel.value}…`, { source: "file_detail", open: true });
+
+  // watch 终态 → 刷新页面数据
+  const unwatch = watch(
+    () => rebuildUI.state.value?.status,
+    async (status) => {
+      if (status === "done") {
+        await loadTables(false, false);
+        const missing = outgoingRefs.value.filter(r => r.resolve_status === "missing").length;
+        const ambiguous = outgoingRefs.value.filter(r => r.resolve_status === "ambiguous").length;
+        const resolved = outgoingRefs.value.filter(r => r.resolve_status === "resolved" || r.resolve_status === "self").length;
+        indexSummary.value = `已重建 · 出向 ${outgoingRefs.value.length} 条（已解析 ${resolved} · 缺失 ${missing} · 歧义 ${ambiguous}）`;
+        shell.setStatus(indexSummary.value);
+        shell.appendLog(indexSummary.value, { source: "file_detail" });
+        ctx.notifyXrefMutation(ctx.rel.value);
+        rebuilding.value = false;
+        unwatch();
+      } else if (status === "error" || status === "cancelled") {
+        const msg = rebuildUI.state.value?.error || "任务已取消";
+        shell.setStatus(msg);
+        shell.appendLog(msg, { source: "file_detail" });
+        rebuilding.value = false;
+        unwatch();
+      }
+    },
+  );
+
   try {
-    const out = await refreshBomXrefHostIndex({
-      host_repo_rel: ctx.rel.value,
-      recursive: rebuildSubtree.value,
-    });
-    if (out.log) shell.appendLog(out.log, { source: "file_detail" });
-    indexSummary.value = `已索引 ${out.hosts_refreshed} 个宿主 · 出向 ${out.outgoing_count} 条（缺失 ${out.outgoing_missing} · 歧义 ${out.outgoing_ambiguous}）`;
-    shell.setStatus(indexSummary.value);
-    ctx.notifyXrefMutation(ctx.rel.value);
-    await loadTables(false, false);
+    await rebuildUI.startPolling(
+      () => startBomXrefRebuild({
+        host_repo_rel: ctx.rel.value,
+        recursive: rebuildSubtree.value,
+      }),
+      (scanId) => fetchBomXrefRebuildProgress(scanId),
+      (scanId) => cancelBomXrefRebuild(scanId),
+      { taskName: `重建引用索引 · ${ctx.rel.value.split('/').pop() || ctx.rel.value}`, singleton: true },
+    );
   } catch (e) {
-    ctx.pageError.value = String(e);
-    shell.appendLog(String(e), { source: "file_detail" });
-    shell.setStatus(String(e));
-  } finally {
+    unwatch();
     rebuilding.value = false;
+    const msg = String(e);
+    ctx.pageError.value = msg;
+    shell.appendLog(msg, { source: "file_detail" });
+    shell.setStatus(msg);
   }
 }
 
@@ -356,7 +385,7 @@ async function onSyncIncomingLabels() {
       <el-button size="small" :loading="loading" :disabled="rebuilding" @click="loadTables(true, true)">
         刷新列表
       </el-button>
-      <el-button size="small" @click="ctx.switchSubTab('rename')">改名后修正 XLink…</el-button>
+      <el-button size="small" @click="ctx.triggerRename()">改名后修正 XLink…</el-button>
     </div>
     <p v-if="indexSummary" class="index-summary">{{ indexSummary }}</p>
 
@@ -475,7 +504,7 @@ async function onSyncIncomingLabels() {
         <tbody>
           <tr v-for="row in outgoingRefs" :key="row.id" :class="rowClass(row.resolve_status, row)">
             <td class="tree-name-cell">
-              <span v-if="row.link_label" class="mono">{{ row.link_label }}</span>
+              <span v-if="row.link_label || row.rule_label" class="mono">{{ row.link_label || row.rule_label }}</span>
               <span v-else class="muted">—</span>
             </td>
             <td class="mono">

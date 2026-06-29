@@ -10,7 +10,7 @@ from typing import Any
 PHOENIX_DIR_NAME = ".phoenix"
 WORKSPACE_DATABASE_FILENAME = "phoenix-workspace.sqlite"
 CAD_DATABASE_FILENAME = WORKSPACE_DATABASE_FILENAME
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 13
 
 from phoenix.code.schema import CODE_CREATE_SCHEMA_DDL, migrate_code_schema
 from phoenix.config.workspace_prefs_schema import WORKSPACE_PREF_CREATE_SCHEMA_DDL, migrate_workspace_pref_schema
@@ -24,6 +24,8 @@ T_PART_FILE_LINK = "phoenix_cad_part_file_link"
 T_BOM_XREF = "phoenix_cad_bom_xref"
 T_BOM_ASSEMBLY_CACHE = "phoenix_cad_bom_assembly_cache"
 T_BOM_TREE_OCCURRENCE = "phoenix_cad_bom_tree_occurrence"
+T_BOM_LINE = "phoenix_cad_bom_line"
+T_XREF_FLAT = "phoenix_cad_xref_flat"
 T_CHANGE_EVENT = "phoenix_audit_change_event"
 T_RENAME_LOG = "phoenix_audit_rename_log"
 T_REF_HIT = "phoenix_audit_ref_hit"
@@ -38,9 +40,15 @@ CREATE TABLE IF NOT EXISTS {T_META} (
 
 CREATE TABLE IF NOT EXISTS {T_CAD_SCAN} (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scan_uuid TEXT UNIQUE,
     scanned_at TEXT NOT NULL,
     scan_root TEXT NOT NULL,
-    stats_json TEXT NOT NULL
+    stats_json TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'done',
+    phase TEXT DEFAULT '',
+    progress_json TEXT,
+    started_at TEXT,
+    finished_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS {T_FILE_ASSET} (
@@ -56,6 +64,7 @@ CREATE TABLE IF NOT EXISTS {T_FILE_ASSET} (
     label TEXT,
     file_status TEXT NOT NULL DEFAULT 'present',
     last_seen_at TEXT,
+    bom_json TEXT,
     updated_at TEXT NOT NULL
 );
 
@@ -226,6 +235,43 @@ CREATE INDEX IF NOT EXISTS idx_phoenix_cad_bom_occ_root
     ON {T_BOM_TREE_OCCURRENCE}(root_host_repo_rel_path);
 CREATE INDEX IF NOT EXISTS idx_phoenix_cad_bom_occ_host_target
     ON {T_BOM_TREE_OCCURRENCE}(host_repo_rel_path, target_repo_rel_path);
+
+CREATE TABLE IF NOT EXISTS {T_BOM_LINE} (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scan_id INTEGER NOT NULL REFERENCES {T_CAD_SCAN}(id) ON DELETE CASCADE,
+    assembly_rel TEXT NOT NULL,
+    part_rel TEXT NOT NULL,
+    depth INTEGER NOT NULL DEFAULT 0,
+    bom_path TEXT NOT NULL,
+    part_key TEXT NOT NULL DEFAULT '',
+    quantity INTEGER NOT NULL DEFAULT 1,
+    cycle_detected INTEGER NOT NULL DEFAULT 0,
+    built_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_phoenix_cad_bom_line_assembly
+    ON {T_BOM_LINE}(assembly_rel);
+CREATE INDEX IF NOT EXISTS idx_phoenix_cad_bom_line_part
+    ON {T_BOM_LINE}(part_rel);
+CREATE INDEX IF NOT EXISTS idx_phoenix_cad_bom_line_scan
+    ON {T_BOM_LINE}(scan_id);
+
+CREATE TABLE IF NOT EXISTS {T_XREF_FLAT} (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scan_id INTEGER NOT NULL REFERENCES {T_CAD_SCAN}(id) ON DELETE CASCADE,
+    host_rel TEXT NOT NULL,
+    target_rel TEXT NOT NULL,
+    link_label TEXT NOT NULL DEFAULT '',
+    is_direct INTEGER NOT NULL DEFAULT 1,
+    built_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_phoenix_cad_xref_flat_host
+    ON {T_XREF_FLAT}(host_rel);
+CREATE INDEX IF NOT EXISTS idx_phoenix_cad_xref_flat_target
+    ON {T_XREF_FLAT}(target_rel);
+CREATE INDEX IF NOT EXISTS idx_phoenix_cad_xref_flat_scan
+    ON {T_XREF_FLAT}(scan_id);
 """ + CODE_CREATE_SCHEMA_DDL + WORKSET_CREATE_SCHEMA_DDL + WORKSPACE_PREF_CREATE_SCHEMA_DDL
 
 
@@ -301,8 +347,82 @@ def database_status_payload(repo_root: Path) -> dict[str, Any]:
     }
 
 
+def migrate_cad_schema(conn: sqlite3.Connection) -> int:
+    """增量迁移 CAD schema：v12→v13 添加 scan_uuid/status/phase 等列 + bom_line/xref_flat 表。"""
+    # v12: bom_json 列 + bom_line / xref_flat 表
+    cur = conn.execute("PRAGMA table_info('phoenix_cad_file_asset')")
+    cols = {r[1] for r in cur.fetchall()}
+    if "bom_json" not in cols:
+        conn.execute(
+            "ALTER TABLE phoenix_cad_file_asset ADD COLUMN bom_json TEXT"
+        )
+    conn.execute(f"""
+        CREATE TABLE IF NOT EXISTS {T_BOM_LINE} (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            scan_id INTEGER NOT NULL REFERENCES {T_CAD_SCAN}(id) ON DELETE CASCADE,
+            assembly_rel TEXT NOT NULL,
+            part_rel TEXT NOT NULL,
+            depth INTEGER NOT NULL DEFAULT 0,
+            bom_path TEXT NOT NULL,
+            part_key TEXT NOT NULL DEFAULT '',
+            quantity INTEGER NOT NULL DEFAULT 1,
+            cycle_detected INTEGER NOT NULL DEFAULT 0,
+            built_at TEXT NOT NULL
+        )
+    """)
+    conn.execute(f"""
+        CREATE INDEX IF NOT EXISTS idx_phoenix_cad_bom_line_assembly
+            ON {T_BOM_LINE}(assembly_rel)
+    """)
+    conn.execute(f"""
+        CREATE INDEX IF NOT EXISTS idx_phoenix_cad_bom_line_part
+            ON {T_BOM_LINE}(part_rel)
+    """)
+    conn.execute(f"""
+        CREATE TABLE IF NOT EXISTS {T_XREF_FLAT} (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            scan_id INTEGER NOT NULL REFERENCES {T_CAD_SCAN}(id) ON DELETE CASCADE,
+            host_rel TEXT NOT NULL,
+            target_rel TEXT NOT NULL,
+            link_label TEXT NOT NULL DEFAULT '',
+            is_direct INTEGER NOT NULL DEFAULT 1,
+            built_at TEXT NOT NULL
+        )
+    """)
+    conn.execute(f"""
+        CREATE INDEX IF NOT EXISTS idx_phoenix_cad_xref_flat_host
+            ON {T_XREF_FLAT}(host_rel)
+    """)
+    conn.execute(f"""
+        CREATE INDEX IF NOT EXISTS idx_phoenix_cad_xref_flat_target
+            ON {T_XREF_FLAT}(target_rel)
+    """)
+
+    # v13: scan_uuid / status / phase / progress_json / started_at / finished_at
+    cur = conn.execute("PRAGMA table_info('phoenix_cad_scan')")
+    scan_cols = {r[1] for r in cur.fetchall()}
+    if "scan_uuid" not in scan_cols:
+        conn.execute("ALTER TABLE phoenix_cad_scan ADD COLUMN scan_uuid TEXT")
+    if "status" not in scan_cols:
+        conn.execute("ALTER TABLE phoenix_cad_scan ADD COLUMN status TEXT NOT NULL DEFAULT 'done'")
+    if "phase" not in scan_cols:
+        conn.execute("ALTER TABLE phoenix_cad_scan ADD COLUMN phase TEXT DEFAULT ''")
+    if "progress_json" not in scan_cols:
+        conn.execute("ALTER TABLE phoenix_cad_scan ADD COLUMN progress_json TEXT")
+    if "started_at" not in scan_cols:
+        conn.execute("ALTER TABLE phoenix_cad_scan ADD COLUMN started_at TEXT")
+    if "finished_at" not in scan_cols:
+        conn.execute("ALTER TABLE phoenix_cad_scan ADD COLUMN finished_at TEXT")
+    conn.execute(f"""
+        CREATE INDEX IF NOT EXISTS idx_phoenix_cad_scan_uuid
+            ON {T_CAD_SCAN}(scan_uuid)
+    """)
+
+    return SCHEMA_VERSION
+
+
 def recreate_database(repo_root: Path) -> dict[str, Any]:
-    """删除工作空间库并创建空 v10 库。"""
+    """删除工作空间库并创建空库。"""
     rr = repo_root.expanduser().resolve(strict=False)
     phoenix_dir(rr).mkdir(parents=True, exist_ok=True)
     removed: list[str] = []

@@ -7,7 +7,7 @@ import FileOverviewPanel from "../components/file-detail/FileOverviewPanel.vue";
 import FileAttributesPanel from "../components/file-detail/FileAttributesPanel.vue";
 import FileXrefPanel from "../components/file-detail/FileXrefPanel.vue";
 import FileAssemblyPanel from "../components/file-detail/FileAssemblyPanel.vue";
-import FileRenamePanel from "../components/file-detail/FileRenamePanel.vue";
+import RenameDialog from "../components/RenameDialog.vue";
 import DrawingBomReadonlyBanner from "../components/file-detail/DrawingBomReadonlyBanner.vue";
 import { provideFileDetailContext } from "../composables/useFileDetailContext";
 import { useDrawingBomReadonly } from "../composables/useDrawingBomReadonly";
@@ -36,14 +36,11 @@ const incomingCount = ref(0);
 const outgoingCount = ref(0);
 const xrefCacheByRel = ref<Record<string, import("../api").FileDetailXrefsPayload>>({});
 const assemblyCacheByKey = ref<Record<string, import("../api").AssemblyTreeNode[]>>({});
-const preferredRenameFilename = ref("");
 const assemblyLabelEdits = ref(false);
 /** 已写入属性但未改盘符时的目标文件名（按 repo_rel 缓存） */
 const filenameDraftByRel = ref<Record<string, string>>({});
 let reloadSeq = 0;
 let bootstrapDone = false;
-
-const fileName = computed(() => rel.value.split("/").pop() ?? "");
 
 function rememberFilenameDraft(filename: string, relPath?: string) {
   const r = (relPath ?? rel.value).trim();
@@ -121,25 +118,15 @@ async function refreshXrefCounts() {
   }
 }
 
-function openRenameTab(target?: string): boolean {
-  const disk = originalFilename.value.trim();
-  const fromForm = (form.value.filename ?? "").trim();
-  const next = (target ?? fromForm).trim();
-  if (!next) {
-    pageError.value = "请先填写或「推荐」生成目标文件名";
-    return false;
-  }
-  preferredRenameFilename.value = next;
-  activeSubTab.value = "rename";
-  pageError.value = "";
-  return true;
+const showRenameDialog = ref(false);
+const renameDialogTarget = ref("");
+
+function triggerRename(target?: string) {
+  renameDialogTarget.value = target?.trim() || "";
+  showRenameDialog.value = true;
 }
 
 function switchSubTab(tab: FileDetailSubTab) {
-  if (tab === "rename") {
-    openRenameTab();
-    return;
-  }
   activeSubTab.value = tab;
 }
 
@@ -219,6 +206,17 @@ async function confirmSwitchFile(targetRel: string): Promise<boolean> {
   return choice.choiceId === "discard";
 }
 
+async function onRenameComplete(newRel: string) {
+  showRenameDialog.value = false;
+  if (newRel && newRel !== rel.value) {
+    await reloadFile(newRel);
+  } else {
+    await reloadFile();
+  }
+  notifyXrefMutation();
+  await refreshXrefCounts();
+}
+
 function onAssemblyEditsChange(dirty: boolean) {
   assemblyLabelEdits.value = dirty;
   if (props.workbenchTabId) shell.setTabDirty(props.workbenchTabId, hasUnsavedEdits());
@@ -240,12 +238,14 @@ async function onTreeSelect(targetRel: string): Promise<boolean> {
 
 function registerTreeHandler() {
   if (!props.workbenchTabId) return;
-  shell.registerTreeSelect(props.workbenchTabId, (path) => onTreeSelect(path));
+  shell.registerPageMessages(props.workbenchTabId, (msg) => {
+    if (msg.type === "tree:select-file") return onTreeSelect(msg.path);
+  });
 }
 
 function unregisterTreeHandler() {
   if (!props.workbenchTabId) return;
-  shell.registerTreeSelect(props.workbenchTabId, null);
+  shell.registerPageMessages(props.workbenchTabId, null);
 }
 
 function applyOpenPayload(): boolean {
@@ -256,7 +256,7 @@ function applyOpenPayload(): boolean {
   const openRel = detail?.rel?.trim() || legacyRel;
   if (!openRel) return false;
   if (detail?.subTab) activeSubTab.value = normalizeFileDetailSubTab(detail.subTab);
-  if (detail?.preferredNewFilename) preferredRenameFilename.value = detail.preferredNewFilename;
+  if (detail?.preferredNewFilename) renameDialogTarget.value = detail.preferredNewFilename;
   if (payload?.fileRename?.form) {
     form.value = { ...payload.fileRename.form };
     baseline.value = { ...(payload.fileRename.baseline ?? payload.fileRename.form) };
@@ -305,7 +305,7 @@ provideFileDetailContext({
   incomingCount,
   outgoingCount,
   switchSubTab,
-  openRenameTab,
+  triggerRename,
   reloadFile,
   refreshXrefCounts,
   xrefCacheByRel,
@@ -375,7 +375,20 @@ onUnmounted(() => {
 
 <template>
   <div class="page file-detail-page">
-    <PageHeader title="文件详情" page-id="file_detail" />
+    <PageHeader title="文件详情" page-id="file_detail">
+      <template #actions>
+        <el-button
+          v-if="rel"
+          size="small"
+          type="primary"
+          plain
+          :disabled="!originalFilename"
+          @click="triggerRename()"
+        >
+          改名
+        </el-button>
+      </template>
+    </PageHeader>
 
     <el-alert v-if="pageError" type="error" :title="pageError" show-icon :closable="false" class="err-alert" />
 
@@ -399,7 +412,6 @@ onUnmounted(() => {
           <span v-if="incomingCount + outgoingCount" class="tab-badge">{{ incomingCount + outgoingCount }}</span>
         </el-radio-button>
         <el-radio-button v-if="showAssemblyTab" value="assembly">装配结构</el-radio-button>
-        <el-radio-button value="rename">改名</el-radio-button>
       </el-radio-group>
 
       <div class="sub-panel">
@@ -410,10 +422,15 @@ onUnmounted(() => {
           v-show="activeSubTab === 'assembly'"
           @edits-change="onAssemblyEditsChange"
         />
-        <FileRenamePanel
-          v-show="activeSubTab === 'rename'"
-          :preferred-filename="preferredRenameFilename"
-          @renamed="notifyXrefMutation(); refreshXrefCounts()"
+        <RenameDialog
+          :open="showRenameDialog"
+          :rel="rel"
+          :original-filename="originalFilename"
+          :preferred-new-filename="renameDialogTarget"
+          :form="form"
+          :baseline="baseline"
+          @close="showRenameDialog = false"
+          @renamed="onRenameComplete"
         />
       </div>
       </div>

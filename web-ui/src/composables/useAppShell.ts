@@ -1,6 +1,8 @@
 import { computed, inject, provide, ref, shallowRef, watch, type InjectionKey, type Ref } from "vue";
+import { ElMessage } from "element-plus";
 import type { BomFields } from "../api";
 import type { AppConfig, LauncherPrefs, NavItem, ShellLayout, WorkspaceNavModules } from "../types/config";
+import type { PageMessage, PageMessageHandler } from "../types/pageMessages";
 import {
   closeWorkspaceApi,
   fetchAppConfig,
@@ -86,6 +88,8 @@ export type AppShellContext = {
   setStatus: (msg: string) => void;
   setPageSummary: (msg: string) => void;
   appendLog: (text: string, opts?: LogAppendOptions) => void;
+  toast: (msg: string, type?: "success" | "warning" | "error" | "info") => void;
+  toggleWorksetPanel: () => void;
   clearLog: () => void;
   setLogOpen: (open: boolean) => void;
   setPropertiesOpen: (open: boolean) => void;
@@ -150,6 +154,13 @@ export type AppShellContext = {
   /** 仅当前激活 Tab 会收到树点击；未注册或返回 false 时回退为打开文件详情 */
   registerTreeSelect: (tabId: string | undefined, fn: TreeSelectHandler | null) => void;
   dispatchTreeSelect: (rel: string) => Promise<void>;
+  /** 目录 pick 按钮：当前活跃页注册 handler 接收目录路径，无注册则静默 */
+  dirPickHandler: Ref<((rel: string) => void) | null>;
+  registerDirPick: (tabId: string | undefined, fn: ((rel: string) => void) | null) => void;
+  dispatchDirPick: (rel: string) => void;
+  /** 页面统一消息接口（替代上述分散注册） */
+  registerPageMessages: (tabId: string | undefined, fn: PageMessageHandler | null) => void;
+  dispatchPageMessage: (msg: PageMessage) => void;
   treeRescanToken: Ref<number>;
   treeSelectAfterRescan: Ref<string | null>;
   requestTreeRescan: (selectRel?: string) => void;
@@ -202,6 +213,8 @@ const DEFAULT_SHELL: ShellLayout = {
   properties_name_col_width_px: 132,
   git_commit_panel_open: true,
   git_commit_panel_dock: "left",
+  workset_panel_dock: "right",
+  workset_panel_open: false,
 };
 
 function clampPanelWidth(px: number): number {
@@ -335,6 +348,10 @@ export function provideAppShell(): AppShellContext {
   const logAutoOpenSuppressed = ref(false);
   const treeSelectHandler = shallowRef<TreeSelectHandler | null>(null);
   const treeHandlersByTab = new Map<string, TreeSelectHandler>();
+  const dirPickHandler = shallowRef<((rel: string) => void) | null>(null);
+  const dirHandlersByTab = new Map<string, (rel: string) => void>();
+  const pageMsgHandler = shallowRef<PageMessageHandler | null>(null);
+  const pageMsgHandlersByTab = new Map<string, PageMessageHandler>();
   const treeRescanToken = ref(0);
   const treeSelectAfterRescan = ref<string | null>(null);
   const scrollToGuideToken = ref(0);
@@ -471,12 +488,20 @@ export function provideAppShell(): AppShellContext {
   function syncActiveTreeHandler() {
     const id = wb.activeTabId.value;
     treeSelectHandler.value = id ? (treeHandlersByTab.get(id) ?? null) : null;
+    dirPickHandler.value = id ? (dirHandlersByTab.get(id) ?? null) : null;
+    pageMsgHandler.value = id ? (pageMsgHandlersByTab.get(id) ?? null) : null;
   }
 
   function pruneTreeHandlers() {
     const ids = new Set(wb.tabs.value.map((t) => t.id));
     for (const id of treeHandlersByTab.keys()) {
       if (!ids.has(id)) treeHandlersByTab.delete(id);
+    }
+    for (const id of dirHandlersByTab.keys()) {
+      if (!ids.has(id)) dirHandlersByTab.delete(id);
+    }
+    for (const id of pageMsgHandlersByTab.keys()) {
+      if (!ids.has(id)) pageMsgHandlersByTab.delete(id);
     }
     syncActiveTreeHandler();
   }
@@ -609,6 +634,18 @@ export function provideAppShell(): AppShellContext {
 
   function setStatus(msg: string) {
     statusText.value = msg;
+  }
+
+  function toggleWorksetPanel() {
+    const cur = shellLayout.value.workset_panel_open;
+    persistShellLayout({ workset_panel_open: !cur });
+  }
+
+  function toast(msg: string, type: "success" | "warning" | "error" | "info" = "info") {
+    if (type === "success") ElMessage.success(msg);
+    else if (type === "warning") ElMessage.warning(msg);
+    else if (type === "error") ElMessage.error(msg);
+    else ElMessage.info(msg);
   }
 
   function setPageSummary(msg: string) {
@@ -903,8 +940,9 @@ export function provideAppShell(): AppShellContext {
     baseline: Partial<BomFields>,
   ) {
     const preferred = String(form.filename ?? "").trim() || undefined;
+    // 改名已从子 Tab 移至弹窗，直接打开文件详情页，preferredNewFilename 可预填弹窗
     openFileDetailForRel(repoRelPath, {
-      subTab: "rename",
+      subTab: "overview",
       preferredNewFilename: preferred,
       form,
       baseline,
@@ -1226,11 +1264,74 @@ export function provideAppShell(): AppShellContext {
     }
   }
 
+  /** @deprecated 使用 registerPageMessages */
   function registerTreeSelect(tabId: string | undefined, fn: TreeSelectHandler | null) {
     if (!tabId) return;
-    if (fn) treeHandlersByTab.set(tabId, fn);
-    else treeHandlersByTab.delete(tabId);
+    if (fn) {
+      treeHandlersByTab.set(tabId, fn);
+      pageMsgHandlersByTab.set(tabId, (msg) => {
+        if (msg.type === "tree:select-file") return fn(msg.path);
+      });
+    } else {
+      treeHandlersByTab.delete(tabId);
+      pageMsgHandlersByTab.delete(tabId);
+    }
     syncActiveTreeHandler();
+  }
+
+  /** @deprecated 使用 registerPageMessages */
+  function registerDirPick(tabId: string | undefined, fn: ((rel: string) => void) | null) {
+    if (!tabId) return;
+    if (fn) {
+      dirHandlersByTab.set(tabId, fn);
+      pageMsgHandlersByTab.set(tabId, (msg) => {
+        if (msg.type === "tree:pick-dir") { fn(msg.path); return true; }
+      });
+    } else {
+      dirHandlersByTab.delete(tabId);
+      pageMsgHandlersByTab.delete(tabId);
+    }
+    syncActiveTreeHandler();
+  }
+
+  function dispatchDirPick(rel: string) {
+    const norm = rel.replace(/\\/g, "/").trim();
+    if (!norm) return;
+    dirPickHandler.value?.(norm);
+  }
+
+  /** 注册页面统一消息处理（新 API，替换 registerTreeSelect + registerDirPick） */
+  function registerPageMessages(tabId: string | undefined, fn: PageMessageHandler | null) {
+    if (!tabId) return;
+    if (fn) pageMsgHandlersByTab.set(tabId, fn);
+    else pageMsgHandlersByTab.delete(tabId);
+    syncActiveTreeHandler();
+  }
+
+  /** 分发消息到当前活跃页 handler。无 handler 或返回 false 时执行默认行为。 */
+  function dispatchPageMessage(msg: PageMessage) {
+    const handler = pageMsgHandler.value;
+    if (handler) {
+      const handled = handler(msg);
+      if (handled !== false) return; // 已处理
+    }
+    // 默认行为
+    switch (msg.type) {
+      case "tree:select-file":
+        _fallbackOpenFile(msg.path);
+        break;
+      default:
+        // 无 handler 且无默认行为 → 前端 log
+        if (!handler) console.log("[page-msg] unhandled:", msg.type, msg);
+    }
+  }
+
+  function _fallbackOpenFile(rel: string) {
+    if (/\.fcstd$/i.test(basenameFromRel(rel))) {
+      openFileDetailForRel(rel);
+    } else if (/\.catdlg$/i.test(basenameFromRel(rel))) {
+      openCaaDialogForRel({ catDlgRel: rel });
+    }
   }
 
   async function dispatchTreeSelect(rel: string) {
@@ -1247,14 +1348,7 @@ export function provideAppShell(): AppShellContext {
       }
     }
 
-    if (/\.fcstd$/i.test(basenameFromRel(norm))) {
-      openFileDetailForRel(norm);
-      return;
-    }
-
-    if (/\.catdlg$/i.test(basenameFromRel(norm))) {
-      openCaaDialogForRel({ catDlgRel: norm });
-    }
+    _fallbackOpenFile(norm);
   }
 
   function requestTreeRescan(selectRel?: string) {
@@ -1315,7 +1409,7 @@ export function provideAppShell(): AppShellContext {
       return;
     }
     if (pageId === "file_rename" && rel) {
-      openFileDetailForRel(rel, { subTab: "rename" });
+      openFileDetailForRel(rel, { subTab: "overview" });
       return;
     }
     if (pageId === "rename_analysis" || pageId === "file_rename") {
@@ -1438,6 +1532,7 @@ export function provideAppShell(): AppShellContext {
     logText,
     logSource,
     setStatus,
+    toast,
     setPageSummary,
     appendLog,
     clearLog,
@@ -1481,6 +1576,12 @@ export function provideAppShell(): AppShellContext {
     treeSelectHandler,
     registerTreeSelect,
     dispatchTreeSelect,
+    dirPickHandler,
+    registerDirPick,
+    dispatchDirPick,
+    registerPageMessages,
+    dispatchPageMessage,
+    toggleWorksetPanel,
     treeRescanToken,
     treeSelectAfterRescan,
     requestTreeRescan,

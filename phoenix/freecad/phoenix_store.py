@@ -25,6 +25,11 @@ from phoenix.freecad.phoenix_schema import (
     CREATE_SCHEMA_DDL,
     SCHEMA_VERSION,
     T_META,
+    T_CAD_SCAN,
+    T_FILE_ASSET,
+    T_BOM_XREF,
+    T_BOM_LINE,
+    T_XREF_FLAT,
     phoenix_dir as _schema_phoenix_dir,
     workspace_database_path,
 )
@@ -201,6 +206,9 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     migrate_caa_schema(conn)
     migrate_workset_schema(conn)
     migrate_workspace_pref_schema(conn)
+    from phoenix.freecad.phoenix_schema import migrate_cad_schema
+
+    migrate_cad_schema(conn)
     conn.execute(
         f"INSERT INTO {T_META}(key, value) VALUES ('schema_version', ?) "
         f"ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -2194,4 +2202,114 @@ def query_bom_xrefs_for_basename(
     if exclude_key:
         rows = [r for r in rows if _norm_key(r["host_repo_rel_path"]) != exclude_key]
     return rows
+
+
+# ---------------------------------------------------------------------------
+# BOM JSON 缓存（文件级持久化）
+# ---------------------------------------------------------------------------
+
+def save_fcstd_bom_json(repo_root: Path, repo_rel_path: str, bom_json: str) -> None:
+    """将一个 FCStd 的 BOM+ XLink JSON 写入 file_asset 表的 bom_json 字段。"""
+    from pathlib import Path as _Path
+
+    rr = repo_root.expanduser().resolve(strict=False)
+    with connect(rr) as conn:
+        cur = conn.execute(
+            f"UPDATE {T_FILE_ASSET} SET bom_json = ? WHERE repo_rel_path = ?",
+            (bom_json, repo_rel_path),
+        )
+        if cur.rowcount == 0:
+            conn.execute(
+                f"INSERT INTO {T_FILE_ASSET} (repo_rel_path, filename, file_status, bom_json) "
+                "VALUES (?, ?, 'present', ?)",
+                (repo_rel_path, _Path(repo_rel_path).name, bom_json),
+            )
+
+
+def load_fcstd_bom_json(repo_root: Path, repo_rel_path: str) -> str | None:
+    """从 file_asset 表读取已缓存的 bom_json。"""
+    import sqlite3
+
+    rr = repo_root.expanduser().resolve(strict=False)
+    with connect(rr) as conn:
+        row = conn.execute(
+            f"SELECT bom_json FROM {T_FILE_ASSET} WHERE repo_rel_path = ?",
+            (repo_rel_path,),
+        ).fetchone()
+        if row and row[0]:
+            return row[0]
+    return None
+
+
+# ---------------------------------------------------------------------------
+# BOM 行表 + 引用展开表（批量替换）
+# ---------------------------------------------------------------------------
+
+def replace_bom_lines(
+    repo_root: Path,
+    scan_id: int,
+    bom_lines: list[dict[str, Any]],
+) -> None:
+    """批量替换 bom_line 表（按 scan_id 先删后插）。"""
+    from datetime import datetime, timezone
+
+    rr = repo_root.expanduser().resolve(strict=False)
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    with connect(rr) as conn:
+        conn.execute(
+            f"DELETE FROM {T_BOM_LINE} WHERE scan_id = ?",
+            (scan_id,),
+        )
+        conn.executemany(
+            f"INSERT INTO {T_BOM_LINE} "
+            "(scan_id, assembly_rel, part_rel, depth, bom_path, part_key, quantity, cycle_detected, built_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    scan_id,
+                    line["assembly_rel"],
+                    line["part_rel"],
+                    line.get("depth", 0),
+                    line.get("bom_path", ""),
+                    line.get("part_key", ""),
+                    line.get("quantity", 1),
+                    1 if line.get("cycle_detected") else 0,
+                    now,
+                )
+                for line in bom_lines
+            ],
+        )
+
+
+def replace_xref_flat(
+    repo_root: Path,
+    scan_id: int,
+    edges: list[dict[str, Any]],
+) -> None:
+    """批量替换 xref_flat 表（按 scan_id 先删后插）。"""
+    from datetime import datetime, timezone
+
+    rr = repo_root.expanduser().resolve(strict=False)
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    with connect(rr) as conn:
+        conn.execute(
+            f"DELETE FROM {T_XREF_FLAT} WHERE scan_id = ?",
+            (scan_id,),
+        )
+        conn.executemany(
+            f"INSERT INTO {T_XREF_FLAT} "
+            "(scan_id, host_rel, target_rel, link_label, is_direct, built_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    scan_id,
+                    e["host_rel"],
+                    e["target_rel"],
+                    e.get("link_label", ""),
+                    1 if e.get("is_direct") else 0,
+                    now,
+                )
+                for e in edges
+            ],
+        )
 

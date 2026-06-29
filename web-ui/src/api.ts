@@ -874,6 +874,90 @@ export function purgeMissingFcstdMap() {
   });
 }
 
+export function startFcstdMapScan(forceUpdatePartName = false, scopeWorksetId?: string) {
+  return jsonFetch<{ scan_id: string; phase: string }>(
+    "/api/fcstd-map/scan/start",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        force_update_part_name: forceUpdatePartName,
+        scope_workset_id: scopeWorksetId || null,
+      }),
+    },
+  );
+}
+
+export type ScanProgressPayload = {
+  scan_id: string;
+  phase: string;
+  step: number;
+  status: string;
+  cancelled: boolean;
+  error: string;
+  total_cad_files: number;
+  total_fcstd_files: number;
+  walk: { total: number; processed: number; percent: number };
+  bom: {
+    total: number;
+    processed: number;
+    skipped: number;
+    failed: number;
+    current_file: string;
+    percent: number;
+    errors: Array<{ rel: string; error: string }>;
+  };
+  xref: {
+    total: number;
+    processed: number;
+    skipped: number;
+    failed: number;
+    current_file: string;
+    percent: number;
+    errors: Array<{ rel: string; error: string }>;
+  };
+};
+
+export function fetchFcstdMapScanProgress(scanId: string) {
+  return jsonFetch<ScanProgressPayload>(
+    `/api/fcstd-map/scan/progress?scan_id=${encodeURIComponent(scanId)}`,
+  );
+}
+
+export function cancelFcstdMapScan(scanId: string) {
+  return jsonFetch<{ cancelled: boolean }>(
+    `/api/fcstd-map/scan/cancel?scan_id=${encodeURIComponent(scanId)}`,
+    { method: "POST" },
+  );
+}
+
+export type ScanHistoryEntry = {
+  scan_uuid: string;
+  status: string;
+  phase: string;
+  scanned_at: string;
+  started_at?: string;
+  finished_at?: string;
+  stats: Record<string, unknown>;
+};
+
+export function fetchFcstdMapScanHistory(limit = 20) {
+  return jsonFetch<{ scans: ScanHistoryEntry[] }>(
+    `/api/fcstd-map/scan/history?limit=${limit}`,
+  );
+}
+
+export type ScanResumePayload = {
+  active: boolean;
+  scan_id?: string;
+  source?: "memory" | "db";
+  progress?: ScanProgressPayload | null;
+};
+
+export function fetchFcstdMapScanResume() {
+  return jsonFetch<ScanResumePayload>("/api/fcstd-map/scan/resume");
+}
+
 export function exportFcstdMapJson() {
   return jsonFetch<{ path: string; path_display: string }>("/api/fcstd-map/export-json", {
     method: "POST",
@@ -1017,6 +1101,31 @@ export function refreshBomXrefHostIndex(body: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+/** 异步启动单文件引用索引重建，返回 {scan_id} */
+export function startBomXrefRebuild(body: {
+  host_repo_rel: string;
+  recursive?: boolean;
+  max_hosts?: number;
+}) {
+  return jsonFetch<{ scan_id: string }>("/api/bom-xrefs/refresh-host-index/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+/** 轮询异步重建进度 */
+export function fetchBomXrefRebuildProgress(scanId: string) {
+  const params = new URLSearchParams({ scan_id: scanId });
+  return jsonFetch<ScanProgressPayload>(`/api/bom-xrefs/refresh-host-index/progress?${params}`);
+}
+
+/** 取消正在运行的异步重建 */
+export function cancelBomXrefRebuild(scanId: string) {
+  const params = new URLSearchParams({ scan_id: scanId });
+  return jsonFetch<{ ok: boolean }>(`/api/bom-xrefs/refresh-host-index/cancel?${params}`, { method: "POST" });
 }
 
 export type AssemblyBomHostRow = {
@@ -1994,10 +2103,18 @@ export function applyCodeRename(body: Partial<CodeRenamePrefs> & { confirm_token
   });
 }
 
+export type WorksetEntry = {
+  path: string;
+  type: "file" | "dir";
+};
+
 export type FileWorkset = {
   id: string;
   name: string;
-  paths: string[];
+  /** 新格式：条目列表（含文件/目录类型） */
+  entries?: WorksetEntry[];
+  /** @deprecated 旧格式，已自动转为 entries */
+  paths?: string[];
   source?: string;
   updated_at: string;
 };

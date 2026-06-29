@@ -210,6 +210,15 @@ def set_workspace(path: Path | None) -> Path | None:
             f"不能使用 phoenix-desk-tools 工具目录作为 CAD 工作空间: {p}"
         )
     _active_workspace = p
+
+    # 标记上次遗留的 running 扫描为 orphaned
+    try:
+        from phoenix.services.cad_index.scan_store import orphan_active_on_startup
+
+        orphan_active_on_startup(p)
+    except Exception:
+        pass  # 数据库可能还不存在
+
     return p
 
 
@@ -245,6 +254,18 @@ class BomOperationBody(BomFieldsBody):
     original_filename: str = ""
     fill_empty_from_prefs: bool = True
     write_attrs_first: bool = False
+
+
+def _dedup_parent_child(dirs: list[str]) -> list[str]:
+    """去除父子目录：若 d 以 parent/ 开头则跳过。"""
+    if len(dirs) <= 1:
+        return list(dirs)
+    sorted_dirs = sorted(dirs)
+    out: list[str] = []
+    for d in sorted_dirs:
+        if not out or not d.startswith(out[-1].rstrip("/") + "/"):
+            out.append(d)
+    return out
 
 
 def _bom_vals(body: BomFieldsBody) -> dict[str, str]:
@@ -291,6 +312,8 @@ class ShellLayoutBody(BaseModel):
     properties_name_col_width_px: int | None = None
     git_commit_panel_open: bool | None = None
     git_commit_panel_dock: str | None = None
+    workset_panel_dock: str | None = None
+    workset_panel_open: bool | None = None
 
 
 class NavModulesBody(BaseModel):
@@ -350,6 +373,7 @@ def shell_log_since(after: int) -> dict[str, object]:
 
 class FcstdMapScanBody(BaseModel):
     force_update_part_name: bool | None = None
+    scope_workset_id: str | None = None
 
 
 class FcstdMapPrefsBody(BaseModel):
@@ -1178,6 +1202,115 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
         except OSError as e:
             raise HTTPException(status_code=500, detail=str(e)) from e
 
+    @app.post("/api/fcstd-map/scan/start")
+    def api_fcstd_map_scan_start(body: FcstdMapScanBody = ...) -> dict:
+        import threading
+
+        from phoenix.services.cad_index.scan_progress import get_progress, register_scan
+        from phoenix.services.cad_index.scan_store import persist_scan
+        from phoenix.services.fcstd_map_service import run_fcstd_map_scan_async
+
+        ws = get_workspace()
+        scan_id = register_scan()
+
+        # 解析工作集 → 扫描范围
+        scope_dirs: list[str] | None = None
+        scope_files: list[str] | None = None
+        if body.scope_workset_id:
+            from phoenix.services.file_workset_service import load_file_worksets
+            data = load_file_worksets(ws)
+            for ws_entry in data.get("worksets") or []:
+                if ws_entry.get("id") == body.scope_workset_id:
+                    entries = ws_entry.get("entries") or []
+                    dirs = sorted({e["path"] for e in entries if e.get("type") == "dir"})
+                    files = sorted({e["path"] for e in entries if e.get("type") == "file"})
+                    # 去父子目录
+                    scope_dirs = _dedup_parent_child(dirs)
+                    scope_files = [f for f in files if not any(f.startswith(d) for d in scope_dirs)]
+                    break
+            if not scope_dirs and not scope_files:
+                raise HTTPException(status_code=400, detail="工作集为空或不存在")
+
+        # 注入持久化回调：每次进度变更自动写入 SQLite
+        progress = get_progress(scan_id)
+        if progress:
+            progress.on_change = lambda p: persist_scan(ws, p)
+            # 立即写入初始行
+            persist_scan(ws, progress, initial=True)
+
+        thread = threading.Thread(
+            target=run_fcstd_map_scan_async,
+            args=(ws, scan_id),
+            kwargs={
+                "force_update_part_name": body.force_update_part_name,
+                "scope_dirs": scope_dirs,
+                "scope_files": scope_files,
+            },
+            daemon=True,
+        )
+        thread.start()
+        return {"scan_id": scan_id, "phase": "walk"}
+
+    @app.get("/api/fcstd-map/scan/progress")
+    def api_fcstd_map_scan_progress(scan_id: str = Query(...)) -> dict:
+        from phoenix.services.cad_index.scan_progress import get_progress
+
+        progress = get_progress(scan_id)
+        if progress:
+            return progress.to_dict()
+
+        # 内存未命中 → 尝试从 DB 恢复（服务重启场景）
+        from phoenix.services.cad_index.scan_store import load_scan
+
+        ws = get_workspace()
+        row = load_scan(ws, scan_id)
+        if row:
+            return row
+        raise HTTPException(status_code=404, detail="scan_id not found")
+
+    @app.post("/api/fcstd-map/scan/cancel")
+    def api_fcstd_map_scan_cancel(scan_id: str = Query(...)) -> dict:
+        from phoenix.services.cad_index.scan_progress import cancel_scan
+
+        ok = cancel_scan(scan_id)
+        return {"cancelled": ok}
+
+    @app.get("/api/fcstd-map/scan/history")
+    def api_fcstd_map_scan_history(limit: int = Query(20)) -> dict:
+        from phoenix.services.cad_index.scan_store import list_recent_scans
+
+        ws = get_workspace()
+        return {"scans": list_recent_scans(ws, limit=limit)}
+
+    @app.get("/api/fcstd-map/scan/resume")
+    def api_fcstd_map_scan_resume() -> dict:
+        from phoenix.services.cad_index.scan_progress import _registry, _registry_lock
+        from phoenix.services.cad_index.scan_store import find_active_scan
+
+        ws = get_workspace()
+
+        # 先检查内存中是否有进行中的扫描
+        with _registry_lock:
+            for p in _registry.values():
+                if p.status == "running":
+                    return {
+                        "active": True,
+                        "scan_id": p.scan_id,
+                        "source": "memory",
+                        "progress": p.to_dict(),
+                    }
+
+        # 内存未命中 → 查 DB
+        row = find_active_scan(ws)
+        if row:
+            return {
+                "active": True,
+                "scan_id": row["scan_uuid"],
+                "source": "db",
+                "progress": row.get("progress"),
+            }
+        return {"active": False}
+
     @app.post("/api/fcstd-map/export-json")
     def api_fcstd_map_export_json() -> dict:
         ws = get_workspace()
@@ -1317,6 +1450,56 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+
+    # ── 异步重建（大装配体）──
+
+    @app.post("/api/bom-xrefs/refresh-host-index/start")
+    def api_bom_xrefs_refresh_host_index_start(body: BomXrefRefreshHostBody) -> dict:
+        """后台启动单文件引用索引重建，返回 scan_id 供轮询。"""
+        import threading
+        import uuid
+
+        from phoenix.services.cad_index.scan_progress import get_progress, register_scan
+        from phoenix.services.cad_index.scan_store import persist_scan
+
+        scan_id = register_scan()
+        progress = get_progress(scan_id)
+        workspace = get_workspace()
+
+        def _run() -> None:
+            try:
+                refresh_bom_xref_index_for_host(
+                    workspace,
+                    body.host_repo_rel,
+                    recursive=body.recursive,
+                    max_hosts=body.max_hosts,
+                    progress=progress,
+                )
+            except Exception as exc:
+                progress.set_error(str(exc))
+            finally:
+                persist_scan(scan_id, progress.to_dict())
+
+        threading.Thread(target=_run, daemon=True).start()
+        return {"scan_id": scan_id}
+
+    @app.get("/api/bom-xrefs/refresh-host-index/progress")
+    def api_bom_xrefs_refresh_host_index_progress(scan_id: str = Query(...)) -> dict:
+        from phoenix.services.cad_index.scan_progress import get_progress
+
+        progress = get_progress(scan_id)
+        if not progress:
+            raise HTTPException(status_code=404, detail="任务不存在或已过期")
+        return progress.to_dict()
+
+    @app.post("/api/bom-xrefs/refresh-host-index/cancel")
+    def api_bom_xrefs_refresh_host_index_cancel(scan_id: str = Query(...)) -> dict:
+        from phoenix.services.cad_index.scan_progress import cancel_scan
+
+        ok = cancel_scan(scan_id)
+        if not ok:
+            raise HTTPException(status_code=404, detail="任务不存在或已完成")
+        return {"ok": True}
 
     @app.get("/api/bom-xrefs/assembly-hosts")
     def api_bom_xrefs_assembly_hosts(

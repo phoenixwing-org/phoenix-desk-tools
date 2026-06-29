@@ -43,7 +43,7 @@ const {
   baseline,
   pageError,
   reloadFile,
-  openRenameTab,
+  triggerRename,
   rememberFilenameDraft,
 } = useFileDetailContext();
 const shell = useAppShell();
@@ -261,7 +261,7 @@ function onGoRename() {
     pageError.value = "请先填写目标文件名，或点「推荐」生成";
     return;
   }
-  openRenameTab(name);
+  triggerRename(name);
 }
 
 onMounted(() => {
