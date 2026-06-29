@@ -2,17 +2,17 @@ import { computed, type ComputedRef, type Ref } from "vue";
 import { usePagePropertySheet } from "./usePagePropertySheet";
 import { propGroup, propReadonly, propSheet } from "../utils/pagePropertySchema";
 
-export function useTestFixturesPropertySheet(  pageId: string,
+export function useTestFixturesPropertySheet(pageId: string,
   opts: {
     checkoutRoot: ComputedRef<string>;
     enabledCount: ComputedRef<number>;
     totalCount: ComputedRef<number>;
-    linkedCount: ComputedRef<number>;
+    checkedOutCount: ComputedRef<number>;
     loading: Ref<boolean>;
     syncing: Ref<boolean>;
   },
 ) {
-  const { checkoutRoot, enabledCount, totalCount, linkedCount, loading, syncing } = opts;
+  const { checkoutRoot, enabledCount, totalCount, checkedOutCount, loading, syncing } = opts;
 
   usePagePropertySheet(pageId, () =>
     propSheet(
@@ -25,8 +25,8 @@ export function useTestFixturesPropertySheet(  pageId: string,
           propReadonly("enabled", "已勾选", {
             value: computed(() => `${enabledCount.value} / ${totalCount.value}`),
           }),
-          propReadonly("linked", "已链接", {
-            value: computed(() => `${linkedCount.value} / ${totalCount.value}`),
+          propReadonly("checked_out", "已检出", {
+            value: computed(() => `${checkedOutCount.value} / ${totalCount.value}`),
           }),
         ]),
         propGroup("state", "状态", [
@@ -40,17 +40,10 @@ export function useTestFixturesPropertySheet(  pageId: string,
         ]),
         propGroup("intro", "介绍", [
           propReadonly("intro_catalog", "来源", {
-            value: computed(() => "系统内置（phoenix/config/test_fixture_catalog.json），非用户自建"),
+            value: computed(() => "系统内置（phoenix/config/test_fixture_catalog.json）"),
           }),
-          propReadonly("intro_prefs", "偏好", {
-            value: computed(() => "launcher.json → test_fixtures"),
-            mono: true,
-          }),
-          propReadonly("intro_action", "操作", {
-            value: computed(
-              () =>
-                "勾选或「检出并链接」：git clone 到检出根目录，再链到 tests/fixtures/<名>（Windows 先删旧链接再建）",
-            ),
+          propReadonly("intro_prefs", "位置", {
+            value: computed(() => "clone 到 phoenix-desk-tools 同级目录即可，测试自动定位"),
           }),
         ]),
         propGroup("prefs", "本机偏好", [
@@ -60,7 +53,7 @@ export function useTestFixturesPropertySheet(  pageId: string,
           }),
         ]),
       ],
-      { title: "引用测试工程" },
+      { title: "检出测试工程" },
     ),
   );
 }

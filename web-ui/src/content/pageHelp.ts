@@ -242,7 +242,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
     ],
   },
   test_fixtures: {
-    title: "引用测试工程",
+    title: "检出测试工程",
     bullets: [
       "可引用的测试工程为系统内置（test_fixture_catalog.json），如 KtAlarmClock、PNXCaaStudy；随仓库提交，本页不可增删。",
       "本机偏好（launcher.json → test_fixtures）：检出根目录、勾选列表，不提交进 Git。",

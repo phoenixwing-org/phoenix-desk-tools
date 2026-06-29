@@ -44,7 +44,7 @@ export const RIBBON_TABS: RibbonTabDef[] = [
         label: "开发",
         items: [
           { pageId: "git", label: "Git" },
-          { pageId: "test_fixtures", label: "引用测试工程" },
+          { pageId: "test_fixtures", label: "检出测试工程" },
           { pageId: "unit_tests" },
         ],
       },

@@ -136,7 +136,7 @@
             "description": "在本机运行 tests/ 下 unittest（Code / CAD / 平台套件）"
         }, {
             "id": "test_fixtures",
-            "label": "引用测试工程",
+            "label": "检出测试工程",
             "page": "test_fixtures",
             "description": "系统内置开源 C++ 样例；本机 git 检出并链接到 tests/fixtures"
         }

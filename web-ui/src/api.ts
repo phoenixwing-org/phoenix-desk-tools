@@ -233,9 +233,6 @@ export type TestFixtureItem = {
   enabled: boolean;
   checkout_path: string;
   checkout_exists: boolean;
-  link_status: string;
-  link_detail: string;
-  symlink_path: string;
   target_path: string;
 };
 
