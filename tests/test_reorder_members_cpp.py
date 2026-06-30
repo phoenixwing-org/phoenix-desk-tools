@@ -157,6 +157,46 @@ class TestReorderMembersCpp(unittest.TestCase):
             # 幂等性：二次运行无变更
             self.assertFalse(reorder_cpp_file(path, dry_run=True))
 
+    # ------------------------------------------------------------------
+    # 回归：} //--- 行尾粘连分隔符
+    # ------------------------------------------------------------------
+
+    def test_glued_sep_stripped_from_block_end(self) -> None:
+        """} //--- 粘连分隔符应剥离到独立行，不重复补插。"""
+        src = """\
+KTCAutoHSO::KTCAutoHSO() {
+}
+
+int KTCAutoHSO::AddElement(CATISpecObject_var object) {
+    return 1;
+} //-----------------------------------------------------------------------------
+int KTCAutoHSO::AddElement(const CATListValCATISpecObject_var& list) {
+    return 2;
+}
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "glued_sep.cpp"
+            path.write_text(src, encoding="utf-8")
+            self.assertTrue(reorder_cpp_file(path, dry_run=False))
+            text = path.read_text(encoding="utf-8")
+            # } 不应粘连 //---
+            self.assertNotIn("} //", text)
+            # 分隔符独立一行
+            self.assertIn("}\n//", text)
+            # 没有相邻两行都是 //--- 分隔线
+            lines = text.split("\n")
+            for i in range(len(lines) - 1):
+                both_sep = (
+                    lines[i].strip().startswith("//-")
+                    and lines[i + 1].strip().startswith("//-")
+                )
+                self.assertFalse(
+                    both_sep,
+                    f"双重分隔符 at line {i}: {lines[i]} / {lines[i+1]}",
+                )
+            # 幂等
+            self.assertFalse(reorder_cpp_file(path, dry_run=True))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -222,7 +222,7 @@ def _clean_block_text(text: str) -> str:
     text = _strip_block_outer_blanks(text)
     if not text:
         return ""
-    text = re.sub(r"\}(//-+\s*)$", "}\n", text.rstrip("\r\n"))
+    text = re.sub(r"\}\s*(//-+\s*)$", "}\n", text.rstrip("\r\n"))
     text = re.sub(r"^(//-+\s*\n)+", "", text)
     text = re.sub(r"(//-+\s*\n)+$", "", text.rstrip("\r\n"))
     # 兜底：清除可能残留的注释分隔线（//---static---... / //---INSIDE FUNCTION---...）
@@ -290,24 +290,34 @@ def _is_cpp_code_position(body: str, index: int) -> bool:
     return True
 
 
-def _advance_past_function_end(body: str, i: int, n: int) -> int:
-    """Skip trailing same-line //--- and blank lines after closing brace/semicolon."""
+def _advance_past_function_end(body: str, i: int, n: int) -> tuple[int, str]:
+    """Skip trailing same-line //--- and blank lines after closing brace/semicolon.
+
+    Returns (new_position, glued_separator_text).
+    glued_separator_text is the ``//---`` on the same line as ``}`` (if any),
+    normalized; empty string otherwise. Caller should pass this as the *next*
+    block's separator.
+    """
+    glued_sep = ""
     while i < n and body[i] in " \t":
         i += 1
     if i + 1 < n and body[i] == "/" and body[i + 1] == "/":
+        sep_start = i
         while i < n and body[i] not in "\r\n":
             i += 1
+        glued_sep = _normalize_sep_line(body[sep_start:i])
     while i < n and body[i] in "\r\n":
         i += 1
-    return i
+    return i, glued_sep
 
 
-def _find_function_body_end(body: str, impl_start: int) -> int:
-    """Return index after the closing brace (or semicolon) of a member function definition."""
+def _find_function_body_end(body: str, impl_start: int) -> tuple[int, str]:
+    """Return (index_after_closing, glued_separator) of a member function definition.
+    glued_separator is the ``//---`` on the same line as ``}`` (if any), empty otherwise."""
     n = len(body)
     paren_start = body.find("(", impl_start)
     if paren_start < 0:
-        return n
+        return n, ""
 
     paren = 1
     i = paren_start + 1
@@ -323,7 +333,7 @@ def _find_function_body_end(body: str, impl_start: int) -> int:
         while i < n and body[i] in " \t\r\n":
             i += 1
         if i >= n:
-            return n
+            return n, ""
 
         c = body[i]
         if c == "{":
@@ -351,7 +361,7 @@ def _find_function_body_end(body: str, impl_start: int) -> int:
                 while i < n and body[i] in " \t\r\n":
                     i += 1
                 if i >= n:
-                    return n
+                    return n, ""
                 ic = body[i]
                 if ic == "(":
                     paren_depth += 1
@@ -390,7 +400,7 @@ def _find_function_body_end(body: str, impl_start: int) -> int:
 
         i += 1
 
-    return n
+    return n, ""
 
 
 def _is_return_type_line(stripped: str, class_name: str) -> bool:
@@ -510,6 +520,7 @@ def _scan_cpp_blocks(body: str, class_name: str) -> List[Tuple[str, str, str]]:
     )
     blocks: List[Tuple[str, str, str]] = []
     prev_end = 0
+    pending_glued_sep = ""  # 上一个函数的 } //--- 粘连分隔符
 
     for m in pat.finditer(body):
         if not _is_cpp_code_position(body, m.start()):
@@ -519,8 +530,12 @@ def _scan_cpp_blocks(body: str, class_name: str) -> List[Tuple[str, str, str]]:
             continue
         impl_name = m.group(1)
         func_line_start = body.rfind("\n", 0, m.start()) + 1
-        block_start, sep = _walk_back_block_start(body, func_line_start, prev_end, class_name)
-        func_end = _find_function_body_end(body, m.start())
+        block_start, walk_sep = _walk_back_block_start(body, func_line_start, prev_end, class_name)
+        # 回溯未找到分隔符时，使用上一函数 } //--- 粘连分隔符
+        sep = walk_sep if walk_sep else pending_glued_sep
+        pending_glued_sep = ""
+        func_end, glued_sep = _find_function_body_end(body, m.start())
+        pending_glued_sep = glued_sep
         text = _clean_block_text(body[block_start:func_end])
         # 过滤非定义匹配（孤儿调用 / 声明）；真正 .cpp 函数定义必含 {
         if "{" not in text and "= delete" not in text and "= default" not in text:
