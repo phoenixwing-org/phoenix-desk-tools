@@ -19,8 +19,9 @@ from phoenix.services.reorder_members_service import (
     list_reorder_top_level_entries,
     run_reorder_members_batch,
 )
+from phoenix.testing.fixture_prefs import resolve_fixture_path
 
-KT_ALARM_CLOCK_FIXTURE = Path(__file__).resolve().parent.parent.parent / "KtAlarmClock"
+KT_ALARM_CLOCK_FIXTURE = resolve_fixture_path("KtAlarmClock")
 
 
 class TestReorderMembersService(unittest.TestCase):

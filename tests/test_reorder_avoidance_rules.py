@@ -15,14 +15,14 @@ from phoenix.code.reorder_avoidance import (
     rule_ids,
 )
 from phoenix.code.reorder_members import reorder_cpp_file, reorder_header_file
+from phoenix.testing.fixture_prefs import resolve_fixture_path
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "reorder_members"
 PNX_BOM_CMD_MIN = FIXTURES / "pnx_bom_analysis_cmd_min.cpp"
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-KT_PARAM_H = _REPO_ROOT / "KtAlarmClock" / "KtAlarmClockUI" / "KtAlarmClockParam.h"
+KT_PARAM_H = resolve_fixture_path("KtAlarmClock") / "KtAlarmClockUI" / "KtAlarmClockParam.h"
 KT_PARAM_CPP = KT_PARAM_H.with_suffix(".cpp")
 PNX_CURVE_DIVISION_H = (
-    _REPO_ROOT / "PNXCaaStudy"
+    resolve_fixture_path("PNXCaaStudy")
     / "PNXCurveDivisionWsp" / "PNXCurveDivisionFrm"
     / "PNXCurveDivisionUI.m" / "LocalInterfaces"
     / "PNXCurveDivisionDlg.h"

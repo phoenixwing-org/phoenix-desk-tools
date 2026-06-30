@@ -12,9 +12,10 @@ from phoenix.code.rename.types import RenameScanOptions
 from phoenix.code.rename.scan import preview_rename_all, preview_text_rename
 from phoenix.code.rename.uuid_apply import apply_uuid_hits
 from phoenix.code.rename.uuid_scan import UuidScanOptions, make_hit_id, scan_uuid_hits
+from phoenix.testing.fixture_prefs import resolve_fixture_path
 
 UUID_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "uuid"
-PNX_CAA_STUDY = Path(__file__).resolve().parent / "fixtures" / "PNXCaaStudy"
+PNX_CAA_STUDY = resolve_fixture_path("PNXCaaStudy")
 
 
 class TestCodeRenameEngine(unittest.TestCase):
@@ -409,9 +410,12 @@ class TestCodeUuidEngine(unittest.TestCase):
             # 与 .iid 字典条目同值 UUID 替换后仍保持 CAA 块形态
             self.assertRegex(new_text.lower(), r"0x[0-9a-f]{8},\s*0x[0-9a-f]{4}")
 
-    @unittest.skipUnless(PNX_CAA_STUDY.is_dir(), "tests/fixtures/PNXCaaStudy 未链接")
+    @unittest.skipUnless(
+        PNX_CAA_STUDY.is_dir(),
+        "PNXCaaStudy 未检出到 phoenix-desk-tools 同级目录",
+    )
     def test_uuid_scan_pnx_caa_study_sample(self) -> None:
-        """case_id=uuid-pnx-tree — 外链 PNXCaaStudy：.iid + IID 块 + Cmd GUID"""
+        """case_id=uuid-pnx-tree — 同级目录 PNXCaaStudy：.iid + IID 块 + Cmd GUID"""
         scanned = scan_uuid_hits(
             PNX_CAA_STUDY,
             UuidScanOptions(scope="PNXCombinedCurveWsp/PNXCombinedCurve.edu"),

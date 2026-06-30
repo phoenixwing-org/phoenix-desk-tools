@@ -16,6 +16,7 @@ from phoenix.code.rename.encoding import (
     write_text_if_changed,
 )
 from phoenix.code.reorder_members import reorder_header_file
+from phoenix.testing.fixture_prefs import resolve_fixture_path
 
 
 class TestEncodingWrite(unittest.TestCase):
@@ -51,8 +52,7 @@ class TestEncodingWrite(unittest.TestCase):
 
     def test_reorder_header_crlf_already_sorted_reports_unchanged(self) -> None:
         kt = (
-            Path(__file__).resolve().parent.parent.parent
-            / "KtAlarmClock"
+            resolve_fixture_path("KtAlarmClock")
             / "KtAlarmClockUI"
             / "KtAlarmClockParam.h"
         )

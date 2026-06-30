@@ -19,7 +19,4 @@ web-ui/node_modules/
 node_modules/
 web-ui/dist
 .phoenix
-# 测试工程 symlink（由「引用测试工程」页或 link_test_fixtures.py 生成本机链接）
-tests/fixtures/KtAlarmClock
-tests/fixtures/PNXCaaStudy
 .npmrc

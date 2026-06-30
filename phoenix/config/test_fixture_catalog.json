@@ -30,6 +30,17 @@
         "tests/test_reorder_avoidance_rules.py",
         "tests/test_code_rename_engine.py"
       ]
+    },
+    {
+      "name": "phoenix-freecad-study",
+      "description": "FreeCAD 学习工程 · 测试库",
+      "clone_url": "https://gitee.com/PhoenixWing321/phoenix-freecad-study.git",
+      "fixture_rel": "tests/fixtures/phoenix-freecad-study",
+      "candidates": [
+        "../phoenix-freecad-study",
+        "../../phoenix-freecad-study"
+      ],
+      "used_by": []
     }
   ]
 }

@@ -84,3 +84,18 @@ def save_test_fixture_prefs(
 
 def enabled_test_fixture_names() -> set[str]:
     return set(load_test_fixture_prefs()["enabled"])
+
+
+def resolve_fixture_path(name: str) -> Path:
+    """返回已配置的测试工程检出目录下的 ``name`` 路径。
+
+    从 ``launcher.json`` 读取 ``checkout_root``，若未配置则回退到
+    ``phoenix-desk-tools`` 同级目录（``_default_checkout_root()``）。
+    """
+    prefs = load_test_fixture_prefs()
+    root_str = prefs.get("checkout_root", "")
+    if root_str:
+        root = Path(root_str)
+        if root.is_dir():
+            return root / name
+    return _default_checkout_root() / name
