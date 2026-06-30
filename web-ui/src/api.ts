@@ -1814,8 +1814,26 @@ export function fetchReorderMembersTopLevel() {
   return jsonFetch<ReorderMembersTopLevelResponse>("/api/code/reorder-members/top-level");
 }
 
+export type ReorderMembersResolveResult = {
+  workspace_path: string;
+  resolved_files: string[];
+  total: number;
+};
+
+export function resolveReorderMembersScope(body: { repo_rel_paths: string[] }) {
+  return jsonFetch<ReorderMembersResolveResult>("/api/code/reorder-members/resolve", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 export function runReorderMembers(
-  body: Partial<ReorderMembersPrefs> & { targets: string[]; dry_run?: boolean },
+  body: Partial<ReorderMembersPrefs> & {
+    targets?: string[];
+    repo_rel_paths?: string[];
+    dry_run?: boolean;
+  },
 ) {
   return jsonFetch<ReorderMembersRunResult>("/api/code/reorder-members/run", {
     method: "POST",

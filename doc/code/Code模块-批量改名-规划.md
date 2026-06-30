@@ -22,18 +22,20 @@
 
 ```mermaid
 flowchart LR
-  A[输入 旧名 → 新名 + 勾选级别] --> B{预览?}
-  B -->|是| C[搜索 / 列出命中]
-  C --> D[表格：路径 · 级别 · 次数 · 行号]
-  D --> E[确认执行]
-  B -->|否| E
-  E --> F[写盘 + 输出报告]
-  F --> G[可选：Code 索引重扫]
+  A[选择工作集] --> B[输入 旧名 → 新名 + 勾选级别]
+  B --> C{预览?}
+  C -->|是| D[搜索 / 列出命中]
+  D --> E[表格：路径 · 级别 · 次数 · 行号]
+  E --> F[确认执行]
+  C -->|否| F
+  F --> G[写盘 + 输出报告]
+  G --> H[可选：Code 索引重扫]
 ```
 
-1. **搜索（预览）**：只读扫描，列出所有命中（文件夹 / 文件 / 文本行），含 **每文件命中次数**、文本 **行号摘要**。
-2. **改名（执行）**：可不预览，直接执行（需二次确认）；执行后输出 **修改清单**（路径、级别、次数、编码变更说明）。
-3. **dry-run 默认**：Web 首次执行建议默认预览；CLI 提供 `--apply`。
+1. **选择工作集**：页头 combo 下拉选择工作集，限定改名范围（与 CAD 索引、C++ 成员排序同模式）。工作集内路径由 `workset_resolve` 展开为文件列表。
+2. **搜索（预览）**：只读扫描，列出所有命中（文件夹 / 文件 / 文本行），含 **每文件命中次数**、文本 **行号摘要**。
+3. **改名（执行）**：可不预览，直接执行（需二次确认）；执行后输出 **修改清单**（路径、级别、次数、编码变更说明）。
+4. **dry-run 默认**：Web 首次执行建议默认预览；CLI 提供 `--apply`。
 
 ## 3. 匹配规则
 
@@ -100,10 +102,10 @@ phoenix/services/code_uuid_service.py     # UUID API（或合并同一 service�
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/api/code/rename/prefs` | 忽略文件路径、默认编码、上次选项 |
-| POST | `/api/code/rename/preview` | body: `old`, `new`, `levels`, `scope?`（相对路径子树） |
+| POST | `/api/code/rename/preview` | body: `old`, `new`, `levels`, `repo_rel_paths?`（从工作集取，经 `workset_resolve` 展开） |
 | POST | `/api/code/rename/apply` | 同上 + `confirm_token` 或命中摘要 hash |
 | GET | `/api/code/rename/report/{id}` | 可选：最近报告落 `.phoenix/reports/` 或仅内存 + 运行日志 |
-| POST | `/api/code/uuid/scan` | 扫描工作空间内 UUID 形态字符串 |
+| POST | `/api/code/uuid/scan` | body: `repo_rel_paths?`（从工作集取）；扫描工作空间内 UUID 形态字符串 |
 | POST | `/api/code/uuid/apply` | body: `items[]`（用户勾选的命中 id）+ 替换策略 |
 
 Web：
@@ -123,8 +125,8 @@ Web：
 | --- | --- |
 | **P0** | 文本级 preview + apply；编码检测；忽略列表；单测 fixture |
 | **P1** | 文件 / 文件夹重命名；自底向上路径更新；macOS 大小写-only 改名提示 |
-| **P2** | 对接旧 CLI 或迁入核心；Web 改名页 + Tab 会话 |
-| **P2b** | **UUID 扫描 + 勾选替换**（见 §11）；Web UUID 页 |
+| **P2** | 对接旧 CLI 或迁入核心；Web 改名页 + Tab 会话；**工作集 combo** 页头选择（与 CAD 索引 / 成员排序同模式）；`repo_rel_paths` 经 `workset_resolve` 展开 |
+| **P2b** | **UUID 扫描 + 勾选替换**（见 §11）；Web UUID 页；**工作集 combo** 同模式 |
 | **P3** | 与 Code 索引联动（限定已索引文件）；`phoenix_code_*` 改名审计表（如 `phoenix_code_rename_log`）；Git 脏文件过滤 |
 
 ## 11. UUID 扫描与勾选替换（独立子功能）
@@ -188,7 +190,8 @@ flowchart LR
 | --- | --- |
 | **U0** | `uuid_scan.py` + 单测（fixture 含 `.cpp` / `.json` / `.ui`） |
 | **U1** | 勾选 apply + 编码复用 §4；Web 表格 + 全选/按值选 — **已落地** |
-| **U2** | 与 Code 索引 / **FileWorkset** 范围联动；导出报告 — **已落地**（2026-06） |
+| **U2** | 与 Code 索引 / **FileWorkset** 范围联动；导出报告；**页头工作集 combo** — **已落地**（2026-06） |
+| **U3** | 工作集路径经 `workset_resolve` 展开（与成员排序/批量改名共用基础函数）— **待实现** |
 
 ### 11.7 风险
 

@@ -10,14 +10,13 @@
 
 1. 侧栏打开 **C++ 成员排序**（`reorder_members`）。
 2. 页面自动使用 **当前 Phoenix 工作空间根** 作为 C++ 源码树（换工程请在 **配置** 里切换工作空间）。
-3. **刷新列表**：列出工作空间下 **一级目录** 与 **一级** `.h` / `.hpp` / `.cpp` 文件（带「目录 / 文件」类型）；其余项按忽略规则隐藏。
-4. **勾选**要处理的条目（至少一项）。
+3. **选择工作集**：页头 combo 下拉选择一个已归集文件的工作集。工作集内的路径（目录 + 文件）由后端 `workset_resolve` 展开为文件列表——目录递归扫描 `.h` / `.hpp` / `.cpp`，文件按扩展名筛选（详见 [FileWorkset-规划](../platform/FileWorkset-规划.md)）。
+4. 可点 **预检** 预览解析出的文件列表（不写盘），确认无误后点 **执行排序**。
 5. 选项：`.cpp` / 头文件勾选、详细日志；**成员变量字母序** Web 暂禁用（见 [成员变量字母序-规则与待实现.md](成员变量字母序-规则与待实现.md)）。
-6. **预检**（不写盘）或 **执行排序**（直接写盘，无需先预检）。
 
 **编码**：CAA 工程常见 GBK 源文件；读写与 Code 批量改名共用 `detect_and_read`（UTF-8 → GBK），写回时尽量保持原编码。
 
-偏好保存在工作空间 `.phoenix/phoenix-workspace-prefs.json` 的 `code_reorder` 段（选项与上次勾选）。
+偏好保存在工作空间 `.phoenix/phoenix-workspace-prefs.json` 的 `code_reorder` 段（选项与上次选中工作集）。
 
 ### 忽略列表
 
@@ -69,14 +68,16 @@ python -m phoenix.code.reorder_members /path/to/module [options]
 | --- | --- | --- |
 | GET | `/api/code/reorder-members/prefs` | 读偏好 |
 | PUT | `/api/code/reorder-members/prefs` | 写偏好 |
-| GET | `/api/code/reorder-members/top-level` | 一级目录+文件；含 `entries[]`（`kind`: dir/file）、`ignored`、`ignore_patterns` |
-| POST | `/api/code/reorder-members/run` | `{ targets: string[], dry_run?: bool, …options }` |
+| GET | `/api/code/reorder-members/top-level` | **保留但 Web 不再使用**：一级目录+文件；CLI 及其他场景可继续调用 |
+| POST | `/api/code/reorder-members/resolve` | **新**：传入 `repo_rel_paths`（从工作集取），后端调 `workset_resolve` 展开为文件列表，供预检预览 |
+| POST | `/api/code/reorder-members/run` | `{ targets?: string[], repo_rel_paths?: string[], dry_run?: bool, …options }`；`repo_rel_paths` 经 `workset_resolve` 展开后与 `targets` 合并去重 |
 
 ---
 
 ## 5. 后续可扩展
 
 - [x] **锁定段（P0）**：clang-format off/on、CAA Wizard 段 — 见 [成员排序-锁定段与回归用例.md](成员排序-锁定段与回归用例.md)
+- [x] **工作集驱动选择（当前）**：页头 combo 选工作集 → `workset_resolve` 展开目录+筛选文件 → 预检/执行；见 [FileWorkset-规划](../platform/FileWorkset-规划.md)
 - [ ] **`#pragma region VirtualFunction`**：待研究；当前不专项处理（见锁定段 doc §待研究）
 - [ ] **PNX Cmd `.cpp` Wizard 段**：fixture `pnx_bom_analysis_cmd_min.cpp` 已摘录，单测待补
 - [ ] 写盘后 Git 对比 / Revert（Web）— 随 Git 插件 G1：[Git插件规划](../platform/Web壳层-Git工作区插件-规划.md) · [消费方](../platform/成员排序-变更Diff预览-待研究.md)
@@ -84,6 +85,7 @@ python -m phoenix.code.reorder_members /path/to/module [options]
 - [ ] 与 Git 状态联动（仅排序已修改文件）
 - [ ] `code/` 模块配置：`app_config.modules` 切换 CAD / Code 导航集
 - [ ] 批量任务队列 + 取消（统一运行日志）
+- [ ] **算法语言评估**：`workset_resolve` 当前为 Python；后续可考虑 TS/Node.js 轻量版做纯路径计算（归一化、去嵌套），权衡见 [FileWorkset-规划](../platform/FileWorkset-规划.md)
 
 ---
 

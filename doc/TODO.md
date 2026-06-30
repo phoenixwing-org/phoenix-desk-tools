@@ -37,7 +37,7 @@
 
 - [x] **配置**：居中 Modal 弹层；工作空间 **浏览…** 走 Python 原生选目录（macOS osascript）
 - [x] 配置：未扫描工作空间时提示并跳转 **CAD 索引**
-- [x] **Code · C++ 成员排序** Web 页：一级子目录勾选 + 后台排序 + 运行日志（见 [成员函数排序-reorder_members.md](code/成员函数排序-reorder_members.md)）
+- [~] **Code · C++ 成员排序** Web 页：~~一级子目录勾选~~ → **工作集 combo 驱动** + `workset_resolve` 展开目录/筛选文件 + 后台排序 + 运行日志（见 [成员函数排序-reorder_members.md](code/成员函数排序-reorder_members.md) · [FileWorkset-规划](platform/FileWorkset-规划.md)）
 - [x] **主页 · 导航模块偏好**（见下方 §导航模块偏好）
 - [x] **工作空间树**：Code 模块偏好下默认筛选 `.h/.cpp` 等（见 §导航模块偏好）
 - [ ] 桌面 `fcstd_map_page` 分页，去掉 `load_fcstd_document` 全表
@@ -144,6 +144,7 @@
 - [x] **P1 消费**：Code UUID · `WorksetScopePicker` + `repo_rel_paths` 扫描；UUID 页从当前工作集扫描 / 命中加入工作集
 - [x] **P1 UX**：工作集删除确认（Element Plus）；侧栏去掉 SQLite 路径说明
 - [ ] 改名 / 转码 / CAD 批量页接入 `useWorksetPageScope`（Code 批量改名已接）
+- [~] **C++ 成员排序 / Code 索引 / Code 批量改名**：页头工作集 combo 改造 + `workset_resolve` 算法集中（进行中，见 [FileWorkset-规划](platform/FileWorkset-规划.md) §6 F–H）
 - [x] 工作集「刷新 / 剔除 missing」、Saved Query 物化（剔除 missing 已做；Saved Query 未做）
 
 **P2 · 代码整洁（优先级靠后）**
@@ -301,7 +302,8 @@
 - [ ] **成员排序 · 待研究**：`#pragma region VirtualFunction`（暂不专项处理）；`.cpp` Wizard 段 — `pnx_bom_analysis_cmd_min.cpp` fixture 待补单测
 - [x] **成员排序 · Web 回归自检（可选）**：`POST /api/code/reorder-members/self-test` 或 dev 页按钮，仅跑 fixture 子集
 - [x] **成员排序 · 变更文件状态列**：预检 `dry_run` / 写盘 `written`（`el-tag`，见 [归档](platform/Web壳层-属性面板与壳层稳定化-归档.md)）
-- [ ] **成员排序 · 可选目录层级**：勾选列表默认 **1 级**（现「一级条目」）；偏好可选 **2–4 级** 展开子目录为可选项（仍受 ignore 规则约束）；`list_reorder_top_level_entries` / `GET top-level` + `ReorderMembersPage` 结果区标题与汇总
+- [ ] **成员排序 · 工作集展开算法**：`phoenix/code/workset_resolve.py` — 工作集路径归一化、去嵌套、目录展开为文件、按扩展名筛选；供成员排序/批量改名/UUID 共用（见 [FileWorkset-规划](platform/FileWorkset-规划.md) §5-6）
+- [ ] **算法语言评估**：`workset_resolve` 当前 Python；后续评估 TS/Node.js 轻量版做纯路径计算
 - [ ] **成员变量字母序（完整规则）**：Doxygen 序号重编、`.h`/`.cpp` 构造/析构等序号一致 — 见 [成员变量字母序-规则与待实现.md](code/成员变量字母序-规则与待实现.md)；Web 勾选暂禁用
 - [~] **成员排序 · Git 预览 / Revert**：表内 👁 已接壳层 `/api/git/diff` + **过渡弹层**；Revert/init 已迁壳层 — **[TODO-GIT](TODO-GIT.md)** · [G1续归档](platform/Web壳层-Git工作区插件-G1续归档.md) · `GitFilePage` 待做
 - [ ] 成员排序：Git 脏文件过滤（**TODO-GIT · G2** `status-paths`，暂缓）

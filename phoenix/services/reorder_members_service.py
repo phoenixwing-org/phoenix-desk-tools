@@ -21,6 +21,9 @@ from phoenix.code.reorder_members import (
     resolve_reorder_include_for_run,
     run_reorder_members,
 )
+from phoenix.code.workset_resolve import (
+    resolve_workset_to_files,
+)
 from phoenix.services.code_ignore_service import get_code_ignore_prefs
 from phoenix.config.user_prefs import (
     format_resolved_under_workspace,
@@ -249,6 +252,43 @@ def list_reorder_top_level_entries(repo_root: Path) -> dict[str, Any]:
 list_reorder_top_level_dirs = list_reorder_top_level_entries
 
 
+def resolve_reorder_scope(
+    repo_root: Path,
+    *,
+    repo_rel_paths: list[str],
+) -> dict[str, Any]:
+    """将工作集路径展开为可排序的源文件列表（供预检预览）。
+
+    Args:
+        repo_root: 工作空间根目录
+        repo_rel_paths: 从 FileWorkset 取出的相对路径列表
+
+    Returns:
+        ``{ resolved_files: list[str], total: int, workspace_path: str }``
+    """
+    rr = repo_root.expanduser().resolve(strict=False)
+    root = _workspace_source_root(rr)
+    patterns, _, _ = load_ignore_patterns(rr)
+
+    # 空列表 → 全工作空间：自动收集一级目录
+    if repo_rel_paths:
+        paths = list(repo_rel_paths)
+    else:
+        top = list_reorder_top_level_entries(rr)
+        paths = [e["name"] for e in top.get("entries", []) if e.get("kind") == "dir"]
+    resolved = resolve_workset_to_files(
+        paths,
+        str(root),
+        file_patterns=["*.h", "*.hpp", "*.cpp"],
+        ignore_patterns=list(patterns),
+    )
+    return {
+        "workspace_path": str(root),
+        "resolved_files": resolved,
+        "total": len(resolved),
+    }
+
+
 def _batch_entry_changed_paths(name: str, kind: str, rel_paths: list[str]) -> list[str]:
     if kind == "file":
         return list(rel_paths)
@@ -321,20 +361,50 @@ def _run_on_target(
 def run_reorder_members_batch(
     repo_root: Path,
     *,
-    targets: list[str],
+    targets: list[str] | None = None,
+    repo_rel_paths: list[str] | None = None,
     dry_run: bool = False,
     patch: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     rr = repo_root.expanduser().resolve(strict=False)
     prefs = get_reorder_members_prefs(rr)
     save_patch = dict(patch or {})
-    save_patch["last_selected"] = targets
-    save_reorder_members_prefs(rr, save_patch)
 
     root = _workspace_source_root(rr)
-    names = [n.strip() for n in targets if n.strip()]
+
+    # 合并 targets 和 repo_rel_paths：targets 是旧版一级目录/文件名，
+    # repo_rel_paths 是从工作集取出的路径，需经 workset_resolve 展开
+    names: list[str] = []
+    if targets:
+        names.extend(n.strip() for n in targets if n.strip())
+    if repo_rel_paths:
+        patterns, _, _ = load_ignore_patterns(rr)
+        resolved = resolve_workset_to_files(
+            repo_rel_paths,
+            str(root),
+            file_patterns=["*.h", "*.hpp", "*.cpp"],
+            ignore_patterns=list(patterns),
+        )
+        names.extend(resolved)
+
+    # 去重保持顺序
+    seen: set[str] = set()
+    unique_names: list[str] = []
+    for n in names:
+        if n not in seen:
+            seen.add(n)
+            unique_names.append(n)
+    names = unique_names
+
+    save_patch["last_selected"] = names
+    save_reorder_members_prefs(rr, save_patch)
+
     if not names:
-        raise ValueError("请至少勾选一项（目录或源文件）")
+        # 全工作空间：自动收集一级目录（去掉忽略的）作为工作目录列表
+        top = list_reorder_top_level_entries(rr)
+        names = [e["name"] for e in top.get("entries", []) if e.get("kind") == "dir"]
+        if not names:
+            raise ValueError("全工作空间下未找到可排序的一级目录（全部被忽略或不存在）")
 
     cpp_only, header_only = include_flags_to_legacy_filters(
         *resolve_reorder_include_for_run(save_patch)

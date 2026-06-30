@@ -72,6 +72,8 @@ interface FileWorkset {
 1. 页面声明 `pageId`（如 `code_uuid`），用 `useWorksetPageScope(pageId)` 读写偏好。
 2. 扫描/执行 API 优先 `repo_rel_paths`，其次 `scope` / `use_index_scope`。
 3. CAD 页可不显示「Code 索引 present」选项（`show-index-scope=false`）。
+4. **后端展开**：`repo_rel_paths` 传至后端后，统一经 `phoenix/code/workset_resolve.py` 做归一化、去嵌套、展开目录、筛选文件，各业务模块不重复实现。
+5. **算法位置**：当前为 Python（`workset_resolve.py`），后续可评估 TS/Node.js 轻量版做纯路径计算（归一化、去嵌套）。
 
 ---
 
@@ -84,3 +86,6 @@ interface FileWorkset {
 | C | Code UUID · WorksetScopePicker | **已完成** |
 | D | 改名、转码、CAD 批量 | 待做 |
 | E | Saved Query 物化 | 待做 |
+| F | **C++ 成员排序**页头工作集 combo → `workset_resolve` 展开目录/筛选文件 | **待实现** |
+| G | **Code 索引**页头工作集 combo 过滤 | **待实现** |
+| H | **Code 批量改名**页头工作集 combo（简化现有 WorksetScopePicker） | **待实现** |

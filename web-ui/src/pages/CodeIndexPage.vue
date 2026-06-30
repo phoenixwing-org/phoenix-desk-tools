@@ -28,6 +28,26 @@ const props = defineProps<{
 const shell = useAppShell();
 const worksetStore = useFileWorksetsStore();
 
+// --- 工作集过滤 ---
+const filterWorksetId = ref("");
+const filterWorksetPaths = computed(() => {
+  if (!filterWorksetId.value) return null as Set<string> | null;
+  const ws = worksetStore.worksetById(filterWorksetId.value);
+  if (!ws) return null;
+  const entries = ws.entries ?? ws.paths;
+  return new Set(
+    (entries ?? []).map((e: any) =>
+      (typeof e === "string" ? e : e.path).replace(/\\/g, "/"),
+    ),
+  );
+});
+
+const filteredEntries = computed(() => {
+  const paths = filterWorksetPaths.value;
+  if (!paths) return entries.value;
+  return entries.value.filter((r) => paths.has(r.repo_rel_path.replace(/\\/g, "/")));
+});
+
 const SESSION_V = 1;
 const PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
 
@@ -462,6 +482,21 @@ onMounted(() => applyInitialTabState());
     <PageHeader title="Code 索引" page-id="code_index">
       <template #actions>
         <div data-tour-page-code-scan class="head-actions-inner">
+          <el-select
+            v-model="filterWorksetId"
+            size="small"
+            placeholder="全工作空间"
+            clearable
+            style="width: 150px"
+          >
+            <el-option label="全部" value="" />
+            <el-option
+              v-for="w in worksetStore.worksetOptions"
+              :key="w.id"
+              :label="`${w.label}（${w.count}）`"
+              :value="w.id"
+            />
+          </el-select>
           <el-button type="primary" size="small" :loading="scanning" @click="onScan">工程内搜索</el-button>
           <el-button
             size="small"
@@ -520,7 +555,7 @@ onMounted(() => applyInitialTabState());
         <span v-if="entriesTotal > 0" class="count">
           显示 <strong>{{ pageOffset + 1 }}–{{ pageEnd }}</strong> / {{ entriesTotal }} 条
         </span>
-        <div v-if="entries.length" class="workset-actions">
+        <div v-if="filteredEntries.length" class="workset-actions">
           <el-button size="small" @click="toggleAllPage(!allPageChecked)">
             {{ allPageChecked ? "取消全选" : "全选本页" }}
           </el-button>
@@ -532,10 +567,10 @@ onMounted(() => applyInitialTabState());
       </section>
 
       <div class="table-area" data-tour-page-code-table>
-        <ResizableDataTable v-if="entries.length" :columns="columns" wrap-class="table-grow">
+        <ResizableDataTable v-if="filteredEntries.length" :columns="columns" wrap-class="table-grow">
           <tbody>
             <tr
-              v-for="(row, idx) in entries"
+              v-for="(row, idx) in filteredEntries"
               :key="row.repo_rel_path + row.file_status"
               :class="row.file_status"
             >

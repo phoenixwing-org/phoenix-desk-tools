@@ -286,6 +286,25 @@ function thClass(key: string) {
   <div class="page tool-page code-uuid-page">
     <PageHeader title="Code UUID 替换" page-id="code_uuid">
       <template #actions>
+        <el-select
+          :model-value="worksetScope.worksetId.value ?? ''"
+          size="small"
+          placeholder="全工作空间"
+          clearable
+          style="width: 160px"
+          @update:model-value="
+            worksetScope.worksetId.value = $event || null;
+            worksetScope.scopeMode.value = $event ? 'workset' : 'all';
+          "
+        >
+          <el-option label="全工作空间" value="" />
+          <el-option
+            v-for="w in worksetStore.worksetOptions"
+            :key="w.id"
+            :label="`${w.label}（${w.count}）`"
+            :value="w.id"
+          />
+        </el-select>
         <div class="toolbar-group">
           <el-button size="small" plain @click="openIgnorePanel">忽略设定</el-button>
         </div>

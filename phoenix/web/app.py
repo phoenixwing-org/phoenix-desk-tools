@@ -107,6 +107,7 @@ from phoenix.services.file_workset_service import (
 from phoenix.services.reorder_members_service import (
     get_reorder_members_prefs,
     list_reorder_top_level_entries,
+    resolve_reorder_scope,
     run_reorder_members_batch,
     save_reorder_members_prefs,
 )
@@ -506,7 +507,12 @@ class ReorderMembersPrefsBody(BaseModel):
 class ReorderMembersRunBody(ReorderMembersPrefsBody):
     targets: list[str] | None = None
     top_dirs: list[str] | None = None  # 兼容旧字段名
+    repo_rel_paths: list[str] | None = None  # 从工作集取出的路径列表
     dry_run: bool = False
+
+
+class ReorderMembersResolveBody(BaseModel):
+    repo_rel_paths: list[str]
 
 
 class CodeRenamePrefsBody(BaseModel):
@@ -1860,13 +1866,25 @@ def create_app(*, static_dir: Path | None = None) -> FastAPI:
     def api_reorder_members_run(body: ReorderMembersRunBody) -> dict:
         patch = body.model_dump(exclude_none=True)
         targets = patch.pop("targets", None) or patch.pop("top_dirs", None) or []
+        repo_rel_paths = patch.pop("repo_rel_paths", None) or []
         dry_run = bool(patch.pop("dry_run", False))
         try:
             return run_reorder_members_batch(
                 get_workspace(),
-                targets=targets,
+                targets=list(targets) if targets else [],
+                repo_rel_paths=list(repo_rel_paths) if repo_rel_paths else [],
                 dry_run=dry_run,
                 patch=patch or None,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post("/api/code/reorder-members/resolve")
+    def api_reorder_members_resolve(body: ReorderMembersResolveBody) -> dict:
+        try:
+            return resolve_reorder_scope(
+                get_workspace(),
+                repo_rel_paths=body.repo_rel_paths,
             )
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e

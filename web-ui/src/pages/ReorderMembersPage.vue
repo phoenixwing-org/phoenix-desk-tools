@@ -1,20 +1,17 @@
 <script setup lang="ts">
-import { Document, Folder } from "@element-plus/icons-vue";
 import { computed, onMounted, ref, watch } from "vue";
 import { promptChoice } from "../composables/choiceDialog";
 import {
   fetchGitInfo,
   fetchReorderMembersPrefs,
-  fetchReorderMembersTopLevel,
   initGitRepo,
+  resolveReorderMembersScope,
   restoreGitPaths,
   runReorderMembers,
   saveReorderMembersPrefs,
-  type ReorderMembersEntry,
 } from "../api";
 import type { GitWorkspaceInfo } from "../types/gitWorkspace";
 import PageHeader from "../components/PageHeader.vue";
-import AppModalOverlay from "../components/AppModalOverlay.vue";
 import GitChangePathLabel from "../components/git/GitChangePathLabel.vue";
 import GitDiffPreviewButton from "../components/git/GitDiffPreviewButton.vue";
 import GitRevertWorktreeButton from "../components/git/GitRevertWorktreeButton.vue";
@@ -22,7 +19,6 @@ import { useAppShell } from "../composables/useAppShell";
 import { useReorderMembersPageStore } from "../stores/reorderMembersPage";
 import { useFileWorksetsStore } from "../stores/fileWorksets";
 import { useReorderMembersPropertySheet } from "../composables/useReorderMembersPropertySheet";
-import { deriveReorderTopLevelFromWorkset } from "../utils/deriveReorderTopLevelFromWorkset";
 import { formatFileAtRepoDir } from "../utils/workspaceFileQuery";
 
 const shell = useAppShell();
@@ -38,43 +34,76 @@ type ChangedFileRow = {
   status: ChangedFileStatus;
 };
 
-const selected = computed(() => pageStore.selectedSet);
-const entriesExpanded = computed({
-  get: () => pageStore.entriesExpanded,
-  set: (value: boolean) => pageStore.setEntriesExpanded(value),
+// --- 工作集选择（页头 combo） ---
+const selectedWorksetId = ref(pageStore.selectedWorksetId || "");
+watch(selectedWorksetId, (v) => {
+  pageStore.setSelectedWorksetId(v || null);
 });
 
-const ignoreFileDisplay = ref("");
-const ignoreFileExists = ref(false);
-const ignoredEntries = ref<Array<{ name: string; kind: string; reason: string }>>([]);
-const entries = ref<ReorderMembersEntry[]>([]);
-const ignoredCount = ref(0);
+const selectedWorkset = computed(() => {
+  if (!selectedWorksetId.value) return null;
+  return worksetStore.worksetById(selectedWorksetId.value);
+});
 
+const worksetEntryCount = computed(() => {
+  const ws = selectedWorkset.value;
+  if (!ws) return 0;
+  const list = ws.entries ?? ws.paths;
+  return list?.length ?? 0;
+});
+
+const worksetPathsForApi = computed(() => {
+  const ws = selectedWorkset.value;
+  if (!ws) return [] as string[];
+  const entries = ws.entries ?? ws.paths;
+  return (entries ?? []).map((e: any) => (typeof e === "string" ? e : e.path));
+});
+
+// --- 解析预览（可选的预检前预览文件列表） ---
+const resolvedFiles = ref<string[]>([]);
+const resolving = ref(false);
+
+async function onResolve() {
+  const paths = worksetPathsForApi.value;
+  resolving.value = true;
+  try {
+    const out = await resolveReorderMembersScope({ repo_rel_paths: paths });
+    resolvedFiles.value = out.resolved_files ?? [];
+    const label = paths.length ? "工作集" : "全工作空间";
+    if (out.total === 0) {
+      shell.setStatus(`${label}内无匹配的 C++ 源文件（.h/.hpp/.cpp）`);
+    } else {
+      shell.setStatus(`${label}解析完成：${out.total} 个源文件`);
+    }
+  } catch (e) {
+    shell.setStatus(String(e));
+    resolvedFiles.value = [];
+  } finally {
+    resolving.value = false;
+  }
+}
+
+// --- 运行 ---
 const changedFileRows = ref<ChangedFileRow[]>([]);
 const lastRunDryRun = ref(false);
 const lastRunSummary = ref("");
 const changedPage = ref(0);
-const ignoredModalOpen = ref(false);
 
-const loading = ref(false);
 const saving = ref(false);
 const running = ref(false);
-const loadError = ref("");
 
 const gitInfo = ref<GitWorkspaceInfo | null>(null);
 const gitInitLoading = ref(false);
 const revertingPath = ref<string | null>(null);
 
-const gitReady = computed(() => Boolean(gitInfo.value?.git_installed && gitInfo.value?.repo_initialized));
-
-const selectedCount = computed(() => pageStore.selectedCount);
-const allChecked = computed(
-  () => entries.value.length > 0 && entries.value.every((e) => selected.value.has(e.name)),
+const gitReady = computed(() =>
+  Boolean(gitInfo.value?.git_installed && gitInfo.value?.repo_initialized),
 );
-const dirCount = computed(() => entries.value.filter((e) => e.kind === "dir").length);
-const fileCount = computed(() => entries.value.filter((e) => e.kind === "file").length);
+
 const changedTotal = computed(() => changedFileRows.value.length);
-const changedPageCount = computed(() => Math.max(1, Math.ceil(changedTotal.value / CHANGED_PAGE_SIZE)));
+const changedPageCount = computed(() =>
+  Math.max(1, Math.ceil(changedTotal.value / CHANGED_PAGE_SIZE)),
+);
 const changedPageSafe = computed(() =>
   Math.min(changedPage.value, Math.max(0, changedPageCount.value - 1)),
 );
@@ -82,16 +111,6 @@ const pagedChangedFiles = computed(() => {
   const start = changedPageSafe.value * CHANGED_PAGE_SIZE;
   return changedFileRows.value.slice(start, start + CHANGED_PAGE_SIZE);
 });
-
-const activeWorksetPathCount = computed(() => {
-  const ws = worksetStore.activeWorkset;
-  if (!ws) return 0;
-  const list = ws.entries ?? ws.paths;
-  return list?.length ?? 0;
-});
-const canSelectFromWorkset = computed(
-  () => activeWorksetPathCount.value > 0 && entries.value.length > 0 && !loading.value,
-);
 
 function fileKindLabel(path: string): string {
   const lower = path.toLowerCase();
@@ -118,13 +137,19 @@ function buildChangedRows(paths: string[], dryRun: boolean): ChangedFileRow[] {
   return paths.map((path) => ({ path, status }));
 }
 
-function collectChangedPaths(out: Awaited<ReturnType<typeof runReorderMembers>>): string[] {
+function collectChangedPaths(
+  out: Awaited<ReturnType<typeof runReorderMembers>>,
+): string[] {
   if (out.changed_files?.length) return out.changed_files;
   return (out.item_results ?? []).flatMap((item) => item.changed_files ?? []);
 }
 
 function canGitActions(row: ChangedFileRow): boolean {
   return row.status === "written" && gitReady.value;
+}
+
+function openIgnorePanel() {
+  void shell.openCodeIgnoreSidebar();
 }
 
 async function loadGitInfo() {
@@ -138,7 +163,8 @@ async function loadGitInfo() {
 async function onGitInit() {
   const choice = await promptChoice({
     title: "初始化 Git 仓库",
-    message: "将在当前工作空间根目录执行 git init。\n需本机已安装 Git。\n\n继续？",
+    message:
+      "将在当前工作空间根目录执行 git init。\n需本机已安装 Git。\n\n继续？",
     defaultChoiceId: "cancel",
     choices: [
       { id: "cancel", label: "取消" },
@@ -174,10 +200,14 @@ async function onRevertFile(row: ChangedFileRow) {
   try {
     const out = await restoreGitPaths([row.path], "worktree");
     if (out.restored.includes(row.path)) {
-      changedFileRows.value = changedFileRows.value.filter((r) => r.path !== row.path);
+      changedFileRows.value = changedFileRows.value.filter(
+        (r) => r.path !== row.path,
+      );
       shell.setStatus(`已 Revert：${row.path}`);
     } else {
-      shell.setStatus(`未能 Revert：${row.path}（可能未跟踪或无 Git 差异）`);
+      shell.setStatus(
+        `未能 Revert：${row.path}（可能未跟踪或无 Git 差异）`,
+      );
     }
   } catch (e) {
     shell.setStatus(String(e));
@@ -190,22 +220,7 @@ function prefsPayload() {
   return pageStore.prefsPayload;
 }
 
-function openIgnorePanel() {
-  void shell.openCodeIgnoreSidebar();
-}
-
-function kindLabel(kind: string) {
-  return kind === "file" ? "文件" : "目录";
-}
-
-async function loadPrefsFromApi() {
-  const prefs = await fetchReorderMembersPrefs();
-  ignoreFileDisplay.value = prefs.ignore_file_display || prefs.ignore_file;
-  ignoreFileExists.value = prefs.ignore_file_exists;
-  pageStore.setIgnoreFileDisplay(ignoreFileDisplay.value);
-  pageStore.applyFromApi(prefs);
-}
-
+// --- 偏好持久化 ---
 let prefsSaveTimer: ReturnType<typeof setTimeout> | null = null;
 function schedulePrefsSave() {
   if (prefsSaveTimer) clearTimeout(prefsSaveTimer);
@@ -215,31 +230,18 @@ function schedulePrefsSave() {
   }, 400);
 }
 
-useReorderMembersPropertySheet("reorder_members", schedulePrefsSave, (msg) => shell.setStatus(msg));
-
-async function refreshList() {
-  loading.value = true;
-  loadError.value = "";
-  try {
-    const data = await fetchReorderMembersTopLevel();
-    ignoreFileDisplay.value = data.ignore_file_display || data.ignore_file;
-    ignoreFileExists.value = data.ignore_file_exists;
-    entries.value = data.entries;
-    ignoredEntries.value = data.ignored ?? [];
-    ignoredCount.value = data.ignored?.length ?? 0;
-    pageStore.filterSelected(new Set(data.entries.map((e) => e.name)));
-  } catch (e) {
-    loadError.value = String(e);
-    entries.value = [];
-  } finally {
-    loading.value = false;
-  }
-}
+useReorderMembersPropertySheet(
+  "reorder_members",
+  schedulePrefsSave,
+  (msg) => shell.setStatus(msg),
+);
 
 async function onSave() {
   saving.value = true;
   try {
-    pageStore.syncFromServer(await saveReorderMembersPrefs(prefsPayload()));
+    pageStore.syncFromServer(
+      await saveReorderMembersPrefs(prefsPayload()),
+    );
     shell.setStatus("已保存成员排序偏好");
   } catch (e) {
     shell.setStatus(String(e));
@@ -248,46 +250,26 @@ async function onSave() {
   }
 }
 
-
-function toggleEntry(name: string, checked: boolean) {
-  pageStore.toggleSelected(name, checked);
-}
-
-function toggleAll(checked: boolean) {
-  pageStore.toggleAll(
-    entries.value.map((e) => e.name),
-    checked,
-  );
-}
-
-function selectFromWorkset() {
-  const ws = worksetStore.activeWorkset;
-  const wsPaths = (ws?.entries ?? ws?.paths ?? []).map((e: any) => (typeof e === "string" ? e : e.path));
-  if (!wsPaths.length) {
-    shell.setStatus("侧栏活动工作集为空，请先在索引/树中归集文件");
-    return;
+// --- 执行排序 ---
+function resolveRunParams(): { repo_rel_paths: string[]; scopeLabel: string } {
+  const paths = worksetPathsForApi.value;
+  if (paths.length) {
+    return {
+      repo_rel_paths: paths,
+      scopeLabel: `工作集「${selectedWorkset.value?.name ?? ""}」${paths.length} 路径`,
+    };
   }
-  const derived = deriveReorderTopLevelFromWorkset(
-    wsPaths,
-    entries.value.map((e) => e.name),
-  );
-  if (!derived.length) {
-    shell.setStatus(`工作集「${ws.name}」中的路径与一级条目无交集`);
-    return;
-  }
-  pageStore.toggleAll(derived, true);
-  shell.setStatus(`已从工作集「${ws.name}」勾选 ${derived.length} 项`);
+  return { repo_rel_paths: [], scopeLabel: "全工作空间" };
 }
 
 async function onRun(dryRun: boolean) {
-  if (!selectedCount.value) {
-    shell.setStatus("请至少勾选一项");
-    return;
-  }
+  const { repo_rel_paths: repoRelPaths, scopeLabel } = resolveRunParams();
   if (!dryRun) {
+    const scopeDesc = repoRelPaths.length ? "工作集范围内的" : "全工作空间的";
     const choice = await promptChoice({
       title: "执行成员排序",
-      message: "将直接写回选中的 .h / .cpp 文件。\n建议先点「预检」确认变更范围。\n\n确定执行排序？",
+      message:
+        `将直接写回${scopeDesc}.h / .cpp 文件。\n建议先点「预检」确认变更范围。\n\n确定执行排序？`,
       defaultChoiceId: "cancel",
       choices: [
         { id: "cancel", label: "取消" },
@@ -298,21 +280,26 @@ async function onRun(dryRun: boolean) {
   }
   running.value = true;
   const mode = dryRun ? "预检" : "写盘";
-  shell.appendLog(`[C++ 成员排序] ${mode} · ${selectedCount.value} 项…`, {
-    source: "reorder_members",
-    open: true,
-  });
+  shell.appendLog(
+    `[C++ 成员排序] ${mode} · ${scopeLabel}…`,
+    { source: "reorder_members", open: true },
+  );
   try {
     const out = await runReorderMembers({
       ...prefsPayload(),
-      targets: [...selected.value],
+      repo_rel_paths: repoRelPaths,
       dry_run: dryRun,
     });
-    changedFileRows.value = buildChangedRows(collectChangedPaths(out), out.dry_run);
+    changedFileRows.value = buildChangedRows(
+      collectChangedPaths(out),
+      out.dry_run,
+    );
     changedPage.value = 0;
     lastRunDryRun.value = dryRun;
     lastRunSummary.value = out.summary || "";
-    const logText = pageStore.verbose ? out.log || out.summary : out.summary || out.log;
+    const logText = pageStore.verbose
+      ? out.log || out.summary
+      : out.summary || out.log;
     shell.appendLog(logText || "完成", { source: "reorder_members" });
     shell.setStatus(out.summary || (out.ok ? "完成" : "失败"));
     if (!dryRun) await loadGitInfo();
@@ -326,9 +313,9 @@ async function onRun(dryRun: boolean) {
 
 onMounted(async () => {
   pageStore.hydrate(shell.workspacePath.value);
+  await worksetStore.hydrate(shell.workspacePath.value);
   try {
     await loadPrefsFromApi();
-    await refreshList();
     await loadGitInfo();
   } catch (e) {
     shell.setStatus(String(e));
@@ -339,24 +326,62 @@ watch(
   () => shell.workspacePath.value,
   async (ws) => {
     pageStore.hydrate(ws);
+    await worksetStore.hydrate(ws);
     try {
       await loadPrefsFromApi();
-      await refreshList();
       await loadGitInfo();
     } catch (e) {
       shell.setStatus(String(e));
     }
   },
 );
+
+async function loadPrefsFromApi() {
+  try {
+    const prefs = await fetchReorderMembersPrefs();
+    pageStore.applyFromApi(prefs);
+  } catch (e) {
+    shell.setStatus(String(e));
+  }
+}
 </script>
 
 <template>
   <div class="page tool-page reorder-page">
     <PageHeader title="C++ 成员排序" page-id="reorder_members">
       <template #actions>
+        <el-select
+          v-model="selectedWorksetId"
+          size="small"
+          placeholder="全工作空间"
+          clearable
+          style="width: 170px"
+        >
+          <el-option label="（未选）" value="" />
+          <el-option
+            v-for="w in worksetStore.worksetOptions"
+            :key="w.id"
+            :label="`${w.label}（${w.count}）`"
+            :value="w.id"
+          />
+        </el-select>
+        <el-button
+          size="small"
+          :loading="resolving"
+          @click="onResolve"
+        >
+          预检范围
+        </el-button>
+        <span class="toolbar-divider" aria-hidden="true" />
         <div class="toolbar-group">
-          <el-button size="small" :loading="saving" @click="onSave">保存偏好</el-button>
-          <el-button size="small" :loading="running" :disabled="!selectedCount" @click="onRun(true)">
+          <el-button size="small" :loading="saving" @click="onSave">
+            保存偏好
+          </el-button>
+          <el-button
+            size="small"
+            :loading="running"
+            @click="onRun(true)"
+          >
             预检
           </el-button>
         </div>
@@ -366,101 +391,73 @@ watch(
             type="primary"
             size="small"
             :loading="running"
-            :disabled="!selectedCount"
             @click="onRun(false)"
           >
             执行排序
           </el-button>
         </div>
+        <el-button size="small" plain @click="openIgnorePanel">
+          忽略设定
+        </el-button>
       </template>
     </PageHeader>
 
-    <section class="card results-card" :class="{ collapsed: !entriesExpanded }">
+    <!-- 预检范围预览 -->
+    <section
+      v-if="resolvedFiles.length"
+      class="card resolved-card"
+    >
       <div class="results-head-row">
-        <el-button class="collapse-trigger" link type="primary" @click="entriesExpanded = !entriesExpanded">
-          <span class="collapse-chevron" :class="{ open: entriesExpanded }" aria-hidden="true">▶</span>
-          <span class="section-label">一级条目</span>
-        </el-button>
-        <span v-if="entries.length" class="head-meta muted small">
-          已选 {{ selectedCount }}/{{ entries.length }}
-          · 目录 {{ dirCount }}
-          · 源文件 {{ fileCount }}
-          <template v-if="ignoredCount"> · 已忽略 {{ ignoredCount }}</template>
+        <span class="section-label">预检范围</span>
+        <span class="head-meta muted small">
+          工作集「{{ selectedWorkset?.name }}」→ {{ resolvedFiles.length }} 个源文件
         </span>
-        <span v-else-if="loading" class="head-meta muted small">加载中…</span>
-        <div class="results-head-actions">
-          <el-button size="small" :loading="loading" @click="refreshList">刷新列表</el-button>
-          <el-button
-            size="small"
-            plain
-            :disabled="!canSelectFromWorkset"
-            :title="
-              activeWorksetPathCount
-                ? `按侧栏活动工作集「${worksetStore.activeWorkset?.name ?? ''}」路径推导一级目录/文件`
-                : '请先在侧栏选择活动工作集并添加文件'
-            "
-            @click="selectFromWorkset"
-          >
-            从工作集勾选
-          </el-button>
-          <el-button v-if="ignoredCount" size="small" @click="ignoredModalOpen = true">
-            已忽略 {{ ignoredCount }}
-          </el-button>
-          <el-button size="small" plain @click="openIgnorePanel">忽略设定</el-button>
-        </div>
       </div>
-
-      <div v-show="entriesExpanded" class="results-body">
-        <el-alert v-if="loadError" type="error" :title="loadError" show-icon :closable="false" class="err-alert" />
-
-        <el-table v-if="entries.length" :data="entries" size="small" stripe class="entries-table">
-          <el-table-column width="44" align="center">
-            <template #header>
-              <el-checkbox :model-value="allChecked" @change="toggleAll(Boolean($event))" />
-            </template>
-            <template #default="{ row }">
-              <el-checkbox
-                :model-value="selected.has(row.name)"
-                @change="toggleEntry(row.name, Boolean($event))"
-              />
-            </template>
-          </el-table-column>
-          <el-table-column prop="name" label="名称" min-width="160" class-name="mono" />
-          <el-table-column label="类型" width="52" align="center">
-            <template #default="{ row }">
-              <el-tooltip :content="kindLabel(row.kind)" placement="top" :show-after="400">
-                <el-icon
-                  class="entry-kind-icon"
-                  :class="row.kind === 'file' ? 'is-file' : 'is-dir'"
-                  :aria-label="kindLabel(row.kind)"
-                >
-                  <Document v-if="row.kind === 'file'" />
-                  <Folder v-else />
-                </el-icon>
-              </el-tooltip>
-            </template>
-          </el-table-column>
-          <el-table-column prop="source_file_count" label="源文件" width="72" align="center" />
-        </el-table>
-        <el-empty
-          v-else
-          :description="loading ? '加载中…' : loadError ? '加载失败' : '没有可列出的目录或源文件'"
-          :image-size="64"
+      <el-table
+        :data="resolvedFiles.map((f, i) => ({ index: i + 1, path: f }))"
+        size="small"
+        stripe
+        class="resolved-table"
+        max-height="200"
+      >
+        <el-table-column label="#" width="48" align="center">
+          <template #default="{ row }">{{ row.index }}</template>
+        </el-table-column>
+        <el-table-column
+          prop="path"
+          label="文件路径"
+          min-width="200"
+          class-name="mono"
         />
-      </div>
+      </el-table>
     </section>
 
-    <section v-if="changedFileRows.length || lastRunSummary" class="card changed-card">
+    <!-- 变更文件 -->
+    <section
+      v-if="changedFileRows.length || lastRunSummary"
+      class="card changed-card"
+    >
       <header class="results-head">
         <div class="results-head-row">
           <span class="section-label">变更文件</span>
           <span v-if="changedFileRows.length" class="muted small">
-            {{ lastRunDryRun ? "预检" : "已写盘" }} · 共 {{ changedTotal }} 个
+            {{ lastRunDryRun ? "预检" : "已写盘" }} · 共
+            {{ changedTotal }} 个
           </span>
-          <span v-else-if="lastRunSummary" class="muted small">本次无变更</span>
+          <span v-else-if="lastRunSummary" class="muted small">
+            本次无变更
+          </span>
         </div>
-        <p v-if="lastRunSummary && !changedFileRows.length" class="run-summary muted">{{ lastRunSummary.split("\n")[0] }}</p>
-        <div v-if="changedFileRows.length && !lastRunDryRun" class="git-hint-row">
+        <p
+          v-if="lastRunSummary && !changedFileRows.length"
+          class="run-summary muted"
+        >
+          {{ lastRunSummary.split("\n")[0] }}
+        </p>
+        <div
+          v-if="changedFileRows.length && !lastRunDryRun"
+          class="git-hint-row"
+        >
           <el-alert
             v-if="gitInfo && !gitInfo.git_installed"
             type="warning"
@@ -491,13 +488,24 @@ watch(
         </div>
       </header>
 
-      <el-table v-if="changedFileRows.length" :data="pagedChangedFiles" size="small" stripe class="changed-table">
+      <el-table
+        v-if="changedFileRows.length"
+        :data="pagedChangedFiles"
+        size="small"
+        stripe
+        class="changed-table"
+      >
         <el-table-column label="#" width="52" align="center">
           <template #default="{ $index }">
             {{ changedPageSafe * CHANGED_PAGE_SIZE + $index + 1 }}
           </template>
         </el-table-column>
-        <el-table-column prop="path" label="文件" min-width="200" class-name="mono">
+        <el-table-column
+          prop="path"
+          label="文件"
+          min-width="200"
+          class-name="mono"
+        >
           <template #default="{ row }">
             <GitChangePathLabel
               :path="row.path"
@@ -520,10 +528,17 @@ watch(
         </el-table-column>
         <el-table-column label="类型" width="80" align="center">
           <template #default="{ row }">
-            <el-tag size="small" effect="plain">{{ fileKindLabel(row.path) }}</el-tag>
+            <el-tag size="small" effect="plain">
+              {{ fileKindLabel(row.path) }}
+            </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="96" align="center" fixed="right">
+        <el-table-column
+          label="操作"
+          width="96"
+          align="center"
+          fixed="right"
+        >
           <template #default="{ row }">
             <template v-if="canGitActions(row)">
               <div class="git-row-actions">
@@ -551,33 +566,6 @@ watch(
         @current-change="(p: number) => (changedPage = p - 1)"
       />
     </section>
-
-    <AppModalOverlay
-      v-if="ignoredEntries.length"
-      :open="ignoredModalOpen"
-      aria-label="已忽略条目"
-      panel-class="reorder-ignored-modal"
-      @close="ignoredModalOpen = false"
-    >
-      <div class="rules-modal-inner">
-        <header class="rules-modal-head">
-          <h2 class="rules-modal-title">已忽略（{{ ignoredEntries.length }}）</h2>
-          <el-button size="small" @click="ignoredModalOpen = false">关闭</el-button>
-        </header>
-        <el-table :data="ignoredEntries" size="small" stripe class="ignored-table">
-          <el-table-column prop="name" label="名称" class-name="mono" />
-          <el-table-column label="类型" width="72">
-            <template #default="{ row }">{{ kindLabel(row.kind) }}</template>
-          </el-table-column>
-          <el-table-column label="原因">
-            <template #default="{ row }">{{ row.reason === "内置" ? "内置" : "ignore 规则" }}</template>
-          </el-table-column>
-        </el-table>
-        <p class="ignored-modal-foot muted small">
-          规则说明见页顶 <strong>?</strong>；编辑忽略请点「忽略设定」。
-        </p>
-      </div>
-    </AppModalOverlay>
   </div>
 </template>
 
@@ -609,28 +597,24 @@ watch(
   line-height: 1.2;
 }
 
-.err-alert {
-  margin-bottom: 8px;
+.results-head-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  align-items: center;
 }
 
-.entries-table :deep(.mono) {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+.head-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.entry-kind-icon {
-  font-size: 16px;
-  vertical-align: middle;
-}
-
-.entry-kind-icon.is-dir {
-  color: var(--el-color-info);
-}
-
-.entry-kind-icon.is-file {
-  color: var(--el-color-success);
-}
-
-.changed-table :deep(.mono) {
+.changed-table :deep(.mono),
+.resolved-table :deep(.mono) {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
@@ -660,255 +644,9 @@ watch(
   justify-content: center;
 }
 
-.results-head-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 10px;
-  align-items: center;
-}
-
-.results-card.collapsed {
-  padding: 6px 12px;
-}
-
-.results-card.collapsed .results-head-row {
-  flex-wrap: nowrap;
-  gap: 8px;
-}
-
-.collapse-trigger {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  margin: 0;
-  padding: 0;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  text-align: left;
-  color: inherit;
-  font: inherit;
-}
-
-.collapse-trigger:hover .section-label {
-  color: var(--text);
-}
-
-.collapse-chevron {
-  display: inline-block;
-  font-size: 0.62rem;
-  color: var(--muted);
-  transition: transform 0.15s ease;
-}
-
-.collapse-chevron.open {
-  transform: rotate(90deg);
-}
-
-.head-meta {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.results-card:not(.collapsed) .head-meta {
-  white-space: normal;
-}
-
-.results-head-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  margin-left: auto;
-}
-
-.results-body {
-  margin-top: 8px;
-}
-
-.reorder-page .table-wrap {
-  max-height: calc(100vh - 380px);
-  padding: 0;
-}
-
-.changed-table-wrap {
-  max-height: min(360px, calc(100vh - 420px));
-}
-
-.pager {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 8px;
-}
-
-.pager-meta {
-  font-size: 0.76rem;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
 .run-summary {
   margin: 6px 0 0;
   font-size: 0.78rem;
-}
-
-.rules-modal-inner {
-  padding: 14px 16px 16px;
-}
-
-.rules-modal-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 12px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border);
-}
-
-.rules-modal-title {
-  margin: 0;
-  font-size: 0.95rem;
-  font-weight: 600;
-}
-
-.ignored-modal-foot {
-  margin: 10px 0 0;
-}
-
-:global(.reorder-ignored-modal) {
-  width: min(520px, 100%);
-}
-
-.entry-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.82rem;
-}
-
-.entry-table th,
-.entry-table td {
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border);
-  text-align: left;
-  vertical-align: middle;
-}
-
-.entry-table th {
-  position: sticky;
-  top: 0;
-  background: #f8fafc;
-  font-weight: 600;
-  font-size: 0.78rem;
-  color: var(--muted);
-  z-index: 1;
-  white-space: nowrap;
-}
-
-.col-check {
-  width: 40px;
-  text-align: center;
-}
-
-.col-kind {
-  width: 72px;
-}
-
-.col-num {
-  width: 72px;
-  text-align: center;
-}
-
-.entry-name {
-  font-weight: 600;
-  word-break: break-all;
-  line-height: 1.45;
-}
-
-.kind-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  background: #f1f5f9;
-  border: 1px solid var(--border);
-  color: var(--muted);
-}
-
-.kind-badge[data-kind="file"] {
-  background: #eff6ff;
-  border-color: #93c5fd;
-  color: #1d4ed8;
-}
-
-.count-badge {
-  display: inline-block;
-  min-width: 22px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: #f8fafc;
-  border: 1px solid var(--border);
-  font-size: 0.72rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
-}
-
-.entry-table tbody tr:hover td {
-  background: #f8fafc;
-}
-
-.entry-table tbody tr.row-alt td {
-  background: #fafbfc;
-}
-
-.entry-table tbody tr.row-alt:hover td {
-  background: #f1f5f9;
-}
-
-.err-msg {
-  margin: 0 0 8px;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 0.82rem;
-  background: #fef2f2;
-  color: #b91c1c;
-}
-
-.help-sub {
-  margin: 0 0 6px;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.help-sub + .help-list {
-  margin-top: 0;
-}
-
-.help-list {
-  margin: 0 0 12px;
-  padding-left: 1.1rem;
-  font-size: 0.78rem;
-  color: var(--muted);
-  line-height: 1.55;
-}
-
-.help-list:last-child {
-  margin-bottom: 0;
-}
-
-.help-list li + li {
-  margin-top: 4px;
 }
 
 .small {
@@ -917,16 +655,6 @@ watch(
 
 .muted {
   color: var(--muted);
-}
-
-.help-list .link-btn {
-  border: none;
-  background: none;
-  color: var(--accent);
-  font-size: inherit;
-  cursor: pointer;
-  padding: 0;
-  text-decoration: underline;
 }
 
 @media (max-width: 720px) {

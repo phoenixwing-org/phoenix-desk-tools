@@ -12,6 +12,7 @@ import PageHeader from "../components/PageHeader.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useCodeRenamePropertySheet } from "../composables/useCodeRenamePropertySheet";
 import { useWorksetPageScope } from "../composables/useWorksetPageScope";
+import { useFileWorksetsStore } from "../stores/fileWorksets";
 import {
   CODE_RENAME_LEVEL_OPTIONS,
   useCodeRenamePageStore,
@@ -20,6 +21,7 @@ import {
 const shell = useAppShell();
 const pageStore = useCodeRenamePageStore();
 const worksetScope = useWorksetPageScope("code_rename");
+const worksetStore = useFileWorksetsStore();
 
 const canRun = computed(() => pageStore.canRun);
 
@@ -164,6 +166,25 @@ onMounted(async () => {
   <div class="page tool-page code-rename-page">
     <PageHeader title="Code 批量改名" page-id="code_rename">
       <template #actions>
+        <el-select
+          :model-value="worksetScope.worksetId.value ?? ''"
+          size="small"
+          placeholder="全工作空间"
+          clearable
+          style="width: 160px"
+          @update:model-value="
+            worksetScope.worksetId.value = $event || null;
+            worksetScope.scopeMode.value = $event ? 'workset' : 'all';
+          "
+        >
+          <el-option label="全工作空间" value="" />
+          <el-option
+            v-for="w in worksetStore.worksetOptions"
+            :key="w.id"
+            :label="`${w.label}（${w.count}）`"
+            :value="w.id"
+          />
+        </el-select>
         <div class="toolbar-group">
           <el-button size="small" plain @click="openIgnorePanel">忽略设定</el-button>
         </div>
