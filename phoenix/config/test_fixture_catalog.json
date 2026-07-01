@@ -41,6 +41,19 @@
         "../../phoenix-freecad-study"
       ],
       "used_by": []
+    },
+    {
+      "name": "phoenix-wing",
+      "description": "Phoenix Wing 共享库 · Vue3 组件/组合式函数/类型定义",
+      "clone_url": "https://gitee.com/PhoenixWing321/phoenix-wing.git",
+      "fixture_rel": "tests/fixtures/phoenix-wing",
+      "candidates": [
+        "../phoenix-wing",
+        "../../phoenix-wing"
+      ],
+      "used_by": [
+        "tests/test_user_prefs.py"
+      ]
     }
   ]
 }
