@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch, type Component } from "vue";
 import AppToolbar from "./AppToolbar.vue";
-import RibbonShell from "./ribbon/RibbonShell.vue";
+import PnwRibbonShell from "phoenix-wing/layout/PnwRibbonShell.vue";
+import RibbonPanel from "./ribbon/RibbonPanel.vue";
 import { useRibbonTabs } from "./ribbon/useRibbonTabs";
 import StatusBar from "./StatusBar.vue";
 import WorkspaceTreeSidebar from "./WorkspaceTreeSidebar.vue";
@@ -234,15 +235,19 @@ onUnmounted(() => {
       v-model:ribbon-active-tab="ribbonActiveTab"
       v-model:ribbon-collapsed="ribbonCollapsed"
     />
-    <RibbonShell
+    <PnwRibbonShell
       v-if="!isWelcomeFullscreen"
-      :active-tab-def="ribbonActiveTabDef"
       :collapsed="ribbonCollapsed"
-      :navigation="navigation"
-      :current-page="shell.currentPage.value"
-      :can-open="(p) => shell.canNavigateToPage(p)"
-      @open="onRibbonOpen"
-    />
+    >
+      <RibbonPanel
+        v-if="!ribbonCollapsed && ribbonActiveTabDef"
+        :tab="ribbonActiveTabDef"
+        :navigation="navigation"
+        :current-page="shell.currentPage.value"
+        :can-open="(p) => shell.canNavigateToPage(p)"
+        @open="onRibbonOpen"
+      />
+    </PnwRibbonShell>
     <div class="shell-body" :class="{ 'shell-body-welcome': isWelcomeFullscreen }">
       <!-- 左栏 NavSidebar（快捷栏）默认不渲染；日后可能迁入工作空间树，见 layout/NavSidebar.vue -->
       <main

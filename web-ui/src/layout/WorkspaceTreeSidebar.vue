@@ -3,7 +3,7 @@ import { computed, onUnmounted, ref, watch } from "vue";
 import TreeBranch from "../components/TreeBranch.vue";
 import CodeIgnorePanel from "../components/CodeIgnorePanel.vue";
 import FileWorksetPanel from "../components/FileWorksetPanel.vue";
-import ShellLogPanel from "./ShellLogPanel.vue";
+import PnwShellLogPanel from "phoenix-wing/layout/PnwShellLogPanel.vue";
 import PagePropertiesPanel from "../components/PagePropertiesPanel.vue";
 import GitCommitPanel from "../components/shell/GitCommitPanel.vue";
 import CaaDialogIndexPanel from "../components/caa/CaaDialogIndexPanel.vue";
@@ -53,6 +53,14 @@ const props = withDefaults(
 );
 
 const shell = useAppShell();
+
+const sourceLabel = computed(() => {
+  const src = shell.logSource.value;
+  if (!src) return "";
+  const nav = shell.appConfig.value?.navigation.find((n) => n.page === src);
+  return nav?.label ?? src;
+});
+
 const worksetStore = useFileWorksetsStore();
 const worksetBlockMode = computed(() => props.showWorksetBlock ?? false);
 const { hasProperties } = usePnwPagePropertiesHost();
@@ -620,7 +628,12 @@ onUnmounted(() => {
         @pointerdown="onLogResizeStart"
       />
       <div class="ws-log-wrap" :style="logPanelStyle">
-        <ShellLogPanel />
+        <PnwShellLogPanel
+          :log-text="shell.logText.value"
+          :source-label="sourceLabel"
+          @clear="shell.clearLog()"
+          @close="shell.setLogOpen(false)"
+        />
       </div>
     </template>
   </aside>
