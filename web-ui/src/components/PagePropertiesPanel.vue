@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, unref, watch } from "vue";
 import PagePropertyFieldRow from "./PagePropertyFieldRow.vue";
-import SidebarBlock from "./shell/SidebarBlock.vue";
+import SidebarBlock from "phoenix-wing/layout/PnwSidebarBlock.vue";
 import { useAppShell } from "../composables/useAppShell";
-import { usePagePropertiesHost } from "../composables/pagePropertiesHost";
-import { bindPointerDrag } from "../utils/pointerDrag";
-import type { PagePropertyGroup } from "../types/pageProperties";
+import { usePnwPagePropertiesHost } from "phoenix-wing";
+import { pnwBindPointerDrag } from "phoenix-wing";
+import type { PnwPagePropertyGroup } from "phoenix-wing";
 
 const NAME_COL_MIN = 72;
 const NAME_COL_MAX = 240;
 
 const shell = useAppShell();
-const { activeSheet } = usePagePropertiesHost();
+const { activeSheet } = usePnwPagePropertiesHost();
 
 const collapsedGroups = ref<Record<string, boolean>>({});
 const tableWrapRef = ref<HTMLElement | null>(null);
@@ -38,7 +38,7 @@ watch(
 
 const sheetGroups = computed(() => activeSheet.value?.groups ?? []);
 
-function visibleFields(group: PagePropertyGroup) {
+function visibleFields(group: PnwPagePropertyGroup) {
   return group.fields.filter((f) => !(f.hidden && unref(f.hidden)));
 }
 
@@ -68,7 +68,7 @@ function onColResizeStart(e: PointerEvent) {
   const startX = e.clientX;
   const startW = nameColWidth.value;
 
-  bindPointerDrag(e, {
+  pnwBindPointerDrag(e, {
     cursor: "col-resize",
     onMove(ev) {
       const next = clampNameColWidth(startW + (ev.clientX - startX));

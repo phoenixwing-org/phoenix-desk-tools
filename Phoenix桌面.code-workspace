@@ -11,6 +11,12 @@
 		},
 		{
 			"path": "../phoenix-freecad-study"
+		},
+		{
+			"path": "../phoenix-wing"
+		},
+		{
+			"path": "../phoenix-open-issue"
 		}
 	]
 }

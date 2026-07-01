@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, provide } from "vue";
 import CodeIgnorePanel from "../components/CodeIgnorePanel.vue";
-import PageHeader from "../components/PageHeader.vue";
+import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import { codeIgnoreFormKey } from "../composables/codeIgnoreFormKey";
 import { useAppShell } from "../composables/useAppShell";
 import { useCodeIgnoreForm } from "../composables/useCodeIgnoreForm";

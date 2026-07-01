@@ -8,16 +8,16 @@ import {
   type PartKeyFile,
 } from "../api";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
-import { promptChoice } from "../composables/choiceDialog";
-import ComboTextInput from "../components/ComboTextInput.vue";
+import { pnwPromptChoice } from "phoenix-wing";
+import ComboTextInput from "phoenix-wing/components/PnwComboTextInput.vue";
 import { BOM_FIELD_LABELS as L, PART_KEY_META_FIELDS } from "../utils/bomFieldLabels";
 import { TYPE_CODE_OPTIONS } from "../utils/typeCodeOptions";
 import { parsePartKeyText } from "../utils/partNaming";
-import PageHeader from "../components/PageHeader.vue";
+import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { isDrawingFcstdFile } from "../composables/useDrawingBomReadonly";
 import { usePageSession } from "../composables/usePageSession";
-import type { TableColumnDef } from "../composables/useResizableTable";
+import type { PnwTableColumnDef } from "phoenix-wing";
 
 const props = defineProps<{
   workbenchTabId?: string;
@@ -27,7 +27,7 @@ const SESSION_V = 1;
 
 const shell = useAppShell();
 
-const fileColumns: TableColumnDef[] = [
+const fileColumns: PnwTableColumnDef[] = [
   { key: "disk", label: "磁盘", width: 56, minWidth: 48 },
   { key: "assetKind", label: "格式", width: 72, minWidth: 56 },
   { key: "filename", label: "文件名", width: 200, minWidth: 120 },
@@ -97,7 +97,7 @@ function hasUnsavedEdits(): boolean {
 
 async function confirmSwitchPartKey(targetKey: string): Promise<boolean> {
   if (!currentPartKey.value || !hasUnsavedEdits()) return true;
-  await promptChoice({
+  await pnwPromptChoice({
     title: "无法切换零件",
     message: `当前零件 ${currentPartKey.value} 有尚未保存的属性修改。\n\n请先保存后再切换到 ${targetKey}。`,
     choices: [{ id: "ok", label: "确定" }],

@@ -1,8 +1,8 @@
 import { computed, type Ref } from "vue";
 import type { UuidApplyStrategy } from "../api";
-import { usePagePropertySheet } from "./usePagePropertySheet";
+import { usePnwPagePropertySheet } from "phoenix-wing";
 import { useWorksetScopePropertyGroups } from "./useWorksetScopePropertyGroups";
-import { propEnum, propGroup, propSheet } from "../utils/pagePropertySchema";
+import { pnwPropEnum, pnwPropGroup, pnwPropSheet } from "phoenix-wing";
 
 const STRATEGY_OPTIONS = [
   {
@@ -20,12 +20,12 @@ const STRATEGY_OPTIONS = [
 export function useCodeUuidPropertySheet(pageId: string, strategy: Ref<UuidApplyStrategy>) {
   const scopeGroups = useWorksetScopePropertyGroups(pageId);
 
-  usePagePropertySheet(pageId, () =>
-    propSheet(
+  usePnwPagePropertySheet(pageId, () =>
+    pnwPropSheet(
       [
         ...scopeGroups(),
-        propGroup("replace", "替换", [
-          propEnum("strategy", "替换策略", {
+        pnwPropGroup("replace", "替换", [
+          pnwPropEnum("strategy", "替换策略", {
             value: computed(() => strategy.value),
             options: STRATEGY_OPTIONS.map((o) => ({
               value: o.value,

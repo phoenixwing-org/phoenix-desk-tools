@@ -3,13 +3,13 @@ import { computed, onMounted, ref } from "vue";
 import { fetchPartKeys, type PartKeyEntry, type PartKeysPayload } from "../api";
 import { BOM_FIELD_LABELS as L } from "../utils/bomFieldLabels";
 import { useAppShell } from "../composables/useAppShell";
-import PageHeader from "../components/PageHeader.vue";
+import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
-import type { TableColumnDef } from "../composables/useResizableTable";
+import type { PnwTableColumnDef } from "phoenix-wing";
 
 const shell = useAppShell();
 
-const catalogColumns = computed<TableColumnDef[]>(() => [
+const catalogColumns = computed<PnwTableColumnDef[]>(() => [
   { key: "label", label: L.label, width: 160, minWidth: 100 },
   { key: "partKey", label: L.partKey, width: 108, minWidth: 80 },
   { key: "typeCode", label: L.typeCode, width: 56, minWidth: 48 },

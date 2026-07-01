@@ -1,6 +1,6 @@
 import { computed, type Ref } from "vue";
-import { usePagePropertySheet } from "./usePagePropertySheet";
-import { propBool, propEnum, propGroup, propNumber, propPath, propReadonly, propSheet } from "../utils/pagePropertySchema";
+import { usePnwPagePropertySheet } from "phoenix-wing";
+import { pnwPropBool, pnwPropEnum, pnwPropGroup, pnwPropNumber, pnwPropPath, pnwPropReadonly, pnwPropSheet } from "phoenix-wing";
 
 const EXT_OPTIONS = [".FCStd", ".SLDPRT", ".SLDASM", ".SLDDRW", ".step", ".stp"];
 
@@ -30,16 +30,16 @@ export function usePartDedupPropertySheet(
     onPersist,
   } = opts;
 
-  usePagePropertySheet(pageId, () =>
-    propSheet(
+  usePnwPagePropertySheet(pageId, () =>
+    pnwPropSheet(
       [
-        propGroup("intro", "介绍", [
-          propReadonly("intro", "说明", {
+        pnwPropGroup("intro", "介绍", [
+          pnwPropReadonly("intro", "说明", {
             value: computed(() => PAGE_INTRO),
           }),
         ]),
-        propGroup("scan", "扫描", [
-          propPath("scan_dir", "目录", {
+        pnwPropGroup("scan", "扫描", [
+          pnwPropPath("scan_dir", "目录", {
             value: computed(() => scanDir.value),
             mono: true,
             placeholder: "相对工作空间，如 .",
@@ -48,7 +48,7 @@ export function usePartDedupPropertySheet(
               onPersist();
             },
           }),
-          propEnum("extension", "扩展名", {
+          pnwPropEnum("extension", "扩展名", {
             value: computed(() => extension.value),
             options: EXT_OPTIONS.map((ext) => ({ value: ext, label: ext })),
             onChange: (v) => {
@@ -56,7 +56,7 @@ export function usePartDedupPropertySheet(
               onPersist();
             },
           }),
-          propNumber("code_len", "编号位数", {
+          pnwPropNumber("code_len", "编号位数", {
             value: computed(() => codeLen.value),
             min: 1,
             max: 20,
@@ -65,7 +65,7 @@ export function usePartDedupPropertySheet(
               onPersist();
             },
           }),
-          propNumber("ver_len", "版本位数", {
+          pnwPropNumber("ver_len", "版本位数", {
             value: computed(() => verLen.value),
             min: 1,
             max: 10,
@@ -75,22 +75,22 @@ export function usePartDedupPropertySheet(
             },
           }),
         ]),
-        propGroup("checks", "检查项", [
-          propBool("check_code", "查编号", {
+        pnwPropGroup("checks", "检查项", [
+          pnwPropBool("check_code", "查编号", {
             value: checkCode,
             onChange: (v) => {
               checkCode.value = v;
               onPersist();
             },
           }),
-          propBool("check_version", "查版本", {
+          pnwPropBool("check_version", "查版本", {
             value: checkVersion,
             onChange: (v) => {
               checkVersion.value = v;
               onPersist();
             },
           }),
-          propBool("code_must_be_digit", "编号须数字", {
+          pnwPropBool("code_must_be_digit", "编号须数字", {
             value: codeMustBeDigit,
             onChange: (v) => {
               codeMustBeDigit.value = v;

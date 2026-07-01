@@ -1,6 +1,6 @@
 import { computed, type Ref } from "vue";
-import { usePagePropertySheet } from "./usePagePropertySheet";
-import { propBool, propGroup, propPath, propReadonly, propSheet } from "../utils/pagePropertySchema";
+import { usePnwPagePropertySheet } from "phoenix-wing";
+import { pnwPropBool, pnwPropGroup, pnwPropPath, pnwPropReadonly, pnwPropSheet } from "phoenix-wing";
 
 const PAGE_INTRO =
   "SolidWorks 三维模型批量导出 STEP（Windows COM）。非 Windows 可保存偏好与预览模型数量。";
@@ -16,16 +16,16 @@ export function useSwStepExportPropertySheet(
 ) {
   const { sourceDir, outStepDir, recursiveScan, onPersist } = opts;
 
-  usePagePropertySheet(pageId, () =>
-    propSheet(
+  usePnwPagePropertySheet(pageId, () =>
+    pnwPropSheet(
       [
-        propGroup("intro", "介绍", [
-          propReadonly("intro", "说明", {
+        pnwPropGroup("intro", "介绍", [
+          pnwPropReadonly("intro", "说明", {
             value: computed(() => PAGE_INTRO),
           }),
         ]),
-        propGroup("paths", "目录", [
-          propPath("source_dir", "SolidWorks 模型", {
+        pnwPropGroup("paths", "目录", [
+          pnwPropPath("source_dir", "SolidWorks 模型", {
             value: computed(() => sourceDir.value),
             placeholder: "相对工作空间",
             onChange: (v) => {
@@ -33,7 +33,7 @@ export function useSwStepExportPropertySheet(
               onPersist();
             },
           }),
-          propPath("out_step_dir", "STEP 输出", {
+          pnwPropPath("out_step_dir", "STEP 输出", {
             value: computed(() => outStepDir.value),
             placeholder: "相对工作空间",
             onChange: (v) => {
@@ -42,8 +42,8 @@ export function useSwStepExportPropertySheet(
             },
           }),
         ]),
-        propGroup("options", "选项", [
-          propBool("recursive_scan", "递归扫描子目录", {
+        pnwPropGroup("options", "选项", [
+          pnwPropBool("recursive_scan", "递归扫描子目录", {
             value: recursiveScan,
             onChange: (v) => {
               recursiveScan.value = v;

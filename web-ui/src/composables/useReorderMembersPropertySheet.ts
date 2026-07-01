@@ -1,9 +1,9 @@
 import { computed } from "vue";
-import { usePagePropertySheet } from "../composables/usePagePropertySheet";
+import { usePnwPagePropertySheet } from "phoenix-wing";
 import { useReorderMembersPageStore } from "../stores/reorderMembersPage";
 import { useFileWorksetsStore } from "../stores/fileWorksets";
 import type { KevinSystemCodeMode } from "../stores/reorderMembersPage";
-import { propBool, propEnum, propGroup, propReadonly, propSheet } from "../utils/pagePropertySchema";
+import { pnwPropBool, pnwPropEnum, pnwPropGroup, pnwPropReadonly, pnwPropSheet } from "phoenix-wing";
 
 const KEVIN_SYSTEM_CODE_OPTIONS: Array<{
   value: KevinSystemCodeMode;
@@ -36,15 +36,15 @@ export function useReorderMembersPropertySheet(
   const pageStore = useReorderMembersPageStore();
   const worksetStore = useFileWorksetsStore();
 
-  usePagePropertySheet(pageId, () =>
-    propSheet(
+  usePnwPagePropertySheet(pageId, () =>
+    pnwPropSheet(
       [
-      propGroup("scope", "运行范围", [
-        propReadonly("active_workset", "活动工作集", {
+      pnwPropGroup("scope", "运行范围", [
+        pnwPropReadonly("active_workset", "活动工作集", {
           value: computed(() => worksetStore.activeWorkset?.name || "（未选择）"),
           hint: "侧栏「工作集」Tab 中当前活动集；主区可用「从工作集勾选」",
         }),
-        propReadonly("workset_path_count", "工作集文件数", {
+        pnwPropReadonly("workset_path_count", "工作集文件数", {
           value: computed(() => {
             const ws = worksetStore.activeWorkset;
             const n = (ws?.entries ?? ws?.paths)?.length ?? 0;
@@ -52,8 +52,8 @@ export function useReorderMembersPropertySheet(
           }),
         }),
       ]),
-      propGroup("run", "运行选项", [
-        propBool("include_cpp", ".cpp", {
+      pnwPropGroup("run", "运行选项", [
+        pnwPropBool("include_cpp", ".cpp", {
           value: computed(() => pageStore.includeCpp),
           onChange: (v) => {
             if (!pageStore.setIncludeCpp(v)) {
@@ -63,7 +63,7 @@ export function useReorderMembersPropertySheet(
             onPersistServer?.();
           },
         }),
-        propBool("include_header", "头文件（.h / .hpp）", {
+        pnwPropBool("include_header", "头文件（.h / .hpp）", {
           value: computed(() => pageStore.includeHeader),
           onChange: (v) => {
             if (!pageStore.setIncludeHeader(v)) {
@@ -73,7 +73,7 @@ export function useReorderMembersPropertySheet(
             onPersistServer?.();
           },
         }),
-        propBool("verbose", "详细日志", {
+        pnwPropBool("verbose", "详细日志", {
           value: computed(() => pageStore.verbose),
           onChange: (v) => {
             pageStore.setVerbose(v);
@@ -81,8 +81,8 @@ export function useReorderMembersPropertySheet(
           },
         }),
       ]),
-      propGroup("kevin_system_code", "KEVIN_SYSTEM_CODE", [
-        propEnum("mode", "处理方式", {
+      pnwPropGroup("kevin_system_code", "KEVIN_SYSTEM_CODE", [
+        pnwPropEnum("mode", "处理方式", {
           value: computed(() => pageStore.kevinSystemCodeMode),
           labelTone: "emphasis",
           options: KEVIN_SYSTEM_CODE_OPTIONS.map((o) => ({
@@ -101,11 +101,11 @@ export function useReorderMembersPropertySheet(
           },
         }),
       ]),
-      propGroup(
+      pnwPropGroup(
         "ignore",
         "忽略规则",
         [
-          propReadonly("ignore_file", "忽略文件", {
+          pnwPropReadonly("ignore_file", "忽略文件", {
             value: computed(() => pageStore.ignoreFileDisplay || "（未配置）"),
             mono: true,
           }),

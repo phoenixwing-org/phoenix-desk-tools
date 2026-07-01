@@ -10,7 +10,7 @@ import {
   loadRenameAnalysis,
 } from "../api";
 import RenameAnalysisPanel from "../components/RenameAnalysisPanel.vue";
-import PageHeader from "../components/PageHeader.vue";
+import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useFileRenamePropertySheet } from "../composables/useFileRenamePropertySheet";
 import { useIncomingRefQuery } from "../composables/useIncomingRefQuery";

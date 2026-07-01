@@ -6,17 +6,17 @@ import {
   type CodeUuidHit,
   type UuidApplyStrategy,
 } from "../api";
-import PageHeader from "../components/PageHeader.vue";
+import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import GitDiffPreviewButton from "../components/git/GitDiffPreviewButton.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useCodeUuidPropertySheet } from "../composables/useCodeUuidPropertySheet";
-import { promptChoice } from "../composables/choiceDialog";
+import { pnwPromptChoice } from "phoenix-wing";
 import { useWorksetPageScope } from "../composables/useWorksetPageScope";
 import { useFileWorksetsStore } from "../stores/fileWorksets";
-import { useResizableTable, type TableColumnDef } from "../composables/useResizableTable";
+import { usePnwResizableTable, type PnwTableColumnDef } from "phoenix-wing";
 import { basenameFromRel, repoDirFromRel } from "../utils/workspaceFileQuery";
 
-const hitColumns: TableColumnDef[] = [
+const hitColumns: PnwTableColumnDef[] = [
   { key: "check", label: "", width: 40, minWidth: 40 },
   { key: "filename", label: "文件名", width: 200, minWidth: 120 },
   { key: "line", label: "行", width: 52, minWidth: 44 },
@@ -32,7 +32,7 @@ const visibleHitColumns = computed(() =>
   showReplacementColumn.value ? hitColumns : hitColumns.filter((c) => c.key !== "new_text"),
 );
 
-const { widths, onResizeStart } = useResizableTable(() => visibleHitColumns.value);
+const { widths, onResizeStart } = usePnwResizableTable(() => visibleHitColumns.value);
 
 const visibleTableWidth = computed(() =>
   visibleHitColumns.value.reduce(
@@ -222,7 +222,7 @@ async function onApply(dryRun: boolean) {
     return;
   }
   if (!dryRun) {
-    const choice = await promptChoice({
+    const choice = await pnwPromptChoice({
       title: "执行 UUID 替换",
       message: `将替换 ${selectedCount.value} 条 UUID 命中。\n建议先预检。\n\n确定写盘？`,
       defaultChoiceId: "cancel",

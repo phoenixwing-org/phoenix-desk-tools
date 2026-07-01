@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { useResizableTable, type TableColumnDef } from "../composables/useResizableTable";
+import { usePnwResizableTable, type PnwTableColumnDef } from "phoenix-wing";
 
 const props = withDefaults(
   defineProps<{
-    columns: TableColumnDef[];
+    columns: PnwTableColumnDef[];
     tableClass?: string;
     wrapClass?: string;
   }>(),
@@ -13,7 +13,7 @@ const props = withDefaults(
   },
 );
 
-const { widths, totalWidth, onResizeStart } = useResizableTable(() => props.columns);
+const { widths, totalWidth, onResizeStart } = usePnwResizableTable(() => props.columns);
 </script>
 
 <template>

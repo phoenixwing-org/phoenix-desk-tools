@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { ElMessageBox } from "element-plus";
+import { pnwPromptChoice } from "phoenix-wing";
 import {
   analyzeXlinkFix,
   applyXlinkFixOverride,
@@ -13,8 +13,8 @@ import {
   type XlinkFixOverrideResult,
   type XlinkFixResult,
 } from "../api";
-import ExpandCaret from "../components/ExpandCaret.vue";
-import PageHeader from "../components/PageHeader.vue";
+import ExpandCaret from "phoenix-wing/components/PnwExpandCaret.vue";
+import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useXlinkFixPropertySheet } from "../composables/useXlinkFixPropertySheet";
 
@@ -212,20 +212,15 @@ async function onApplyOne(row: XlinkFixIssueRow) {
     shell.setStatus("请先选择目标 FCStd");
     return;
   }
-  const ok = await ElMessageBox.confirm(
-    "将宿主内该 XLink 指向所选文件，是否继续？",
-    "修正此项",
-    {
-      type: "warning",
-      confirmButtonText: "写回",
-      cancelButtonText: "取消",
-      distinguishCancelAndClose: true,
-    },
-  ).then(
-    () => true,
-    () => false,
-  );
-  if (!ok) return;
+  const result = await pnwPromptChoice({
+    title: "修正此项",
+    message: "将宿主内该 XLink 指向所选文件，是否继续？",
+    choices: [
+      { id: "write", label: "写回", variant: "primary" },
+      { id: "cancel", label: "取消" },
+    ],
+  });
+  if (result.choiceId !== "write") return;
   applyingKey.value = key;
   try {
     const result = await applyXlinkFixOverride({
@@ -277,20 +272,15 @@ async function onAnalyze() {
 async function onApply() {
   if (!canApply.value) return;
   const fixable = stats.value?.fixable_count ?? 0;
-  const ok = await ElMessageBox.confirm(
-    `将写回 ${fixable} 处 XLink 路径到 FCStd，是否继续？`,
-    "执行修正",
-    {
-      type: "warning",
-      confirmButtonText: "写回",
-      cancelButtonText: "取消",
-      distinguishCancelAndClose: true,
-    },
-  ).then(
-    () => true,
-    () => false,
-  );
-  if (!ok) return;
+  const result = await pnwPromptChoice({
+    title: "执行修正",
+    message: `将写回 ${fixable} 处 XLink 路径到 FCStd，是否继续？`,
+    choices: [
+      { id: "write", label: "写回", variant: "primary" },
+      { id: "cancel", label: "取消" },
+    ],
+  });
+  if (result.choiceId !== "write") return;
 
   applying.value = true;
   shell.appendLog("[链接路径修正] 执行写回…", { source: "xlink_fix", open: true });
@@ -410,7 +400,7 @@ onMounted(async () => {
                   <button
                     v-if="canExpandRow(row)"
                     type="button"
-                    class="phoenix-expand-btn expand-btn"
+                    class="pnw-expand-btn expand-btn"
                     :aria-expanded="isExpanded(row)"
                     title="展开：按零件标识选择目标 FCStd"
                     @click.stop="toggleExpand(row)"
@@ -709,7 +699,7 @@ onMounted(async () => {
 }
 
 .col-expand {
-  width: calc(var(--phoenix-expand-size) + 12px);
+  width: calc(var(--pnw-expand-size) + 12px);
   padding: 4px 6px;
   vertical-align: middle;
 }

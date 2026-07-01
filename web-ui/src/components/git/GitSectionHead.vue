@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Minus, Plus, RefreshLeft } from "@element-plus/icons-vue";
-import ExpandCaret from "../ExpandCaret.vue";
+import ExpandCaret from "phoenix-wing/components/PnwExpandCaret.vue";
 
 defineProps<{
   title: string;

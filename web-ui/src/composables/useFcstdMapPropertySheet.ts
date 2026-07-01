@@ -1,7 +1,7 @@
 import { computed, type Ref } from "vue";
 import type { FcstdMapPayload } from "../api";
-import { usePagePropertySheet } from "./usePagePropertySheet";
-import { propBool, propGroup, propReadonly, propSheet } from "../utils/pagePropertySchema";
+import { usePnwPagePropertySheet } from "phoenix-wing";
+import { pnwPropBool, pnwPropGroup, pnwPropReadonly, pnwPropSheet } from "phoenix-wing";
 
 function formatScanTime(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -37,14 +37,14 @@ export function useFcstdMapPropertySheet(
 
   const hasIndex = computed(() => Boolean(data.value?.exists));
 
-  usePagePropertySheet(pageId, () =>
-    propSheet(
+  usePnwPagePropertySheet(pageId, () =>
+    pnwPropSheet(
       [
-        propGroup("scan_opts", "扫描选项", [
-          propReadonly("scan_scope", "扫描范围", {
+        pnwPropGroup("scan_opts", "扫描选项", [
+          pnwPropReadonly("scan_scope", "扫描范围", {
             value: computed(() => scanWorksetId.value ? `工作集 · ${worksetName.value}` : "全部"),
           }),
-          propBool("force_update_part_name", "强制更新零件名", {
+          pnwPropBool("force_update_part_name", "强制更新零件名", {
             value: forceUpdatePartName,
             hint: "重新扫描时覆盖索引中已有零件名（不写回 FCStd）；变更后自动保存",
             onChange: (v) => {
@@ -53,53 +53,53 @@ export function useFcstdMapPropertySheet(
             },
           }),
         ]),
-        propGroup("status", "索引状态", [
-          propReadonly("index_state", "索引库", {
+        pnwPropGroup("status", "索引状态", [
+          pnwPropReadonly("index_state", "索引库", {
             value: computed(() => (hasIndex.value ? "已建立" : "尚无")),
           }),
-          propReadonly("last_scan_at", "上次扫描", {
+          pnwPropReadonly("last_scan_at", "上次扫描", {
             value: computed(() => formatScanTime(data.value?.last_scan_at)),
             hidden: computed(() => !data.value?.last_scan_at),
           }),
-          propReadonly("total_entries", "条目", {
+          pnwPropReadonly("total_entries", "条目", {
             value: computed(() => data.value?.stats.total_entries ?? "—"),
             hidden: computed(() => !hasIndex.value),
           }),
-          propReadonly("present", "存在", {
+          pnwPropReadonly("present", "存在", {
             value: computed(() => data.value?.stats.present ?? "—"),
             hidden: computed(() => !hasIndex.value),
           }),
-          propReadonly("missing", "缺失", {
+          pnwPropReadonly("missing", "缺失", {
             value: computed(() => data.value?.stats.missing ?? "—"),
             hidden: computed(() => !hasIndex.value),
           }),
-          propReadonly("fcstd_count", "FCStd", {
+          pnwPropReadonly("fcstd_count", "FCStd", {
             value: computed(() => data.value?.stats.fcstd_file_count ?? "—"),
             hidden: computed(() => !hasIndex.value),
           }),
-          propReadonly("cad_count", "CAD 文件", {
+          pnwPropReadonly("cad_count", "CAD 文件", {
             value: computed(() => data.value?.stats.cad_file_count ?? "—"),
             hidden: computed(() => !hasIndex.value),
           }),
-          propReadonly("dup_names", "重名", {
+          pnwPropReadonly("dup_names", "重名", {
             value: computed(() => data.value?.stats.duplicate_filename_kinds ?? "—"),
             hidden: computed(() => !hasIndex.value),
           }),
         ]),
-        propGroup("paths", "路径", [
-          propReadonly("database_path", "数据库", {
+        pnwPropGroup("paths", "路径", [
+          pnwPropReadonly("database_path", "数据库", {
             value: computed(() => data.value?.database_path_display || "—"),
             mono: true,
             hidden: computed(() => !data.value?.database_path_display),
           }),
-          propReadonly("map_path", "JSON", {
+          pnwPropReadonly("map_path", "JSON", {
             value: computed(() => data.value?.map_path_display || "—"),
             mono: true,
             hidden: computed(() => !data.value?.map_path_display),
           }),
         ], { hidden: computed(() => !hasIndex.value) }),
-        propGroup("intro", "介绍", [
-          propReadonly("intro", "说明", {
+        pnwPropGroup("intro", "介绍", [
+          pnwPropReadonly("intro", "说明", {
             value: computed(() => PAGE_INTRO),
           }),
         ]),

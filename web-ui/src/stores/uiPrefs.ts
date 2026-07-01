@@ -4,7 +4,7 @@ import {
   clampExpandIconSize,
   EXPAND_ICON_SIZE_DEFAULT,
 } from "../utils/expandIconTheme";
-import { applyColorScheme, type ColorScheme } from "../utils/colorScheme";
+import { pnwApplyColorScheme, type PnwColorScheme } from "phoenix-wing";
 
 const STORAGE_KEY = "phoenix-ui-prefs-v1";
 
@@ -13,14 +13,14 @@ export type RibbonLayoutMode = "grouped" | "inline";
 type UiPrefsPersisted = {
   expandControlSizePx?: number;
   ribbonLayoutMode?: RibbonLayoutMode;
-  colorScheme?: ColorScheme;
+  colorScheme?: PnwColorScheme;
 };
 
 export const useUiPrefsStore = defineStore("uiPrefs", {
   state: () => ({
     expandControlSizePx: EXPAND_ICON_SIZE_DEFAULT,
     ribbonLayoutMode: "grouped" as RibbonLayoutMode,
-    colorScheme: "light" as ColorScheme,
+    colorScheme: "light" as PnwColorScheme,
     hydrated: false,
   }),
   actions: {
@@ -48,7 +48,7 @@ export const useUiPrefsStore = defineStore("uiPrefs", {
         /* ignore corrupt storage */
       }
       applyExpandIconCssVars(this.expandControlSizePx);
-      applyColorScheme(this.colorScheme);
+      pnwApplyColorScheme(this.colorScheme);
       this.hydrated = true;
     },
     persist() {
@@ -71,9 +71,9 @@ export const useUiPrefsStore = defineStore("uiPrefs", {
     toggleRibbonLayoutMode() {
       this.setRibbonLayoutMode(this.ribbonLayoutMode === "grouped" ? "inline" : "grouped");
     },
-    setColorScheme(scheme: ColorScheme) {
+    setColorScheme(scheme: PnwColorScheme) {
       this.colorScheme = scheme;
-      applyColorScheme(scheme);
+      pnwApplyColorScheme(scheme);
       this.persist();
     },
     resetToDefaults() {
@@ -86,7 +86,7 @@ export const useUiPrefsStore = defineStore("uiPrefs", {
         /* ignore */
       }
       applyExpandIconCssVars(this.expandControlSizePx);
-      applyColorScheme(this.colorScheme);
+      pnwApplyColorScheme(this.colorScheme);
     },
   },
 });

@@ -5,17 +5,17 @@
 */
 
 import { computed, ref } from "vue";
-import type { TaskKind } from "../utils/asyncProgressTypes";
+import type { PnwTaskKind } from "phoenix-wing";
 import {
-  appendTaskLog,
-  createScanTaskState,
-  createTestTaskState,
-  isTerminal,
-  recordFileTiming,
-  updateTaskFromPoll,
-  updateTaskFromStreamEvent,
-} from "../utils/asyncProgress";
-import { useAsyncTaskStore } from "../stores/asyncTasks";
+  pnwAppendTaskLog,
+  pnwCreateScanTaskState,
+  pnwCreateTestTaskState,
+  pnwIsTerminal,
+  pnwRecordFileTiming,
+  pnwUpdateTaskFromPoll,
+  pnwUpdateTaskFromStreamEvent,
+} from "phoenix-wing";
+import { usePnwAsyncTaskStore } from "phoenix-wing";
 import {
   type ScanProgressPayload,
   type UnitTestStreamEvent,
@@ -39,8 +39,8 @@ interface StreamOptions {
 }
 
 /** 单任务进度控制器。每个页面调用一次，管理一个任务实例。 */
-export function useAsyncProgress(kind: TaskKind) {
-  const store = useAsyncTaskStore();
+export function useAsyncProgress(kind: PnwTaskKind) {
+  const store = usePnwAsyncTaskStore();
 
   // ── 响应式状态 ──
   const taskId = ref("");
@@ -113,8 +113,8 @@ export function useAsyncProgress(kind: TaskKind) {
     store.registerCancel(id, () => cancelFn(id));
 
     // 创建初始任务状态 + 自动展开浮层
-    let current = createScanTaskState(id, opts?.taskName);
-    current = appendTaskLog(current, `开始扫描 — 工作空间 ${id}`);
+    let current = pnwCreateScanTaskState(id, opts?.taskName);
+    current = pnwAppendTaskLog(current, `开始扫描 — 工作空间 ${id}`);
     store.upsertTask(current);
     store.setFullscreen(true); // 自动全屏让用户看到
 
@@ -155,20 +155,20 @@ export function useAsyncProgress(kind: TaskKind) {
 
         const prevErrors = current.steps.reduce((s, step) => s + step.errors.length, 0);
 
-        const updated = updateTaskFromPoll(current, payload);
+        const updated = pnwUpdateTaskFromPoll(current, payload);
         store.upsertTask(updated);
         current = updated;
 
         // 新增错误日志
         const newErrors = updated.steps.reduce((s, step) => s + step.errors.length, 0) - prevErrors;
         if (newErrors > 0) {
-          const withLog = appendTaskLog(current, `⚠ ${newErrors} 个文件读取失败`);
+          const withLog = pnwAppendTaskLog(current, `⚠ ${newErrors} 个文件读取失败`);
           store.upsertTask(withLog);
           current = withLog;
         }
 
-        if (isTerminal(updated.status)) {
-          const finalLog = appendTaskLog(
+        if (pnwIsTerminal(updated.status)) {
+          const finalLog = pnwAppendTaskLog(
             current,
             updated.status === "done"
               ? `✓ 扫描完成 · CAD ${payload.total_cad_files} · FCStd ${payload.total_fcstd_files}`
@@ -211,7 +211,7 @@ export function useAsyncProgress(kind: TaskKind) {
     _cancelFn = cancelFn;
     store.registerCancel(id, () => cancelFn(taskId.value));
 
-    const initial = createTestTaskState(id, undefined, opts?.taskName);
+    const initial = pnwCreateTestTaskState(id, undefined, opts?.taskName);
     store.upsertTask(initial);
     store.setFullscreen(true); // 自动全屏让用户看到
 
@@ -237,9 +237,9 @@ export function useAsyncProgress(kind: TaskKind) {
         const c = store.tasks[realId];
         if (!c) return;
         // 已是终态则跳过后续事件（如全部模块加载失败已在 start 中标记 error，阻止后续 done 覆盖）
-        if (isTerminal(c.status)) return;
+        if (pnwIsTerminal(c.status)) return;
 
-        const updated = updateTaskFromStreamEvent(c, event as Parameters<typeof updateTaskFromStreamEvent>[1]);
+        const updated = pnwUpdateTaskFromStreamEvent(c, event as Parameters<typeof pnwUpdateTaskFromStreamEvent>[1]);
         store.upsertTask(updated);
 
         // ── logs / errors / timings（新架构统一在此产出）──
@@ -248,12 +248,12 @@ export function useAsyncProgress(kind: TaskKind) {
           case "start": {
             const mods = event.total_modules || 0;
             const cases = event.total_cases || 0;
-            enriched = appendTaskLog(enriched, `${event.suite_label || event.suite_id || "单元测试"} · 总计 ${mods} 模块 ${cases} 用例`);
+            enriched = pnwAppendTaskLog(enriched, `${event.suite_label || event.suite_id || "单元测试"} · 总计 ${mods} 模块 ${cases} 用例`);
             // 模块导入错误 → 记入 overlay 日志和 errors
             const loadErrs = (event as any).load_errors as string[] | undefined;
             if (loadErrs?.length) {
               for (const err of loadErrs) {
-                enriched = appendTaskLog(enriched, `✗ 加载失败: ${err}`);
+                enriched = pnwAppendTaskLog(enriched, `✗ 加载失败: ${err}`);
               }
               if (!cases && !mods) {
                 // 全部模块加载失败 → 标记为错误
@@ -263,14 +263,14 @@ export function useAsyncProgress(kind: TaskKind) {
             break;
           }
           case "module_start":
-            enriched = appendTaskLog(enriched, `→ [${event.suite_id || ""}] ${event.module} (${event.module_index}/${event.module_total})`);
+            enriched = pnwAppendTaskLog(enriched, `→ [${event.suite_id || ""}] ${event.module} (${event.module_index}/${event.module_total})`);
             break;
           case "case_done": {
             const cs = (event as any).case;
             if (cs) {
-              enriched = recordFileTiming(enriched, cs.method || cs.id || "", cs.module || "", cs.duration_ms || 0, cs.status === "passed", cs.status !== "passed" ? (cs.message || "") : undefined);
+              enriched = pnwRecordFileTiming(enriched, cs.method || cs.id || "", cs.module || "", cs.duration_ms || 0, cs.status === "passed", cs.status !== "passed" ? (cs.message || "") : undefined);
               if (cs.status === "failed" || cs.status === "error") {
-                enriched = appendTaskLog(enriched, `✗ ${cs.method || cs.id}: ${cs.message || "失败"}`);
+                enriched = pnwAppendTaskLog(enriched, `✗ ${cs.method || cs.id}: ${cs.message || "失败"}`);
                 if (enriched.steps[0]) {
                   enriched = {
                     ...enriched,
@@ -286,7 +286,7 @@ export function useAsyncProgress(kind: TaskKind) {
           case "module_done": {
             const summary = (event as any).summary;
             if (summary) {
-              enriched = appendTaskLog(enriched, `✓ ${summary.module}: ${summary.passed}/${summary.tests_run} 通过`);
+              enriched = pnwAppendTaskLog(enriched, `✓ ${summary.module}: ${summary.passed}/${summary.tests_run} 通过`);
             }
             break;
           }
@@ -294,12 +294,12 @@ export function useAsyncProgress(kind: TaskKind) {
             const result = (event as any).result;
             if (result?.summary) {
               const s = result.summary;
-              enriched = appendTaskLog(enriched, `完成 · ${s.passed || 0} 通过 ${s.failed || 0} 失败 ${s.errors || 0} 错误 ${s.skipped || 0} 跳过 · ${s.tests_run || 0} 用例 ${s.modules || 0} 模块`);
+              enriched = pnwAppendTaskLog(enriched, `完成 · ${s.passed || 0} 通过 ${s.failed || 0} 失败 ${s.errors || 0} 错误 ${s.skipped || 0} 跳过 · ${s.tests_run || 0} 用例 ${s.modules || 0} 模块`);
             }
             break;
           }
           case "error":
-            enriched = appendTaskLog(enriched, `✗ ${event.message || "未知错误"}`);
+            enriched = pnwAppendTaskLog(enriched, `✗ ${event.message || "未知错误"}`);
             break;
         }
 
@@ -307,7 +307,7 @@ export function useAsyncProgress(kind: TaskKind) {
           store.upsertTask(enriched);
         }
 
-        if (isTerminal(enriched.status)) {
+        if (pnwIsTerminal(enriched.status)) {
           isRunning.value = false;
         }
       });
@@ -364,8 +364,8 @@ export function useAsyncProgress(kind: TaskKind) {
           // 如果有 progress 快照，直接恢复
           if (result.progress) {
             const current = store.tasks[result.scan_id];
-            const base = current || createScanTaskState(result.scan_id);
-            const updated = updateTaskFromPoll(base, result.progress as ScanProgressPayload);
+            const base = current || pnwCreateScanTaskState(result.scan_id);
+            const updated = pnwUpdateTaskFromPoll(base, result.progress as ScanProgressPayload);
             store.upsertTask(updated);
           }
 
@@ -385,9 +385,9 @@ export function useAsyncProgress(kind: TaskKind) {
               const payload = await fetchFcstdMapScanProgress(result.scan_id!);
               const c = store.tasks[result.scan_id!];
               if (!c) return;
-              const updated = updateTaskFromPoll(c, payload);
+              const updated = pnwUpdateTaskFromPoll(c, payload);
               store.upsertTask(updated);
-              if (isTerminal(updated.status)) {
+              if (pnwIsTerminal(updated.status)) {
                 _stopPolling();
                 isRunning.value = false;
               }

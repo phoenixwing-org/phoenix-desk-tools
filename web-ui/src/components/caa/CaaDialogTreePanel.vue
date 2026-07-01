@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import SidebarBlock from "../shell/SidebarBlock.vue";
+import SidebarBlock from "phoenix-wing/layout/PnwSidebarBlock.vue";
 import { useCaaDialogPageStore } from "../../stores/caaDialogPage";
 import { toCaaElTreeRoots, type CaaElTreeNode } from "../../utils/caaDialogTree";
 import { CONTROL_ICONS } from "../../assets/caa/controlIcons";

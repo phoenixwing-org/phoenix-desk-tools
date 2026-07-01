@@ -29,7 +29,7 @@ import { parseShellUrl, replaceShellUrl, type ShellUrlIntent } from "../utils/sh
 import { useOnboardingStore } from "../stores/onboarding";
 import { useFileWorksetsStore } from "../stores/fileWorksets";
 import { useUiPrefsStore } from "../stores/uiPrefs";
-import { clearPhoenixBrowserStorage } from "../utils/phoenixBrowserStorage";
+import { pnwClearPhoenixBrowserStorage } from "phoenix-wing";
 import { confirmCloseWorkspace } from "./tabCloseConfirm";
 import type { ModuleScope } from "../constants/moduleScope";
 import { WORKBENCH_IDLE_PAGE } from "../constants/workbench";
@@ -1056,7 +1056,7 @@ export function provideAppShell(): AppShellContext {
       clearWorkbenchAfterWorkspaceClose();
     }
     await resetLauncherFactory();
-    clearPhoenixBrowserStorage();
+    pnwClearPhoenixBrowserStorage();
     onboarding.resetLocalState();
     useUiPrefsStore().resetToDefaults();
     await reloadLauncher();

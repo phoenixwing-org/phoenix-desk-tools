@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import PageHeader from "../components/PageHeader.vue";
+import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import CaaDialogHomeView from "../components/caa/CaaDialogHomeView.vue";
 import { fetchCaaHealth, fetchCaaIndexGroups, scanCaaIndex, type CaaIndexStats } from "../api/caaDialog";
 import { CAA_HOME_PAGE_ID } from "../constants/caaPages";

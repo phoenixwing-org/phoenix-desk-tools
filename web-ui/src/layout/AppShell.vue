@@ -31,19 +31,19 @@ import CaaDialogEditorPage from "../pages/CaaDialogEditorPage.vue";
 import CaaDialogHomePage from "../pages/CaaDialogHomePage.vue";
 import WorkbenchIdlePage from "../pages/WorkbenchIdlePage.vue";
 import PlaceholderPage from "../pages/PlaceholderPage.vue";
-import { sideDockVisibility } from "../utils/sideDockLayout";
-import { bindPointerDrag } from "../utils/pointerDrag";
+import { pnwSideDockVisibility } from "phoenix-wing";
+import { pnwBindPointerDrag } from "phoenix-wing";
 import { fetchPhoenixDatabaseStatus, recreatePhoenixDatabase } from "../api";
 import { provideAppShell } from "../composables/useAppShell";
 import { isCaaEditorPage } from "../constants/caaPages";
 import { WORKBENCH_IDLE_PAGE } from "../constants/workbench";
-import { useDocumentTitle } from "../composables/useDocumentTitle";
+import { usePnwDocumentTitle } from "phoenix-wing";
 import { useWorkspaceSwitcher } from "../composables/useWorkspaceSwitcher";
-import ChoiceDialogHost from "../components/ChoiceDialogHost.vue";
+import ChoiceDialogHost from "phoenix-wing/components/PnwChoiceDialogHost.vue";
 import GitDiffPreviewHost from "../components/git/GitDiffPreviewHost.vue";
 import CaaRelatedFilePreviewHost from "../components/caa/CaaRelatedFilePreviewHost.vue";
-import AppModalOverlay from "../components/AppModalOverlay.vue";
-import AsyncProgressOverlay from "../components/AsyncProgressOverlay.vue";
+import AppModalOverlay from "phoenix-wing/components/PnwAppModalOverlay.vue";
+import AsyncProgressOverlay from "phoenix-wing/components/PnwAsyncProgressOverlay.vue";
 
 const shell = provideAppShell();
 const { workspacePath, workspaceShort } = useWorkspaceSwitcher(shell);
@@ -69,7 +69,7 @@ const pageLabel = computed(() => {
   return navigation.value.find((n) => n.page === page)?.label;
 });
 
-useDocumentTitle({ workspaceShort, workspacePath, pageLabel });
+usePnwDocumentTitle({ workspaceShort, workspacePath, pageLabel });
 
 const { activeTab: ribbonActiveTab, visibleTabs: ribbonVisibleTabs, activeTabDef: ribbonActiveTabDef } =
   useRibbonTabs({
@@ -91,7 +91,7 @@ watch(ribbonActiveTab, (tabId) => {
 });
 
 const dockVis = computed(() =>
-  sideDockVisibility(shellLayout.value, {
+  pnwSideDockVisibility(shellLayout.value, {
     onGitPage: shell.currentPage.value === "git",
     onCaaPage: isCaaEditorPage(shell.currentPage.value),
   }),
@@ -145,7 +145,7 @@ function onResizeStart(e: PointerEvent, side: "left" | "right") {
   const startX = e.clientX;
   const startW = shell.shellLayout.value[widthKey];
 
-  bindPointerDrag(e, {
+  pnwBindPointerDrag(e, {
     cursor: "col-resize",
     onMove(ev) {
       const delta = side === "right" ? startX - ev.clientX : ev.clientX - startX;

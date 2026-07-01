@@ -1,4 +1,4 @@
-import { promptChoice } from "./choiceDialog";
+import { pnwPromptChoice } from "phoenix-wing";
 
 export type TabCloseChoice = "flush" | "discard" | "cancel";
 
@@ -55,7 +55,7 @@ export async function confirmCloseWorkspace(
 ): Promise<"close" | "close_all" | null> {
   const base = "不会删除磁盘上的项目文件；可稍后在配置中重新打开。";
   if (toolTabCount <= 0) {
-    const choice = await promptChoice({
+    const choice = await pnwPromptChoice({
       title: "关闭工作空间",
       message: `关闭当前工作空间？\n\n${base}`,
       choices: [
@@ -68,7 +68,7 @@ export async function confirmCloseWorkspace(
   }
 
   const dirtyNote = formatDirtyTabList(dirtyTitles);
-  const choice = await promptChoice({
+  const choice = await pnwPromptChoice({
     title: "关闭工作空间",
     message:
       `当前还有 ${toolTabCount} 个工具 Tab 未关闭（「主页」可保留）。\n\n`
@@ -110,7 +110,7 @@ export async function confirmCloseTabsBeforeWorkspacePick(
     message += dirtyNote;
   }
 
-  const choice = await promptChoice({
+  const choice = await pnwPromptChoice({
     title: "打开工作空间",
     message,
     choices: [
@@ -164,7 +164,7 @@ export async function confirmCloseAllTabs(
     message += `\n\n其中 ${dirty} 个有未保存更改（●），关闭后将丢弃未写入内容：\n\n${list}`;
   }
 
-  const choice = await promptChoice({
+  const choice = await pnwPromptChoice({
     title: "关闭全部 Tab",
     message,
     choices: [

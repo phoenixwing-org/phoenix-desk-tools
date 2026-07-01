@@ -11,7 +11,7 @@ import {
 } from "../api";
 import { useAppShell } from "../composables/useAppShell";
 import { useTestFixturesPropertySheet } from "../composables/useTestFixturesPropertySheet";
-import PageHeader from "../components/PageHeader.vue";
+import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 
 const shell = useAppShell();
 const loading = ref(false);

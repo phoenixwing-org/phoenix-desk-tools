@@ -8,7 +8,7 @@ import PagePropertiesPanel from "../components/PagePropertiesPanel.vue";
 import GitCommitPanel from "../components/shell/GitCommitPanel.vue";
 import CaaDialogIndexPanel from "../components/caa/CaaDialogIndexPanel.vue";
 import CaaDialogTreePanel from "../components/caa/CaaDialogTreePanel.vue";
-import { usePagePropertiesHost, setPropertiesActivePage } from "../composables/pagePropertiesHost";
+import { usePnwPagePropertiesHost, pnwSetPropertiesActivePage } from "phoenix-wing";
 import { fetchTree, type TreeNode } from "../api";
 import { useAppShell } from "../composables/useAppShell";
 import { useFileWorksetsStore } from "../stores/fileWorksets";
@@ -21,7 +21,7 @@ import {
   treeFetchOptions,
   type WorkspaceTreeFilterState,
 } from "../utils/workspaceTreeFilters";
-import { bindPointerDrag } from "../utils/pointerDrag";
+import { pnwBindPointerDrag } from "phoenix-wing";
 import {
   maxStoredLogHeightPx,
   maxStoredPropsFooterHeightPx,
@@ -55,7 +55,7 @@ const props = withDefaults(
 const shell = useAppShell();
 const worksetStore = useFileWorksetsStore();
 const worksetBlockMode = computed(() => props.showWorksetBlock ?? false);
-const { hasProperties } = usePagePropertiesHost();
+const { hasProperties } = usePnwPagePropertiesHost();
 const sidebarRef = ref<HTMLElement | null>(null);
 const sidebarHeight = ref(0);
 
@@ -86,7 +86,7 @@ const showCodeFilters = computed(() => filterProfile.value === "code");
 
 watch(
   () => shell.currentPage.value,
-  (pageId) => setPropertiesActivePage(pageId),
+  (pageId) => pnwSetPropertiesActivePage(pageId),
   { immediate: true },
 );
 
@@ -290,7 +290,7 @@ function onPropsResizeStart(e: PointerEvent) {
   const startY = e.clientY;
   const startH = shellLayout.value.properties_panel_height_px;
 
-  bindPointerDrag(e, {
+  pnwBindPointerDrag(e, {
     cursor: "row-resize",
     onMove(ev) {
       const delta = ev.clientY - startY;
@@ -321,7 +321,7 @@ function onPropsFooterResizeStart(e: PointerEvent) {
   const wrapH = stackLayout.value.propsWrapHeightPx;
   let nextFooterH = startH;
 
-  bindPointerDrag(e, {
+  pnwBindPointerDrag(e, {
     cursor: "row-resize",
     onMove(ev) {
       const delta = ev.clientY - startY;
@@ -347,7 +347,7 @@ function onLogResizeStart(e: PointerEvent) {
   const startY = e.clientY;
   const startH = shellLayout.value.log_panel_height_px;
 
-  bindPointerDrag(e, {
+  pnwBindPointerDrag(e, {
     cursor: "row-resize",
     onMove(ev) {
       const delta = ev.clientY - startY;

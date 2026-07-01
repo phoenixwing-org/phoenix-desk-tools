@@ -11,7 +11,7 @@ import {
 import { useFileDetailContext } from "../../composables/useFileDetailContext";
 import { useDrawingBomReadonly } from "../../composables/useDrawingBomReadonly";
 import { useAppShell } from "../../composables/useAppShell";
-import ComboTextInput from "../ComboTextInput.vue";
+import ComboTextInput from "phoenix-wing/components/PnwComboTextInput.vue";
 import { TYPE_CODE_OPTIONS } from "../../utils/typeCodeOptions";
 
 const EDITABLE_KEYS = [
@@ -537,7 +537,7 @@ onMounted(() => {
   align-items: center;
 }
 .input-row input,
-.input-row .combo-wrap {
+.input-row .pnw-combo-wrap {
   flex: 1;
   min-width: 0;
 }
@@ -550,7 +550,7 @@ onMounted(() => {
 .input-row input.readonly {
   background: #f3f4f6;
 }
-.input-row :deep(.combo-text-input) {
+.input-row :deep(.pnw-combo-text-input) {
   font-size: 0.85rem;
   padding: 6px 10px;
 }

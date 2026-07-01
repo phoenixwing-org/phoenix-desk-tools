@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Grid, Folder } from "@element-plus/icons-vue";
-import SidebarBlock from "../shell/SidebarBlock.vue";
+import SidebarBlock from "phoenix-wing/layout/PnwSidebarBlock.vue";
 import { fetchCaaIndexGroups, scanCaaIndex } from "../../api/caaDialog";
 import { useAppShell } from "../../composables/useAppShell";
 import { useCaaDialogPageStore } from "../../stores/caaDialogPage";

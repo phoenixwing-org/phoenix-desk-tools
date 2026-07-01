@@ -2,7 +2,7 @@
 import { Refresh } from "@element-plus/icons-vue";
 import GitPathFilterChips from "../components/git/GitPathFilterChips.vue";
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import PageHeader from "../components/PageHeader.vue";
+import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import GitChangeList from "../components/git/GitChangeList.vue";
 import GitSectionHead from "../components/git/GitSectionHead.vue";
 import {
@@ -13,7 +13,7 @@ import {
   stageGitPaths,
 } from "../api";
 import { useAppShell } from "../composables/useAppShell";
-import { promptChoice } from "../composables/choiceDialog";
+import { pnwPromptChoice } from "phoenix-wing";
 import { useGitPropertySheet } from "../composables/useGitPropertySheet";
 import { useGitPathFilter } from "../composables/useGitPathFilter";
 import { useGitPageState } from "../composables/useGitPageState";
@@ -173,7 +173,7 @@ async function onRevert(paths: string[], scope: "worktree" | "untracked" = "work
   const isUntracked = scope === "untracked";
   const pathSummary =
     paths.length === 1 ? paths[0]! : `${paths.length} 个路径（含 ${paths[0]} 等）`;
-  const choice = await promptChoice({
+  const choice = await pnwPromptChoice({
     title: isUntracked ? "删除未跟踪" : "Revert 工作区",
     message: isUntracked
       ? `将删除未跟踪路径（不可恢复）：\n${pathSummary}\n\n继续？`
@@ -252,7 +252,7 @@ async function onBulkRevert(
   const paths = sectionPaths(rows);
   if (!paths.length) return;
   const isUntracked = scope === "untracked";
-  const choice = await promptChoice({
+  const choice = await pnwPromptChoice({
     title: isUntracked ? "删除全部未跟踪" : "Revert 全部更改",
     message: isUntracked
       ? `将删除 ${paths.length} 个未跟踪路径（不可恢复）。\n\n继续？`

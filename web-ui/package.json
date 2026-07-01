@@ -12,6 +12,7 @@
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
     "@phoenix/catdlg-core": "workspace:*",
+    "phoenix-wing": "workspace:*",
     "diff2html": "^3.4.56",
     "driver.js": "^1.4.0",
     "element-plus": "^2.14.2",

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, ref } from "vue";
-import ExpandCaret from "../ExpandCaret.vue";
+import ExpandCaret from "phoenix-wing/components/PnwExpandCaret.vue";
 import GitChangePathLabel from "./GitChangePathLabel.vue";
 import GitChangeRowActions from "./GitChangeRowActions.vue";
 import GitChangeStatusBadge from "./GitChangeStatusBadge.vue";

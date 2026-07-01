@@ -7,7 +7,7 @@ import {
   saveSwStepPrefs,
   type SwStepPrefs,
 } from "../api";
-import PageHeader from "../components/PageHeader.vue";
+import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useSwStepExportPropertySheet } from "../composables/useSwStepExportPropertySheet";
 

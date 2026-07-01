@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
 import { Close, Delete } from "@element-plus/icons-vue";
-import SidebarBlock from "../components/shell/SidebarBlock.vue";
+import SidebarBlock from "phoenix-wing/layout/PnwSidebarBlock.vue";
 import { useAppShell } from "../composables/useAppShell";
 
 const shell = useAppShell();

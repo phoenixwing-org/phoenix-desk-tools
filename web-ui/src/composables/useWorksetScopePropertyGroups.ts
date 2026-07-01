@@ -1,8 +1,8 @@
 import { computed } from "vue";
 import { useWorksetPageScope } from "./useWorksetPageScope";
 import { useFileWorksetsStore, type WorksetScopeMode } from "../stores/fileWorksets";
-import { propEnum, propGroup, propPath, propReadonly } from "../utils/pagePropertySchema";
-import type { PagePropertyGroup } from "../types/pageProperties";
+import { pnwPropEnum, pnwPropGroup, pnwPropPath, pnwPropReadonly } from "phoenix-wing";
+import type { PnwPagePropertyGroup } from "phoenix-wing";
 
 const SCOPE_MODE_OPTIONS = [
   { value: "all", label: "全工作空间" },
@@ -56,29 +56,29 @@ export function useWorksetScopePropertyGroups(
     }
   }
 
-  function build(): PagePropertyGroup[] {
+  function build(): PnwPagePropertyGroup[] {
     return [
-      propGroup("scope", "扫描范围", [
-        propEnum("scope_mode", "范围模式", {
+      pnwPropGroup("scope", "扫描范围", [
+        pnwPropEnum("scope_mode", "范围模式", {
           value: computed(() => pageScope.scopeMode.value),
           options: scopeModeOptions,
           onChange: onScopeModeChange,
         }),
       ]),
-      propGroup("scope_subdir", "子目录", [
-        propPath("scope_path", "相对路径", {
+      pnwPropGroup("scope_subdir", "子目录", [
+        pnwPropPath("scope_path", "相对路径", {
           value: pageScope.scope,
           placeholder: "相对子目录",
           mono: true,
         }),
       ], { hidden: computed(() => !isSubdirMode.value) }),
-      propGroup("scope_workset", "工作集", [
-        propEnum("workset_id", "选择", {
+      pnwPropGroup("scope_workset", "工作集", [
+        pnwPropEnum("workset_id", "选择", {
           value: worksetIdValue,
           options: worksetSelectOptions,
           hint: "选「侧栏当前工作集」即跟随侧栏活动项；在侧栏「工作集」Tab 管理",
         }),
-        propReadonly("active_workset", "侧栏活动", {
+        pnwPropReadonly("active_workset", "侧栏活动", {
           value: activeWorksetLabel,
           hint: "侧栏当前活动工作集；选「侧栏当前工作集」时使用",
         }),

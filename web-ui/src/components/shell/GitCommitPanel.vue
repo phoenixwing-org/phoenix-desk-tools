@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { commitGitRepo } from "../../api";
-import SidebarBlock from "./SidebarBlock.vue";
+import SidebarBlock from "phoenix-wing/layout/PnwSidebarBlock.vue";
 import { useAppShell } from "../../composables/useAppShell";
 import { useGitPageState } from "../../composables/useGitPageState";
 

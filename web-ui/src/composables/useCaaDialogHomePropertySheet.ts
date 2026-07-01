@@ -1,7 +1,7 @@
 import { computed, type Ref } from "vue";
 import { caaServicePropertyGroup } from "./caaServicePropertyGroup";
-import { usePagePropertySheet } from "./usePagePropertySheet";
-import { propGroup, propReadonly, propSheet } from "../utils/pagePropertySchema";
+import { usePnwPagePropertySheet } from "phoenix-wing";
+import { pnwPropGroup, pnwPropReadonly, pnwPropSheet } from "phoenix-wing";
 
 function formatTime(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -34,33 +34,33 @@ export function useCaaDialogHomePropertySheet(
 ) {
   const { dialogCount, moduleCount, lastScanAt, indexed, lastLoadedAt, listLoading } = opts;
 
-  usePagePropertySheet(pageId, () =>
-    propSheet(
+  usePnwPagePropertySheet(pageId, () =>
+    pnwPropSheet(
       [
-        propGroup("list", "列表", [
-          propReadonly("dialog_count", "对话框数", {
+        pnwPropGroup("list", "列表", [
+          pnwPropReadonly("dialog_count", "对话框数", {
             value: computed(() => (indexed.value ? dialogCount.value : "—")),
           }),
-          propReadonly("module_count", "模块数", {
+          pnwPropReadonly("module_count", "模块数", {
             value: computed(() => (indexed.value && dialogCount.value > 0 ? moduleCount.value : "—")),
             hidden: computed(() => !indexed.value || dialogCount.value <= 0),
           }),
-          propReadonly("data_source", "数据来源", {
+          pnwPropReadonly("data_source", "数据来源", {
             value: computed(() => "CAA 索引 SQL"),
           }),
-          propReadonly("list_state", "加载状态", {
+          pnwPropReadonly("list_state", "加载状态", {
             value: computed(() => (listLoading.value ? "加载中…" : indexed.value ? "已加载" : "索引未建立")),
           }),
-          propReadonly("last_loaded", "本次加载", {
+          pnwPropReadonly("last_loaded", "本次加载", {
             value: computed(() => formatTime(lastLoadedAt.value)),
             hidden: computed(() => !lastLoadedAt.value),
           }),
         ]),
-        propGroup("index", "CAA 索引", [
-          propReadonly("index_state", "索引状态", {
+        pnwPropGroup("index", "CAA 索引", [
+          pnwPropReadonly("index_state", "索引状态", {
             value: computed(() => (indexed.value ? "已建立" : "尚未扫描")),
           }),
-          propReadonly("last_scan_at", "上次扫描", {
+          pnwPropReadonly("last_scan_at", "上次扫描", {
             value: computed(() => formatTime(lastScanAt.value)),
             hidden: computed(() => !lastScanAt.value),
           }),

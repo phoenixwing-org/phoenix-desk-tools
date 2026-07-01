@@ -1,5 +1,5 @@
 import type { ShellLayout, SideDock } from "../types/config";
-import { gitCommitPanelDock, sideDockVisibility, type SideDockVisibilityContext } from "./sideDockLayout";
+import { pnwGitCommitPanelDock, pnwSideDockVisibility, type PnwSideDockVisibilityContext } from "phoenix-wing";
 
 export type SidePanelSnapshot = {
   tree: boolean;
@@ -13,7 +13,7 @@ export function sideHasDockedPanels(layout: ShellLayout, side: SideDock): boolea
     layout.workspace_tree_dock === side ||
     layout.shell_log_dock === side ||
     layout.properties_panel_dock === side ||
-    gitCommitPanelDock(layout) === side
+    pnwGitCommitPanelDock(layout) === side
   );
 }
 
@@ -22,7 +22,7 @@ export function snapshotPanelsOnSide(layout: ShellLayout, side: SideDock): SideP
     tree: layout.workspace_tree_dock === side && layout.right_panel_open,
     log: layout.shell_log_dock === side && layout.log_panel_open,
     props: layout.properties_panel_dock === side && layout.properties_panel_open,
-    git: gitCommitPanelDock(layout) === side && layout.git_commit_panel_open,
+    git: pnwGitCommitPanelDock(layout) === side && layout.git_commit_panel_open,
   };
 }
 
@@ -31,7 +31,7 @@ export function buildCollapseSidePatch(layout: ShellLayout, side: SideDock): Par
   if (layout.workspace_tree_dock === side) patch.right_panel_open = false;
   if (layout.shell_log_dock === side) patch.log_panel_open = false;
   if (layout.properties_panel_dock === side) patch.properties_panel_open = false;
-  if (gitCommitPanelDock(layout) === side) patch.git_commit_panel_open = false;
+  if (pnwGitCommitPanelDock(layout) === side) patch.git_commit_panel_open = false;
   return patch;
 }
 
@@ -45,28 +45,28 @@ export function buildExpandSidePatch(
   if (layout.workspace_tree_dock === side && snap.tree) patch.right_panel_open = true;
   if (layout.shell_log_dock === side && snap.log) patch.log_panel_open = true;
   if (layout.properties_panel_dock === side && snap.props) patch.properties_panel_open = true;
-  if (gitCommitPanelDock(layout) === side && snap.git) patch.git_commit_panel_open = true;
+  if (pnwGitCommitPanelDock(layout) === side && snap.git) patch.git_commit_panel_open = true;
 
   const wouldOpen = Boolean(
     (patch.right_panel_open && layout.workspace_tree_dock === side) ||
       (patch.log_panel_open && layout.shell_log_dock === side) ||
       (patch.properties_panel_open && layout.properties_panel_dock === side) ||
-      (patch.git_commit_panel_open && gitCommitPanelDock(layout) === side),
+      (patch.git_commit_panel_open && pnwGitCommitPanelDock(layout) === side),
   );
   if (wouldOpen) return patch;
 
   if (layout.workspace_tree_dock === side) patch.right_panel_open = true;
   else if (layout.shell_log_dock === side) patch.log_panel_open = true;
   else if (layout.properties_panel_dock === side) patch.properties_panel_open = true;
-  else if (gitCommitPanelDock(layout) === side) patch.git_commit_panel_open = true;
+  else if (pnwGitCommitPanelDock(layout) === side) patch.git_commit_panel_open = true;
   return patch;
 }
 
 export function isSideVisible(
   layout: ShellLayout,
   side: SideDock,
-  ctx: SideDockVisibilityContext = {},
+  ctx: PnwSideDockVisibilityContext = {},
 ): boolean {
-  const vis = sideDockVisibility(layout, ctx);
+  const vis = pnwSideDockVisibility(layout, ctx);
   return side === "left" ? vis.leftVisible : vis.rightVisible;
 }

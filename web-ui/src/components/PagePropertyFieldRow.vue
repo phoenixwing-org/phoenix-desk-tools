@@ -3,34 +3,34 @@ import { ref, unref } from "vue";
 import { ElMessage } from "element-plus";
 import { pickWorkspaceDirectory } from "../api";
 import type {
-  PagePropertyField,
-  PagePropertyPathField,
-  PagePropertySelectField,
-} from "../types/pageProperties";
+  PnwPagePropertyField,
+  PnwPagePropertyPathField,
+  PnwPagePropertySelectField,
+} from "phoenix-wing";
 import { useAppShell } from "../composables/useAppShell";
 import { resolveWorkspacePathHint, toRepoRelativePath } from "../utils/toRepoRelativePath";
 
 defineProps<{
-  field: PagePropertyField;
+  field: PnwPagePropertyField;
   stripe?: boolean;
 }>();
 
 const shell = useAppShell();
 const browsing = ref(false);
 
-function isHidden(field: PagePropertyField) {
+function isHidden(field: PnwPagePropertyField) {
   return field.hidden ? Boolean(unref(field.hidden)) : false;
 }
 
-function isDisabled(field: PagePropertyField) {
+function isDisabled(field: PnwPagePropertyField) {
   return field.disabled ? Boolean(unref(field.disabled)) : false;
 }
 
-function fieldHint(field: PagePropertyField): string {
+function fieldHint(field: PnwPagePropertyField): string {
   return field.hint ? String(unref(field.hint)) : "";
 }
 
-function selectOptions(field: PagePropertyField & { kind: "select" }) {
+function selectOptions(field: PnwPagePropertyField & { kind: "select" }) {
   return unref(field.options);
 }
 
@@ -40,30 +40,30 @@ function formatInfoValue(raw: unknown): string {
   return String(raw);
 }
 
-function onBoolChange(field: PagePropertyField & { kind: "boolean" }, checked: boolean) {
+function onBoolChange(field: PnwPagePropertyField & { kind: "boolean" }, checked: boolean) {
   if (Boolean(unref(field.value)) === checked) return;
   field.onChange?.(checked);
 }
 
-function onStringChange(field: PagePropertyField & { kind: "string" | "path" }, value: string) {
+function onStringChange(field: PnwPagePropertyField & { kind: "string" | "path" }, value: string) {
   const next = String(value);
   if (String(unref(field.value)) === next) return;
   field.onChange?.(next);
 }
 
-function onNumberChange(field: PagePropertyField & { kind: "number" }, value: number) {
+function onNumberChange(field: PnwPagePropertyField & { kind: "number" }, value: number) {
   const next = Number(value);
   if (Number(unref(field.value)) === next) return;
   field.onChange?.(next);
 }
 
-function onSelectChange(field: PagePropertySelectField, value: unknown) {
+function onSelectChange(field: PnwPagePropertySelectField, value: unknown) {
   const next = String(value);
   if (String(unref(field.value)) === next) return;
   field.onChange?.(next);
 }
 
-async function onBrowsePath(field: PagePropertyPathField) {
+async function onBrowsePath(field: PnwPagePropertyPathField) {
   if (browsing.value || isDisabled(field)) return;
   const ws = shell.workspacePath.value.trim();
   if (!ws) {

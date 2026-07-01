@@ -8,7 +8,7 @@ import {
   type LinkLabelPatch,
 } from "../api";
 import { useAppShell } from "../composables/useAppShell";
-import ExpandCaret from "./ExpandCaret.vue";
+import ExpandCaret from "phoenix-wing/components/PnwExpandCaret.vue";
 import XlinkReplaceDialog from "./XlinkReplaceDialog.vue";
 import {
   linkLabelsEqual,
@@ -547,7 +547,7 @@ watch(
                 >
                   <button
                     type="button"
-                    class="phoenix-expand-btn toggle"
+                    class="pnw-expand-btn toggle"
                     :class="[`toggle-${toggleVisualState(node)}`, { leaf: !canExpand(node) }]"
                     :disabled="!canExpand(node) || loadingSubtree.has(node.id)"
                     :aria-expanded="
@@ -1032,7 +1032,7 @@ watch(
   color: #64748b;
 }
 
-.toggle-loading .phoenix-expand-twistie {
+.toggle-loading .pnw-expand-twistie {
   display: none;
 }
 

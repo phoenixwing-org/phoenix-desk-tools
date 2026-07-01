@@ -1,10 +1,10 @@
 @import "./styles/theme.css";
 
 :root {
-  --phoenix-expand-size: 24px;
-  --phoenix-expand-glyph: 16px;
-  --phoenix-expand-icon-collapsed: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23475569' d='M6.2 3.8 11.4 8l-5.2 4.2z'/%3E%3C/svg%3E");
-  --phoenix-expand-icon-expanded: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23475569' d='M3.8 5.8 8 11l4.2-5.2z'/%3E%3C/svg%3E");
+  --pnw-expand-size: 24px;
+  --pnw-expand-glyph: 16px;
+  --pnw-expand-icon-collapsed: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23475569' d='M6.2 3.8 11.4 8l-5.2 4.2z'/%3E%3C/svg%3E");
+  --pnw-expand-icon-expanded: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%23475569' d='M3.8 5.8 8 11l4.2-5.2z'/%3E%3C/svg%3E");
   font-family: "SF Pro Text", "PingFang SC", "Hiragino Sans GB", system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, "Liberation Mono",
     "Courier New", monospace;
@@ -13,8 +13,8 @@
 }
 
 [data-theme="dark"] {
-  --phoenix-expand-icon-collapsed: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%2394a3b8' d='M6.2 3.8 11.4 8l-5.2 4.2z'/%3E%3C/svg%3E");
-  --phoenix-expand-icon-expanded: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%2394a3b8' d='M3.8 5.8 8 11l4.2-5.2z'/%3E%3C/svg%3E");
+  --pnw-expand-icon-collapsed: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%2394a3b8' d='M6.2 3.8 11.4 8l-5.2 4.2z'/%3E%3C/svg%3E");
+  --pnw-expand-icon-expanded: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%2394a3b8' d='M3.8 5.8 8 11l4.2-5.2z'/%3E%3C/svg%3E");
 }
 
 * {
@@ -50,31 +50,31 @@ textarea {
   overflow: auto;
 }
 
-.phoenix-expand-twistie {
+.pnw-expand-twistie {
   flex-shrink: 0;
   display: inline-block;
-  width: var(--phoenix-expand-size);
-  height: var(--phoenix-expand-size);
-  background: center / var(--phoenix-expand-glyph) var(--phoenix-expand-glyph) no-repeat;
-  background-image: var(--phoenix-expand-icon-collapsed);
+  width: var(--pnw-expand-size);
+  height: var(--pnw-expand-size);
+  background: center / var(--pnw-expand-glyph) var(--pnw-expand-glyph) no-repeat;
+  background-image: var(--pnw-expand-icon-collapsed);
 }
 
-.phoenix-expand-twistie.is-expanded {
-  background-image: var(--phoenix-expand-icon-expanded);
+.pnw-expand-twistie.is-expanded {
+  background-image: var(--pnw-expand-icon-expanded);
 }
 
-.phoenix-expand-twistie-inline {
-  width: var(--phoenix-expand-glyph);
-  height: var(--phoenix-expand-glyph);
+.pnw-expand-twistie-inline {
+  width: var(--pnw-expand-glyph);
+  height: var(--pnw-expand-glyph);
 }
 
-.phoenix-expand-btn {
+.pnw-expand-btn {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--phoenix-expand-size);
-  height: var(--phoenix-expand-size);
+  width: var(--pnw-expand-size);
+  height: var(--pnw-expand-size);
   margin: 0;
   padding: 0;
   border: none;
@@ -84,11 +84,11 @@ textarea {
   color: var(--phoenix-text-muted);
 }
 
-.phoenix-expand-btn:hover:not(:disabled) {
+.pnw-expand-btn:hover:not(:disabled) {
   background: var(--el-fill-color-light);
 }
 
-.phoenix-expand-btn:focus-visible {
+.pnw-expand-btn:focus-visible {
   outline: 2px solid var(--phoenix-focus-ring);
   outline-offset: 1px;
 }

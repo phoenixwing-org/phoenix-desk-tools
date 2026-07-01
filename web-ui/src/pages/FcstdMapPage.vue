@@ -13,7 +13,7 @@ import {
   type FcstdMapEntry,
   type FcstdMapPayload,
 } from "../api";
-import { promptChoice } from "../composables/choiceDialog";
+import { pnwPromptChoice } from "phoenix-wing";
 import { useAppShell } from "../composables/useAppShell";
 import { useAsyncProgress } from "../composables/useAsyncProgress";
 import { useFcstdMapPropertySheet } from "../composables/useFcstdMapPropertySheet";
@@ -21,9 +21,9 @@ import { useFileWorksetsStore } from "../stores/fileWorksets";
 import { useOnboardingStore } from "../stores/onboarding";
 import { usePageSession } from "../composables/usePageSession";
 import { usePageSummary } from "../composables/usePageSummary";
-import PageHeader from "../components/PageHeader.vue";
+import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
-import type { TableColumnDef } from "../composables/useResizableTable";
+import type { PnwTableColumnDef } from "phoenix-wing";
 import { BOM_FIELD_LABELS as L } from "../utils/bomFieldLabels";
 
 const props = defineProps<{
@@ -38,7 +38,7 @@ const PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
 
 type PageSubTab = "index" | "settings";
 
-const cadColumns: TableColumnDef[] = [
+const cadColumns: PnwTableColumnDef[] = [
   { key: "index", label: "#", width: 44, minWidth: 40, headerClass: "col-index" },
   { key: "status", label: "状态", width: 52, minWidth: 44 },
   { key: "kind", label: "类型", width: 72, minWidth: 56 },
@@ -131,7 +131,7 @@ async function onPurgeMissing() {
     setStatus("当前没有缺失条目");
     return;
   }
-  const choice = await promptChoice({
+  const choice = await pnwPromptChoice({
     title: "删除缺失记录",
     defaultChoiceId: "cancel",
     message:
@@ -226,7 +226,7 @@ async function onScan() {
         if (e && typeof e === "object" && "__conflict" in e) {
           const ce = e as { __conflict: true; taskId: string; taskName: string; status?: string };
           const isDone = ce.status === "done" || ce.status === "error" || ce.status === "cancelled";
-          const choice = await promptChoice({
+          const choice = await pnwPromptChoice({
             title: isDone ? "上次任务已完成" : "上次扫描未完成",
             defaultChoiceId: "view",
             message: isDone
@@ -292,7 +292,7 @@ async function onScan() {
     } else if (finalState?.status === "error") {
       shell.appendLog(`[CAD 索引] 扫描出错: ${finalState.error}`, { source: "fcstd_map" });
       setStatus(finalState.error || "扫描出错");
-      await promptChoice({
+      await pnwPromptChoice({
         title: "扫描出错",
         defaultChoiceId: "ok",
         message: finalState.error || "扫描过程中发生未知错误",
@@ -306,7 +306,7 @@ async function onScan() {
     const msg = String(e);
     shell.appendLog(msg, { source: "fcstd_map" });
     setStatus(msg);
-    await promptChoice({
+    await pnwPromptChoice({
       title: "扫描失败",
       defaultChoiceId: "ok",
       message: msg || "扫描请求失败，请检查后端是否正常运行",

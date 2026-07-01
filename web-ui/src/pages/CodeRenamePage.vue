@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { ElMessageBox } from "element-plus";
+import { pnwPromptChoice } from "phoenix-wing";
 import {
   applyCodeRename,
   fetchCodeRenamePrefs,
@@ -8,7 +8,7 @@ import {
   saveCodeRenamePrefs,
   type CodeRenameHit,
 } from "../api";
-import PageHeader from "../components/PageHeader.vue";
+import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useCodeRenamePropertySheet } from "../composables/useCodeRenamePropertySheet";
 import { useWorksetPageScope } from "../composables/useWorksetPageScope";
@@ -107,20 +107,15 @@ async function onApply() {
     shell.setStatus("请填写旧名、新名并勾选级别");
     return;
   }
-  const ok = await ElMessageBox.confirm(
-    `将执行批量改名：\n  ${pageStore.old.trim()} → ${pageStore.new.trim()}\n\n建议先预览。确定写盘？`,
-    "执行批量改名",
-    {
-      type: "warning",
-      confirmButtonText: "写盘",
-      cancelButtonText: "取消",
-      distinguishCancelAndClose: true,
-    },
-  ).then(
-    () => true,
-    () => false,
-  );
-  if (!ok) return;
+  const result = await pnwPromptChoice({
+    title: "执行批量改名",
+    message: `将执行批量改名：\n  ${pageStore.old.trim()} → ${pageStore.new.trim()}\n\n建议先预览。确定写盘？`,
+    choices: [
+      { id: "write", label: "写盘", variant: "primary" },
+      { id: "cancel", label: "取消" },
+    ],
+  });
+  if (result.choiceId !== "write") return;
   applying.value = true;
   shell.appendLog("[Code 批量改名] 执行写盘…", { source: "code_rename", open: true });
   try {

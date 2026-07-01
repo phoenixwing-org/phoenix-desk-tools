@@ -11,10 +11,10 @@ import {
   type CodeIndexPayload,
   type CodeIndexSearchMode,
 } from "../api";
-import { promptChoice } from "../composables/choiceDialog";
-import PageHeader from "../components/PageHeader.vue";
+import { pnwPromptChoice } from "phoenix-wing";
+import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
-import type { TableColumnDef } from "../composables/useResizableTable";
+import type { PnwTableColumnDef } from "phoenix-wing";
 import { useAppShell } from "../composables/useAppShell";
 import { useCodeIndexPropertySheet } from "../composables/useCodeIndexPropertySheet";
 import { usePageSession } from "../composables/usePageSession";
@@ -73,7 +73,7 @@ const SEARCH_MODE_OPTIONS = [
 type KindFilter = (typeof KIND_OPTIONS)[number]["value"];
 type StatusFilter = (typeof STATUS_OPTIONS)[number]["value"];
 
-const columns: TableColumnDef[] = [
+const columns: PnwTableColumnDef[] = [
   { key: "check", label: "", width: 36, minWidth: 36 },
   { key: "index", label: "#", width: 44, minWidth: 40, headerClass: "col-index" },
   { key: "status", label: "状态", width: 64, minWidth: 52 },
@@ -237,7 +237,7 @@ async function onScan() {
     const discovery = await fetchCodeIndexExtensionDiscovery();
     const candidates = discovery.candidates ?? [];
     if (candidates.length > 0) {
-      const choice = await promptChoice({
+      const choice = await pnwPromptChoice({
         title: "发现未纳入索引的后缀",
         message:
           "工作空间内发现以下后缀尚未纳入 Code 索引。勾选要纳入的后缀并扫描；纳入的后缀会保存到本工作空间数据库。",
@@ -293,7 +293,7 @@ async function onPurgeMissing() {
     setStatus("当前没有缺失条目");
     return;
   }
-  const choice = await promptChoice({
+  const choice = await pnwPromptChoice({
     title: "删除缺失记录",
     defaultChoiceId: "cancel",
     message:

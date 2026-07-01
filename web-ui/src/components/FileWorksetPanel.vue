@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useAppShell } from "../composables/useAppShell";
-import { promptChoice } from "../composables/choiceDialog";
+import { pnwPromptChoice } from "phoenix-wing";
 import { useFileWorksetsStore } from "../stores/fileWorksets";
 import { basenameFromRel, repoDirFromRel } from "../utils/workspaceFileQuery";
 
@@ -64,7 +64,7 @@ async function onDelete() {
   const ws = active.value;
   const cnt = _activePaths(ws).length;
   const pathHint = cnt ? `（含 ${cnt} 个条目）` : "";
-  const choice = await promptChoice({
+  const choice = await pnwPromptChoice({
     title: "删除工作集",
     defaultChoiceId: "cancel",
     message: `确定删除工作集「${ws.name}」${pathHint}？\n删除后不可恢复。`,

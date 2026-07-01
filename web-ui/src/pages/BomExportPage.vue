@@ -8,13 +8,13 @@ import {
   type BomXrefMeta,
 } from "../api";
 import OnboardingBanner from "../components/OnboardingBanner.vue";
-import PageHeader from "../components/PageHeader.vue";
+import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useBomExportPropertySheet } from "../composables/useBomExportPropertySheet";
 import { useOnboardingStore } from "../stores/onboarding";
 import { usePageSession } from "../composables/usePageSession";
-import type { TableColumnDef } from "../composables/useResizableTable";
+import type { PnwTableColumnDef } from "phoenix-wing";
 import { useWorkspaceFileQuery } from "../composables/useWorkspaceFileQuery";
 import { BOM_FIELD_LABELS as L } from "../utils/bomFieldLabels";
 import { basenameFromRel, normalizeRepoRelForApi } from "../utils/workspaceFileQuery";
@@ -31,7 +31,7 @@ const onboarding = useOnboardingStore();
 const { queryText, pickedRel, clearPickedOnInput, applyTreeSelection, registerTreeSelectHandler, unregisterTreeSelectHandler } =
   useWorkspaceFileQuery(props.workbenchTabId);
 
-const catalogColumns: TableColumnDef[] = [
+const catalogColumns: PnwTableColumnDef[] = [
   { key: "index", label: "#", width: 44, minWidth: 40, headerClass: "col-index" },
   { key: "file", label: "总成文件", width: 200, minWidth: 120 },
   { key: "partKey", label: L.partKey, width: 108, minWidth: 80 },

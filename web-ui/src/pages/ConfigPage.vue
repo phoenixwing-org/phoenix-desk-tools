@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { ElMessage, ElMessageBox } from "element-plus";
+import { ElMessage } from "element-plus";
+import { pnwPromptChoice } from "phoenix-wing";
 import { pruneRecentWorkspaces, removeRecentWorkspace, saveLauncherFreecad, shutdownWebServer } from "../api";
 import { useAppShell } from "../composables/useAppShell";
 import { useWorkspaceDirectoryPicker } from "../composables/useWorkspaceDirectoryPicker";
-import PageHeader from "../components/PageHeader.vue";
+import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import { useShellTour } from "../composables/useShellTour";
 import { useOnboardingStore } from "../stores/onboarding";
 import { useUiPrefsStore } from "../stores/uiPrefs";
@@ -149,15 +150,15 @@ async function switchRecent(path: string) {
     );
     return;
   }
-  const ok = await ElMessageBox.confirm(`切换到以下工作空间？\n\n${path}`, "切换工作空间", {
-    confirmButtonText: "切换",
-    cancelButtonText: "取消",
-    distinguishCancelAndClose: true,
-  }).then(
-    () => true,
-    () => false,
-  );
-  if (!ok) return;
+  const result = await pnwPromptChoice({
+    title: "切换工作空间",
+    message: `切换到以下工作空间？\n\n${path}`,
+    choices: [
+      { id: "switch", label: "切换", variant: "primary" },
+      { id: "cancel", label: "取消" },
+    ],
+  });
+  if (result.choiceId !== "switch") return;
   shell.appendLog(`切换工作空间：${path}`, { source: "config", open: true });
   try {
     await shell.switchWorkspace(path);
@@ -179,20 +180,15 @@ async function refreshWebStatus() {
 }
 
 async function stopWebServer() {
-  const ok = await ElMessageBox.confirm(
-    `停止本地 Web 服务并释放端口？\n\n${webUrl.value}`,
-    "关闭 Web 服务",
-    {
-      type: "warning",
-      confirmButtonText: "关闭",
-      cancelButtonText: "取消",
-      distinguishCancelAndClose: true,
-    },
-  ).then(
-    () => true,
-    () => false,
-  );
-  if (!ok) return;
+  const result = await pnwPromptChoice({
+    title: "关闭 Web 服务",
+    message: `停止本地 Web 服务并释放端口？\n\n${webUrl.value}`,
+    choices: [
+      { id: "stop", label: "关闭", variant: "danger" },
+      { id: "cancel", label: "取消" },
+    ],
+  });
+  if (result.choiceId !== "stop") return;
   shell.appendLog(`请求关闭 Web 服务：${webUrl.value}`, { source: "config", open: true });
   try {
     await shutdownWebServer();
@@ -209,15 +205,15 @@ async function stopWebServer() {
 
 async function removeRecent(path: string, event: MouseEvent) {
   event.stopPropagation();
-  const ok = await ElMessageBox.confirm(`从最近列表中移除？\n\n${path}`, "移除记录", {
-    confirmButtonText: "移除",
-    cancelButtonText: "取消",
-    distinguishCancelAndClose: true,
-  }).then(
-    () => true,
-    () => false,
-  );
-  if (!ok) return;
+  const result = await pnwPromptChoice({
+    title: "移除记录",
+    message: `从最近列表中移除？\n\n${path}`,
+    choices: [
+      { id: "remove", label: "移除", variant: "danger" },
+      { id: "cancel", label: "取消" },
+    ],
+  });
+  if (result.choiceId !== "remove") return;
   try {
     await removeRecentWorkspace(path);
     await shell.reloadLauncher();
@@ -268,23 +264,17 @@ async function resetFactory() {
     ElMessage.warning(`请先关闭 ${n} 个工具 Tab（可保留「主页」），再恢复初始状态。`);
     return;
   }
-  const ok = await ElMessageBox.confirm(
-    "将清除本机 launcher 中的最近工作空间、FreeCAD 路径、壳层布局，以及浏览器内的新手指引与 Tab 缓存。\n\n"
+  const result = await pnwPromptChoice({
+    title: "恢复初始状态",
+    message: "将清除本机 launcher 中的最近工作空间、FreeCAD 路径、壳层布局，以及浏览器内的新手指引与 Tab 缓存。\n\n"
       + "不会删除 CAD 项目磁盘上的文件或各项目下的 .phoenix 数据。\n\n"
       + "效果等同于初次安装，请慎用。是否继续？",
-    "恢复初始状态",
-    {
-      type: "warning",
-      confirmButtonText: "恢复",
-      cancelButtonText: "取消",
-      distinguishCancelAndClose: true,
-      confirmButtonClass: "el-button--danger",
-    },
-  ).then(
-    () => true,
-    () => false,
-  );
-  if (!ok) return;
+    choices: [
+      { id: "reset", label: "恢复", variant: "danger" },
+      { id: "cancel", label: "取消" },
+    ],
+  });
+  if (result.choiceId !== "reset") return;
   shell.appendLog("恢复初始安装状态…", { source: "config", open: true });
   try {
     await shell.resetToFactorySettings();
@@ -301,15 +291,15 @@ async function resetFactory() {
 }
 
 async function pruneRecentList() {
-  const ok = await ElMessageBox.confirm("清理最近列表中的临时目录与无效路径？", "清理最近列表", {
-    confirmButtonText: "清理",
-    cancelButtonText: "取消",
-    distinguishCancelAndClose: true,
-  }).then(
-    () => true,
-    () => false,
-  );
-  if (!ok) return;
+  const result = await pnwPromptChoice({
+    title: "清理最近列表",
+    message: "清理最近列表中的临时目录与无效路径？",
+    choices: [
+      { id: "clean", label: "清理", variant: "primary" },
+      { id: "cancel", label: "取消" },
+    ],
+  });
+  if (result.choiceId !== "clean") return;
   shell.appendLog("清理最近工作空间列表…", { source: "config", open: true });
   try {
     const data = await pruneRecentWorkspaces();

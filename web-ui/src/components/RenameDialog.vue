@@ -3,7 +3,7 @@ import { toRef } from "vue";
 import type { BomFields } from "../api";
 import { useRenameDialog } from "../composables/useRenameDialog";
 import { formatLogTime } from "../utils/fileRename";
-import AppModalOverlay from "./AppModalOverlay.vue";
+import AppModalOverlay from "phoenix-wing/components/PnwAppModalOverlay.vue";
 
 const props = defineProps<{
   open: boolean;

@@ -1,12 +1,12 @@
 import { computed } from "vue";
-import { usePagePropertySheet } from "./usePagePropertySheet";
+import { usePnwPagePropertySheet } from "phoenix-wing";
 import { useWorksetScopePropertyGroups } from "./useWorksetScopePropertyGroups";
 import type { RenameLevel } from "../api";
 import {
   CODE_RENAME_LEVEL_OPTIONS,
   useCodeRenamePageStore,
 } from "../stores/codeRenamePage";
-import { propBool, propEnum, propGroup, propSheet, propString } from "../utils/pagePropertySchema";
+import { pnwPropBool, pnwPropEnum, pnwPropGroup, pnwPropSheet, pnwPropString } from "phoenix-wing";
 
 export function useCodeRenamePropertySheet(
   pageId: string,
@@ -29,11 +29,11 @@ export function useCodeRenamePropertySheet(
     onPersistServer?.();
   }
 
-  usePagePropertySheet(pageId, () =>
-    propSheet(
+  usePnwPagePropertySheet(pageId, () =>
+    pnwPropSheet(
       [
-        propGroup("rename", "改名", [
-          propString("old", "旧名", {
+        pnwPropGroup("rename", "改名", [
+          pnwPropString("old", "旧名", {
             value: computed(() => pageStore.old),
             mono: true,
             placeholder: "精确匹配",
@@ -42,7 +42,7 @@ export function useCodeRenamePropertySheet(
               onPersistServer?.();
             },
           }),
-          propString("new", "新名", {
+          pnwPropString("new", "新名", {
             value: computed(() => pageStore.new),
             mono: true,
             onChange: (v) => {
@@ -52,14 +52,14 @@ export function useCodeRenamePropertySheet(
           }),
         ]),
         ...scopeGroups(),
-        propGroup("rules", "规则", [
+        pnwPropGroup("rules", "规则", [
           ...CODE_RENAME_LEVEL_OPTIONS.map((opt) =>
-            propBool(`level_${opt.id}`, opt.label, {
+            pnwPropBool(`level_${opt.id}`, opt.label, {
               value: computed(() => pageStore.levelSet.has(opt.id)),
               onChange: (v) => toggleLevel(opt.id, v),
             }),
           ),
-          propEnum("target_encoding", "写回编码", {
+          pnwPropEnum("target_encoding", "写回编码", {
             value: computed(() => pageStore.targetEncoding),
             options: [
               { value: "utf-8", label: "UTF-8" },
@@ -70,14 +70,14 @@ export function useCodeRenamePropertySheet(
               onPersistServer?.();
             },
           }),
-          propBool("rescan_index", "完成后重扫 Code 索引", {
+          pnwPropBool("rescan_index", "完成后重扫 Code 索引", {
             value: computed(() => pageStore.rescanIndex),
             onChange: (v) => {
               pageStore.setRescanIndex(v);
               onPersistServer?.();
             },
           }),
-          propBool("include_ignored", "包含忽略目录", {
+          pnwPropBool("include_ignored", "包含忽略目录", {
             value: computed(() => pageStore.includeIgnored),
             labelTone: "emphasis",
             hint: "包含 code.ignore 忽略目录内的条目，慎用",

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { promptChoice } from "../composables/choiceDialog";
+import { pnwPromptChoice } from "phoenix-wing";
 import {
   fetchGitInfo,
   fetchReorderMembersPrefs,
@@ -11,7 +11,7 @@ import {
   saveReorderMembersPrefs,
 } from "../api";
 import type { GitWorkspaceInfo } from "../types/gitWorkspace";
-import PageHeader from "../components/PageHeader.vue";
+import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import GitChangePathLabel from "../components/git/GitChangePathLabel.vue";
 import GitDiffPreviewButton from "../components/git/GitDiffPreviewButton.vue";
 import GitRevertWorktreeButton from "../components/git/GitRevertWorktreeButton.vue";
@@ -161,7 +161,7 @@ async function loadGitInfo() {
 }
 
 async function onGitInit() {
-  const choice = await promptChoice({
+  const choice = await pnwPromptChoice({
     title: "初始化 Git 仓库",
     message:
       "将在当前工作空间根目录执行 git init。\n需本机已安装 Git。\n\n继续？",
@@ -186,7 +186,7 @@ async function onGitInit() {
 
 async function onRevertFile(row: ChangedFileRow) {
   if (!canGitActions(row)) return;
-  const choice = await promptChoice({
+  const choice = await pnwPromptChoice({
     title: "Revert 文件",
     message: `将用 git restore 恢复：\n${row.path}\n\n未跟踪或二进制文件可能无法恢复。继续？`,
     defaultChoiceId: "cancel",
@@ -266,7 +266,7 @@ async function onRun(dryRun: boolean) {
   const { repo_rel_paths: repoRelPaths, scopeLabel } = resolveRunParams();
   if (!dryRun) {
     const scopeDesc = repoRelPaths.length ? "工作集范围内的" : "全工作空间的";
-    const choice = await promptChoice({
+    const choice = await pnwPromptChoice({
       title: "执行成员排序",
       message:
         `将直接写回${scopeDesc}.h / .cpp 文件。\n建议先点「预检」确认变更范围。\n\n确定执行排序？`,

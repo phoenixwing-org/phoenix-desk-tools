@@ -2,7 +2,7 @@
 import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from "vue";
 import type { BomFields, BomPreview } from "../api";
 import { fetchBom, fetchBomXrefCounts } from "../api";
-import PageHeader from "../components/PageHeader.vue";
+import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import FileOverviewPanel from "../components/file-detail/FileOverviewPanel.vue";
 import FileAttributesPanel from "../components/file-detail/FileAttributesPanel.vue";
 import FileXrefPanel from "../components/file-detail/FileXrefPanel.vue";
@@ -13,7 +13,7 @@ import { provideFileDetailContext } from "../composables/useFileDetailContext";
 import { useDrawingBomReadonly } from "../composables/useDrawingBomReadonly";
 import { useAppShell } from "../composables/useAppShell";
 import { usePageSession } from "../composables/usePageSession";
-import { promptChoice } from "../composables/choiceDialog";
+import { pnwPromptChoice } from "phoenix-wing";
 import type { FileDetailSubTab } from "../types/fileDetail";
 import { normalizeFileDetailSubTab } from "../types/fileDetail";
 
@@ -195,7 +195,7 @@ async function confirmSwitchFile(targetRel: string): Promise<boolean> {
   const name = rel.value.split("/").pop() ?? "当前文件";
   const next = targetRel.split("/").pop() ?? targetRel;
   const hint = assemblyLabelEdits.value ? "链接标签或属性" : "属性";
-  const choice = await promptChoice({
+  const choice = await pnwPromptChoice({
     title: "切换文件",
     message: `「${name}」有尚未写入的${hint}。\n\n要打开「${next}」？`,
     choices: [

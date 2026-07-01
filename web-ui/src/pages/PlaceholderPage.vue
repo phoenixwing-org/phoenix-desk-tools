@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import PageHeader from "../components/PageHeader.vue";
+import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import { useAppShell } from "../composables/useAppShell";
 
 const shell = useAppShell();

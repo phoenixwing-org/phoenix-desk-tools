@@ -1,7 +1,7 @@
 import { computed, type Ref } from "vue";
 import type { XlinkFixResult } from "../api";
-import { usePagePropertySheet } from "./usePagePropertySheet";
-import { propBool, propGroup, propPath, propReadonly, propSheet } from "../utils/pagePropertySchema";
+import { usePnwPagePropertySheet } from "phoenix-wing";
+import { pnwPropBool, pnwPropGroup, pnwPropPath, pnwPropReadonly, pnwPropSheet } from "phoenix-wing";
 
 export function useXlinkFixPropertySheet(
   pageId: string,
@@ -14,11 +14,11 @@ export function useXlinkFixPropertySheet(
 ) {
   const { batchDir, allInDir, analysis, onPersist } = opts;
 
-  usePagePropertySheet(pageId, () =>
-    propSheet(
+  usePnwPagePropertySheet(pageId, () =>
+    pnwPropSheet(
       [
-        propGroup("scan", "扫描范围", [
-          propPath("batch_dir", "修正目录", {
+        pnwPropGroup("scan", "扫描范围", [
+          pnwPropPath("batch_dir", "修正目录", {
             value: computed(() => batchDir.value),
             mono: true,
             placeholder: "相对工作空间，如 .",
@@ -28,7 +28,7 @@ export function useXlinkFixPropertySheet(
               onPersist();
             },
           }),
-          propBool("all_in_dir", "目录内全部 FCStd", {
+          pnwPropBool("all_in_dir", "目录内全部 FCStd", {
             value: allInDir,
             hint: "勾选时扫描该目录下全部 FCStd（推荐）",
             onChange: (v) => {
@@ -37,16 +37,16 @@ export function useXlinkFixPropertySheet(
             },
           }),
         ]),
-        propGroup(
+        pnwPropGroup(
           "meta",
           "分析信息",
           [
-            propReadonly("map_path", "索引库", {
+            pnwPropReadonly("map_path", "索引库", {
               value: computed(() => analysis.value?.map_path_display || "—"),
               mono: true,
               hidden: computed(() => !analysis.value?.map_path_display),
             }),
-            propReadonly("batch_dir_display", "扫描目录", {
+            pnwPropReadonly("batch_dir_display", "扫描目录", {
               value: computed(() => analysis.value?.batch_dir_display || "—"),
               mono: true,
               hidden: computed(() => !analysis.value?.batch_dir_display),

@@ -9,7 +9,7 @@ import {
   collectNlsOrdered,
   parseCatNls,
 } from "@phoenix/catdlg-core";
-import PageHeader from "../components/PageHeader.vue";
+import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import CaaDialogEditorView from "../components/caa/CaaDialogEditorView.vue";
 import CaaNlsSupplementDialog from "../components/caa/CaaNlsSupplementDialog.vue";
 import CaaControlContextMenu from "../components/caa/CaaControlContextMenu.vue";

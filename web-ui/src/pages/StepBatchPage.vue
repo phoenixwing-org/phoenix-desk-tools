@@ -8,7 +8,7 @@ import {
   type StepBatchPreview,
 } from "../api";
 import OnboardingBanner from "../components/OnboardingBanner.vue";
-import PageHeader from "../components/PageHeader.vue";
+import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useFreecadTaskGate } from "../composables/useFreecadTaskGate";
 import { useStepBatchPropertySheet } from "../composables/useStepBatchPropertySheet";

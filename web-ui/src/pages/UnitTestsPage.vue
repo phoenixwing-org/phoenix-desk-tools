@@ -18,10 +18,10 @@ import {
   type UnitTestStreamEvent,
   type UnitTestSuiteInfo,
 } from "../api";
-import PageHeader from "../components/PageHeader.vue";
+import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import { useUnitTestsPropertySheet } from "../composables/useUnitTestsPropertySheet";
 import { useAsyncProgress } from "../composables/useAsyncProgress";
-import { promptChoice } from "../composables/choiceDialog";
+import { pnwPromptChoice } from "phoenix-wing";
 import { useAppShell } from "../composables/useAppShell";
 import {
   UNIT_TEST_RUNNABLE_SUITE_IDS,
@@ -473,7 +473,7 @@ function formatWatchlistTime(iso: string): string {
 }
 
 async function removeFromWatchlist(entry: UnitTestWatchlistEntry) {
-  const result = await promptChoice({
+  const result = await pnwPromptChoice({
     title: "移出关注列表",
     message: `${entry.method}\n累计失败 ${entry.fail_count} 次`,
     choices: [
@@ -487,7 +487,7 @@ async function removeFromWatchlist(entry: UnitTestWatchlistEntry) {
 }
 
 async function clearAllWatchlist() {
-  const result = await promptChoice({
+  const result = await pnwPromptChoice({
     title: "清空关注列表",
     message: `确定移除全部 ${watchlistCount.value} 条失败关注？\n此操作不可恢复`,
     choices: [

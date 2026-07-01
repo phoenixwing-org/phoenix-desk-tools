@@ -10,7 +10,7 @@ import {
   snapshotPanelsOnSide,
   type SidePanelSnapshot,
 } from "../utils/sidebarSideToggle";
-import { sideDockVisibility } from "../utils/sideDockLayout";
+import { pnwSideDockVisibility } from "phoenix-wing";
 import { isCaaEditorPage } from "../constants/caaPages";
 
 const collapsedSnapshots: { left: SidePanelSnapshot | null; right: SidePanelSnapshot | null } = {
@@ -22,7 +22,7 @@ const collapsedSnapshots: { left: SidePanelSnapshot | null; right: SidePanelSnap
 export function useShellPanelToggles() {
   const shell = useAppShell();
   const dockVis = computed(() =>
-    sideDockVisibility(shell.shellLayout.value, {
+    pnwSideDockVisibility(shell.shellLayout.value, {
       onGitPage: shell.currentPage.value === "git",
       onCaaPage: isCaaEditorPage(shell.currentPage.value),
     }),

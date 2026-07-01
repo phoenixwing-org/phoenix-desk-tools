@@ -8,7 +8,7 @@ import {
   type PartDedupGroup,
   type PartDedupScanResult,
 } from "../api";
-import PageHeader from "../components/PageHeader.vue";
+import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { usePartDedupPropertySheet } from "../composables/usePartDedupPropertySheet";
 

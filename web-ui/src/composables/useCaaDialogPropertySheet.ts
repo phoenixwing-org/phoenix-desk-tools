@@ -1,7 +1,7 @@
 import { computed, type ComputedRef } from "vue";
 import { nlsKeyForProp, nlsPathSegments, type NlsStringProp } from "@phoenix/catdlg-core";
 import { caaServicePropertyGroup } from "./caaServicePropertyGroup";
-import { usePagePropertySheet } from "./usePagePropertySheet";
+import { usePnwPagePropertySheet } from "phoenix-wing";
 import { useCaaDialogPageStore } from "../stores/caaDialogPage";
 import {
   formatGrid,
@@ -9,7 +9,7 @@ import {
   resolveSelectedNode,
 } from "../utils/caaDialogTree";
 import { catDlgDirRel } from "../utils/caaDialogDisplay";
-import { propGroup, propReadonly, propSheet, propString } from "../utils/pagePropertySchema";
+import { pnwPropGroup, pnwPropReadonly, pnwPropSheet, pnwPropString } from "phoenix-wing";
 
 function dash(value: string | number | boolean | null | undefined): string {
   if (value === null || value === undefined || value === "") return "—";
@@ -101,18 +101,18 @@ export function useCaaDialogPropertySheet(
     opts?.onNlsChange?.({ nodeId: node.id, prop, key: key.value, value });
   }
 
-  usePagePropertySheet(pageId, () =>
-    propSheet(
+  usePnwPagePropertySheet(pageId, () =>
+    pnwPropSheet(
       [
-        propGroup("dialog", "对话框", [
-          propReadonly("dialog_name", "名称", {
+        pnwPropGroup("dialog", "对话框", [
+          pnwPropReadonly("dialog_name", "名称", {
             value: computed(() => dash(store.ir?.dialogName)),
             mono: true,
           }),
-          propReadonly("dialog_title", "标题", {
+          pnwPropReadonly("dialog_title", "标题", {
             value: computed(() => dash(store.ir?.title)),
           }),
-          propReadonly("catdlg_dir", ".CATDlg 目录", {
+          pnwPropReadonly("catdlg_dir", ".CATDlg 目录", {
             value: computed(() => {
               const rel = store.ir?.sources.catDlg;
               if (!rel) return "—";
@@ -121,25 +121,25 @@ export function useCaaDialogPropertySheet(
             mono: true,
             hidden: computed(() => !store.ir?.sources.catDlg),
           }),
-          propReadonly("catdlg_source", ".CATDlg", {
+          pnwPropReadonly("catdlg_source", ".CATDlg", {
             value: computed(() => dash(store.ir?.sources.catDlg)),
             mono: true,
           }),
-          propReadonly("catnls_source", ".CATNls", {
+          pnwPropReadonly("catnls_source", ".CATNls", {
             value: computed(() => dash(store.ir?.sources.catNls)),
             mono: true,
             hidden: computed(() => !store.ir?.sources.catNls),
           }),
-          propReadonly("catrsc_source", ".CATRsc", {
+          pnwPropReadonly("catrsc_source", ".CATRsc", {
             value: computed(() => dash(store.ir?.sources.catRsc)),
             mono: true,
             hidden: computed(() => !store.ir?.sources.catRsc),
           }),
-          propReadonly("binding_count", "字段绑定", {
+          pnwPropReadonly("binding_count", "字段绑定", {
             value: computed(() => bindingCount.value),
             hidden: computed(() => bindingCount.value === 0),
           }),
-          propReadonly("nls_locales", "NLS 语言", {
+          pnwPropReadonly("nls_locales", "NLS 语言", {
             value: computed(() => {
               const locales = store.ir?.parseMeta?.locales;
               if (!locales?.length) return "—";
@@ -147,7 +147,7 @@ export function useCaaDialogPropertySheet(
             }),
             hidden: computed(() => !store.ir?.parseMeta?.locales.length),
           }),
-          propReadonly("bitmap_dirs", "位图目录", {
+          pnwPropReadonly("bitmap_dirs", "位图目录", {
             value: computed(() => {
               const dirs = store.ir?.parseMeta?.bitmapDirs;
               if (!dirs?.length) return "—";
@@ -158,62 +158,62 @@ export function useCaaDialogPropertySheet(
           }),
         ]),
         caaServicePropertyGroup(),
-        propGroup("selection", "选中控件", [
-          propReadonly("ctrl_id", "ID", {
+        pnwPropGroup("selection", "选中控件", [
+          pnwPropReadonly("ctrl_id", "ID", {
             value: computed(() => dash(selectedNode.value?.id)),
             mono: true,
             labelTone: "emphasis",
           }),
-          propReadonly("ctrl_type", "类型", {
+          pnwPropReadonly("ctrl_type", "类型", {
             value: computed(() => dash(selectedNode.value?.type)),
             mono: true,
           }),
-          propReadonly("ctrl_father", "父控件", {
+          pnwPropReadonly("ctrl_father", "父控件", {
             value: computed(() => dash(selectedNode.value?.father)),
             mono: true,
             hidden: computed(() => !selectedNode.value?.father),
           }),
-          propReadonly("ctrl_style", "STYLE", {
+          pnwPropReadonly("ctrl_style", "STYLE", {
             value: computed(() => dash(selectedNode.value?.style?.join(" | "))),
             mono: true,
             hidden: computed(() => !selectedNode.value?.style?.length),
           }),
         ], { hidden: computed(() => !hasSelection.value) }),
-        propGroup("bindings", "字段绑定（只读）", [
-          propReadonly("selected_bindings", "绑定", {
+        pnwPropGroup("bindings", "字段绑定（只读）", [
+          pnwPropReadonly("selected_bindings", "绑定", {
             value: computed(() => formatBindingLines(selectedBindings.value)),
             mono: true,
             multiline: true,
           }),
         ], { hidden: computed(() => selectedBindings.value.length === 0) }),
-        propGroup(
+        pnwPropGroup(
           "nls",
           "文案 (NLS)",
           [
-            propString("nls_title", "Title", {
+            pnwPropString("nls_title", "Title", {
               value: computed(() => selectedNode.value?.nls?.title ?? ""),
               onChange: (v) => nlsChange("title", nlsKeyTitle, v),
               placeholder: "控件标签文本",
             }),
-            propString("nls_help", "Help（提示）", {
+            pnwPropString("nls_help", "Help（提示）", {
               value: computed(() => selectedNode.value?.nls?.help ?? ""),
               onChange: (v) => nlsChange("help", nlsKeyHelp, v),
               placeholder: "悬停提示",
               hint: "鼠标悬停时显示的完整提示文本",
             }),
-            propString("nls_short", "ShortHelp（简短提示）", {
+            pnwPropString("nls_short", "ShortHelp（简短提示）", {
               value: computed(() => selectedNode.value?.nls?.shortHelp ?? ""),
               onChange: (v) => nlsChange("shortHelp", nlsKeyShortHelp, v),
               placeholder: "状态栏简短提示",
               hint: "状态栏 / 快速提示，通常比 Help 更短",
             }),
-            propString("nls_long", "LongHelp（详细提示）", {
+            pnwPropString("nls_long", "LongHelp（详细提示）", {
               value: computed(() => selectedNode.value?.nls?.longHelp ?? ""),
               onChange: (v) => nlsChange("longHelp", nlsKeyLongHelp, v),
               placeholder: "详细说明文本",
               hint: "详细帮助文本，用于更完整的说明",
             }),
-            propReadonly("nls_columns", "列标题", {
+            pnwPropReadonly("nls_columns", "列标题", {
               value: computed(() =>
                 dash(selectedNode.value?.nls?.columnTitles?.filter(Boolean).join(" · ")),
               ),
@@ -222,46 +222,46 @@ export function useCaaDialogPropertySheet(
           ],
           { hidden: computed(() => !hasSelection.value) },
         ),
-        propGroup("grid", "Grid 布局", [
-          propReadonly("grid_placement", "位置", {
+        pnwPropGroup("grid", "Grid 布局", [
+          pnwPropReadonly("grid_placement", "位置", {
             value: computed(() =>
               selectedNode.value ? formatGrid(selectedNode.value) : "—",
             ),
             mono: true,
           }),
         ], { hidden: computed(() => !hasGrid.value) }),
-        propGroup(
+        pnwPropGroup(
           "grid_res",
           "伸缩",
           [
-            propReadonly("row_res", "ROWRES", {
+            pnwPropReadonly("row_res", "ROWRES", {
               value: computed(() => formatIntList(selectedNode.value?.gridLayout?.rowResizable)),
               mono: true,
             }),
-            propReadonly("col_res", "COLRES", {
+            pnwPropReadonly("col_res", "COLRES", {
               value: computed(() => formatIntList(selectedNode.value?.gridLayout?.colResizable)),
               mono: true,
             }),
           ],
           { hidden: computed(() => !hasGridLayout.value), defaultCollapsed: true },
         ),
-        propGroup(
+        pnwPropGroup(
           "size",
           "尺寸",
           [
-            propReadonly("text_height", "TH", {
+            pnwPropReadonly("text_height", "TH", {
               value: computed(() => dash(selectedNode.value?.size?.textHeight)),
               hidden: computed(() => selectedNode.value?.size?.textHeight == null),
             }),
-            propReadonly("text_width", "TW", {
+            pnwPropReadonly("text_width", "TW", {
               value: computed(() => dash(selectedNode.value?.size?.textWidth)),
               hidden: computed(() => selectedNode.value?.size?.textWidth == null),
             }),
-            propReadonly("column_count", "CC", {
+            pnwPropReadonly("column_count", "CC", {
               value: computed(() => dash(selectedNode.value?.size?.columnCount)),
               hidden: computed(() => selectedNode.value?.size?.columnCount == null),
             }),
-            propReadonly("visible_columns", "VCC", {
+            pnwPropReadonly("visible_columns", "VCC", {
               value: computed(() => dash(selectedNode.value?.size?.visibleColumnCount)),
               hidden: computed(() => selectedNode.value?.size?.visibleColumnCount == null),
             }),
