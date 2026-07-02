@@ -2,4 +2,3 @@ packages:
   - "web-ui"
   - "packages/*"
   - "server/*"
-  - "../phoenix-wing"
