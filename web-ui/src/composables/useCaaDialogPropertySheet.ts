@@ -1,5 +1,5 @@
 import { computed, type ComputedRef } from "vue";
-import { nlsKeyForProp, nlsPathSegments, type NlsStringProp } from "@phoenix/catdlg-core";
+import { nlsKeyForProp, nlsPathSegments, type NlsStringProp } from "@desk-tools/catdlg-core";
 import { caaServicePropertyGroup } from "./caaServicePropertyGroup";
 import { usePnwPagePropertySheet } from "phoenix-wing";
 import { useCaaDialogPageStore } from "../stores/caaDialogPage";

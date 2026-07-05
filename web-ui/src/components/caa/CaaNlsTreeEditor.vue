@@ -10,7 +10,7 @@ import {
   nlsPathSegments,
   shouldCreateDefaultTitle,
   type NlsStringProp,
-} from "@phoenix/catdlg-core";
+} from "@desk-tools/catdlg-core";
 import type { CaaDialogNode } from "../../types/caaDialogIr";
 import { hasTitle, hasHelp } from "../../utils/caaControlBehaviors";
 import { useCaaDialogPageStore } from "../../stores/caaDialogPage";

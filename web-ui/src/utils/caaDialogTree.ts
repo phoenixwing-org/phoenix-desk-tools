@@ -4,7 +4,7 @@ import {
   getCaaControlCatalogEntry,
   isCaaContainerType,
   shouldCreateDefaultTitle,
-} from "@phoenix/catdlg-core";
+} from "@desk-tools/catdlg-core";
 
 export type CaaElTreeNode = { id: string; label: string; icon?: string; children?: CaaElTreeNode[] };
 

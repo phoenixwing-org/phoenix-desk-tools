@@ -1,5 +1,5 @@
 import type { ComputedRef, InjectionKey, Ref } from "vue";
-import type { NlsStringProp } from "@phoenix/catdlg-core";
+import type { NlsStringProp } from "@desk-tools/catdlg-core";
 import type { CaaDialogNode } from "../types/caaDialogIr";
 import type { DropEdge, BuilderRecord } from "../utils/caaDropZone";
 

@@ -7,7 +7,7 @@ const props = withDefaults(
     text: string;
     nlsKey: string;
     nodeId: string;
-    prop: import("@phoenix/catdlg-core").NlsStringProp;
+    prop: import("@desk-tools/catdlg-core").NlsStringProp;
     columnIndex?: number;
     /** 占位文案（如选择列表）仍允许点击编辑 */
     allowPlaceholder?: boolean;

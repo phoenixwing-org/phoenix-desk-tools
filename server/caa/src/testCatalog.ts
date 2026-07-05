@@ -1,20 +1,18 @@
-/**
- * 共享测试目录（SQLite）—— Node + Python 两后端公用。
- * Node 写 vitest 模块，Python 写 unittest 模块。
- */
-import Database from "better-sqlite3";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+/** 共享测试目录（SQLite）—— Node + Python 两后端公用。Node 写 vitest 模块，Python 写 unittest 模块。 */
+// 使用 phoenix-wing 的 PnwDbAdapter 适配层（node-sqlite3-wasm，纯 WASM，无需编译）
+import { pnwCreateDb, type PnwDbAdapter } from 'phoenix-wing/db/pnwDbAdapter'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = path.resolve(__dirname, "../../../tests/fixtures/caa/test-catalog.db");
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const DB_PATH = path.resolve(__dirname, "../../../tests/fixtures/caa/test-catalog.db")
 
-let _db: Database.Database | null = null;
+let _db: PnwDbAdapter | null = null
 
-function db(): Database.Database {
+function db(): PnwDbAdapter {
   if (!_db) {
-    _db = new Database(DB_PATH);
-    _db.pragma("journal_mode = WAL");
+    _db = pnwCreateDb(DB_PATH)
+    _db.exec('PRAGMA journal_mode = WAL')
     _db.exec(`
       CREATE TABLE IF NOT EXISTS test_modules (
         backend   TEXT NOT NULL,
@@ -24,42 +22,46 @@ function db(): Database.Database {
         updated_at TEXT DEFAULT (datetime('now')),
         PRIMARY KEY (backend, module)
       )
-    `);
+    `)
   }
-  return _db;
+  return _db
 }
 
 export interface TestModuleRow {
-  backend: string;
-  module: string;
-  case_count: number;
-  cases_json: string;
+  backend: string
+  module: string
+  case_count: number
+  cases_json: string
 }
 
 /** 写入 vitest 模块（Node 启动时调用） */
 export function upsertVitestModules(modules: { file: string; count: number; tests: string[] }[]) {
-  const d = db();
-  const stmt = d.prepare(`
-    INSERT INTO test_modules (backend, module, case_count, cases_json, updated_at)
-    VALUES ('vitest', ?, ?, ?, datetime('now'))
-    ON CONFLICT(backend, module) DO UPDATE SET case_count=excluded.case_count, cases_json=excluded.cases_json, updated_at=datetime('now')
-  `);
-  const tx = d.transaction(() => {
+  const d = db()
+  d.exec('BEGIN TRANSACTION')
+  try {
     // 先清旧 vitest 条目
-    d.prepare("DELETE FROM test_modules WHERE backend = 'vitest'").run();
+    d.run("DELETE FROM test_modules WHERE backend = 'vitest'")
     for (const m of modules) {
-      stmt.run(m.file, m.count, JSON.stringify(m.tests));
+      d.run(
+        `INSERT INTO test_modules (backend, module, case_count, cases_json, updated_at)
+         VALUES ('vitest', ?, ?, ?, datetime('now'))
+         ON CONFLICT(backend, module) DO UPDATE SET case_count=excluded.case_count, cases_json=excluded.cases_json, updated_at=datetime('now')`,
+        [m.file, m.count, JSON.stringify(m.tests)],
+      )
     }
-  });
-  tx();
+    d.exec('COMMIT')
+  } catch (err) {
+    if (d.inTransaction) d.exec('ROLLBACK')
+    throw err
+  }
 }
 
 /** 读取所有模块 */
 export function readAllModules(): TestModuleRow[] {
-  return db().prepare("SELECT * FROM test_modules ORDER BY backend, module").all() as TestModuleRow[];
+  return db().all('SELECT * FROM test_modules ORDER BY backend, module') as unknown as TestModuleRow[]
 }
 
 /** 按 backend 读取 */
 export function readModulesByBackend(backend: string): TestModuleRow[] {
-  return db().prepare("SELECT * FROM test_modules WHERE backend = ? ORDER BY module").all(backend) as TestModuleRow[];
+  return db().all('SELECT * FROM test_modules WHERE backend = ? ORDER BY module', backend) as unknown as TestModuleRow[]
 }

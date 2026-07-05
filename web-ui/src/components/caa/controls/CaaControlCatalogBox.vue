@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { getCaaControlCatalogEntry } from "@phoenix/catdlg-core";
+import { getCaaControlCatalogEntry } from "@desk-tools/catdlg-core";
 import type { CaaDialogNode } from "../../../types/caaDialogIr";
 import CaaDialogGrid from "../CaaDialogGrid.vue";
 import { useCaaControl } from "./useCaaControl";

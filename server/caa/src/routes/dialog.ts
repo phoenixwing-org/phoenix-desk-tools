@@ -18,8 +18,8 @@ import {
   patchWizardCppConstruction,
   validateCaaDialogIrRoot,
   type CaaDialogNode,
-} from "@phoenix/catdlg-core";
-import { findRepoRoot } from "@phoenix/catdlg-core/node";
+} from "@desk-tools/catdlg-core";
+import { findRepoRoot } from "@desk-tools/catdlg-core/node";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { parseDialogFull } from "../parseDialogFull.js";

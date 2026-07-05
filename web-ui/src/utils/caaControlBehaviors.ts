@@ -1,4 +1,4 @@
-import { getCaaControlCatalogEntry } from "@phoenix/catdlg-core";
+import { getCaaControlCatalogEntry } from "@desk-tools/catdlg-core";
 
 export interface CaaControlBehavior {
   /** 是否有可编辑 Title */

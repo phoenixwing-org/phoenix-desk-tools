@@ -4,7 +4,7 @@ import {
   parseCatNls,
   type CaaDialogIr,
   type CaaDialogParseMeta,
-} from "@phoenix/catdlg-core";
+} from "@desk-tools/catdlg-core";
 import { discoverDialogResources, type DiscoveredDialogResources } from "./discoverDialogResources.js";
 import { caaLog, caaLogLines } from "./caaLog.js";
 

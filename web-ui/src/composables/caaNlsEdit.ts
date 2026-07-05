@@ -1,5 +1,5 @@
 import type { InjectionKey } from "vue";
-import type { NlsStringProp } from "@phoenix/catdlg-core";
+import type { NlsStringProp } from "@desk-tools/catdlg-core";
 
 export type CaaNlsEditTarget = {
   nodeId: string;

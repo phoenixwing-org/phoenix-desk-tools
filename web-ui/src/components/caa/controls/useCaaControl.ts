@@ -4,7 +4,7 @@ import {
   nlsKeyForProp,
   nlsPathSegments,
   type NlsStringProp,
-} from "@phoenix/catdlg-core";
+} from "@desk-tools/catdlg-core";
 import type { CaaDialogNode } from "../../../types/caaDialogIr";
 import { CAA_CONTROL_KEY, type CaaContextMenuItem } from "../../../composables/useCaaControlContext";
 import { caaControlWidthStyle, CAA_DIALOG_PREVIEW_WIDTH_PX } from "../../../utils/caaControlMetrics";

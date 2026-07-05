@@ -1,5 +1,5 @@
 {
-  "name": "@phoenix/caa-server",
+  "name": "@desk-tools/caa-server",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,8 +9,9 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.13.8",
-    "@phoenix/catdlg-core": "workspace:*",
-    "better-sqlite3": "^12.11.1",
+    "@desk-tools/catdlg-core": "workspace:*",
+    "phoenix-wing": "^0.1.4",
+    "node-sqlite3-wasm": "^0.8.59",
     "hono": "^4.7.4"
   },
   "devDependencies": {

@@ -7,7 +7,7 @@ import {
   inferMsgCatalogDir,
   normalizeRepoRel,
   type CaaNlsLocaleRef,
-} from "@phoenix/catdlg-core";
+} from "@desk-tools/catdlg-core";
 import { caaLog } from "./caaLog.js";
 
 const IMAGE_EXTS = new Set([".png", ".bmp", ".gif", ".jpg", ".jpeg", ".ico", ".svg"]);

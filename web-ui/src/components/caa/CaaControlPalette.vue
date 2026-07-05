@@ -6,7 +6,7 @@
  */
 import { inject, watch, onMounted } from "vue";
 import { storeToRefs } from "pinia";
-import { caaControlPaletteGroups } from "@phoenix/catdlg-core";
+import { caaControlPaletteGroups } from "@desk-tools/catdlg-core";
 import { CAA_CONTROL_KEY } from "../../composables/useCaaControlContext";
 import { useCaaDialogPageStore } from "../../stores/caaDialogPage";
 import { controlIcon } from "../../assets/caa/controlIcons";
