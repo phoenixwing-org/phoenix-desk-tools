@@ -4,6 +4,7 @@ import AppToolbar from "./AppToolbar.vue";
 import PnwRibbonShell from "phoenix-wing/layout/PnwRibbonShell.vue";
 import RibbonPanel from "./ribbon/RibbonPanel.vue";
 import { useRibbonTabs } from "./ribbon/useRibbonTabs";
+import { useUiPrefsStore } from "../stores/uiPrefs";
 import StatusBar from "./StatusBar.vue";
 import WorkspaceTreeSidebar from "./WorkspaceTreeSidebar.vue";
 import FileWorksetPanel from "../components/FileWorksetPanel.vue";
@@ -25,6 +26,10 @@ import PartCatalogPage from "../pages/PartCatalogPage.vue";
 import PartKeyDetailPage from "../pages/PartKeyDetailPage.vue";
 import FileRenamePage from "../pages/FileRenamePage.vue";
 import BomExportPage from "../pages/BomExportPage.vue";
+import CrBomExportPage from "../pages/CrBomExportPage.vue";
+import CrPartCatalogPage from "../pages/CrPartCatalogPage.vue";
+import CrFcstdMapPage from "../pages/CrFcstdMapPage.vue";
+import CrFileDetailPage from "../pages/CrFileDetailPage.vue";
 import UnitTestsPage from "../pages/UnitTestsPage.vue";
 import TestFixturesPage from "../pages/TestFixturesPage.vue";
 import GitPage from "../pages/GitPage.vue";
@@ -55,11 +60,13 @@ const legacyDbReasons = ref<string[]>([]);
 const legacyDbRecreating = ref(false);
 const legacyDbError = ref("");
 
+const uiPrefs = useUiPrefsStore();
 const activeTab = computed(() => shell.activeTab());
 
 const isWelcomeFullscreen = computed(() => shell.currentPage.value === "welcome");
 
 const ribbonCollapsed = ref(false);
+const ribbonLayout = computed(() => uiPrefs.ribbonLayoutMode === "inline" ? "inline" : "stacked");
 
 const shellLayout = computed(() => shell.shellLayout.value);
 const navigation = computed(() => shell.appConfig.value?.navigation ?? []);
@@ -127,6 +134,10 @@ const PAGE_COMPONENTS: Record<string, Component> = {
   code_rename: CodeRenamePage,
   code_uuid: CodeUuidReplacePage,
   bom_export: BomExportPage,
+  cr_bom_export: CrBomExportPage,
+  cr_part_catalog: CrPartCatalogPage,
+  cr_fcstd_map: CrFcstdMapPage,
+  cr_file_detail: CrFileDetailPage,
   unit_tests: UnitTestsPage,
   test_fixtures: TestFixturesPage,
   caa_dialog_home: CaaDialogHomePage,
@@ -238,6 +249,8 @@ onUnmounted(() => {
     <PnwRibbonShell
       v-if="!isWelcomeFullscreen"
       :collapsed="ribbonCollapsed"
+      :layout="ribbonLayout"
+      @update:layout="(v) => uiPrefs.setRibbonLayoutMode(v === 'inline' ? 'inline' : 'grouped')"
     >
       <RibbonPanel
         v-if="!ribbonCollapsed && ribbonActiveTabDef"
@@ -307,14 +320,6 @@ onUnmounted(() => {
     <ChoiceDialogHost />
     <GitDiffPreviewHost />
     <CaaRelatedFilePreviewHost />
-    <AppModalOverlay
-      :open="shell.configOverlayOpen.value"
-      aria-label="配置"
-      panel-class="config-modal-panel"
-      @close="shell.closeConfig()"
-    >
-      <ConfigPage />
-    </AppModalOverlay>
     <AsyncProgressOverlay />
   </div>
 </template>

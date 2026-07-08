@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
+
 import { pnwPromptChoice } from "phoenix-wing";
 import { pruneRecentWorkspaces, removeRecentWorkspace, saveLauncherFreecad, shutdownWebServer } from "../api";
 import { useAppShell } from "../composables/useAppShell";
@@ -77,23 +78,13 @@ onMounted(async () => {
   fcInput.value = launcher.value?.freecad_dir ?? "";
   await refreshWebStatus();
   await onboarding.refreshStatus();
-  window.addEventListener("keydown", onConfigKeydown);
 });
 
 function openCadIndex() {
   shell.goToPage("fcstd_map");
-  shell.closeConfig();
 }
 
-onUnmounted(() => {
-  window.removeEventListener("keydown", onConfigKeydown);
-});
-
-function onConfigKeydown(e: KeyboardEvent) {
-  if (e.key === "Escape" && shell.configOverlayOpen.value) {
-    shell.closeConfig();
-  }
-}
+onUnmounted(() => {});
 
 watch(workspacePath, (v) => {
   repoInput.value = v;
@@ -322,13 +313,7 @@ const navItems = () =>
 
 <template>
   <div class="page config-page">
-    <PageHeader title="配置" page-id="config">
-      <template v-if="shell.configOverlayOpen.value" #actions>
-        <el-button size="small" @click="shell.closeConfig()">
-          关闭
-        </el-button>
-      </template>
-    </PageHeader>
+    <PageHeader title="配置" page-id="config" />
 
     <section class="section" data-tour-page-config-workspace>
       <label class="field-label">当前工作空间</label>

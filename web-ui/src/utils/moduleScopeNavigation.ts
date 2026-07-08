@@ -63,7 +63,6 @@ export function defaultPageForModuleScope(
   return "fcstd_map";
 }
 
-/** Ribbon Tab id（cad / code / system），用于无打开页面时高亮模块 */
 export function ribbonTabIdForModuleScope(
   scope: ModuleScope,
   enabledModules: readonly string[],

@@ -10,7 +10,7 @@ import { caaLog } from "../caaLog.js";
 import { readModulesByBackend, upsertVitestModules } from "../testCatalog.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(__dirname, "../../../..");
+const REPO_ROOT = path.resolve(__dirname, "../../..");
 
 export const unitTestRoutes = new Hono();
 
@@ -51,7 +51,7 @@ export function parseVitestResult(output: string): { passed: number; failed: num
 
 /** 扫描 vitest + 写入共享 SQLite（启动时调用） */
 export function refreshVitestCatalog() {
-  const pkgs = ["packages/catdlg-core", "web-ui"];
+  const pkgs = ["packages/catdlg-core", "web-ui", "server"];
   const allModules: VitestModule[] = [];
   for (const pkg of pkgs) {
     try {
@@ -97,7 +97,7 @@ unitTestRoutes.post("/run", async (c) => {
   caaLog(`unit-tests/run: ${mods.length} modules`);
   try {
     let allOut = "";
-    for (const pkg of ["packages/catdlg-core", "web-ui"]) {
+    for (const pkg of ["packages/catdlg-core", "web-ui", "server"]) {
       const pkgMods = mods.filter((m) => m.startsWith(pkg));
       const args = pkgMods.length > 0 ? pkgMods.join(" ") : "";
       const out = execSync(`cd "${pkg}" && pnpm vitest run --reporter verbose ${args}`, {

@@ -9,6 +9,10 @@ export type NavItem = {
   module?: "cad" | "code" | string;
   description?: string;
   icon?: string;
+  /** Ribbon 分组名（同 module 下按此字段分组） */
+  ribbonGroup?: string;
+  /** Ribbon 按钮上的短标签（缺省用 label） */
+  ribbonLabel?: string;
 };
 
 export type NavModules = {

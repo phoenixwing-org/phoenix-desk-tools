@@ -27,6 +27,7 @@
             "label": "CAD 索引",
             "page": "fcstd_map",
             "module": "cad",
+            "ribbonGroup": "索引",
             "description": "扫描 FCStd、MD、PDF、图片、DXF/DWG 等写入索引库"
         },
         {
@@ -34,12 +35,20 @@
             "label": "BOM 列表",
             "page": "bom_export",
             "module": "cad",
+            "ribbonGroup": "索引",
             "description": "按装配列出 XLink 子件 BOM 表（属性来自 CAD 索引）"
+        }, {
+            "id": "bom_apply",
+            "label": "文件详情",
+            "page": "file_detail",
+            "module": "cad",
+            "description": "FCStd 文件详情：属性回写、引用关系、改名与引用写回（页内子 Tab）"
         }, {
             "id": "part_catalog",
             "label": "零件目录",
             "page": "part_catalog",
             "module": "cad",
+            "ribbonGroup": "索引",
             "description": "PartKey 零件库与关联文件"
         }, {
             "id": "part_key_detail",
@@ -48,76 +57,85 @@
             "module": "cad",
             "description": "PartKey 属性与关联文件（从零件目录或索引打开，可多 Tab）"
         }, {
-            "id": "bom_apply",
-            "label": "文件详情",
-            "page": "file_detail",
-            "module": "cad",
-            "description": "FCStd 文件详情：属性回写、引用关系、改名与引用写回（页内子 Tab）"
-        }, {
             "id": "file_rename",
             "label": "改名分析",
             "page": "file_rename",
             "module": "cad",
+            "ribbonGroup": "工具",
+            "ribbonLabel": "改名分析",
             "description": "改名历史的引用影响分析与写回（磁盘改名在文件详情 · 改名子 Tab）"
         }, {
             "id": "xlink_fix",
             "label": "链接路径修正",
             "page": "xlink_fix",
             "module": "cad",
+            "ribbonGroup": "工具",
+            "ribbonLabel": "链接修正",
             "description": "修正 Document.xml / FCStd 内 XLink"
         }, {
             "id": "part_dedup",
             "label": "编号查重",
             "page": "part_dedup",
             "module": "cad",
+            "ribbonGroup": "工具",
             "description": "文件名和编号+版本查重"
         }, {
             "id": "step_batch",
             "label": "STEP 批量",
             "page": "step_batch",
             "module": "cad",
+            "ribbonGroup": "工具",
             "description": "STEP → FCStd 批量转换（FreeCADCmd）"
         }, {
             "id": "sw_step_export",
             "label": "SW→STEP",
             "page": "sw_step_export",
             "module": "cad",
+            "ribbonGroup": "工具",
             "description": "SolidWorks 三维模型批量导出 STEP（COM，Windows）"
         }, {
             "id": "code_index",
             "label": "Code 索引",
             "page": "code_index",
             "module": "code",
+            "ribbonGroup": "索引",
             "description": "扫描源文件、配置、文档与资源写入 phoenix_code_* 索引表"
         }, {
             "id": "code_ignore",
             "label": "Code 忽略设定",
             "page": "code_ignore",
             "module": "code",
+            "ribbonGroup": "编辑",
+            "ribbonLabel": "忽略设定",
             "description": "Code 模块共用忽略：code.ignore 文件 + 工作空间自定义（CAA 等）"
         }, {
             "id": "reorder_members",
             "label": "C++ 成员排序",
             "page": "reorder_members",
             "module": "code",
+            "ribbonGroup": "编辑",
             "description": "按 cxx-code-style 重排选定模块下 .h/.cpp 类成员"
         }, {
             "id": "caa_dialog_home",
             "label": "CAA 对话框",
             "page": "caa_dialog_home",
             "module": "code",
+            "ribbonGroup": "CAA",
+            "ribbonLabel": "CAA 对话框",
             "description": "扫描工作空间 .CATDlg 列表；点击在新 Tab 打开编辑器"
         }, {
             "id": "code_rename",
             "label": "Code 批量改名",
             "page": "code_rename",
             "module": "code",
+            "ribbonGroup": "编辑",
             "description": "工作空间内文件夹 / 文件 / 文本精确匹配改名"
         }, {
             "id": "code_uuid",
             "label": "Code UUID 替换",
             "page": "code_uuid",
             "module": "code",
+            "ribbonGroup": "编辑",
             "description": "扫描并勾选替换 UUID 形态字符串"
         }, {
             "id": "config",
@@ -203,6 +221,19 @@
             },
             "bom_export": {
                 "max_tabs": 1
+            },
+            "cr_bom_export": {
+                "max_tabs": 1
+            },
+            "cr_part_catalog": {
+                "max_tabs": 1
+            },
+            "cr_fcstd_map": {
+                "max_tabs": 1
+            },
+            "cr_file_detail": {
+                "max_tabs": 4,
+                "tab_enabled": true
             },
             "welcome": {
                 "max_tabs": 1

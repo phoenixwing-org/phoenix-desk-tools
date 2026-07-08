@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { fetchPartKeys, type PartKeyEntry, type PartKeysPayload } from "../api";
 import { BOM_FIELD_LABELS as L } from "../utils/bomFieldLabels";
 import { useAppShell } from "../composables/useAppShell";
@@ -59,10 +59,29 @@ async function refreshList() {
   loading.value = true;
   shell.appendLog("[零件目录] 刷新列表…", { source: "part_catalog", open: true });
   try {
-    listData.value = await fetchPartKeys();
-    const msg = listData.value.exists
-      ? `零件目录 ${listData.value.stats.total_keys} 键 · ${listData.value.stats.total_files} 文件`
-      : "尚无零件目录，请先执行 CAD 索引扫描";
+    const ws = shell.workspacePath.value || "";
+    const url = `/api/cad/parts?workspace=${encodeURIComponent(ws)}`;
+    console.log("[cad-rust] PartCatalog fetch", url);
+    const res = await fetch(url);
+    console.log("[cad-rust] PartCatalog res", res.status);
+    if (!res.ok) throw new Error((await res.json()).error || res.statusText);
+    const data = await res.json();
+    // 适配 Rust 原生格式 → 旧 PartKeysPayload 格式
+    const items: PartKeyEntry[] = (data.items || []).map((r: any) => ({
+      part_number: r.part_number,
+      part_version: r.part_version,
+      part_key: [r.part_number, r.part_version].filter(Boolean).join("."),
+      PartName: r.part_name || "",
+      label: r.part_name || "",
+      TypeCode: r.type_code || "",
+      ModelSeries: r.model_series || "",
+      status: "active",
+      files: r.file_count ?? 0,
+      notes: "",
+    }));
+    listData.value = { entries: items, exists: items.length > 0, stats: { total_keys: items.length, total_files: items.reduce((s: number, i: any) => s + (i.files || 0), 0) } };
+    const native = data._native || data._proxy || "";
+    const msg = `零件目录 ${items.length} 键 (${native === "rust" ? "Rust" : "代理"})`;
     shell.appendLog(msg, { source: "part_catalog" });
     setStatus(msg);
   } catch (e) {

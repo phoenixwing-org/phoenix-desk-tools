@@ -93,10 +93,6 @@ export type AppShellContext = {
   clearLog: () => void;
   setLogOpen: (open: boolean) => void;
   setPropertiesOpen: (open: boolean) => void;
-  /** 全屏配置层（遮住主内容区，不占 Tab 栏） */
-  configOverlayOpen: Ref<boolean>;
-  openConfig: () => void;
-  closeConfig: () => void;
   goToPage: (pageId: string) => void;
   canNavigateToPage: (pageId: string) => boolean;
   /** 进入工作台并开始界面巡游（driver.js 逐步介绍壳层） */
@@ -355,7 +351,6 @@ export function provideAppShell(): AppShellContext {
   const treeRescanToken = ref(0);
   const treeSelectAfterRescan = ref<string | null>(null);
   const scrollToGuideToken = ref(0);
-  const configOverlayOpen = ref(false);
   const showWelcomeScreen = ref(true);
   const workbenchFocusScope = ref<ModuleScope>("all");
 
@@ -442,7 +437,7 @@ export function provideAppShell(): AppShellContext {
   function requireWorkspace(): boolean {
     if (onboarding.workspaceOk) return true;
     setStatus(WORKSPACE_GATE_MSG);
-    openConfig();
+    goToPage("config");
     return false;
   }
 
@@ -469,16 +464,6 @@ export function provideAppShell(): AppShellContext {
     leaveWelcomeForWorkbench();
     wb.activeTabId.value = "";
     focusWorkbenchForModuleScope(workbenchFocusScope.value);
-  }
-
-  function openConfig() {
-    purgeConfigTabs();
-    configOverlayOpen.value = true;
-    navHover.value = null;
-  }
-
-  function closeConfig() {
-    configOverlayOpen.value = false;
   }
 
   function syncOnboardingFromTabs() {
@@ -696,10 +681,6 @@ export function provideAppShell(): AppShellContext {
       openWelcome();
       return;
     }
-    if (id === "config") {
-      openConfig();
-      return;
-    }
     leaveWelcomeForWorkbench();
     if (!isPageModuleVisible(id)) {
       setStatus("该功能模块已关闭");
@@ -708,7 +689,7 @@ export function provideAppShell(): AppShellContext {
     }
     if (!canNavigateToPage(id)) {
       setStatus(WORKSPACE_GATE_MSG);
-      openConfig();
+      goToPage("config");
       navHover.value = null;
       return;
     }
@@ -1063,7 +1044,7 @@ export function provideAppShell(): AppShellContext {
     shellLayout.value = normalizeShellLayout(launcher.value?.shell_layout);
     await onboarding.refreshStatus();
     openWelcome();
-    openConfig();
+    goToPage("config");
     setStatus("已恢复为初始安装状态");
   }
 
@@ -1084,13 +1065,13 @@ export function provideAppShell(): AppShellContext {
 
   async function enterWorkbenchFromWelcome(opts?: { scope?: ModuleScope }) {
     if (!workspacePath.value) {
-      openConfig();
+      goToPage("config");
       return;
     }
     await onboarding.refreshStatus();
     if (!onboarding.workspaceOk) {
       setStatus(WORKSPACE_GATE_MSG);
-      openConfig();
+      goToPage("config");
       return;
     }
     leaveWelcomeForWorkbench();
@@ -1398,7 +1379,7 @@ export function provideAppShell(): AppShellContext {
       return;
     }
     if (intent.kind === "config") {
-      openConfig();
+      goToPage("config");
       return;
     }
     if (intent.kind !== "page") return;
@@ -1489,7 +1470,7 @@ export function provideAppShell(): AppShellContext {
           applyShellUrlIntent(urlIntent);
         }
       } else if (urlIntent.kind === "config") {
-        openConfig();
+        goToPage("config");
       } else {
         applyShellUrlIntent(urlIntent);
       }
@@ -1506,7 +1487,7 @@ export function provideAppShell(): AppShellContext {
       if (!wb.tabs.value.length && !urlIntent) {
         openWelcome();
       }
-      openConfig();
+      goToPage("config");
     }
 
     purgeHiddenModuleTabs();
@@ -1538,9 +1519,6 @@ export function provideAppShell(): AppShellContext {
     clearLog,
     setLogOpen,
     setPropertiesOpen,
-    configOverlayOpen,
-    openConfig,
-    closeConfig,
     goToPage,
     canNavigateToPage,
     openOnboardingGuide: () => {

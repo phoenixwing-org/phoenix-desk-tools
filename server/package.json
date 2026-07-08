@@ -5,17 +5,20 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "start": "tsx src/server.ts"
+    "start": "tsx src/server.ts",
+    "test": "vitest run src/lib/"
   },
   "dependencies": {
-    "@hono/node-server": "^1.13.8",
     "@desk-tools/catdlg-core": "workspace:*",
-    "phoenix-wing": "^0.1.4",
+    "@hono/node-server": "^1.13.8",
+    "hono": "^4.7.4",
     "node-sqlite3-wasm": "^0.8.59",
-    "hono": "^4.7.4"
+    "phoenix-wing": "^0.1.4"
   },
   "devDependencies": {
+    "@vitest/ui": "^4.1.10",
     "tsx": "^4.19.3",
-    "typescript": "~5.7.2"
+    "typescript": "~5.7.2",
+    "vitest": "^4.1.9"
   }
 }

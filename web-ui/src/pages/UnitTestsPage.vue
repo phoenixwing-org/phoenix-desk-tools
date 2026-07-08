@@ -650,15 +650,17 @@ async function executeRun(args: {
   expandedCase.value = null;
   currentRunId.value = null;
   activeTab.value = "results";
+  console.log("[unit-tests] executeRun start", { suiteIds: args.suiteIds, logLabel: args.logLabel });
   shell.appendLog(`[单元测试] 运行 ${args.logLabel}…`, { source: "unit_tests", open: true });
   runAbortController = new AbortController();
   let cancelled = false;
   try {
     // 进度统一走 AsyncProgressOverlay（新架构），仅保留 watchlist/结果同步
+    console.log("[unit-tests] calling runUnitTestsStream", args.suiteIds);
     result.value = (await testProgressUI.startStreaming(
       (onEvent) =>
         runUnitTestsStream(args.suiteIds, (event) => {
-          // 副作用：watchlist 同步 + 运行 id 捕获
+          console.log("[unit-tests] stream event", event.type);
           if (event.type === "start") {
             currentRunId.value = event.run_id ?? null;
             if (event.load_errors.length) {
@@ -678,6 +680,8 @@ async function executeRun(args: {
       (runId) => cancelUnitTestRun(runId),
       { taskName: "单元测试" },
     )) ?? null as unknown as UnitTestRunResult;
+    console.log("[unit-tests] stream result", result.value);
+    if (!result.value) { shell.appendLog("❌ 流式响应返回为空", { source: "unit_tests" }); running.value = false; return; }
     cancelled = !!result.value.summary.cancelled;
     recordRunHistoryFromResult(result.value);
     lastRunSuites.value = args.lastRunSuiteIds ?? [...runChecked.value];
@@ -707,6 +711,7 @@ async function executeRun(args: {
       activeTab.value = "watchlist";
     }
   } catch (e) {
+    console.error("[unit-tests] executeRun FAILED", e);
     const msg = String(e);
     if (msg.includes("终止") || msg.includes("aborted")) {
       shell.appendLog("[单元测试] 运行已终止", { source: "unit_tests" });

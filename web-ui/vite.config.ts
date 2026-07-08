@@ -6,8 +6,7 @@ import { ElementPlusResolver } from "unplugin-vue-components/resolvers";
 import { resolve } from "path";
 import { resolvePhoenixWingPath } from "./config/resolvePhoenixWing";
 
-/** 双进程开发：Vite 5173，API 由 ``python -m phoenix.web --dev`` 监听此端口。CAA Node 默认 5180。 */
-const apiPort = Number(process.env.PHOENIX_API_PORT || 8765);
+/** 开发：Vite 5173，Node Hono 5180。 */
 const caaPort = Number(process.env.CAA_SERVER_PORT || 5180);
 
 const webRoot = resolve(__dirname);
@@ -35,15 +34,19 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       "/api/caa/index": {
-        target: `http://127.0.0.1:${apiPort}`,
+        target: `http://127.0.0.1:${caaPort}`,
         changeOrigin: true,
       },
       "/api/caa": {
         target: `http://127.0.0.1:${caaPort}`,
         changeOrigin: true,
       },
+      "/api/cad": {
+        target: `http://127.0.0.1:${caaPort}`,
+        changeOrigin: true,
+      },
       "/api": {
-        target: `http://127.0.0.1:${apiPort}`,
+        target: `http://127.0.0.1:${caaPort}`,
         changeOrigin: true,
       },
     },

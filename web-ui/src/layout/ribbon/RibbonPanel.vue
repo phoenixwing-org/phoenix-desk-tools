@@ -60,10 +60,6 @@ const visibleGroups = computed(() => resolveGroups(props.tab.groups));
 const flatItems = computed(() => visibleGroups.value.flatMap((g) => g.items));
 
 const isShellTab = computed(() => props.tab.id === RIBBON_SHELL_TAB_ID);
-
-function toggleLayout() {
-  uiPrefs.toggleRibbonLayoutMode();
-}
 </script>
 
 <template>
@@ -103,16 +99,6 @@ function toggleLayout() {
         <RibbonPanelUtils :layout="isInline ? 'inline' : 'group'" />
       </div>
     </div>
-    <button
-      type="button"
-      class="ribbon-layout-toggle"
-      :title="isInline ? '切换为分组 Ribbon' : '切换为单行排列'"
-      :aria-label="isInline ? '切换为分组 Ribbon' : '切换为单行排列'"
-      @click="toggleLayout"
-    >
-      <span class="toggle-icon" aria-hidden="true">{{ isInline ? "▦" : "☰" }}</span>
-      <span class="toggle-label">{{ isInline ? "分组" : "单行" }}</span>
-    </button>
   </div>
 </template>
 

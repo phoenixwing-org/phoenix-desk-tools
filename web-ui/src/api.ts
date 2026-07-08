@@ -409,15 +409,15 @@ function bomBody(fields: Partial<BomFields>, extra: Record<string, unknown> = {}
 }
 
 export function fetchBomPrefs() {
-  return jsonFetch<BomApplyPrefs>("/api/bom/prefs");
+  return jsonFetch<BomApplyPrefs>("/api/cad/bom/prefs");
 }
 
 export function fetchBom(rel: string) {
-  return jsonFetch<BomPreview>(`/api/bom?rel=${encodeURIComponent(rel)}`);
+  return jsonFetch<BomPreview>(`/api/cad/bom/file?rel=${encodeURIComponent(rel)}`);
 }
 
 export function saveBom(rel: string, fields: Partial<BomFields>) {
-  return jsonFetch<{ status: string }>(`/api/bom?rel=${encodeURIComponent(rel)}`, {
+  return jsonFetch<{ status: string }>(`/api/cad/bom/file?rel=${encodeURIComponent(rel)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(bomBody(fields)),
@@ -438,7 +438,7 @@ export function recommendBomField(
   kindFilters: BomKindFilters,
 ) {
   return jsonFetch<BomFieldRecommendResult>(
-    `/api/bom/recommend-field?rel=${encodeURIComponent(rel)}&field=${encodeURIComponent(field)}`,
+    `/api/cad/bom/recommend-field?rel=${encodeURIComponent(rel)}&field=${encodeURIComponent(field)}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -455,7 +455,7 @@ export function recommendBomFieldsAll(
   return jsonFetch<{
     results: Record<string, BomFieldRecommendResult>;
     filled_keys: string[];
-  }>(`/api/bom/recommend-all-fields?rel=${encodeURIComponent(rel)}`, {
+  }>(`/api/cad/bom/recommend-all-fields?rel=${encodeURIComponent(rel)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...bomBody(fields), kind_filters: kindFilters }),
@@ -464,7 +464,7 @@ export function recommendBomFieldsAll(
 
 export function fillRecommendedValues(rel: string, fields: Partial<BomFields>) {
   return jsonFetch<{ fields: BomFields; filled_keys: string[] }>(
-    `/api/bom/fill-recommended-values?rel=${encodeURIComponent(rel)}`,
+    `/api/cad/bom/fill-recommended-values?rel=${encodeURIComponent(rel)}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -479,7 +479,7 @@ export function fillBomFromEmbedded(
   kindFilters: BomKindFilters,
 ) {
   return jsonFetch<{ fields: BomFields; document_kinds?: BomPreview["document_kinds"] }>(
-    `/api/bom/fill-from-embedded?rel=${encodeURIComponent(rel)}`,
+    `/api/cad/bom/fill-from-embedded?rel=${encodeURIComponent(rel)}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -490,7 +490,7 @@ export function fillBomFromEmbedded(
 
 export function fillBomFromFilename(rel: string) {
   return jsonFetch<{ fields: BomFields }>(
-    `/api/bom/fill-from-filename?rel=${encodeURIComponent(rel)}`,
+    `/api/cad/bom/fill-from-filename?rel=${encodeURIComponent(rel)}`,
     { method: "POST" },
   );
 }
@@ -501,7 +501,7 @@ export function applyLabelFormula(
   fillEmptyFromPrefs = true,
 ) {
   return jsonFetch<{ fields: BomFields; label: string; filled_keys: string[] }>(
-    `/api/bom/apply-label-formula?rel=${encodeURIComponent(rel)}`,
+    `/api/cad/bom/apply-label-formula?rel=${encodeURIComponent(rel)}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -512,7 +512,7 @@ export function applyLabelFormula(
 
 export function fetchBomDocumentKinds(rel: string) {
   return jsonFetch<{ document_kinds: NonNullable<BomPreview["document_kinds"]> }>(
-    `/api/bom/document-kinds?rel=${encodeURIComponent(rel)}`,
+    `/api/cad/bom/document-kinds?rel=${encodeURIComponent(rel)}`,
   );
 }
 
@@ -533,7 +533,7 @@ export function recommendFilename(
     hint_text: string;
     matches_disk_name: boolean;
     document_kinds?: BomPreview["document_kinds"];
-  }>(`/api/bom/recommend-filename?rel=${encodeURIComponent(rel)}`, {
+  }>(`/api/cad/bom/recommend-filename?rel=${encodeURIComponent(rel)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -556,7 +556,7 @@ export function renameBomFile(
     filename: string;
     map_updated: boolean;
     attrs_saved?: boolean;
-  }>(`/api/bom/rename?rel=${encodeURIComponent(rel)}`, {
+  }>(`/api/cad/bom/rename?rel=${encodeURIComponent(rel)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -673,7 +673,7 @@ export function fetchRenameLogs(limit = 50, rel?: string) {
   const q = new URLSearchParams({ limit: String(limit) });
   const path = (rel ?? "").trim();
   if (path) q.set("rel", path);
-  return jsonFetch<RenameLogsPayload>(`/api/rename-analysis/logs?${q.toString()}`);
+  return jsonFetch<RenameLogsPayload>(`/api/cad/rename/logs?${q.toString()}`);
 }
 
 export function analyzeRenameReferences(body: {
@@ -686,7 +686,7 @@ export function analyzeRenameReferences(body: {
   transitive?: boolean;
   persist?: boolean;
 }) {
-  return jsonFetch<RefScanPayload>("/api/rename-analysis/analyze", {
+  return jsonFetch<RefScanPayload>("/api/cad/rename/analyze", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -723,7 +723,7 @@ export function applyRenameAnalysisCorrections(
     label_patches?: number;
     label_changes?: ReferenceLabelChange[];
     scan: RefScanPayload;
-  }>("/api/rename-analysis/apply", {
+  }>("/api/cad/rename/apply", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -755,7 +755,7 @@ export function applyReferenceLabelCorrections(
 
 export function loadRenameAnalysis(renameLogId: number) {
   return jsonFetch<{ rename_log: RenameLog; scan: RefScanPayload }>(
-    `/api/rename-analysis/load?rename_log_id=${renameLogId}`,
+    `/api/cad/rename/load?rename_log_id=${renameLogId}`,
   );
 }
 
@@ -765,7 +765,7 @@ export function exportRenameAnalysisReport(body: {
   note?: string;
 }) {
   return jsonFetch<{ report_path: string; report_path_display: string }>(
-    "/api/rename-analysis/export-report",
+    "/api/cad/rename/export-report",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -823,7 +823,7 @@ export type FcstdMapPayload = {
 };
 
 export function fetchFcstdMap() {
-  return jsonFetch<FcstdMapPayload>("/api/fcstd-map");
+  return jsonFetch<FcstdMapPayload>("/api/cad/fcstd-map");
 }
 
 export type FcstdMapEntriesPayload = {
@@ -849,11 +849,11 @@ export function fetchFcstdMapEntries(opts?: {
   if (opts?.kind && opts.kind !== "all") q.set("kind", opts.kind);
   if (opts?.search?.trim()) q.set("search", opts.search.trim());
   const qs = q.toString();
-  return jsonFetch<FcstdMapEntriesPayload>(`/api/fcstd-map/entries${qs ? `?${qs}` : ""}`);
+  return jsonFetch<FcstdMapEntriesPayload>(`/api/cad/fcstd-map/entries${qs ? `?${qs}` : ""}`);
 }
 
 export function saveFcstdMapPrefs(force_update_part_name?: boolean) {
-  return jsonFetch<{ force_update_part_name: boolean }>("/api/fcstd-map/prefs", {
+  return jsonFetch<{ force_update_part_name: boolean }>("/api/cad/fcstd-map/prefs", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ force_update_part_name }),
@@ -861,7 +861,7 @@ export function saveFcstdMapPrefs(force_update_part_name?: boolean) {
 }
 
 export function scanFcstdMap(force_update_part_name?: boolean) {
-  return jsonFetch<FcstdMapPayload>("/api/fcstd-map/scan", {
+  return jsonFetch<FcstdMapPayload>("/api/cad/fcstd-map/scan", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ force_update_part_name }),
@@ -869,14 +869,14 @@ export function scanFcstdMap(force_update_part_name?: boolean) {
 }
 
 export function purgeMissingFcstdMap() {
-  return jsonFetch<FcstdMapPayload & { purge_deleted?: number }>("/api/fcstd-map/purge-missing", {
+  return jsonFetch<FcstdMapPayload & { purge_deleted?: number }>("/api/cad/fcstd-map/purge-missing", {
     method: "POST",
   });
 }
 
 export function startFcstdMapScan(forceUpdatePartName = false, scopeWorksetId?: string) {
   return jsonFetch<{ scan_id: string; phase: string }>(
-    "/api/fcstd-map/scan/start",
+    "/api/cad/fcstd-map/scan/start",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -920,13 +920,13 @@ export type ScanProgressPayload = {
 
 export function fetchFcstdMapScanProgress(scanId: string) {
   return jsonFetch<ScanProgressPayload>(
-    `/api/fcstd-map/scan/progress?scan_id=${encodeURIComponent(scanId)}`,
+    `/api/cad/fcstd-map/scan/progress?scan_id=${encodeURIComponent(scanId)}`,
   );
 }
 
 export function cancelFcstdMapScan(scanId: string) {
   return jsonFetch<{ cancelled: boolean }>(
-    `/api/fcstd-map/scan/cancel?scan_id=${encodeURIComponent(scanId)}`,
+    `/api/cad/fcstd-map/scan/cancel?scan_id=${encodeURIComponent(scanId)}`,
     { method: "POST" },
   );
 }
@@ -943,7 +943,7 @@ export type ScanHistoryEntry = {
 
 export function fetchFcstdMapScanHistory(limit = 20) {
   return jsonFetch<{ scans: ScanHistoryEntry[] }>(
-    `/api/fcstd-map/scan/history?limit=${limit}`,
+    `/api/cad/fcstd-map/scan/history?limit=${limit}`,
   );
 }
 
@@ -955,11 +955,11 @@ export type ScanResumePayload = {
 };
 
 export function fetchFcstdMapScanResume() {
-  return jsonFetch<ScanResumePayload>("/api/fcstd-map/scan/resume");
+  return jsonFetch<ScanResumePayload>("/api/cad/fcstd-map/scan/resume");
 }
 
 export function exportFcstdMapJson() {
-  return jsonFetch<{ path: string; path_display: string }>("/api/fcstd-map/export-json", {
+  return jsonFetch<{ path: string; path_display: string }>("/api/cad/fcstd-map/export-json", {
     method: "POST",
   });
 }
@@ -994,7 +994,7 @@ export type BomXrefEdge = {
 };
 
 export function fetchBomXrefMeta() {
-  return jsonFetch<BomXrefMeta>("/api/bom-xrefs/meta");
+  return jsonFetch<BomXrefMeta>("/api/cad/bom/xref/meta");
 }
 
 export type BomXrefHost = {
@@ -1023,7 +1023,7 @@ export function fetchBomXrefIncoming(opts: {
     direct_count?: number;
     refs: BomXrefEdge[];
     hosts: BomXrefHost[];
-  }>(`/api/bom-xrefs/incoming${qs ? `?${qs}` : ""}`);
+  }>(`/api/cad/bom/xref/incoming${qs ? `?${qs}` : ""}`);
 }
 
 export function fetchBomXrefOutgoing(rel: string, limit?: number, refreshDisk = false) {
@@ -1036,7 +1036,7 @@ export function fetchBomXrefOutgoing(rel: string, limit?: number, refreshDisk = 
     label_mismatch_count?: number;
     refs: BomXrefEdge[];
   }>(
-    `/api/bom-xrefs/outgoing?${q}`,
+    `/api/cad/bom/xref/outgoing?${q}`,
   );
 }
 
@@ -1058,7 +1058,7 @@ export type FileDetailXrefsPayload = {
 
 export function fetchBomXrefCounts(rel: string) {
   return jsonFetch<BomXrefCounts & { index_pending?: boolean }>(
-    `/api/bom-xrefs/counts?rel=${encodeURIComponent(rel)}`,
+    `/api/cad/bom/xref/counts?rel=${encodeURIComponent(rel)}`,
   );
 }
 
@@ -1096,7 +1096,7 @@ export function refreshBomXrefHostIndex(body: {
   recursive?: boolean;
   max_hosts?: number;
 }) {
-  return jsonFetch<BomXrefRefreshHostResult>("/api/bom-xrefs/refresh-host-index", {
+  return jsonFetch<BomXrefRefreshHostResult>("/api/cad/bom/xref/refresh-host-index", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -1109,7 +1109,7 @@ export function startBomXrefRebuild(body: {
   recursive?: boolean;
   max_hosts?: number;
 }) {
-  return jsonFetch<{ scan_id: string }>("/api/bom-xrefs/refresh-host-index/start", {
+  return jsonFetch<{ scan_id: string }>("/api/cad/bom/xref/refresh-host-index/start", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -1119,13 +1119,13 @@ export function startBomXrefRebuild(body: {
 /** 轮询异步重建进度 */
 export function fetchBomXrefRebuildProgress(scanId: string) {
   const params = new URLSearchParams({ scan_id: scanId });
-  return jsonFetch<ScanProgressPayload>(`/api/bom-xrefs/refresh-host-index/progress?${params}`);
+  return jsonFetch<ScanProgressPayload>(`/api/cad/bom/xref/refresh-host-index/progress?${params}`);
 }
 
 /** 取消正在运行的异步重建 */
 export function cancelBomXrefRebuild(scanId: string) {
   const params = new URLSearchParams({ scan_id: scanId });
-  return jsonFetch<{ ok: boolean }>(`/api/bom-xrefs/refresh-host-index/cancel?${params}`, { method: "POST" });
+  return jsonFetch<{ ok: boolean }>(`/api/cad/bom/xref/refresh-host-index/cancel?${params}`, { method: "POST" });
 }
 
 export type AssemblyBomHostRow = {
@@ -1161,7 +1161,7 @@ export type BomTargetUsageStats = {
 
 export function fetchBomTargetUsageStats(rel: string) {
   const q = new URLSearchParams({ rel });
-  return jsonFetch<BomTargetUsageStats>(`/api/bom-xrefs/usage-stats?${q}`);
+  return jsonFetch<BomTargetUsageStats>(`/api/cad/bom/xref/usage-stats?${q}`);
 }
 
 export function fetchAssemblyBomHosts(search?: string) {
@@ -1172,7 +1172,7 @@ export function fetchAssemblyBomHosts(search?: string) {
     count: number;
     hosts: AssemblyBomHostRow[];
     filter?: { assembly_only?: boolean; exclude_drawings?: boolean; note?: string };
-  }>(`/api/bom-xrefs/assembly-hosts${qs ? `?${qs}` : ""}`);
+  }>(`/api/cad/bom/xref/assembly-hosts${qs ? `?${qs}` : ""}`);
 }
 
 export function fetchBomXrefEdges(opts?: { offset?: number; limit?: number; search?: string }) {
@@ -1187,7 +1187,7 @@ export function fetchBomXrefEdges(opts?: { offset?: number; limit?: number; sear
     total: number;
     count: number;
     refs: BomXrefEdge[];
-  }>(`/api/bom-xrefs/edges${qs ? `?${qs}` : ""}`);
+  }>(`/api/cad/bom/xref/edges${qs ? `?${qs}` : ""}`);
 }
 
 export function rebuildBomXrefs() {
@@ -1199,7 +1199,7 @@ export function rebuildBomXrefs() {
       hosts_with_xlink?: number;
       hosts_without_xlink?: number;
     }
-  >("/api/bom-xrefs/rebuild", { method: "POST" });
+  >("/api/cad/bom/xref/rebuild", { method: "POST" });
 }
 
 export type PartKeyEntry = {
@@ -1259,7 +1259,7 @@ export type PartKeyDetail = PartKeyEntry & {
 };
 
 export function fetchPartKeys() {
-  return jsonFetch<PartKeysPayload>("/api/part-keys");
+  return jsonFetch<PartKeysPayload>("/api/cad/parts");
 }
 
 export type PartKeyInfer = {
@@ -1273,12 +1273,12 @@ export type PartKeyInfer = {
 };
 
 export function inferPartKeyFromPath(rel: string) {
-  return jsonFetch<PartKeyInfer>(`/api/part-key-infer?rel=${encodeURIComponent(rel)}`);
+  return jsonFetch<PartKeyInfer>(`/api/cad/parts/infer?rel=${encodeURIComponent(rel)}`);
 }
 
 export function fetchPartKeyDetail(partNumber: string, partVersion: string) {
   return jsonFetch<PartKeyDetail>(
-    `/api/part-keys/${encodeURIComponent(partNumber)}/${encodeURIComponent(partVersion)}`,
+    `/api/cad/parts/${encodeURIComponent(partNumber)}/${encodeURIComponent(partVersion)}`,
   );
 }
 
@@ -1324,7 +1324,7 @@ export function patchLinkLabels(patches: LinkLabelPatch[]) {
     applied_hosts: string[];
     failed: { host_repo_rel: string; error: string }[];
     label_changes?: ReferenceLabelChange[];
-  }>("/api/bom-xrefs/patch-labels", {
+  }>("/api/cad/bom/xref/patch-labels", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ patches }),
@@ -1348,7 +1348,7 @@ export function fetchAssemblyTreeByHost(
     full: full ? "true" : "false",
   });
   if (refreshDisk) params.set("refresh_disk", "true");
-  return jsonFetch<AssemblyTreePayload>(`/api/bom-xrefs/assembly-tree?${params}`);
+  return jsonFetch<AssemblyTreePayload>(`/api/cad/bom/xref/assembly-tree?${params}`);
 }
 
 export function fetchPartAssemblyTree(
@@ -1362,7 +1362,7 @@ export function fetchPartAssemblyTree(
     full: full ? "true" : "false",
   });
   return jsonFetch<AssemblyTreePayload>(
-    `/api/part-keys/${encodeURIComponent(partNumber)}/${encodeURIComponent(partVersion)}/assembly-tree?${params}`,
+    `/api/cad/parts/${encodeURIComponent(partNumber)}/${encodeURIComponent(partVersion)}/assembly-tree?${params}`,
   );
 }
 
@@ -1372,7 +1372,7 @@ export function patchPartKey(
   patch: Partial<Pick<PartKeyEntry, "TypeCode" | "ModelSeries" | "PartName" | "label" | "notes" | "status">>,
 ) {
   return jsonFetch<PartKeyDetail>(
-    `/api/part-keys/${encodeURIComponent(partNumber)}/${encodeURIComponent(partVersion)}`,
+    `/api/cad/parts/${encodeURIComponent(partNumber)}/${encodeURIComponent(partVersion)}`,
     {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -1388,7 +1388,7 @@ export function patchPartFileLink(
   patch: Partial<Pick<PartKeyFile, "file_role" | "link_notes" | "link_status">>,
 ) {
   return jsonFetch<PartKeyDetail>(
-    `/api/part-keys/${encodeURIComponent(partNumber)}/${encodeURIComponent(partVersion)}/files/${fileAssetId}`,
+    `/api/cad/parts/${encodeURIComponent(partNumber)}/${encodeURIComponent(partVersion)}/files/${fileAssetId}`,
     {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -1458,11 +1458,11 @@ export type XlinkFixResult = {
 };
 
 export function fetchXlinkPrefs() {
-  return jsonFetch<XlinkFixPrefs>("/api/xlink-fix/prefs");
+  return jsonFetch<XlinkFixPrefs>("/api/cad/xlink-fix/prefs");
 }
 
 export function saveXlinkPrefs(prefs: Partial<XlinkFixPrefs>) {
-  return jsonFetch<XlinkFixPrefs>("/api/xlink-fix/prefs", {
+  return jsonFetch<XlinkFixPrefs>("/api/cad/xlink-fix/prefs", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(prefs),
@@ -1470,7 +1470,7 @@ export function saveXlinkPrefs(prefs: Partial<XlinkFixPrefs>) {
 }
 
 export function analyzeXlinkFix(opts: Pick<Partial<XlinkFixPrefs>, "batch_dir" | "all_in_dir"> = {}) {
-  return jsonFetch<XlinkFixResult>("/api/xlink-fix/analyze", {
+  return jsonFetch<XlinkFixResult>("/api/cad/xlink-fix/analyze", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(opts),
@@ -1478,7 +1478,7 @@ export function analyzeXlinkFix(opts: Pick<Partial<XlinkFixPrefs>, "batch_dir" |
 }
 
 export function runXlinkFix(opts: Partial<XlinkFixPrefs> = {}) {
-  return jsonFetch<XlinkFixResult>("/api/xlink-fix/run", {
+  return jsonFetch<XlinkFixResult>("/api/cad/xlink-fix/run", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(opts),
@@ -1490,7 +1490,7 @@ export function applyXlinkFixOverride(body: {
   old_path: string;
   target_repo_rel: string;
 }) {
-  return jsonFetch<XlinkFixOverrideResult>("/api/xlink-fix/apply-override", {
+  return jsonFetch<XlinkFixOverrideResult>("/api/cad/xlink-fix/apply-override", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -1526,7 +1526,7 @@ export function fetchXlinkFixCandidates(opts: {
   if (opts.part_number) params.set("part_number", opts.part_number);
   if (opts.part_version) params.set("part_version", opts.part_version);
   if (opts.exclude_repo_rel?.trim()) params.set("exclude_repo_rel", opts.exclude_repo_rel.trim());
-  return jsonFetch<XlinkFixCandidatesPayload>(`/api/xlink-fix/candidates?${params}`);
+  return jsonFetch<XlinkFixCandidatesPayload>(`/api/cad/xlink-fix/candidates?${params}`);
 }
 
 export type PartDedupPrefs = {
@@ -1563,11 +1563,11 @@ export type PartDedupScanResult = {
 };
 
 export function fetchPartDedupPrefs() {
-  return jsonFetch<PartDedupPrefs>("/api/part-dedup/prefs");
+  return jsonFetch<PartDedupPrefs>("/api/cad/part-dedup/prefs");
 }
 
 export function savePartDedupPrefs(prefs: Partial<PartDedupPrefs>) {
-  return jsonFetch<PartDedupPrefs>("/api/part-dedup/prefs", {
+  return jsonFetch<PartDedupPrefs>("/api/cad/part-dedup/prefs", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(prefs),
@@ -1575,7 +1575,7 @@ export function savePartDedupPrefs(prefs: Partial<PartDedupPrefs>) {
 }
 
 export function scanPartDedup(opts: Partial<PartDedupPrefs> = {}) {
-  return jsonFetch<PartDedupScanResult>("/api/part-dedup/scan", {
+  return jsonFetch<PartDedupScanResult>("/api/cad/part-dedup/scan", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(opts),
@@ -1583,7 +1583,7 @@ export function scanPartDedup(opts: Partial<PartDedupPrefs> = {}) {
 }
 
 export function exportPartDedupCsv(results?: PartDedupScanResult["results"]) {
-  return jsonFetch<{ path: string; path_display: string }>("/api/part-dedup/export-csv", {
+  return jsonFetch<{ path: string; path_display: string }>("/api/cad/part-dedup/export-csv", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(results ? { results } : {}),
@@ -1909,11 +1909,11 @@ export type StepBatchPreview = {
 };
 
 export function fetchStepBatchPrefs() {
-  return jsonFetch<StepBatchPrefs>("/api/step-batch/prefs");
+  return jsonFetch<StepBatchPrefs>("/api/cad/step-batch/prefs");
 }
 
 export function saveStepBatchPrefs(prefs: Partial<StepBatchPrefs>) {
-  return jsonFetch<StepBatchPrefs>("/api/step-batch/prefs", {
+  return jsonFetch<StepBatchPrefs>("/api/cad/step-batch/prefs", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(prefs),
@@ -1921,7 +1921,7 @@ export function saveStepBatchPrefs(prefs: Partial<StepBatchPrefs>) {
 }
 
 export function previewStepBatch(opts: Partial<StepBatchPrefs> = {}) {
-  return jsonFetch<StepBatchPreview>("/api/step-batch/preview", {
+  return jsonFetch<StepBatchPreview>("/api/cad/step-batch/preview", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(opts),
@@ -1939,7 +1939,7 @@ export function runStepBatch(opts: Partial<StepBatchPrefs> = {}) {
     out_dir_display: string;
     report_display: string;
     prefs: StepBatchPrefs;
-  }>("/api/step-batch/run", {
+  }>("/api/cad/step-batch/run", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(opts),
@@ -1955,11 +1955,11 @@ export type SwStepPrefs = {
 };
 
 export function fetchSwStepPrefs() {
-  return jsonFetch<SwStepPrefs>("/api/sw-step-export/prefs");
+  return jsonFetch<SwStepPrefs>("/api/cad/sw-step/prefs");
 }
 
 export function saveSwStepPrefs(prefs: Partial<SwStepPrefs>) {
-  return jsonFetch<SwStepPrefs>("/api/sw-step-export/prefs", {
+  return jsonFetch<SwStepPrefs>("/api/cad/sw-step/prefs", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(prefs),
@@ -1968,7 +1968,7 @@ export function saveSwStepPrefs(prefs: Partial<SwStepPrefs>) {
 
 export function previewSwStepExport(opts: Partial<SwStepPrefs> = {}) {
   return jsonFetch<{ source_display: string; model_count: number; prefs: SwStepPrefs }>(
-    "/api/sw-step-export/preview",
+    "/api/cad/sw-step/preview",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1985,7 +1985,7 @@ export function runSwStepExport(opts: Partial<SwStepPrefs> = {}) {
     log: string;
     out_display: string;
     prefs: SwStepPrefs;
-  }>("/api/sw-step-export/run", {
+  }>("/api/cad/sw-step/run", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(opts),
@@ -2471,12 +2471,14 @@ export async function runUnitTestsStream(
     include_cases: options?.include_cases,
     include_modules: options?.include_modules,
   };
+  console.log("[api] runUnitTestsStream POST", { suites, body });
   const res = await fetch("/api/unit-tests/run/stream", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
     signal,
   });
+  console.log("[api] runUnitTestsStream response", { ok: res.ok, status: res.status, hasBody: !!res.body });
   if (!res.ok) {
     const text = await res.text();
     let detail = text;
@@ -2498,12 +2500,14 @@ export async function runUnitTestsStream(
   let finalResult: UnitTestRunResult | null = null;
 
   const consumeEvent = (event: UnitTestStreamEvent) => {
+    console.log("[api] stream line parsed", { type: event.type, hasResult: !!(event as any).result });
     if (event.type === "error") {
       throw new Error(event.message);
     }
     onEvent(event);
     if (event.type === "done" || event.type === "cancelled") {
       finalResult = event.result;
+      console.log("[api] stream done", { hasFinalResult: !!finalResult, keys: finalResult ? Object.keys(finalResult) : null });
     }
   };
 
@@ -2536,7 +2540,9 @@ export async function runUnitTestsStream(
   }
 
   if (!finalResult) {
+    console.error("[api] stream finalResult is null!");
     throw new Error("测试运行未返回结果");
   }
+  console.log("[api] stream returning", { ok: finalResult.ok, summary: finalResult.summary });
   return finalResult;
 }

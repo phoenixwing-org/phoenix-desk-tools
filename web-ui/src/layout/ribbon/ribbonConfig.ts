@@ -1,11 +1,16 @@
-/** Ribbon Tab / 分组 / 工具项静态配置（标签可覆盖 navigation.label） */
+/** Ribbon 配置。
+ *
+ * TODO: 改回 buildRibbonTabs(navigation) 动态生成，消除硬编码。
+ * 当前回退到静态 RIBBON_TABS 排查 UI bug。
+ */
+
+import type { NavItem } from "../../types/config";
 
 export type RibbonItemSize = "large" | "small";
 
 export type RibbonItemDef = {
   pageId: string;
   label?: string;
-  /** 分组 Ribbon 下均为大图标；small 仅单行模式保留语义 */
   size?: RibbonItemSize;
 };
 
@@ -18,12 +23,10 @@ export type RibbonGroupDef = {
 export type RibbonTabDef = {
   id: string;
   label: string;
-  /** 空 = 不过滤模块；cad/code 与 nav_modules 联动 */
-  module?: "" | "cad" | "code";
+  module?: string;
   groups: RibbonGroupDef[];
 };
 
-/** 壳层常用区（工作空间 / 模块 / 侧栏）仅在此 Tab 展示 */
 export const RIBBON_SHELL_TAB_ID = "system";
 
 export const RIBBON_TABS: RibbonTabDef[] = [
@@ -105,3 +108,9 @@ export const RIBBON_TABS: RibbonTabDef[] = [
     ],
   },
 ];
+
+/** 从 navigation 动态生成 Ribbon Tab 配置（待 debug 后启用）。 */
+export function buildRibbonTabs(_navigation: NavItem[]): RibbonTabDef[] {
+  // TODO: 修复后启用动态生成
+  return RIBBON_TABS;
+}

@@ -20,3 +20,8 @@ node_modules/
 web-ui/dist
 .phoenix
 .npmrc
+# Rust
+server/target/
+server/**/target/
+server/fcstd-reader/Cargo.lock
+test-report/

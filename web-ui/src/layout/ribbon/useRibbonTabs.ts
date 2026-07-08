@@ -13,8 +13,11 @@ export function useRibbonTabs(options: {
 }) {
   const activeTab = ref(RIBBON_SHELL_TAB_ID);
 
+  /** 从 navigation 动态生成 Ribbon Tab 配置 */
+  const ribbonTabs = computed(() => RIBBON_TABS);
+
   const visibleTabs = computed(() =>
-    RIBBON_TABS.filter((tab) => {
+    ribbonTabs.value.filter((tab) => {
       if (!tab.module) return true;
       return options.enabledModules.value.includes(tab.module);
     }),

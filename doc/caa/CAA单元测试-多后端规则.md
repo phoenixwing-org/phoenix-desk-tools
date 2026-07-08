@@ -154,7 +154,7 @@ run/stream 端点
 | Python 注册 | `phoenix/testing/suite_registry.py` | 套件元数据、SQLite 同步、模块分类 |
 | Python 运行 | `phoenix/testing/runner.py` | run/plan/stream、vitest-only 分发 |
 | Python 子进程 | `phoenix/testing/vitest_runner.py` | subprocess vitest JSON→结构化结果 |
-| 共享 DB | `server/caa/src/testCatalog.ts` | better-sqlite3 读写共享 test-catalog.db |
+| 共享 DB | `server/src/testCatalog.ts` | node-sqlite3-wasm → phoenix-wing PnwDbAdapter |
 | Node 端点 | `server/caa/src/routes/unit-tests.ts` | vitest list 扫描 + run + 纯函数 parse |
 | 前端合并 | `web-ui/src/utils/unitTestBackendSplit.ts` | mergeSuites 等纯函数 |
 | 前端页面 | `web-ui/src/pages/UnitTestsPage.vue` | loadSuites 合并 + 按 backend 展示 |

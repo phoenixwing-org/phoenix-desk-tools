@@ -3,15 +3,17 @@
   "private": true,
   "description": "Phoenix 桌面辅助工具 — 根目录 pnpm 命令转发至 web-ui",
   "scripts": {
-    "dev": "concurrently -n ui,server -c blue,green \"pnpm dev:ui\" \"pnpm dev:server\"",
+    "dev": "concurrently -n server,ui -c green,blue \"pnpm dev:server\" \"sleep 2 && pnpm dev:ui\"",
     "dev:ui": "pnpm -C web-ui dev",
     "dev:server": "pnpm -C server dev",
     "build": "pnpm -C web-ui build",
     "preview": "pnpm -C web-ui preview",
-    "test:py:caa": "python -m unittest tests.test_caa_index -v",
+    "test": "pnpm test:rust && pnpm test:ts && pnpm test:caa && echo '' && echo '📊 测试报告: open test-report/index.html (或 npx serve test-report)'",
+    "test:ts": "pnpm -C server test",
     "test:core": "pnpm -C packages/catdlg-core test",
     "test:web": "pnpm -C web-ui test",
-    "test:caa": "pnpm run test:py:caa && pnpm run test:core && pnpm run test:web"
+    "test:caa": "pnpm run test:core && pnpm run test:web",
+    "test:rust": "cargo test --manifest-path server/fcstd-reader/Cargo.toml && cargo test --manifest-path server/fcstd-xlink/Cargo.toml"
   },
   "packageManager": "pnpm@9.15.9+sha512.68046141893c66fad01c079231128e9afb89ef87e2691d69e4d40eee228988295fd4682181bae55b58418c3a253bde65a505ec7c5f9403ece5cc3cd37dcf2531",
   "devDependencies": {

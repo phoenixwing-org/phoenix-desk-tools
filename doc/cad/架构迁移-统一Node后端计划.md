@@ -101,7 +101,7 @@
 |------|------|------|
 | Python 代码量大（~30 个服务文件） | 迁移周期长 | 分阶段，新功能直接写 Node.js |
 | FCStd 几何计算依赖 FreeCAD | XYZ 包围盒绕不开 | 保留 freecadcmd sidecar |
-| SQLite 格式兼容 | 旧 Python 数据库 | Node.js 用 `better-sqlite3` 或 wasm |
+| SQLite 格式兼容 | 旧 Python 数据库 | Node.js 用 `node-sqlite3-wasm`（phoenix-wing PnwDbAdapter） |
 | 团队对 Rust 不熟 | 维护成本 | Rust 只用在性能关键路径（FCStd 解析） |
 
 ## 4. 路线图

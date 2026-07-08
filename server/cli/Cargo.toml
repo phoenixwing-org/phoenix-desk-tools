@@ -1,0 +1,12 @@
+[package]
+name = "fcstd-cli"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "fcstd-read"
+path = "src/main.rs"
+
+[dependencies]
+fcstd-reader = { path = "../fcstd-reader" }
+serde_json = "1"

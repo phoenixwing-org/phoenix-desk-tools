@@ -1,5 +1,4 @@
 import type { NavItem } from "../types/config";
-import { RIBBON_TABS } from "../layout/ribbon/ribbonConfig";
 
 import { CAA_HOME_PAGE_ID, CAA_EDITOR_PAGE_ID } from "../constants/caaPages";
 
@@ -12,15 +11,10 @@ const EXTRA_LABELS: Record<string, string> = {
   rename_analysis: "文件改名",
 };
 
-/** 侧栏属性标题：Ribbon 覆盖 > navigation > 内置表 */
+/** 侧栏属性标题：ribbonLabel > navigation.label > 内置表 */
 export function resolvePageLabel(pageId: string, navigation: NavItem[]): string {
-  for (const tab of RIBBON_TABS) {
-    for (const group of tab.groups) {
-      const item = group.items.find((i) => i.pageId === pageId);
-      if (item?.label) return item.label;
-    }
-  }
-  const fromNav = navigation.find((n) => n.page === pageId)?.label;
-  if (fromNav) return fromNav;
+  const nav = navigation.find((n) => n.page === pageId);
+  if (nav?.ribbonLabel) return nav.ribbonLabel;
+  if (nav?.label) return nav.label;
   return EXTRA_LABELS[pageId] ?? pageId;
 }
