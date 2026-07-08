@@ -21,11 +21,11 @@ importers:
         specifier: ^4.1.9
         version: 4.1.9(@types/node@26.0.1)(vite@6.4.2(@types/node@26.0.1)(sass-embedded@1.100.0)(sass@1.100.0)(tsx@4.22.4))
 
-  server/caa:
+  server:
     dependencies:
       '@desk-tools/catdlg-core':
         specifier: workspace:*
-        version: link:../../packages/catdlg-core
+        version: link:../packages/catdlg-core
       '@hono/node-server':
         specifier: ^1.13.8
         version: 1.19.14(hono@4.12.27)

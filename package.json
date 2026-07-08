@@ -3,9 +3,9 @@
   "private": true,
   "description": "Phoenix 桌面辅助工具 — 根目录 pnpm 命令转发至 web-ui",
   "scripts": {
-    "dev": "concurrently -n ui,caa -c blue,green \"pnpm dev:ui\" \"pnpm dev:caa\"",
+    "dev": "concurrently -n ui,server -c blue,green \"pnpm dev:ui\" \"pnpm dev:server\"",
     "dev:ui": "pnpm -C web-ui dev",
-    "dev:caa": "pnpm -C server/caa dev",
+    "dev:server": "pnpm -C server dev",
     "build": "pnpm -C web-ui build",
     "preview": "pnpm -C web-ui preview",
     "test:py:caa": "python -m unittest tests.test_caa_index -v",
