@@ -71,7 +71,7 @@ function instancesOf(node: AssemblyTreeNode): AssemblyXrefInstance[] {
   return [{ xlink_file_attr: attr, link_label: node.link_label ?? "" }];
 }
 
-function baselineLabel(host: string, inst: AssemblyXrefInstance) {
+function baselineLabel(_host: string, inst: AssemblyXrefInstance) {
   return inst.link_label ?? "";
 }
 

@@ -53,7 +53,7 @@ function onOpenChange(setter: (open: boolean) => void | Promise<void>, v: string
             :model-value="treeDock"
             size="small"
             class="dock-side-group"
-            @update:model-value="(v) => onDockChange(setTreeDock, v)"
+            @update:model-value="(v: string | number | boolean | undefined) => onDockChange(setTreeDock, v)"
           >
             <el-radio-button value="left">左</el-radio-button>
             <el-radio-button value="right">右</el-radio-button>
@@ -63,7 +63,7 @@ function onOpenChange(setter: (open: boolean) => void | Promise<void>, v: string
             <el-switch
               :model-value="treePanelOpen"
               size="small"
-              @update:model-value="(v) => onOpenChange(setTreePanelOpen, v)"
+              @update:model-value="(v: string | number | boolean) => onOpenChange(setTreePanelOpen, v)"
             />
           </div>
         </div>
@@ -74,7 +74,7 @@ function onOpenChange(setter: (open: boolean) => void | Promise<void>, v: string
             :model-value="propsDock"
             size="small"
             class="dock-side-group"
-            @update:model-value="(v) => onDockChange(setPropsDock, v)"
+            @update:model-value="(v: string | number | boolean | undefined) => onDockChange(setPropsDock, v)"
           >
             <el-radio-button value="left">左</el-radio-button>
             <el-radio-button value="right">右</el-radio-button>
@@ -84,7 +84,7 @@ function onOpenChange(setter: (open: boolean) => void | Promise<void>, v: string
             <el-switch
               :model-value="propsPanelOpen"
               size="small"
-              @update:model-value="(v) => onOpenChange(setPropsPanelOpen, v)"
+              @update:model-value="(v: string | number | boolean) => onOpenChange(setPropsPanelOpen, v)"
             />
           </div>
         </div>
@@ -95,7 +95,7 @@ function onOpenChange(setter: (open: boolean) => void | Promise<void>, v: string
             :model-value="gitCommitDock"
             size="small"
             class="dock-side-group"
-            @update:model-value="(v) => onDockChange(setGitCommitDock, v)"
+            @update:model-value="(v: string | number | boolean | undefined) => onDockChange(setGitCommitDock, v)"
           >
             <el-radio-button value="left">左</el-radio-button>
             <el-radio-button value="right">右</el-radio-button>
@@ -105,7 +105,7 @@ function onOpenChange(setter: (open: boolean) => void | Promise<void>, v: string
             <el-switch
               :model-value="gitCommitPanelOpen"
               size="small"
-              @update:model-value="(v) => onOpenChange(setGitCommitPanelOpen, v)"
+              @update:model-value="(v: string | number | boolean) => onOpenChange(setGitCommitPanelOpen, v)"
             />
           </div>
         </div>
@@ -116,7 +116,7 @@ function onOpenChange(setter: (open: boolean) => void | Promise<void>, v: string
             :model-value="logDock"
             size="small"
             class="dock-side-group"
-            @update:model-value="(v) => onDockChange(setLogDock, v)"
+            @update:model-value="(v: string | number | boolean | undefined) => onDockChange(setLogDock, v)"
           >
             <el-radio-button value="left">左</el-radio-button>
             <el-radio-button value="right">右</el-radio-button>
@@ -126,7 +126,7 @@ function onOpenChange(setter: (open: boolean) => void | Promise<void>, v: string
             <el-switch
               :model-value="logPanelOpen"
               size="small"
-              @update:model-value="(v) => onOpenChange(setLogPanelOpen, v)"
+              @update:model-value="(v: string | number | boolean) => onOpenChange(setLogPanelOpen, v)"
             />
           </div>
         </div>

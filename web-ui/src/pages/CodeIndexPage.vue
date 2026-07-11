@@ -20,6 +20,7 @@ import { useCodeIndexPropertySheet } from "../composables/useCodeIndexPropertySh
 import { usePageSession } from "../composables/usePageSession";
 import { usePageSummary } from "../composables/usePageSummary";
 import { useFileWorksetsStore } from "../stores/fileWorksets";
+import { matchesWorksetPath, type WorksetPathLike } from "../utils/worksetPathMatch";
 
 const props = defineProps<{
   workbenchTabId?: string;
@@ -30,22 +31,17 @@ const worksetStore = useFileWorksetsStore();
 
 // --- 工作集过滤 ---
 const filterWorksetId = ref("");
-const filterWorksetPaths = computed(() => {
-  if (!filterWorksetId.value) return null as Set<string> | null;
+const filterWorksetEntries = computed<WorksetPathLike[] | null>(() => {
+  if (!filterWorksetId.value) return null;
   const ws = worksetStore.worksetById(filterWorksetId.value);
   if (!ws) return null;
-  const entries = ws.entries ?? ws.paths;
-  return new Set(
-    (entries ?? []).map((e: any) =>
-      (typeof e === "string" ? e : e.path).replace(/\\/g, "/"),
-    ),
-  );
+  return (ws.entries ?? ws.paths ?? []) as WorksetPathLike[];
 });
 
 const filteredEntries = computed(() => {
-  const paths = filterWorksetPaths.value;
-  if (!paths) return entries.value;
-  return entries.value.filter((r) => paths.has(r.repo_rel_path.replace(/\\/g, "/")));
+  const worksetEntries = filterWorksetEntries.value;
+  if (!worksetEntries) return entries.value;
+  return entries.value.filter((row) => matchesWorksetPath(row.repo_rel_path, worksetEntries));
 });
 
 const SESSION_V = 1;
@@ -111,10 +107,7 @@ const missingCount = computed(() => {
 useCodeIndexPropertySheet("code_index", { data, missingCount });
 
 const pageEnd = computed(() => Math.min(pageOffset.value + entries.value.length, entriesTotal.value));
-const hasPrevPage = computed(() => pageOffset.value > 0);
-const hasNextPage = computed(() => pageOffset.value + pageSize.value < entriesTotal.value);
 const currentPage = computed(() => Math.floor(pageOffset.value / pageSize.value) + 1);
-const totalPages = computed(() => Math.max(1, Math.ceil(entriesTotal.value / pageSize.value)));
 const hasScan = computed(() => Boolean(data.value?.last_scan_at));
 const searchPlaceholder = computed(() =>
   searchMode.value === "filename"
@@ -327,7 +320,7 @@ async function onPurgeMissing() {
 }
 
 async function onExportJson() {
-  if (!hasScan.value) {
+  if (!hasScan.value || !data.value?.file_count) {
     setStatus("请先执行工程内搜索");
     return;
   }
@@ -372,26 +365,6 @@ async function loadEntries() {
   } finally {
     entriesLoading.value = false;
   }
-}
-
-function goPrevPage() {
-  if (!hasPrevPage.value) return;
-  pageOffset.value = Math.max(0, pageOffset.value - pageSize.value);
-  void loadEntries();
-}
-
-function goNextPage() {
-  if (!hasNextPage.value) return;
-  pageOffset.value += pageSize.value;
-  void loadEntries();
-}
-
-function onPageSizeChange(ev: Event) {
-  const n = Number((ev.target as HTMLSelectElement).value);
-  if (!PAGE_SIZE_OPTIONS.includes(n as (typeof PAGE_SIZE_OPTIONS)[number])) return;
-  pageSize.value = n;
-  pageOffset.value = 0;
-  void loadEntries();
 }
 
 function onPagerCurrentChange(page: number) {
@@ -508,7 +481,7 @@ onMounted(() => applyInitialTabState());
           >
             删除缺失{{ missingCount ? `（${missingCount}）` : "" }}
           </el-button>
-          <el-button size="small" :loading="exporting" :disabled="!hasScan" @click="onExportJson">
+          <el-button size="small" :loading="exporting" :disabled="!hasScan || !data?.file_count" @click="onExportJson">
             导出 JSON
           </el-button>
           <el-button size="small" :loading="loading" @click="refresh()">刷新</el-button>

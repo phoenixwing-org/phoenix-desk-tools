@@ -4,4 +4,4 @@ export type PageMessage =
   | { type: "tree:pick-dir"; path: string }
   | { type: "tree:pick-file"; path: string };
 
-export type PageMessageHandler = (msg: PageMessage) => boolean | void;
+export type PageMessageHandler = (msg: PageMessage) => boolean | void | Promise<boolean | void>;

@@ -43,12 +43,12 @@ export function useTestFixturesPropertySheet(pageId: string,
             value: computed(() => "系统内置（phoenix/config/test_fixture_catalog.json）"),
           }),
           pnwPropReadonly("intro_prefs", "位置", {
-            value: computed(() => "clone 到 phoenix-desk-tools 同级目录即可，测试自动定位"),
+            value: computed(() => "clone 到检出根目录下的同名子目录"),
           }),
         ]),
         pnwPropGroup("prefs", "本机偏好", [
           pnwPropReadonly("prefs_store", "保存位置", {
-            value: computed(() => "launcher.json → test_fixtures"),
+            value: computed(() => "launcher-prefs.json → test_fixtures"),
             mono: true,
           }),
         ]),

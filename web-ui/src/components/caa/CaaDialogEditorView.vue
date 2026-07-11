@@ -18,7 +18,7 @@ const paletteLayout = ref<"vertical" | "horizontal">(store.paletteLayout);
 <template>
   <div class="caa-editor-view">
     <p v-if="store.caaOnline === false" class="banner banner-warn">
-      CAA 服务离线。侧栏「属性 → CAA 服务」查看端口与启动说明。
+      Phoenix Node 服务离线，CAA API 当前不可用。
     </p>
     <p v-if="store.errorText" class="banner banner-err">{{ store.errorText }}</p>
 

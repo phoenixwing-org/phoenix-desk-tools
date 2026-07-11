@@ -86,7 +86,7 @@ export function useAsyncProgress(kind: PnwTaskKind) {
         (t) => t.kind === kind && (
           t.status === "running" ||
           t.status === "orphaned" ||
-          (t.status !== "running" && !t.confirmed)
+          !t.confirmed
         ),
       );
       if (conflict) {
@@ -225,11 +225,12 @@ export function useAsyncProgress(kind: PnwTaskKind) {
 
         // 提取 run_id（start 事件带回）
         if (event.type === "start" && event.run_id && event.run_id !== id) {
-          taskId.value = event.run_id;
+          const runId = event.run_id;
+          taskId.value = runId;
           store.unregisterCancel(id);
-          store.registerCancel(event.run_id, () => cancelFn(event.run_id));
+          store.registerCancel(runId, () => cancelFn(runId));
           store.removeTask(id);
-          const renamed = { ...current, taskId: event.run_id };
+          const renamed = { ...current, taskId: runId };
           store.upsertTask(renamed);
         }
 
@@ -323,6 +324,7 @@ export function useAsyncProgress(kind: PnwTaskKind) {
         });
       }
       isRunning.value = false;
+      throw err;
     }
     return streamResult;
   }

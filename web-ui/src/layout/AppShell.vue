@@ -7,36 +7,10 @@ import { useRibbonTabs } from "./ribbon/useRibbonTabs";
 import { useUiPrefsStore } from "../stores/uiPrefs";
 import StatusBar from "./StatusBar.vue";
 import WorkspaceTreeSidebar from "./WorkspaceTreeSidebar.vue";
-import FileWorksetPanel from "../components/FileWorksetPanel.vue";
-import HomePage from "../pages/HomePage.vue";
 import WelcomePage from "../pages/WelcomePage.vue";
-import ConfigPage from "../pages/ConfigPage.vue";
-import FileDetailPage from "../pages/FileDetailPage.vue";
-import FcstdMapPage from "../pages/FcstdMapPage.vue";
-import XlinkFixPage from "../pages/XlinkFixPage.vue";
-import PartDedupPage from "../pages/PartDedupPage.vue";
-import StepBatchPage from "../pages/StepBatchPage.vue";
-import SwStepExportPage from "../pages/SwStepExportPage.vue";
-import ReorderMembersPage from "../pages/ReorderMembersPage.vue";
-import CodeIndexPage from "../pages/CodeIndexPage.vue";
-import CodeIgnorePage from "../pages/CodeIgnorePage.vue";
-import CodeRenamePage from "../pages/CodeRenamePage.vue";
-import CodeUuidReplacePage from "../pages/CodeUuidReplacePage.vue";
-import PartCatalogPage from "../pages/PartCatalogPage.vue";
-import PartKeyDetailPage from "../pages/PartKeyDetailPage.vue";
-import FileRenamePage from "../pages/FileRenamePage.vue";
-import BomExportPage from "../pages/BomExportPage.vue";
-import CrBomExportPage from "../pages/CrBomExportPage.vue";
-import CrPartCatalogPage from "../pages/CrPartCatalogPage.vue";
-import CrFcstdMapPage from "../pages/CrFcstdMapPage.vue";
-import CrFileDetailPage from "../pages/CrFileDetailPage.vue";
-import UnitTestsPage from "../pages/UnitTestsPage.vue";
-import TestFixturesPage from "../pages/TestFixturesPage.vue";
-import GitPage from "../pages/GitPage.vue";
-import CaaDialogEditorPage from "../pages/CaaDialogEditorPage.vue";
-import CaaDialogHomePage from "../pages/CaaDialogHomePage.vue";
 import WorkbenchIdlePage from "../pages/WorkbenchIdlePage.vue";
 import PlaceholderPage from "../pages/PlaceholderPage.vue";
+import { PAGE_COMPONENTS } from "./pageRegistry";
 import { pnwSideDockVisibility } from "phoenix-wing";
 import { pnwBindPointerDrag } from "phoenix-wing";
 import { fetchPhoenixDatabaseStatus, recreatePhoenixDatabase } from "../api";
@@ -48,7 +22,6 @@ import { useWorkspaceSwitcher } from "../composables/useWorkspaceSwitcher";
 import ChoiceDialogHost from "phoenix-wing/components/PnwChoiceDialogHost.vue";
 import GitDiffPreviewHost from "../components/git/GitDiffPreviewHost.vue";
 import CaaRelatedFilePreviewHost from "../components/caa/CaaRelatedFilePreviewHost.vue";
-import AppModalOverlay from "phoenix-wing/components/PnwAppModalOverlay.vue";
 import AsyncProgressOverlay from "phoenix-wing/components/PnwAsyncProgressOverlay.vue";
 
 const shell = provideAppShell();
@@ -59,6 +32,7 @@ const legacyDbBanner = ref(false);
 const legacyDbReasons = ref<string[]>([]);
 const legacyDbRecreating = ref(false);
 const legacyDbError = ref("");
+const legacyDbExpectedSchema = ref(13);
 
 const uiPrefs = useUiPrefsStore();
 const activeTab = computed(() => shell.activeTab());
@@ -113,37 +87,6 @@ const mainMargins = computed(() => ({
   marginRight: dockVis.value.rightVisible ? rightPanelWidth.value : undefined,
 }));
 
-const PAGE_COMPONENTS: Record<string, Component> = {
-  home: HomePage,
-  config: ConfigPage,
-  git: GitPage,
-  bom_apply: FileDetailPage,
-  file_detail: FileDetailPage,
-  file_rename: FileRenamePage,
-  rename_analysis: FileRenamePage,
-  fcstd_map: FcstdMapPage,
-  part_catalog: PartCatalogPage,
-  part_key_detail: PartKeyDetailPage,
-  xlink_fix: XlinkFixPage,
-  part_dedup: PartDedupPage,
-  step_batch: StepBatchPage,
-  sw_step_export: SwStepExportPage,
-  reorder_members: ReorderMembersPage,
-  code_index: CodeIndexPage,
-  code_ignore: CodeIgnorePage,
-  code_rename: CodeRenamePage,
-  code_uuid: CodeUuidReplacePage,
-  bom_export: BomExportPage,
-  cr_bom_export: CrBomExportPage,
-  cr_part_catalog: CrPartCatalogPage,
-  cr_fcstd_map: CrFcstdMapPage,
-  cr_file_detail: CrFileDetailPage,
-  unit_tests: UnitTestsPage,
-  test_fixtures: TestFixturesPage,
-  caa_dialog_home: CaaDialogHomePage,
-  caa_dialog: CaaDialogEditorPage,
-};
-
 function pageComponent(pageId: string): Component {
   return PAGE_COMPONENTS[pageId] ?? PlaceholderPage;
 }
@@ -177,6 +120,7 @@ async function refreshLegacyDatabaseBanner() {
     const status = await fetchPhoenixDatabaseStatus();
     legacyDbBanner.value = status.needs_recreate;
     legacyDbReasons.value = status.reasons;
+    legacyDbExpectedSchema.value = status.expected_schema_version;
     legacyDbError.value = "";
   } catch (e) {
     legacyDbError.value = String(e);
@@ -185,7 +129,7 @@ async function refreshLegacyDatabaseBanner() {
 
 async function confirmRecreateLegacyDatabase() {
   const ok = window.confirm(
-    "将删除当前工作空间数据库并创建空的 phoenix-workspace.sqlite（schema v10）。\n"
+    `将删除当前工作空间数据库并创建空的 phoenix-workspace.sqlite（schema v${legacyDbExpectedSchema.value}）。\n`
       + "遗留文件（cad-database.sqlite / phoenix-cad.sqlite）与含旧表名的库也会被清除。\n"
       + "CAD 索引、BOM 引用与改名历史需重新扫描。\n\n确定继续？",
   );
@@ -226,8 +170,8 @@ onUnmounted(() => {
   <div v-else class="shell" :class="{ 'shell-welcome': isWelcomeFullscreen }">
     <div v-if="legacyDbBanner && !isWelcomeFullscreen" class="legacy-db-banner" role="alert">
       <div class="legacy-db-banner-text">
-        <strong>检测到旧版 CAD 数据库</strong>
-        <span>（旧库文件名或旧表名）。需重建为 phoenix-workspace.sqlite 后才能继续使用索引与 BOM 功能。</span>
+        <strong>工作空间数据库需要重建</strong>
+        <span>检测到旧文件、旧表或 schema 版本不匹配。重建后才能继续使用索引与 BOM 功能。</span>
         <span v-if="legacyDbReasons.length" class="legacy-db-reasons">{{ legacyDbReasons.join(" · ") }}</span>
         <span v-if="legacyDbError" class="legacy-db-error">{{ legacyDbError }}</span>
       </div>

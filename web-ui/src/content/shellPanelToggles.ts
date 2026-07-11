@@ -52,13 +52,13 @@ export function shellPanelToggleTip(
   opts?: { open?: boolean; logPending?: boolean },
 ): string {
   const c = shellPanelToggleCopy[key];
-  if (key === "workset" || key === "sideDock") {
+  if ("action" in c) {
     return `${c.name} — ${c.action}`;
   }
   const open = opts?.open ?? false;
   const action = open ? c.close : c.open;
   let tip = `${c.name} — ${action}`;
-  if (key === "log" && opts?.logPending && !open) {
+  if ("pending" in c && opts?.logPending && !open) {
     tip += `（${c.pending}）`;
   }
   return tip;

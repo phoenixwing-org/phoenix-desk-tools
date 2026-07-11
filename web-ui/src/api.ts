@@ -1,5 +1,7 @@
-import type { AppConfig, LauncherPrefs, ModuleScope, ShellLayout, WorkspaceNavModules } from "./types/config";
+import type { AppConfig, LauncherPrefs, ShellLayout, WorkspaceNavModules } from "./types/config";
+import type { ModuleScope } from "./constants/moduleScope";
 import type { GitChangesPayload, GitCommitResult, GitFileDiff, GitWorkspaceInfo } from "./types/gitWorkspace";
+import { apiUrl, invokeTauri, isTauriRuntime } from "./utils/runtimeBridge";
 
 export type TreeNode = {
   name: string;
@@ -108,7 +110,7 @@ async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
   if (init?.body != null && init.body !== "" && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  const res = await fetch(url, { ...init, headers });
+  const res = await fetch(apiUrl(url), { ...init, headers });
   const text = await res.text();
   let data: unknown = null;
   if (text) {
@@ -139,6 +141,23 @@ export type OnboardingStatus = {
 
 export function fetchOnboardingStatus() {
   return jsonFetch<OnboardingStatus>("/api/onboarding/status");
+}
+
+export type NativeToolStatusPayload = {
+  ok: boolean;
+  platform: string;
+  tools: Array<{
+    name: "fcstd-read" | "fcstd-xlink";
+    available: boolean;
+    path: string;
+    env_key: string;
+    manifest: string;
+    candidates: string[];
+  }>;
+};
+
+export function fetchNativeToolStatus() {
+  return jsonFetch<NativeToolStatusPayload>("/api/native-tools/status");
 }
 
 export type PhoenixDatabaseStatus = {
@@ -209,6 +228,9 @@ export function addRecentWorkspace(path: string) {
 }
 
 export function pickWorkspaceDirectory(pathHint = "") {
+  if (isTauriRuntime()) {
+    return invokeTauri<{ cancelled: boolean; path: string }>("pick_workspace_directory", { pathHint });
+  }
   return jsonFetch<{ cancelled: boolean; path: string }>(
     "/api/config/pick-workspace-directory",
     {
@@ -233,6 +255,9 @@ export type TestFixtureItem = {
   enabled: boolean;
   checkout_path: string;
   checkout_exists: boolean;
+  link_status?: string;
+  link_detail?: string;
+  symlink_path?: string;
   target_path: string;
 };
 
@@ -261,7 +286,7 @@ export function updateTestFixturesPrefs(body: { checkout_root?: string; enabled:
   });
 }
 
-export function syncTestFixtures(body?: { checkout_root?: string; enabled?: string[] }) {
+export function syncTestFixtures(body?: { checkout_root?: string; enabled?: string[]; names?: string[] }) {
   return jsonFetch<TestFixturesPayload>("/api/test-fixtures/sync", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -308,6 +333,9 @@ export function appendShellLog(text: string, source = "web") {
 }
 
 export function shutdownWebServer() {
+  if (isTauriRuntime()) {
+    return invokeTauri<{ status: string }>("shutdown_desktop");
+  }
   return jsonFetch<{ status: string }>("/api/shutdown", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1247,6 +1275,7 @@ export type PartKeysPayload = {
   database_path_display: string;
   exists: boolean;
   entries: PartKeyEntry[];
+  _native?: "node" | "rust";
   stats: {
     total_keys: number;
     total_files: number;
@@ -1951,6 +1980,14 @@ export type SwStepPrefs = {
   out_step_dir: string;
   recursive_scan: boolean;
   com_available: boolean;
+  adapter_available: boolean;
+  solidworks_registered: boolean | null;
+  availability_code:
+    | "ready"
+    | "custom_adapter"
+    | "unsupported_platform"
+    | "adapter_missing"
+    | "solidworks_not_registered";
   platform: string;
 };
 
@@ -2089,6 +2126,8 @@ export type CodeRenameResult = {
   rescan_index: boolean;
   hits: CodeRenameHit[];
   summary: CodeRenameSummary;
+  report_path?: string;
+  report_path_display?: string;
   log?: string;
   lines?: string[];
 };
@@ -2145,6 +2184,7 @@ export type FileWorksetPayload = {
   path?: string;
   path_display?: string;
   storage?: string;
+  legacy_json_path?: string;
 };
 
 export function fetchFileWorksets() {
@@ -2215,7 +2255,10 @@ export type CodeUuidApplyResult = {
     files_scanned: number;
     total_hits: number;
     unique_uuids: number;
+    unique_new_uuids?: number;
   };
+  report_path?: string;
+  report_path_display?: string;
   log?: string;
   lines?: string[];
 };
@@ -2252,7 +2295,7 @@ export type UnitTestSuiteInfo = {
   description: string;
   module_count: number;
   modules: string[];
-  backend: "python" | "vitest";
+  backend: "vitest" | "runtime";
 };
 
 export type UnitTestCaseResult = {
@@ -2301,14 +2344,6 @@ export function fetchUnitTestSuites() {
   return jsonFetch<{ suites: UnitTestSuiteInfo[] }>("/api/unit-tests/suites");
 }
 
-/** vitest 测试列表（Node.js 后端） */
-/** vitest 测试列表（Node.js 后端，返回 {modules: [{file, count, tests}]}） */
-export function fetchVitestTestList() {
-  return jsonFetch<{ modules: { file: string; count: number; tests: string[] }[] }>(
-    "/api/caa/unit-tests/suites",
-  );
-}
-
 export type UnitTestPlanCase = {
   id: string;
   class_name: string;
@@ -2318,6 +2353,7 @@ export type UnitTestPlanCase = {
 export type UnitTestPlanModule = {
   module: string;
   suite_id: string;
+  backend?: "vitest" | "runtime";
   case_count: number;
   cases?: UnitTestPlanCase[];
 };
@@ -2383,6 +2419,7 @@ export type TestCaseCatalogEntry = {
   suite_id: string;
   title: string;
   description_zh: string;
+  summary?: string;
   docstring: string;
 };
 
@@ -2471,14 +2508,12 @@ export async function runUnitTestsStream(
     include_cases: options?.include_cases,
     include_modules: options?.include_modules,
   };
-  console.log("[api] runUnitTestsStream POST", { suites, body });
-  const res = await fetch("/api/unit-tests/run/stream", {
+  const res = await fetch(apiUrl("/api/unit-tests/run/stream"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
     signal,
   });
-  console.log("[api] runUnitTestsStream response", { ok: res.ok, status: res.status, hasBody: !!res.body });
   if (!res.ok) {
     const text = await res.text();
     let detail = text;
@@ -2497,17 +2532,15 @@ export async function runUnitTestsStream(
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  let finalResult: UnitTestRunResult | null = null;
+  const streamState: { finalResult: UnitTestRunResult | null } = { finalResult: null };
 
   const consumeEvent = (event: UnitTestStreamEvent) => {
-    console.log("[api] stream line parsed", { type: event.type, hasResult: !!(event as any).result });
     if (event.type === "error") {
       throw new Error(event.message);
     }
     onEvent(event);
     if (event.type === "done" || event.type === "cancelled") {
-      finalResult = event.result;
-      console.log("[api] stream done", { hasFinalResult: !!finalResult, keys: finalResult ? Object.keys(finalResult) : null });
+      streamState.finalResult = event.result;
     }
   };
 
@@ -2533,16 +2566,15 @@ export async function runUnitTestsStream(
     }
   } catch (e) {
     if (signal?.aborted) {
-      if (finalResult) return finalResult;
+      if (streamState.finalResult) return streamState.finalResult;
       throw new Error("运行已终止");
     }
     throw e;
   }
 
+  const finalResult = streamState.finalResult;
   if (!finalResult) {
-    console.error("[api] stream finalResult is null!");
     throw new Error("测试运行未返回结果");
   }
-  console.log("[api] stream returning", { ok: finalResult.ok, summary: finalResult.summary });
   return finalResult;
 }

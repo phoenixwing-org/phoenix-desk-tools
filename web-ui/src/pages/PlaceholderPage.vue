@@ -16,8 +16,7 @@ const pageId = computed(() => shell.currentPage.value);
       <template #description>
         <p class="desc">{{ item?.description ?? "功能开发中" }}</p>
         <p class="hint">
-          此页对应桌面壳中的同名功能，后续将通过 Python 服务层 API 接入（逻辑复用
-          <code>phoenix/</code> 核心模块，不重写算法）。
+          当前版本没有与页面标识 <code>{{ pageId }}</code> 匹配的实现，请检查应用导航配置。
         </p>
       </template>
     </el-empty>

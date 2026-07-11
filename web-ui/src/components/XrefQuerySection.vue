@@ -8,6 +8,7 @@ import {
 } from "../api";
 import type { useIncomingRefQuery } from "../composables/useIncomingRefQuery";
 import { resolveOutgoingHostQuery } from "../utils/workspaceFileQuery";
+import type { TargetFileQuery } from "../utils/workspaceFileQuery";
 
 type IncomingApi = ReturnType<typeof useIncomingRefQuery>;
 
@@ -89,9 +90,10 @@ async function onSearch() {
   searchAttempted.value = true;
   try {
     if (searchMode.value === "incoming") {
+      const incomingQuery = q as TargetFileQuery;
       const data = await fetchBomXrefIncoming({
-        rel: q.rel,
-        basename: q.basename,
+        rel: incomingQuery.rel,
+        basename: incomingQuery.basename,
         transitive: includeTransitive.value,
       });
       incomingHosts.value = data.hosts;

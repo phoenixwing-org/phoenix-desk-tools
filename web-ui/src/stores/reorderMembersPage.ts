@@ -76,6 +76,7 @@ export const useReorderMembersPageStore = defineStore(
     state: () => ({
       hydrated: false,
       activeWorkspaceKey: DEFAULT_WORKSPACE_KEY,
+      ignoreFileDisplay: "",
       ...defaultForm(),
     }),
     getters: {
@@ -126,6 +127,7 @@ export const useReorderMembersPageStore = defineStore(
         writePersisted({ byWorkspace });
       },
       applyFromApi(prefs: ReorderMembersPrefs) {
+        this.ignoreFileDisplay = prefs.ignore_file_display || "";
         if (hasLocalEntry(this.activeWorkspaceKey)) return;
         this.applyForm({
           includeCpp: prefs.include_cpp ?? true,
@@ -138,6 +140,7 @@ export const useReorderMembersPageStore = defineStore(
         this.persist();
       },
       syncFromServer(prefs: ReorderMembersPrefs) {
+        this.ignoreFileDisplay = prefs.ignore_file_display || "";
         this.applyForm({
           includeCpp: prefs.include_cpp ?? true,
           includeHeader: prefs.include_header ?? true,

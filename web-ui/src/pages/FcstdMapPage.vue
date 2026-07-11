@@ -8,7 +8,6 @@ import {
   fetchFcstdMapScanProgress,
   purgeMissingFcstdMap,
   saveFcstdMapPrefs,
-  scanFcstdMap,
   startFcstdMapScan,
   type FcstdMapEntry,
   type FcstdMapPayload,
@@ -105,8 +104,6 @@ useFcstdMapPropertySheet("fcstd_map", {
 });
 
 const pageEnd = computed(() => Math.min(pageOffset.value + entries.value.length, entriesTotal.value));
-const hasPrevPage = computed(() => pageOffset.value > 0);
-const hasNextPage = computed(() => pageOffset.value + pageSize.value < entriesTotal.value);
 const currentPage = computed(() => Math.floor(pageOffset.value / pageSize.value) + 1);
 
 function setStatus(msg: string) {
@@ -204,7 +201,6 @@ const scanProgressUI = useAsyncProgress("fcstd-scan");
 async function onScan() {
   if (scanning.value) return; // 已在扫描中，防重复点击
   scanning.value = true;
-  const ws = shell.workspacePath.value || "（工作空间）";
   const scopeLabel = scanWorksetId.value ? `工作集「${worksetStore.worksetById(scanWorksetId.value)?.name || "?"}」` : "全部";
   shell.appendLog(`工程内搜索：${scopeLabel}`, { source: "fcstd_map", open: true });
 
@@ -279,7 +275,7 @@ async function onScan() {
       const result = await fetchFcstdMap();
       data.value = { ...result, entries: [] };
       shell.appendLog(
-        `扫描完成：CAD ${result.stats.cad_file_count} · FCStd ${result.stats.fcstd_count ?? result.stats.present}`,
+        `扫描完成：CAD ${result.stats.cad_file_count} · FCStd ${result.stats.fcstd_file_count}`,
         { source: "fcstd_map" },
       );
       setStatus(
@@ -414,26 +410,6 @@ async function loadEntries() {
   } finally {
     entriesLoading.value = false;
   }
-}
-
-function goPrevPage() {
-  if (!hasPrevPage.value) return;
-  pageOffset.value = Math.max(0, pageOffset.value - pageSize.value);
-  void loadEntries();
-}
-
-function goNextPage() {
-  if (!hasNextPage.value) return;
-  pageOffset.value += pageSize.value;
-  void loadEntries();
-}
-
-function onPageSizeChange(ev: Event) {
-  const n = Number((ev.target as HTMLSelectElement).value);
-  if (!PAGE_SIZE_OPTIONS.includes(n as (typeof PAGE_SIZE_OPTIONS)[number])) return;
-  pageSize.value = n;
-  pageOffset.value = 0;
-  void loadEntries();
 }
 
 function onPagerCurrentChange(page: number) {

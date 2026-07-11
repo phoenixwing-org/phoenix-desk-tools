@@ -3,7 +3,7 @@ import { useAppShell } from "./useAppShell";
 import { useOnboardingStore } from "../stores/onboarding";
 import { FREECAD_TASK_MSG } from "../utils/onboardingConstants";
 
-/** STEP 批量、SW→STEP 等需本机 FreeCAD 目录的任务门禁 */
+/** STEP 批量等需本机 FreeCAD 目录的任务门禁 */
 export function useFreecadTaskGate() {
   const shell = useAppShell();
   const onboarding = useOnboardingStore();

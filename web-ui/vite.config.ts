@@ -29,6 +29,11 @@ export default defineConfig({
       ...(localWingSrc ? { "phoenix-wing": localWingSrc } : {}),
     },
   },
+  // Choice-dialog refs are shared between the root barrel and Vue subpath components.
+  // Prebundling only the barrel creates a second singleton in development.
+  optimizeDeps: {
+    exclude: ["phoenix-wing"],
+  },
   server: {
     port: 5173,
     strictPort: true,

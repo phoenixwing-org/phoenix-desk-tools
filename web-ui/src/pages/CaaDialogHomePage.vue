@@ -61,7 +61,7 @@ async function loadFromIndex() {
   listLoading.value = true;
   listErrorText.value = "";
   try {
-    const data = await fetchCaaIndexGroups(undefined, { fallbackWorkspaceRoot: workspacePath.value });
+    const data = await fetchCaaIndexGroups(undefined, { workspaceRoot: workspacePath.value });
     indexed.value = data.indexed;
     lastScanAt.value = data.last_scan_at ?? null;
     dialogCount.value = data.count;
@@ -92,7 +92,7 @@ async function onRescan() {
   listErrorText.value = "";
   shell.appendLog("[CAA 对话框] 更新 CAA 索引…", { source: PAGE_ID, open: true });
   try {
-    const out = await scanCaaIndex({ fallbackWorkspaceRoot: workspacePath.value });
+    const out = await scanCaaIndex({ workspaceRoot: workspacePath.value });
     if (out.summary) {
       shell.appendLog(out.summary, { source: PAGE_ID });
     }
@@ -162,7 +162,7 @@ watch(workspacePath, () => {
     </PageHeader>
 
     <p v-if="store.caaOnline === false" class="banner banner-warn">
-      CAA 服务离线。侧栏「属性 → CAA 服务」查看端口与启动说明。
+      Phoenix Node 服务离线，CAA API 当前不可用。
     </p>
 
     <CaaDialogHomeView

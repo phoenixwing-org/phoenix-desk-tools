@@ -3,13 +3,21 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 
 import { pnwPromptChoice } from "phoenix-wing";
-import { pruneRecentWorkspaces, removeRecentWorkspace, saveLauncherFreecad, shutdownWebServer } from "../api";
+import {
+  fetchNativeToolStatus,
+  pruneRecentWorkspaces,
+  removeRecentWorkspace,
+  saveLauncherFreecad,
+  shutdownWebServer,
+  type NativeToolStatusPayload,
+} from "../api";
 import { useAppShell } from "../composables/useAppShell";
 import { useWorkspaceDirectoryPicker } from "../composables/useWorkspaceDirectoryPicker";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import { useShellTour } from "../composables/useShellTour";
 import { useOnboardingStore } from "../stores/onboarding";
 import { useUiPrefsStore } from "../stores/uiPrefs";
+import { apiOrigin, apiUrl, isTauriRuntime } from "../utils/runtimeBridge";
 
 import SideDockPrefsPanel from "../components/SideDockPrefsPanel.vue";
 import {
@@ -39,7 +47,10 @@ const recentEntries = computed(
     recentWorkspaces.value.map((path) => ({ path, exists: true })),
 );
 const webRunning = ref(false);
-const webUrl = ref("http://127.0.0.1:5173");
+const desktopRuntime = isTauriRuntime();
+const webUrl = ref(apiOrigin() || "http://127.0.0.1:5180");
+const nativeTools = ref<NativeToolStatusPayload | null>(null);
+const nativeToolsLoading = ref(false);
 const defaultFreecadDir = computed(() => launcher.value?.default_freecad_dir ?? "");
 
 const nonHomeTabCount = computed(
@@ -76,8 +87,7 @@ function fillDefaultFreecad() {
 onMounted(async () => {
   repoInput.value = workspacePath.value;
   fcInput.value = launcher.value?.freecad_dir ?? "";
-  await refreshWebStatus();
-  await onboarding.refreshStatus();
+  await Promise.all([refreshWebStatus(), refreshNativeTools(), onboarding.refreshStatus()]);
 });
 
 function openCadIndex() {
@@ -163,28 +173,42 @@ async function switchRecent(path: string) {
 
 async function refreshWebStatus() {
   try {
-    await fetch("/api/health", { method: "GET" });
+    const response = await fetch(apiUrl("/api/health"), { method: "GET" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     webRunning.value = true;
   } catch {
     webRunning.value = false;
   }
 }
 
+async function refreshNativeTools() {
+  nativeToolsLoading.value = true;
+  try {
+    nativeTools.value = await fetchNativeToolStatus();
+  } catch {
+    nativeTools.value = null;
+  } finally {
+    nativeToolsLoading.value = false;
+  }
+}
+
 async function stopWebServer() {
   const result = await pnwPromptChoice({
-    title: "关闭 Web 服务",
-    message: `停止本地 Web 服务并释放端口？\n\n${webUrl.value}`,
+    title: desktopRuntime ? "退出 Phoenix" : "关闭后端服务",
+    message: desktopRuntime
+      ? "退出 Phoenix 桌面程序并停止其本地服务？"
+      : `停止本地后端服务并释放端口？\n\n${webUrl.value}`,
     choices: [
       { id: "stop", label: "关闭", variant: "danger" },
       { id: "cancel", label: "取消" },
     ],
   });
   if (result.choiceId !== "stop") return;
-  shell.appendLog(`请求关闭 Web 服务：${webUrl.value}`, { source: "config", open: true });
+  shell.appendLog(desktopRuntime ? "请求退出 Phoenix 桌面程序" : `请求关闭后端服务：${webUrl.value}`, { source: "config", open: true });
   try {
     await shutdownWebServer();
-    shell.appendLog("Web 服务正在关闭…", { source: "config", open: true });
-    shell.setStatus("Web 服务已关闭");
+    shell.appendLog(desktopRuntime ? "Phoenix 正在退出…" : "后端服务正在关闭…", { source: "config", open: true });
+    shell.setStatus(desktopRuntime ? "Phoenix 正在退出" : "后端服务已关闭");
     webRunning.value = false;
   } catch (e) {
     const msg = String(e);
@@ -396,21 +420,40 @@ const navItems = () =>
     </section>
 
     <section class="section">
-      <h2 class="section-title">Web 服务</h2>
+      <div class="section-title-row">
+        <h2 class="section-title">原生工具</h2>
+        <el-button size="small" :loading="nativeToolsLoading" @click="refreshNativeTools">刷新</el-button>
+      </div>
+      <div v-if="nativeTools" class="native-tool-list">
+        <div v-for="tool in nativeTools.tools" :key="tool.name" class="native-tool-row">
+          <code>{{ tool.name }}</code>
+          <el-tag :type="tool.available ? 'success' : 'warning'" effect="plain" size="small">
+            {{ tool.available ? "可用" : "未构建" }}
+          </el-tag>
+          <span class="native-tool-path">{{ tool.path || tool.manifest }}</span>
+        </div>
+      </div>
+      <p v-else class="hint">无法读取原生工具状态。</p>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">{{ desktopRuntime ? "桌面运行状态" : "本地后端服务" }}</h2>
       <p class="hint">
         {{ webRunning ? `运行中 · ${webUrl}` : "未检测到本页面对应的服务（可能已在其它端口运行）" }}
       </p>
       <div class="btn-row">
-        <el-button type="danger" plain :disabled="!webRunning" @click="stopWebServer">关闭 Web 服务</el-button>
+        <el-button type="danger" plain :disabled="!webRunning" @click="stopWebServer">
+          {{ desktopRuntime ? "退出 Phoenix" : "关闭后端服务" }}
+        </el-button>
         <el-button @click="refreshWebStatus">刷新状态</el-button>
       </div>
-      <p class="hint">关闭后释放 5173 端口；详细步骤见右侧运行日志。</p>
+      <p class="hint">{{ desktopRuntime ? "退出时会同步回收桌面壳启动的后端进程。" : "关闭后释放 5180 端口；Vite 开发页面仍会保留。" }}</p>
     </section>
 
     <section class="section">
       <h2 class="section-title">最近打开</h2>
       <p class="hint">
-        仅记录你主动切换/保存的工作空间根目录（写入本机 launcher.json）。系统临时目录不会再加入列表。
+        仅记录你主动切换/保存的工作空间根目录（写入本机 launcher-prefs.json）。系统临时目录不会再加入列表。
       </p>
       <div class="btn-row compact">
         <el-button @click="pruneRecentList">清理临时/无效项</el-button>
@@ -498,6 +541,40 @@ const navItems = () =>
 .section-title {
   margin: 0 0 8px;
   font-size: 1rem;
+}
+
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.section-title-row .section-title {
+  margin: 0;
+}
+
+.native-tool-list {
+  border-top: 1px solid var(--border);
+}
+
+.native-tool-row {
+  display: grid;
+  grid-template-columns: minmax(100px, 140px) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  border-bottom: 1px solid var(--border);
+}
+
+.native-tool-path {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .field-label {

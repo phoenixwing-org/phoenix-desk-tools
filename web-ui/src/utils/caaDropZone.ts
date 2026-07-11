@@ -28,7 +28,8 @@ export interface DropZoneInput {
 }
 
 export interface GridChild {
-  grid?: { row: number; col: number; rowSpan: number; colSpan: number };
+  id?: string;
+  grid?: { row: number; col: number; rowSpan: number; colSpan: number; anchor?: string };
 }
 
 /** 根据规则计算 drop 目标边（空 cell → inside；有控件 → 4 象限分区） */
@@ -238,7 +239,7 @@ export function applyDropTransform(input: DropTransformInput): DropTransformResu
   // 1. 深拷贝（不影响原数据）
   const working: GridChild[] = children.map((c) => ({
     ...c,
-    grid: c.grid ? { row: c.grid.row, col: c.grid.col, rowSpan: c.grid.rowSpan, colSpan: c.grid.colSpan } : undefined,
+    grid: c.grid ? { ...c.grid } : undefined,
   }));
 
   const spanning = getSpanningChild(working, targetRow, targetCol);

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Phoenix Desktop Tools",
+  "version": "0.1.0",
+  "identifier": "com.phoenix.desktools",
+  "build": {
+    "beforeDevCommand": "pnpm -C web-ui dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "pnpm build && pnpm build:tauri-runtime",
+    "frontendDist": "../web-ui/dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Phoenix 桌面工具",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 960,
+        "minHeight": 640,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:5180; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:",
+      "devCsp": "default-src 'self' http://localhost:5173; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:5180 http://localhost:5173 ws://localhost:5173; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline' http://localhost:5173; font-src 'self' data:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "resources": {
+      "resources/runtime/": "runtime/"
+    }
+  }
+}

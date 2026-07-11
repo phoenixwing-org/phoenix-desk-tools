@@ -4,6 +4,7 @@ import { Document, FolderOpened, List, Operation } from "@element-plus/icons-vue
 import RibbonToolButton from "../layout/ribbon/RibbonToolButton.vue";
 import SideDockPrefsPanel from "./SideDockPrefsPanel.vue";
 import { useShellPanelToggles } from "../composables/useShellPanelToggles";
+import { usePnwPagePropertiesHost } from "phoenix-wing";
 
 withDefaults(
   defineProps<{
@@ -18,10 +19,9 @@ withDefaults(
 const sideDockOpen = ref(false);
 
 const {
-  panelOpen,
+  treeOpen: panelOpen,
   logOpen,
   propsOpen,
-  hasProperties,
   hasLogContent,
   treeTip,
   propsTip,
@@ -31,6 +31,7 @@ const {
   toggleLog,
   toggleProps,
 } = useShellPanelToggles();
+const { hasProperties } = usePnwPagePropertiesHost();
 
 const footerTipProps = {
   placement: "top" as const,

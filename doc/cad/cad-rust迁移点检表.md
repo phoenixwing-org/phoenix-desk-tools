@@ -1,6 +1,19 @@
-# cad-rust 迁移点检表（最终版）
+# cad-rust 迁移点检表（历史记录，已二验否决）
 
-> 图例：✅ 已完成  ⚫ 保留Python  ❌ 废弃
+> **重要：本文件由 20281d1 迁移提交生成，原有勾选不能作为当前验收依据。**
+>
+> 二验发现原提交仍有 Python HTTP 代理、固定空响应、重复路由和不调用生产代码的 stub 测试；“0 stub”“页面全部完成”“124/124 函数完成”等结论均不成立。当前权威结论和逐页状态见 [tauri 分支迁移审计与接手指南](../tauri-分支迁移审计与接手指南.md) 与 [tauri migration correction log](../tauri-migration-correction.md)。
+>
+> 本文件后续表格保留原迁移意图，未逐条重验的 ✅ 一律只能理解为“原作者声称完成”。图例：✅ 当前有直接实现/测试证据；⚠️ 部分实现或证据不足；❌ 原结论错误；⚫ 明确保留外部引擎适配器。
+
+## 二验摘要（2026-07-10）
+
+- 仓库没有 `src-tauri`、`tauri.conf.*` 或 Tauri command/capability，当前是 Vue + Node/Hono + Rust CLI。
+- `/api/cad/worksets` 是无权威消费者的虚构别名，已删除；规范入口是 `/api/file-worksets`。
+- `pnwPythonSidecar.ts` 已删除，`cad.ts` 不再以 Python 降级；原表中的这两个完成项已经失效。
+- 原 `pdtCodeStub.test.ts` 与 `pdtSystemStub.test.ts` 已删除。前者验证旧固定响应，后者只断言测试内手写对象，不能映射任何 Python 测试完成。
+- 当前最终门禁快照：server 48 文件/163 测试，web-ui 13/162，catdlg-core 11/65，server `tsc` 与 web-ui `vue-tsc` 通过。
+- Rust `fcstd-reader` 和 `fcstd-xlink` 已通过；`fcstd-cli` 与 `fcstd-query` 因缺少待下载 Cargo 依赖尚未完成本机复验。
 
 ## 一、Rust 模块
 
@@ -190,7 +203,27 @@
 
 ## 单元测试迁移
 
-> 图例：✅ 已迁移  ⬜ 待迁移  🟡 不需要（TS原生/非Python）  ⚫ 保留Python  ❌ 废弃
+下表先给出二验后的真实测试所有者。这里的“有覆盖”只证明列出的行为，不自动等价于整个同名 Python 测试文件已经逐例迁移。
+
+| 领域 | 状态 | 当前直接证据 | 尚未证明 |
+|------|------|-------------|----------|
+| Code Index / Rename / UUID | ✅/⚠️ | `pdtCodeService.test.ts`、`shell-code-index/rename/uuid.test.ts`、`sourceTextCodec.test.ts` | SQLite 元数据、报告输出、完整旧 fixture 差分 |
+| Code Ignore | ✅/⚠️ | `codeIgnoreService.test.ts`、`shell-code-ignore.test.ts` | 旧全局存储退役和真实 UI |
+| Reorder Members | ✅ | `reorderHeaderEngine.test.ts`、`reorderCppEngine.test.ts`、`reorderMembersService.test.ts`、路由测试；15 个 header + 7 个 cpp fixture 差分 | 一个外部 fixture 和已知解析边界 |
+| Workspace / launcher / nav | ✅/⚠️ | `shell-launcher-config.test.ts`、`workspaceStateService.test.ts`、`shell-state.test.ts` | Tauri 原生目录选择和打包生命周期 |
+| Phoenix schema | ✅ | `phoenixDatabaseService.test.ts` | 历史数据库全版本升级链 |
+| Workbench session | ✅ | `workbenchSessionService.test.ts`、`shell-state.test.ts` | 浏览器重载 smoke |
+| File Worksets | ✅/⚠️ | `fileWorksetService.test.ts`、`shell-file-worksets.test.ts` | 旧 Python SQLite 工作集迁移 |
+| Runtime catalog / Unit Tests | ✅/⚠️ | `unitTestService.test.ts`、`shell-unit-tests.test.ts`、`unit-tests.test.ts` | 非 Vitest Python suite 退役决策 |
+| Git | ⚠️ | 生产路由已实现，前端 API 契约扫描可发现缺路由 | 缺完整 Git 行为路由测试、复杂仓库和 UI smoke |
+| Native dialog | ⚠️ | 壳层请求/响应类型和相关路由存在 | 真正 Tauri 原生 dialog 尚不存在 |
+| Cancellation | ⚠️ | FCStd Map、XRef refresh、Unit Tests 有各自取消测试 | 没有统一 run-cancel 等价实现；单文件/事务不可中断 |
+| CAD Map / BOM / XRef / PartKey | ✅/⚠️ | 对应 `pnwFcstdMapService`、`bomAttributeService`、`pnwBomXrefService`、`pnwPartKeyService` 及路由测试 | 真实 FreeCAD 往返和部分 Python 边界差分 |
+| STEP / SolidWorks | ⚫/⚠️ | Node 编排与子进程契约测试 | 必须在真实 FreeCAD/SolidWorks 环境验收 |
+
+### 以下为原始提交的测试映射（已否决，仅留作追溯）
+
+> 原图例和勾选不再有效。特别是映射到 `pdtCodeStub.test.ts`、`pdtSystemStub.test.ts` 的行没有迁移证明；这两个测试已删除。
 
 ### CAD 模块测试
 
@@ -217,7 +250,7 @@
 | ⚫ | test_solidworks_models_pure.py | cad | 保留 Python (COM) |
 | ✅ | test_default_freecad_install.py | cad | pnwCadTypes 覆盖 |
 
-### Code 模块测试（全部完成）
+### Code 模块测试（原声称全部完成，已否决）
 
 | 状态 | Python 测试文件 | 模块 |
 |------|----------------|------|
@@ -236,7 +269,7 @@
 | ✅ | test_reorder_self_test.py | code | pdtCodeStub.test.ts |
 | ✅ | test_workset_resolve.py | code | pdtCodeStub.test.ts |
 
-### 系统/配置测试（全部完成）
+### 系统/配置测试（原声称全部完成，已否决）
 
 | 状态 | Python 测试文件 | 模块 |
 |------|----------------|------|
@@ -255,7 +288,7 @@
 | ✅ | test_native_dialog.py | 系统 | pdtSystemStub.test.ts |
 | ✅ | test_run_cancel.py | 系统 | pdtSystemStub.test.ts |
 
-### 非 Python 测试（不需要迁移）
+### 非 Python 测试（原始清单）
 
 | 状态 | 测试文件 | 模块 | 说明 |
 |------|---------|------|------|
@@ -271,7 +304,7 @@
 | 🟡 | web-ui/src/utils/unitTestBackendSplit.test.ts | 系统 | TS 原生 |
 | 🟡 | web-ui/src/components/caa/controls/*.test.ts | caa | TS 原生 |
 
-### 测试统计
+### 原始测试统计（已否决）
 
 | 类别 | 总数 | ✅ | ⬜ | ⚫ | 🟡 |
 |------|------|----|-----|-----|-----|
@@ -281,7 +314,7 @@
 | 非 Python (TS原生) | 25 | 0 | 0 | 0 | 25 |
 | **合计** | **73** | **10** | **34** | **2** | **26** |
 
-### 函数迁移统计
+### 原始函数迁移统计（已否决）
 
 | 类别 | 函数数 | ✅ | 🟡 |
 |------|--------|----|-----|
@@ -293,7 +326,7 @@
 | 其他模块 | 38 | 38 | 0 |
 | **合计** | **124** | **124** | **0** |
 
-### 最终统计
+### 原始最终统计（已否决）
 
 | 状态 | 数量 | 说明 |
 |------|------|------|

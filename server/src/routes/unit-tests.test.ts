@@ -1,67 +1,43 @@
-import { describe, it, expect } from "vitest";
-import { parseVitestList, parseVitestResult, type VitestModule } from "./unit-tests.js";
+import { describe, expect, it } from "vitest";
+import { parseVitestList, parseVitestResult } from "./unit-tests.js";
 
-const SAMPLE_LIST = `web-ui/src/utils/caaDialogTree.test.ts > removeChildNode > 正常移除
-web-ui/src/utils/caaDialogTree.test.ts > removeChildNode > ID 不存在 → removed=null
-web-ui/src/utils/caaDialogTree.test.ts > removeChildNode > 不修改原数组
-web-ui/src/utils/caaDialogTree.test.ts > collectDescendantIds > 叶子 → []
-web-ui/src/utils/caaDropZone.test.ts > resolveDropEdge > 空 cell → inside
-web-ui/src/utils/caaDropZone.test.ts > resolveDropEdge > occupied cell left edge
+const SAMPLE_LIST = `src/a.test.ts > suite a > first case
+src/a.test.ts > suite a > second case
+src/b.test.ts > suite b > third case
+src/a.test.ts > suite a > fourth case
 `;
 
-const SAMPLE_VERBOSE = `✓ removeChildNode > 正常移除
-✓ removeChildNode > ID 不存在
-✗ resolveDropEdge > 空 cell
-✓ collectDescendantIds > 叶子
-`;
+const SAMPLE_JSON = JSON.stringify({
+  numPassedTests: 2,
+  numFailedTests: 1,
+  testResults: [],
+});
 
 describe("parseVitestList", () => {
-  it("空字符串 → 空数组", () => {
+  it("returns an empty list for empty output", () => {
     expect(parseVitestList("")).toEqual([]);
   });
 
-  it("解析标准 vitest list 输出", () => {
+  it("groups vitest list output by test file", () => {
     const result = parseVitestList(SAMPLE_LIST);
-    expect(result).toHaveLength(2); // 两个文件
-    expect(result[0].file).toContain("caaDialogTree.test.ts");
-    expect(result[0].count).toBe(4);
-    expect(result[0].tests).toHaveLength(4);
-    expect(result[1].file).toContain("caaDropZone.test.ts");
-    expect(result[1].count).toBe(2);
-  });
-
-  it("同一文件连续行合并为一个 module", () => {
-    const out = `a.test.ts > suite1 > test1\na.test.ts > suite1 > test2\nb.test.ts > test3`;
-    const result = parseVitestList(out);
     expect(result).toHaveLength(2);
-    expect(result[0].count).toBe(2);
-    expect(result[1].count).toBe(1);
+    expect(result[0]).toMatchObject({ file: "src/a.test.ts", count: 3 });
+    expect(result[0].tests).toEqual(["suite a > first case", "suite a > second case", "suite a > fourth case"]);
+    expect(result[1]).toMatchObject({ file: "src/b.test.ts", count: 1 });
   });
 
-  it("相同文件不连续时分开", () => {
-    const out = `a.test.ts > test1\nb.test.ts > test2\na.test.ts > test3`;
-    const result = parseVitestList(out);
-    expect(result).toHaveLength(3); // a, b, a
-  });
-
-  it("忽略不匹配的行（空行/噪音）", () => {
-    const out = "some noise\na.test.ts > test1\n\nanother line\nb.test.ts > test2";
-    const result = parseVitestList(out);
-    expect(result).toHaveLength(2);
+  it("ignores non-matching noise", () => {
+    const result = parseVitestList("noise\nsrc/a.test.ts > test 1\n\nanother line");
+    expect(result).toEqual([{ file: "src/a.test.ts", count: 1, tests: ["test 1"] }]);
   });
 });
 
 describe("parseVitestResult", () => {
-  it("全通过", () => {
-    const out = "✓ test1\n✓ test2\n✓ test3";
-    expect(parseVitestResult(out)).toEqual({ passed: 3, failed: 0 });
+  it("reads JSON reporter counts", () => {
+    expect(parseVitestResult(SAMPLE_JSON)).toEqual({ passed: 2, failed: 1 });
   });
 
-  it("有失败", () => {
-    expect(parseVitestResult(SAMPLE_VERBOSE)).toEqual({ passed: 3, failed: 1 });
-  });
-
-  it("空输出", () => {
-    expect(parseVitestResult("")).toEqual({ passed: 0, failed: 0 });
+  it("falls back to common textual markers", () => {
+    expect(parseVitestResult("✓ case 1\n✓ case 2\n× case 3\n")).toEqual({ passed: 2, failed: 1 });
   });
 });

@@ -89,8 +89,8 @@ async function onPreview() {
     engineMessage.value = out.message || "";
     const logText = out.lines?.join("\n") || out.log || out.message || "预览完成";
     shell.appendLog(logText, { source: "code_rename" });
-    if (!out.implemented) {
-      shell.setStatus(out.message || "引擎尚未接入");
+    if (out.implemented === false) {
+      shell.setStatus(out.message || "预览不可用");
     } else {
       shell.setStatus(`命中 ${out.summary?.total_hits ?? hits.value.length} 处`);
     }
@@ -123,7 +123,7 @@ async function onApply() {
     engineMessage.value = out.message || "";
     const logText = out.lines?.join("\n") || out.log || out.message || "完成";
     shell.appendLog(logText, { source: "code_rename" });
-    shell.setStatus(out.implemented ? out.summary?.total_hits != null ? "执行完成" : "完成" : out.message || "引擎尚未接入");
+    shell.setStatus(out.implemented === false ? out.message || "执行不可用" : "执行完成");
   } catch (e) {
     shell.appendLog(String(e), { source: "code_rename" });
     shell.setStatus(String(e));

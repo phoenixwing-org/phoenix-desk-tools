@@ -66,6 +66,7 @@ async function applySync(triggerName?: string, opts?: { silent?: boolean }) {
     const data = await syncTestFixtures({
       checkout_root: checkoutRootInput.value.trim(),
       enabled: [...enabledSet.value],
+      names: triggerName ? [triggerName] : undefined,
     });
     payload.value = data;
     checkoutRootInput.value = data.checkout_root || data.default_checkout_root;
@@ -129,7 +130,7 @@ async function browseCheckoutRoot() {
   }
 }
 
-async function syncAndLink() {
+async function syncFixtures() {
   await applySync();
 }
 
@@ -140,6 +141,10 @@ function statusTagType(item: TestFixtureItem) {
 
 function checkoutLabel(item: TestFixtureItem) {
   return item.checkout_exists ? "已检出" : "未检出";
+}
+
+function checkoutActionLabel(item: TestFixtureItem) {
+  return item.checkout_exists ? "已检出" : "检出";
 }
 
 function checkoutPath(name: string) {
@@ -170,7 +175,7 @@ const checkoutRootDisplay = computed(
 const checkoutRootHint = computed(() => {
   const def = payload.value?.default_checkout_root ?? "—";
   const root = checkoutRootInput.value.trim() || def;
-  return `默认与本仓库同级（${def}）；检出为 ${root}/KtAlarmClock、${root}/PNXCaaStudy。`;
+  return `默认目录：${def}；项目将检出到 ${root} 下各自的同名子目录。`;
 });
 
 useTestFixturesPropertySheet("test_fixtures", {
@@ -192,7 +197,7 @@ useTestFixturesPropertySheet("test_fixtures", {
           size="small"
           :loading="syncing && !busyName"
           :disabled="!enabledCount || (syncing && !!busyName)"
-          @click="syncAndLink"
+          @click="syncFixtures"
         >
           {{ primaryActionLabel }}
         </el-button>
@@ -208,7 +213,7 @@ useTestFixturesPropertySheet("test_fixtures", {
         <el-input
           v-model="checkoutRootInput"
           spellcheck="false"
-          placeholder="默认：仓库上一级目录"
+          placeholder="默认：桌面应用数据目录；开发态为仓库上一级"
           :disabled="syncing"
         />
         <el-button :disabled="syncing" title="填入默认检出根目录" @click="useDefaultCheckoutRoot">默认</el-button>
@@ -224,8 +229,7 @@ useTestFixturesPropertySheet("test_fixtures", {
         </span>
       </div>
       <p class="section-hint muted small">
-        清单由产品配置，不可在本页增删。勾选表示「要引用」；需点击「检出」才会 git clone 并建立
-        phoenix-desk-tools 同级目录。
+        清单由产品配置，不可在本页增删。勾选表示启用；点击「检出」后会将仓库克隆到上方目录中的同名子目录。
       </p>
 
       <div v-loading="loading" class="fixture-list">
@@ -257,10 +261,6 @@ useTestFixturesPropertySheet("test_fixtures", {
               <dt>检出路径</dt>
               <dd><code>{{ checkoutPath(row.name) }}</code></dd>
             </div>
-            <div v-if="row.target_path" class="meta-row">
-              <dt>当前指向</dt>
-              <dd class="mono" :title="row.target_path">{{ row.target_path }}</dd>
-            </div>
             <div class="meta-row">
               <dt>检出目录</dt>
               <dd class="mono" :title="row.checkout_path">{{ row.checkout_path }}</dd>
@@ -278,7 +278,7 @@ useTestFixturesPropertySheet("test_fixtures", {
           </dl>
           <div v-if="needsSetup(row)" class="card-actions">
             <el-button size="small" type="primary" :loading="syncing && busyName === row.name" :disabled="syncing && busyName !== row.name" @click="applySync(row.name)">
-              {{ checkoutLabel(row) }}
+              {{ checkoutActionLabel(row) }}
             </el-button>
           </div>
         </article>

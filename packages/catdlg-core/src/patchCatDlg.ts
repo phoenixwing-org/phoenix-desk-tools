@@ -165,6 +165,7 @@ function formatGrid(grid: NonNullable<NodePositionPatch["grid"]>): string {
 
 /** GRID 行正则：GRID = { ... };  */
 const GRID_RE = /^(\s*)GRID\s*=\s*\{[^}]*\}\s*;?\s*$/;
+const PROP_LINE = /^([A-Z_][A-Z0-9_]*)\s*=\s*(.+?)\s*;\s*$/;
 /** FATHER 行正则：FATHER = ...; */
 const FATHER_RE = /^(\s*)FATHER\s*=\s*(.+?)\s*;?\s*$/;
 

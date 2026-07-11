@@ -1,9 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
+  caaDialogGroupKey,
   inferCatNlsRel,
   inferCatNlsRelCandidates,
   inferGraphicResourceDirs,
 } from "../src/caaDialogPaths.js";
+
+describe("caaDialogGroupKey", () => {
+  it("recognizes a UI module at the start or in the middle of a relative path", () => {
+    expect(caaDialogGroupKey("ModuleUI.m/dialog/First.CATDlg")).toBe("ModuleUI.m");
+    expect(caaDialogGroupKey("Workspace/ModuleUI.m/dialog/First.CATDlg")).toBe("ModuleUI.m");
+    expect(caaDialogGroupKey("plain/dialog/First.CATDlg")).toBe("dialog");
+  });
+});
 
 describe("inferCatNlsRelCandidates", () => {
   const catDlg =
@@ -14,7 +23,9 @@ describe("inferCatNlsRelCandidates", () => {
     expect(candidates[0]).toBe(
       "PNXBomAnalysisWsp/PNXBomAnalysisFrm/CNext/resources/msgcatalog/PNXBomAnalysisDlg.CATNls",
     );
-    expect(candidates.length).toBe(1);
+    expect(candidates[1]).toBe(
+      "PNXBomAnalysisWsp/PNXBomAnalysisFrm/PNXBomAnalysisUI.m/LocalInterfaces/PNXBomAnalysisDlg.CATNls",
+    );
     expect(inferCatNlsRel(catDlg)).toBe(candidates[0]);
   });
 
@@ -24,6 +35,13 @@ describe("inferCatNlsRelCandidates", () => {
     const candidates = inferCatNlsRelCandidates(catDlg);
     expect(candidates).toEqual([
       "PNXCombinedCurveWsp/PNXCombinedCurve.edu/CNext/resources/msgcatalog/PNXSubCurveDlg.CATNls",
+      "PNXCombinedCurveWsp/PNXCombinedCurve.edu/PNXCombinedCurveUI.m/LocalInterfaces/PNXSubCurveDlg.CATNls",
+    ]);
+  });
+
+  it("falls back to a CATNls next to a CATDlg outside the canonical CAA layout", () => {
+    expect(inferCatNlsRelCandidates("CAA/Dialog/Sample.CATDlg")).toEqual([
+      "CAA/Dialog/Sample.CATNls",
     ]);
   });
 

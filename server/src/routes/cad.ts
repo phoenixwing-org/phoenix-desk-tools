@@ -1,63 +1,90 @@
-/** cad-rust: CAD 模块
+/** CAD 模块
  *
- * 原生实现（Rust rusqlite → SQLite），不依赖 Python。
- * 若 Rust CLI 不可用，降级到 Python FastAPI 代理。
+ * Node/SQLite 服务负责 API 编排，并在适用处调用 Rust 工具。
  *
- * pnwCadDb 查询层 → server/src/lib/pnwCadDb.ts（未来拆到 phoenix-wing）
- * Rust CLI        → server/fcstd-query/
+ * SQLite queries are owned by the feature services; Rust CLIs are reserved for FCStd file I/O.
  */
 
 import { Hono } from "hono";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
-import { execFile } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import {
-  pnwQueryParts, pnwQueryFcstdMap, pnwQueryBomHosts, pnwQueryBomFile,
-  pnwQueryXrefIncoming, pnwQueryXrefOutgoing, pnwQueryXrefCounts,
-  pnwQueryBomTree,
-} from "../lib/pnwCadDb.js";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-// ── Python fallback ────────────────────────────────────
-
-const PYTHON_PORT = Number(process.env.PHOENIX_API_PORT || 8765);
-const PYTHON_API = `http://127.0.0.1:${PYTHON_PORT}`;
-let pythonAvailable = false;
-
-export async function checkPython(): Promise<boolean> {
-  try {
-    const res = await fetch(`${PYTHON_API}/api/config/app`, { signal: AbortSignal.timeout(3000) });
-    pythonAvailable = res.ok;
-    if (pythonAvailable) console.log(`[cad-rust] Python API OK :${PYTHON_PORT}`);
-    else console.warn(`[cad-rust] Python API ${res.status} :${PYTHON_PORT}`);
-  } catch {
-    pythonAvailable = false;
-    console.warn(`[cad-rust] Python API 未运行 (可选) — 旧功能走 stub`);
-  }
-  return pythonAvailable;
-}
-
-async function proxyToPython(path: string): Promise<Response | null> {
-  if (!pythonAvailable) return null;
-  try { return await fetch(`${PYTHON_API}${path}`, { signal: AbortSignal.timeout(15000) }); }
-  catch { return null; }
-}
-
-/** Python 不可用时返回空 JSON */
-async function stubOrProxy(c: any, path: string) {
-  const res = await proxyToPython(path);
-  if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true });
-  return c.json({ ...await res.json(), _proxy: "python" });
-}
+  loadAssemblyTreeFromXrefs,
+  loadAssemblyBomCatalog,
+  loadBomXrefPayload,
+  loadTargetUsageStats,
+  patchBomLinkLabels,
+  queryXrefCountsForRel,
+  rebuildBomXrefsFromLastScan,
+  refreshBomXrefForHost,
+  refreshBomXrefForHostAsync,
+  searchBomXrefEdges,
+  searchIncomingRefs,
+  searchOutgoingRefs,
+} from "../lib/pnwBomXrefService.js";
+import {
+  inferPartKeyFromWorkspaceRel,
+  loadPartAssemblyTreePayload,
+  loadPartKeyDetailPayload,
+  loadPartKeysPayload,
+  patchPartFileLink,
+  patchPartKey,
+} from "../lib/pnwPartKeyService.js";
+import {
+  applyBomLabelFormula,
+  fillBomFromEmbedded,
+  fillBomFromFilename,
+  fillRecommendedValues,
+  loadBomApplyPrefs,
+  loadBomPreview,
+  readBomDocumentKinds,
+  recommendBomField,
+  recommendBomFieldsAll,
+  recommendBomFilename,
+  renameBomFcstdFile,
+  writeBomToFcstd,
+} from "../lib/bomAttributeService.js";
+import {
+  exportPartDedupCsv,
+  getPartDedupPrefs,
+  savePartDedupPrefs,
+  scanPartDedup,
+} from "../lib/pnwPartDedupService.js";
+import {
+  getStepBatchPrefs,
+  previewStepBatch,
+  runStepBatch,
+  saveStepBatchPrefs,
+} from "../lib/pnwStepBatchService.js";
+import {
+  getSwStepPrefs,
+  previewSwStepExport,
+  runSwStepExport,
+  saveSwStepPrefs,
+} from "../lib/pnwSwStepExportService.js";
+import {
+  analyzeXlinkFix,
+  applyXlinkFixOverride,
+  getXlinkPrefs,
+  listXlinkFixCandidates,
+  runXlinkFix,
+  saveXlinkPrefs,
+} from "../lib/pnwXlinkFixService.js";
+import {
+  analyzeRenameReferences,
+  applyRenameCorrections,
+  exportRenameReport,
+  listRenameLogs,
+  loadRenameAnalysis,
+} from "../lib/pnwRenameService.js";
+import { runtimeUserDataDir } from "../lib/appRuntimePaths.js";
 
 function getWorkspace(c: any): string {
   const q = c.req.query("workspace") || "";
   if (q) return q;
   try {
-    const p = path.join(os.homedir(), ".phoenix", "launcher-prefs.json");
+    const p = path.join(runtimeUserDataDir(), "launcher-prefs.json");
     if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf-8")).workspace || "";
   } catch { /* ignore */ }
   return "";
@@ -65,43 +92,105 @@ function getWorkspace(c: any): string {
 
 // ── helpers ────────────────────────────────────────────
 
-/** Rust 优先，失败降级 Python。native=true 表示来自 Rust。 */
-async function nativeOrProxy(
-  c: any,
-  queryFn: (ws: string) => Promise<any>,
-  proxyPath: string,
-): Promise<Response> {
-  const ws = getWorkspace(c);
-  if (ws) {
-    try {
-      const data = await queryFn(ws);
-      // data 可能是数组或 {items: [...]}，统一包装避免 spread 数组索引问题
-      const items = Array.isArray(data) ? data : (data.items ?? []);
-      return c.json({ items, hosts: items, count: items.length, _native: "rust" });
-    } catch (e: any) {
-      console.warn(`[cad-rust] Rust query failed, fallback to Python: ${e.message}`);
-    }
+function flattenAssemblyTreeItems(nodes: any[], depth = 0, prefix = ""): any[] {
+  const out: any[] = [];
+  for (const node of nodes || []) {
+    const rel = node.repo_rel_path || node.xlink_file_attr || "";
+    const pathKey = prefix ? `${prefix}/${node.basename || rel}` : (node.basename || rel);
+    out.push({
+      depth,
+      part_rel: rel,
+      part_key: node.part_key || "",
+      quantity: node.ref_count || 1,
+      bom_path: pathKey,
+      ...node,
+    });
+    out.push(...flattenAssemblyTreeItems(node.children || [], depth + 1, pathKey));
   }
-  const res = await proxyToPython(proxyPath);
-  if (!res) return c.json({ entries: [], items: [], hosts: [], _stub: true, error: "后端不可用" });
-  const pyData = await res.json();
-  return c.json({ ...pyData, _proxy: "python" });
+  return out;
 }
 
 // ── Hono app ────────────────────────────────────────────
 
 export const cadRoutes = new Hono();
 
+type BomXrefProgress = {
+  scan_id: string;
+  phase: string;
+  step: number;
+  status: string;
+  cancelled: boolean;
+  error: string;
+  total_cad_files: number;
+  total_fcstd_files: number;
+  walk: { total: number; processed: number; percent: number; current_file?: string };
+  bom: { total: number; processed: number; skipped: number; failed: number; current_file: string; percent: number; errors: Array<{ rel: string; error: string }> };
+  xref: { total: number; processed: number; skipped: number; failed: number; current_file: string; percent: number; errors: Array<{ rel: string; error: string }> };
+  result?: any;
+};
+
+const bomXrefProgress = new Map<string, BomXrefProgress>();
+
+function percent(current: number, total: number): number {
+  if (total <= 0) return current > 0 ? 100 : 0;
+  return Math.max(0, Math.min(100, Math.round((current / total) * 100)));
+}
+
+function newBomXrefProgress(scanId: string): BomXrefProgress {
+  return {
+    scan_id: scanId,
+    phase: "walk",
+    step: 0,
+    status: "running",
+    cancelled: false,
+    error: "",
+    total_cad_files: 0,
+    total_fcstd_files: 0,
+    walk: { total: 1, processed: 0, percent: 0 },
+    bom: { total: 0, processed: 0, skipped: 0, failed: 0, current_file: "", percent: 100, errors: [] },
+    xref: { total: 0, processed: 0, skipped: 0, failed: 0, current_file: "", percent: 0, errors: [] },
+  };
+}
+
+function updateBomXrefProgress(scanId: string, phase: "walk" | "xref", current: number, total: number, currentFile = ""): void {
+  const progress = bomXrefProgress.get(scanId);
+  if (!progress || progress.cancelled) return;
+  progress.phase = phase;
+  progress.step = phase === "walk" ? 0 : 2;
+  const bucket = progress[phase];
+  bucket.total = total;
+  bucket.processed = current;
+  bucket.percent = percent(current, total);
+  if (currentFile) bucket.current_file = currentFile;
+  if (phase === "xref") {
+    progress.total_cad_files = total;
+    progress.total_fcstd_files = total;
+  }
+}
+
+function finishBomXrefProgress(scanId: string, result: any): void {
+  const progress = bomXrefProgress.get(scanId);
+  if (!progress) return;
+  progress.result = result;
+  progress.cancelled = progress.cancelled || Boolean(result?.cancelled);
+  progress.status = progress.cancelled ? "cancelled" : "done";
+  progress.phase = progress.status;
+  progress.step = 2;
+  if (!progress.cancelled) {
+    progress.walk.percent = 100;
+    progress.xref.percent = 100;
+  }
+}
+
 /** GET /api/cad/health */
 cadRoutes.get("/health", async (c) => {
   let rustOk = false;
   try {
     const ws = getWorkspace(c);
-    if (ws) { await pnwQueryParts(ws, { limit: 1 }); rustOk = true; }
+    if (ws) { loadPartKeysPayload(ws); rustOk = true; }
   } catch {}
-  return c.json({ ok: true, module: "cad-rust",
-    rust: { available: rustOk },
-    python: { available: pythonAvailable, port: PYTHON_PORT },
+  return c.json({ ok: true, module: "cad-native",
+    native: { available: rustOk, engine: "node-sqlite" },
   });
 });
 
@@ -109,405 +198,584 @@ cadRoutes.get("/health", async (c) => {
 cadRoutes.get("/bom/file", async (c) => {
   const ws = getWorkspace(c);
   const rel = c.req.query("rel");
-  if (!rel) return c.json({ error: "需要 rel 参数" }, 400);
-
-  // Rust 原生
-  if (ws) {
-    try {
-      const asset = await pnwQueryBomFile(ws, rel);
-      if (asset) {
-        return c.json({
-          rel, workspace: ws,
-          filename: asset.filename, assetKind: asset.asset_kind,
-          partNumber: asset.part_number, partVersion: asset.part_version,
-          partName: asset.part_name, label: asset.label,
-          _native: "rust",
-        });
-      }
-      return c.json({ error: "文件未在 CAD 索引中", rel }, 404);
-    } catch (e: any) {
-      console.warn(`[cad-rust] bom/file Rust failed: ${e.message}`);
-    }
+  if (!rel) return c.json({ error: "rel is required" }, 400);
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  try {
+    return c.json(loadBomPreview(ws, rel));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
   }
-
-  // Python fallback
-  const res = await proxyToPython(`/api/bom?rel=${encodeURIComponent(rel)}`);
-  if (!res) return c.json({ entries: [], items: [], hosts: [], _stub: true, error: "后端不可用" });
-  if (!res.ok) return c.json({ _stub: true });
-  const preview = await res.json();
-  const fields = preview.fields || {};
-  return c.json({
-    rel, workspace: ws,
-    filename: preview.rel_path?.split("/").pop() || preview.rel_path,
-    assetKind: null, partNumber: fields.part_number, partVersion: fields.part_version,
-    partName: fields.part_name, label: fields.Label, _proxy: "python",
-  });
 });
 
 // ── 零件号（Rust 原生）─────────────────────────────────
 
-cadRoutes.get("/parts", async (c) =>
-  nativeOrProxy(c,
-    (ws) => pnwQueryParts(ws, { search: c.req.query("q") || undefined }),
-    `/api/part-keys?q=${encodeURIComponent(c.req.query("q") || "")}`,
-  ),
-);
+cadRoutes.get("/parts", (c) => {
+  const ws = getWorkspace(c);
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  return c.json(loadPartKeysPayload(ws, { search: c.req.query("q") || c.req.query("search") || "" }));
+});
 
 cadRoutes.get("/parts/:pn/:pv", async (c) => {
+  const ws = getWorkspace(c);
   const { pn, pv } = c.req.param();
-  const res = await proxyToPython(`/api/part-keys/${encodeURIComponent(pn)}/${encodeURIComponent(pv)}`);
-  if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true });
-  return c.json({ ...await res.json(), _proxy: "python" });
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  try {
+    return c.json(loadPartKeyDetailPayload(ws, pn, pv));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 404);
+  }
 });
 
 cadRoutes.patch("/parts/:pn/:pv", async (c) => {
+  const ws = getWorkspace(c);
   const { pn, pv } = c.req.param();
-  const body = await c.req.json();
-  const res = await fetch(`${PYTHON_API}/api/part-keys/${encodeURIComponent(pn)}/${encodeURIComponent(pv)}`, {
-    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-  });
-  if (!res.ok) return c.json({ _stub: true });
-  return c.json({ ...await res.json(), _proxy: "python" });
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  const body = await c.req.json().catch(() => ({}));
+  try {
+    return c.json(patchPartKey(ws, pn, pv, body));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 404);
+  }
 });
 
-cadRoutes.get("/parts/infer", async (c) => {
+cadRoutes.get("/parts/infer", (c) => {
+  const ws = getWorkspace(c);
   const rel = c.req.query("rel") || "";
-  const res = await proxyToPython(`/api/part-key-infer?rel=${encodeURIComponent(rel)}`);
-  if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true });
-  return c.json({ ...await res.json(), _proxy: "python" });
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  try {
+    return c.json(inferPartKeyFromWorkspaceRel(ws, rel));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
 });
 
 cadRoutes.get("/parts/:pn/:pv/assembly-tree", async (c) => {
+  const ws = getWorkspace(c);
   const { pn, pv } = c.req.param();
-  const qs = new URL(c.req.url).searchParams.toString();
-  const path = `/api/part-keys/${encodeURIComponent(pn)}/${encodeURIComponent(pv)}/assembly-tree${qs ? `?${qs}` : ""}`;
-  const res = await proxyToPython(path);
-  if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true });
-  return c.json({ ...await res.json(), _proxy: "python" });
+  const hostRel = c.req.query("host_rel") || c.req.query("rel") || "";
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  if (!hostRel) return c.json({ error: "host_rel is required" }, 400);
+  try {
+    return c.json(loadPartAssemblyTreePayload(ws, pn, pv, hostRel, { full: c.req.query("full") === "true" }));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
 });
 
 cadRoutes.patch("/parts/:pn/:pv/files/:fileId", async (c) => {
+  const ws = getWorkspace(c);
   const { pn, pv, fileId } = c.req.param();
-  const body = await c.req.json();
-  const res = await fetch(`${PYTHON_API}/api/part-keys/${encodeURIComponent(pn)}/${encodeURIComponent(pv)}/files/${fileId}`, {
-    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-  });
-  if (!res.ok) return c.json({ _stub: true });
-  return c.json({ ...await res.json(), _proxy: "python" });
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  const body = await c.req.json().catch(() => ({}));
+  try {
+    return c.json(patchPartFileLink(ws, pn, pv, Number(fileId), body));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 404);
+  }
 });
-
-cadRoutes.get("/fcstd-map/prefs", async (c) => { const res = await proxyToPython("/api/fcstd-map/prefs"); if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.put("/fcstd-map/prefs", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/fcstd-map/prefs`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/fcstd-map/scan", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/fcstd-map/scan`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/fcstd-map/purge-missing", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/fcstd-map/purge-missing`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/fcstd-map/scan/start", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/fcstd-map/scan/start`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.get("/fcstd-map/scan/progress", async (c) => { const qs = new URL(c.req.url).searchParams.toString(); const res = await proxyToPython(`/api/fcstd-map/scan/progress?${qs}`); if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/fcstd-map/scan/cancel", async (c) => { const qs = new URL(c.req.url).searchParams.toString(); const res = await fetch(`${PYTHON_API}/api/fcstd-map/scan/cancel?${qs}`, { method: "POST" }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.get("/fcstd-map/scan/history", async (c) => { const qs = new URL(c.req.url).searchParams.toString(); const res = await proxyToPython(`/api/fcstd-map/scan/history?${qs}`); if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.get("/fcstd-map/scan/resume", async (c) => { const res = await proxyToPython("/api/fcstd-map/scan/resume"); if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/fcstd-map/export-json", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/fcstd-map/export-json`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-
-// ── CAD 索引（Rust 原生）───────────────────────────────
-
-cadRoutes.get("/fcstd-map/entries", async (c) =>
-  nativeOrProxy(c,
-    (ws) => pnwQueryFcstdMap(ws, {
-      search: c.req.query("search") || undefined,
-      kind: c.req.query("kind") || undefined,
-      offset: Number(c.req.query("offset")) || 0,
-      limit: Number(c.req.query("limit")) || 100,
-    }),
-    `/api/fcstd-map/entries?${new URLSearchParams({ ...Object.fromEntries(new URL(c.req.url).searchParams) })}`,
-  ),
-);
 
 // ── BOM XRef（Rust 原生）───────────────────────────────
 
-cadRoutes.get("/bom/xref/meta", async (c) =>
-  nativeOrProxy(c, (ws) => pnwQueryBomHosts(ws), "/api/bom-xrefs/meta"),
-);
+cadRoutes.get("/bom/xref/meta", (c) => {
+  const ws = getWorkspace(c);
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  return c.json(loadBomXrefPayload(ws));
+});
 
 // ── BOM XRef 详情（Rust 原生）─────────────────────────
 
-cadRoutes.get("/bom/xref/incoming", async (c) =>
-  nativeOrProxy(c,
-    (ws) => pnwQueryXrefIncoming(ws, c.req.query("rel") || ""),
-    `/api/bom-xrefs/incoming?rel=${encodeURIComponent(c.req.query("rel") || "")}&limit=500&transitive=true`,
-  ),
-);
+cadRoutes.get("/bom/xref/incoming", (c) => {
+  const ws = getWorkspace(c);
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  return c.json(searchIncomingRefs(ws, {
+    rel: c.req.query("rel") || undefined,
+    basename: c.req.query("basename") || undefined,
+    limit: Number(c.req.query("limit") || 500),
+    transitive: c.req.query("transitive") !== "false",
+  }));
+});
 
-cadRoutes.get("/bom/xref/outgoing", async (c) =>
-  nativeOrProxy(c,
-    (ws) => pnwQueryXrefOutgoing(ws, c.req.query("rel") || ""),
-    `/api/bom-xrefs/outgoing?rel=${encodeURIComponent(c.req.query("rel") || "")}&limit=500`,
-  ),
-);
+cadRoutes.get("/bom/xref/outgoing", (c) => {
+  const ws = getWorkspace(c);
+  const rel = c.req.query("rel") || "";
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  if (!rel) return c.json({ error: "rel is required" }, 400);
+  return c.json(searchOutgoingRefs(ws, rel, { limit: Number(c.req.query("limit") || 500) }));
+});
 
-cadRoutes.get("/bom/xref/counts", async (c) =>
-  nativeOrProxy(c,
-    (ws) => pnwQueryXrefCounts(ws, c.req.query("rel") || ""),
-    `/api/bom-xrefs/counts?rel=${encodeURIComponent(c.req.query("rel") || "")}`,
-  ),
-);
+cadRoutes.get("/bom/xref/counts", (c) => {
+  const ws = getWorkspace(c);
+  const rel = c.req.query("rel") || "";
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  if (!rel) return c.json({ error: "rel is required" }, 400);
+  return c.json(queryXrefCountsForRel(ws, rel));
+});
 
-// BOM xref 补充路由（纯代理）
-cadRoutes.get("/bom/xref/assembly-hosts", async (c) => {
-  const qs = new URL(c.req.url).searchParams.toString();
-  const res = await proxyToPython(`/api/bom-xrefs/assembly-hosts${qs ? `?${qs}` : ""}`);
-  if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true });
-  return c.json({ ...await res.json(), _proxy: "python" });
+cadRoutes.get("/bom/xref/assembly-tree", async (c) => {
+  const rel = c.req.query("host_rel") || c.req.query("rel") || "";
+  const full = c.req.query("full") === "true";
+  const ws = getWorkspace(c);
+  if (!rel) return c.json({ error: "host_rel is required" }, 400);
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  return c.json(loadAssemblyTreeFromXrefs(ws, rel, { full }));
+});
+
+cadRoutes.get("/bom/xref/usage-stats", async (c) => {
+  const ws = getWorkspace(c);
+  const rel = c.req.query("rel") || "";
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  if (!rel) return c.json({ error: "rel is required" }, 400);
+  return c.json(loadTargetUsageStats(ws, rel));
+});
+
+cadRoutes.get("/bom/xref/edges", (c) => {
+  const ws = getWorkspace(c);
+  if (!ws) return c.json({
+    offset: Number(c.req.query("offset")) || 0,
+    limit: Number(c.req.query("limit")) || 100,
+    total: 0,
+    count: 0,
+    refs: [],
+    index_pending: true,
+  }, 400);
+  return c.json(searchBomXrefEdges(ws, {
+    offset: Number(c.req.query("offset") || 0),
+    limit: Number(c.req.query("limit") || 100),
+    search: c.req.query("search") || undefined,
+  }));
+});
+
+cadRoutes.post("/bom/xref/rebuild", (c) => {
+  const ws = getWorkspace(c);
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  try {
+    return c.json(rebuildBomXrefsFromLastScan(ws));
+  } catch (error: any) {
+    return c.json({ error: error?.message || String(error) }, 400);
+  }
+});
+
+cadRoutes.post("/bom/xref/patch-labels", async (c) => {
+  const ws = getWorkspace(c);
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  const body = await c.req.json().catch(() => ({}));
+  return c.json(patchBomLinkLabels(ws, Array.isArray(body?.patches) ? body.patches : []));
+});
+
+// Additional BOM xref compatibility routes.
+cadRoutes.get("/bom/xref/assembly-hosts", (c) => {
+  const ws = getWorkspace(c);
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  return c.json(loadAssemblyBomCatalog(ws, c.req.query("search") || undefined));
 });
 cadRoutes.post("/bom/xref/refresh-host-index", async (c) => {
-  const body = await c.req.json();
-  const res = await fetch(`${PYTHON_API}/api/bom-xrefs/refresh-host-index`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  if (!res.ok) return c.json({ _stub: true });
-  return c.json({ ...await res.json(), _proxy: "python" });
+  const ws = getWorkspace(c);
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  const body = await c.req.json().catch(() => ({}));
+  try {
+    return c.json(refreshBomXrefForHost(ws, body.host_repo_rel || body.rel || "", {
+      recursive: body.recursive !== false,
+      maxHosts: Number(body.max_hosts || 64),
+    }));
+  } catch (error: any) {
+    return c.json({ error: error?.message || String(error) }, 400);
+  }
 });
 cadRoutes.post("/bom/xref/refresh-host-index/start", async (c) => {
-  const body = await c.req.json();
-  const res = await fetch(`${PYTHON_API}/api/bom-xrefs/refresh-host-index/start`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  if (!res.ok) return c.json({ _stub: true });
-  return c.json({ ...await res.json(), _proxy: "python" });
+  const ws = getWorkspace(c);
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  const body = await c.req.json().catch(() => ({}));
+  const scanId = `bom-xref-${Date.now()}-${randomUUID().slice(0, 8)}`;
+  bomXrefProgress.set(scanId, newBomXrefProgress(scanId));
+  void refreshBomXrefForHostAsync(ws, body.host_repo_rel || body.rel || "", {
+    recursive: body.recursive !== false,
+    maxHosts: Number(body.max_hosts || 64),
+    isCancelled: () => Boolean(bomXrefProgress.get(scanId)?.cancelled),
+    onProgress: (phase, current, total, currentFile) => updateBomXrefProgress(scanId, phase, current, total, currentFile),
+  }).then((result) => finishBomXrefProgress(scanId, result)).catch((error: any) => {
+    const progress = bomXrefProgress.get(scanId) || newBomXrefProgress(scanId);
+    progress.status = "error";
+    progress.phase = "error";
+    progress.error = error?.message || String(error);
+    bomXrefProgress.set(scanId, progress);
+  });
+  return c.json({ scan_id: scanId });
 });
 cadRoutes.get("/bom/xref/refresh-host-index/progress", async (c) => {
-  const qs = new URL(c.req.url).searchParams.toString();
-  const res = await proxyToPython(`/api/bom-xrefs/refresh-host-index/progress${qs ? `?${qs}` : ""}`);
-  if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true });
-  return c.json({ ...await res.json(), _proxy: "python" });
+  const scanId = c.req.query("scan_id") || "";
+  const progress = bomXrefProgress.get(scanId);
+  if (!progress) return c.json({ error: "BOM xref task not found", scan_id: scanId }, 404);
+  return c.json(progress);
 });
 cadRoutes.post("/bom/xref/refresh-host-index/cancel", async (c) => {
-  const qs = new URL(c.req.url).searchParams.toString();
-  const res = await fetch(`${PYTHON_API}/api/bom-xrefs/refresh-host-index/cancel${qs ? `?${qs}` : ""}`, { method: "POST" });
-  if (!res.ok) return c.json({ _stub: true });
-  return c.json({ ...await res.json(), _proxy: "python" });
+  const scanId = c.req.query("scan_id") || "";
+  const progress = bomXrefProgress.get(scanId);
+  const ok = Boolean(progress && progress.status === "running");
+  if (ok && progress) {
+    progress.cancelled = true;
+    progress.status = "cancelled";
+    progress.phase = "cancelled";
+  }
+  return c.json({ ok });
 });
 
-cadRoutes.get("/fcstd-map/prefs", async (c) => { const res = await proxyToPython("/api/fcstd-map/prefs"); if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.put("/fcstd-map/prefs", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/fcstd-map/prefs`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/fcstd-map/scan", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/fcstd-map/scan`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/fcstd-map/purge-missing", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/fcstd-map/purge-missing`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/fcstd-map/scan/start", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/fcstd-map/scan/start`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.get("/fcstd-map/scan/progress", async (c) => { const qs = new URL(c.req.url).searchParams.toString(); const res = await proxyToPython(`/api/fcstd-map/scan/progress?${qs}`); if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/fcstd-map/scan/cancel", async (c) => { const qs = new URL(c.req.url).searchParams.toString(); const res = await fetch(`${PYTHON_API}/api/fcstd-map/scan/cancel?${qs}`, { method: "POST" }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.get("/fcstd-map/scan/history", async (c) => { const qs = new URL(c.req.url).searchParams.toString(); const res = await proxyToPython(`/api/fcstd-map/scan/history?${qs}`); if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.get("/fcstd-map/scan/resume", async (c) => { const res = await proxyToPython("/api/fcstd-map/scan/resume"); if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/fcstd-map/export-json", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/fcstd-map/export-json`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
 
-// ── BOM 属性回写代理 (file_detail 页面) ──────────────
+// ── BOM attribute write compatibility routes for file detail page ──────────────
 
-cadRoutes.get("/bom/prefs", async (c) => { const res = await proxyToPython("/api/bom/prefs"); if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.put("/bom/file", async (c) => { /* handled below */ });
-cadRoutes.post("/bom/recommend-field", async (c) => { const body = await c.req.json(); const qs = new URL(c.req.url).searchParams.toString(); const res = await fetch(`${PYTHON_API}/api/bom/recommend-field?${qs}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/bom/recommend-all-fields", async (c) => { const body = await c.req.json(); const qs = new URL(c.req.url).searchParams.toString(); const res = await fetch(`${PYTHON_API}/api/bom/recommend-all-fields?${qs}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/bom/fill-recommended-values", async (c) => { const body = await c.req.json(); const qs = new URL(c.req.url).searchParams.toString(); const res = await fetch(`${PYTHON_API}/api/bom/fill-recommended-values?${qs}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/bom/fill-from-embedded", async (c) => { const body = await c.req.json(); const qs = new URL(c.req.url).searchParams.toString(); const res = await fetch(`${PYTHON_API}/api/bom/fill-from-embedded?${qs}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/bom/fill-from-filename", async (c) => { const body = await c.req.json(); const qs = new URL(c.req.url).searchParams.toString(); const res = await fetch(`${PYTHON_API}/api/bom/fill-from-filename?${qs}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/bom/apply-label-formula", async (c) => { const body = await c.req.json(); const qs = new URL(c.req.url).searchParams.toString(); const res = await fetch(`${PYTHON_API}/api/bom/apply-label-formula?${qs}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.get("/bom/document-kinds", async (c) => { const qs = new URL(c.req.url).searchParams.toString(); const res = await proxyToPython(`/api/bom/document-kinds?${qs}`); if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/bom/rename", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/bom/rename`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
+cadRoutes.get("/bom/prefs", (c) => {
+  const ws = getWorkspace(c);
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  return c.json(loadBomApplyPrefs(ws));
+});
+cadRoutes.put("/bom/file", async (c) => {
+  const ws = getWorkspace(c);
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  const body = await c.req.json().catch(() => ({}));
+  const rel = c.req.query("rel") || body.rel;
+  if (!rel) return c.json({ error: "rel is required" }, 400);
+  try {
+    return c.json(await writeBomToFcstd(ws, rel, body));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 500);
+  }
+});
+cadRoutes.post("/bom/recommend-field", async (c) => {
+  const ws = getWorkspace(c);
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  const body = await c.req.json().catch(() => ({}));
+  const rel = c.req.query("rel") || body.rel;
+  const field = c.req.query("field") || body.field;
+  if (!rel || !field) return c.json({ error: "rel and field are required" }, 400);
+  try {
+    return c.json(recommendBomField(ws, rel, field, body));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
+});
+cadRoutes.post("/bom/recommend-all-fields", async (c) => {
+  const ws = getWorkspace(c);
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  const body = await c.req.json().catch(() => ({}));
+  const rel = c.req.query("rel") || body.rel;
+  if (!rel) return c.json({ error: "rel is required" }, 400);
+  try {
+    return c.json(recommendBomFieldsAll(ws, rel, body));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
+});
+cadRoutes.post("/bom/fill-recommended-values", async (c) => {
+  const ws = getWorkspace(c);
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  const body = await c.req.json().catch(() => ({}));
+  const rel = c.req.query("rel") || body.rel;
+  if (!rel) return c.json({ error: "rel is required" }, 400);
+  return c.json(fillRecommendedValues(ws, rel, body));
+});
+cadRoutes.post("/bom/fill-from-embedded", async (c) => {
+  const ws = getWorkspace(c);
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  const body = await c.req.json().catch(() => ({}));
+  const rel = c.req.query("rel") || body.rel;
+  if (!rel) return c.json({ error: "rel is required" }, 400);
+  try {
+    return c.json(fillBomFromEmbedded(ws, rel, body));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
+});
+cadRoutes.post("/bom/fill-from-filename", async (c) => {
+  const ws = getWorkspace(c);
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  const body = await c.req.json().catch(() => ({}));
+  const rel = c.req.query("rel") || body.rel;
+  if (!rel) return c.json({ error: "rel is required" }, 400);
+  return c.json(fillBomFromFilename(ws, rel));
+});
+cadRoutes.post("/bom/apply-label-formula", async (c) => {
+  const ws = getWorkspace(c);
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  const body = await c.req.json().catch(() => ({}));
+  const rel = c.req.query("rel") || body.rel;
+  if (!rel) return c.json({ error: "rel is required" }, 400);
+  try {
+    return c.json(applyBomLabelFormula(ws, rel, body, body.fill_empty_from_prefs !== false));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
+});
+cadRoutes.get("/bom/document-kinds", (c) => {
+  const ws = getWorkspace(c);
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  const rel = c.req.query("rel") || "";
+  if (!rel) return c.json({ error: "rel is required" }, 400);
+  return c.json(readBomDocumentKinds(ws, rel));
+});
+cadRoutes.post("/bom/recommend-filename", async (c) => {
+  const ws = getWorkspace(c);
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  const body = await c.req.json().catch(() => ({}));
+  const rel = c.req.query("rel") || body.rel;
+  if (!rel) return c.json({ error: "rel is required" }, 400);
+  try {
+    return c.json(recommendBomFilename(ws, rel, body));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
+});
+cadRoutes.post("/bom/rename", async (c) => {
+  const ws = getWorkspace(c);
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  const body = await c.req.json().catch(() => ({}));
+  const rel = c.req.query("rel") || body.rel;
+  if (!rel) return c.json({ error: "rel is required" }, 400);
+  try {
+    return c.json(await renameBomFcstdFile(ws, rel, body));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
+});
 
 // ── BOM 展开树（Rust 原生）────────────────────────────
 
-cadRoutes.get("/bom/tree", async (c) =>
-  nativeOrProxy(c,
-    (ws) => pnwQueryBomTree(ws, c.req.query("rel") || ""),
-    `/api/bom-xrefs/assembly-tree?rel=${encodeURIComponent(c.req.query("rel") || "")}`,
-  ),
-);
-
-// ── 以下暂用 Python 代理 ──────────────────────────────
-
-cadRoutes.get("/fcstd-map", async (c) => {
-  const res = await proxyToPython("/api/fcstd-map");
-  if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true });
-  return c.json({ ...await res.json(), _proxy: "python" });
-});
-
-/** PUT /api/cad/bom/file — BOM 属性回写（Rust fcstd-reader write） */
-cadRoutes.put("/bom/file", async (c) => {
+cadRoutes.get("/bom/tree", (c) => {
   const ws = getWorkspace(c);
-  if (!ws) return c.json({ error: "需要 workspace 参数" }, 400);
-  const body = await c.req.json();
-  const rel = body.rel;
-  if (!rel) return c.json({ error: "需要 rel" }, 400);
-
-  const values: Record<string, string> = {};
-  for (const k of ["PartNumber", "PartVersion", "PartName", "Label", "TypeCode", "ModelSeries"]) {
-    if (body[k]) values[k] = body[k];
-  }
-  if (!Object.keys(values).length) return c.json({ error: "无有效字段" }, 400);
-
-  // Call Rust CLI: fcstd-read write-bom
-  const absPath = path.join(ws, rel);
-  const kvArgs = Object.entries(values).map(([k, v]) => `${k}=${v}`);
-  try {
-    const result = await new Promise<any>((resolve, reject) => {
-      const CLI = path.resolve(__dirname, "../../cli/target/debug/fcstd-read");
-      execFile(CLI, ["write-bom", absPath, ...kvArgs], { timeout: 30_000 }, (err: any, stdout: string, stderr: string) => {
-        if (err) { reject(new Error(stderr || err.message)); return; }
-        try { resolve(JSON.parse(stdout)); } catch { resolve({ ok: true, raw: stdout }); }
-      });
-    });
-    return c.json({ ...result, rel, _native: "rust" });
-  } catch (e: any) {
-    // Fallback to Python
-    const res = await proxyToPython("/api/bom");
-    if (!res) return c.json({ entries: [], items: [], hosts: [], _stub: true, error: e.message });
-    return c.json({ ...await res.json(), _proxy: "python" });
-  }
+  const rel = c.req.query("rel") || c.req.query("host_rel") || "";
+  if (!ws) return c.json({ error: "workspace is required" }, 400);
+  if (!rel) return c.json({ error: "rel is required" }, 400);
+  const tree = loadAssemblyTreeFromXrefs(ws, rel, { full: c.req.query("full") !== "false" });
+  return c.json({ ...tree, items: flattenAssemblyTreeItems(tree.nodes || []) });
 });
 
-// ── STEP 批量 + SW→STEP（代理 Python，后续迁到 server/scripts/）──
+// ── STEP batch + SolidWorks to STEP native routes ─────────────────────────────
 
-cadRoutes.get("/step-batch/prefs", async (c) => {
-  const res = await proxyToPython("/api/step-batch/prefs");
-  if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true });
-  return c.json({ ...await res.json(), _proxy: "python" });
+cadRoutes.get("/step-batch/prefs", (c) => {
+  try {
+    const ws = getWorkspace(c);
+    if (!ws) return c.json({ error: "workspace is required" }, 400);
+    return c.json(getStepBatchPrefs(ws));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
 });
 
 cadRoutes.put("/step-batch/prefs", async (c) => {
-  const body = await c.req.json();
-  const res = await fetch(`${PYTHON_API}/api/step-batch/prefs`, {
-    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-  });
-  if (!res.ok) return c.json({ _stub: true });
-  return c.json({ ...await res.json(), _proxy: "python" });
+  try {
+    const ws = getWorkspace(c);
+    if (!ws) return c.json({ error: "workspace is required" }, 400);
+    return c.json(saveStepBatchPrefs(ws, await c.req.json().catch(() => ({}))));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
 });
 
 cadRoutes.post("/step-batch/preview", async (c) => {
-  const body = await c.req.json();
-  const res = await fetch(`${PYTHON_API}/api/step-batch/preview`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-  });
-  if (!res.ok) return c.json({ _stub: true });
-  return c.json({ ...await res.json(), _proxy: "python" });
+  try {
+    const ws = getWorkspace(c);
+    if (!ws) return c.json({ error: "workspace is required" }, 400);
+    return c.json(previewStepBatch(ws, await c.req.json().catch(() => ({}))));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
 });
 
 cadRoutes.post("/step-batch/run", async (c) => {
-  const body = await c.req.json();
-  const res = await fetch(`${PYTHON_API}/api/step-batch/run`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-  });
-  if (!res.ok) return c.json({ _stub: true });
-  return c.json({ ...await res.json(), _proxy: "python" });
+  try {
+    const ws = getWorkspace(c);
+    if (!ws) return c.json({ error: "workspace is required" }, 400);
+    return c.json(await runStepBatch(ws, await c.req.json().catch(() => ({}))));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
 });
 
-cadRoutes.get("/sw-step/prefs", async (c) => {
-  const res = await proxyToPython("/api/sw-step-export/prefs");
-  if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true });
-  return c.json({ ...await res.json(), _proxy: "python" });
+cadRoutes.get("/sw-step/prefs", (c) => {
+  try {
+    const ws = getWorkspace(c);
+    if (!ws) return c.json({ error: "workspace is required" }, 400);
+    return c.json(getSwStepPrefs(ws));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
+});
+
+cadRoutes.put("/sw-step/prefs", async (c) => {
+  try {
+    const ws = getWorkspace(c);
+    if (!ws) return c.json({ error: "workspace is required" }, 400);
+    return c.json(saveSwStepPrefs(ws, await c.req.json().catch(() => ({}))));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
 });
 
 cadRoutes.post("/sw-step/preview", async (c) => {
-  const body = await c.req.json();
-  const res = await fetch(`${PYTHON_API}/api/sw-step-export/preview`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-  });
-  if (!res.ok) return c.json({ _stub: true });
-  return c.json({ ...await res.json(), _proxy: "python" });
+  try {
+    const ws = getWorkspace(c);
+    if (!ws) return c.json({ error: "workspace is required" }, 400);
+    return c.json(previewSwStepExport(ws, await c.req.json().catch(() => ({}))));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
 });
 
 cadRoutes.post("/sw-step/run", async (c) => {
-  const body = await c.req.json();
-  const res = await fetch(`${PYTHON_API}/api/sw-step-export/run`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-  });
-  if (!res.ok) return c.json({ _stub: true });
-  return c.json({ ...await res.json(), _proxy: "python" });
+  try {
+    const ws = getWorkspace(c);
+    if (!ws) return c.json({ error: "workspace is required" }, 400);
+    return c.json(await runSwStepExport(ws, await c.req.json().catch(() => ({}))));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
 });
 
-cadRoutes.get("/fcstd-map/prefs", async (c) => { const res = await proxyToPython("/api/fcstd-map/prefs"); if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.put("/fcstd-map/prefs", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/fcstd-map/prefs`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/fcstd-map/scan", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/fcstd-map/scan`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/fcstd-map/purge-missing", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/fcstd-map/purge-missing`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/fcstd-map/scan/start", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/fcstd-map/scan/start`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.get("/fcstd-map/scan/progress", async (c) => { const qs = new URL(c.req.url).searchParams.toString(); const res = await proxyToPython(`/api/fcstd-map/scan/progress?${qs}`); if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/fcstd-map/scan/cancel", async (c) => { const qs = new URL(c.req.url).searchParams.toString(); const res = await fetch(`${PYTHON_API}/api/fcstd-map/scan/cancel?${qs}`, { method: "POST" }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.get("/fcstd-map/scan/history", async (c) => { const qs = new URL(c.req.url).searchParams.toString(); const res = await proxyToPython(`/api/fcstd-map/scan/history?${qs}`); if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.get("/fcstd-map/scan/resume", async (c) => { const res = await proxyToPython("/api/fcstd-map/scan/resume"); if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/fcstd-map/export-json", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/fcstd-map/export-json`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
 
-// ── XLink 路径修正 + 改名分析（代理 Python）───────────
+// ── XLink fix + rename analysis native routes ────────────────────────────────
 
-// xlink-fix
-cadRoutes.get("/xlink-fix/prefs", async (c) => { const res = await proxyToPython("/api/xlink-fix/prefs"); if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.put("/xlink-fix/prefs", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/xlink-fix/prefs`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/xlink-fix/analyze", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/xlink-fix/analyze`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/xlink-fix/run", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/xlink-fix/run`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/xlink-fix/apply-override", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/xlink-fix/apply-override`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.get("/xlink-fix/candidates", async (c) => { const qs = new URL(c.req.url).searchParams.toString(); const res = await proxyToPython(`/api/xlink-fix/candidates?${qs}`); if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true }); return c.json({ ...await res.json(), _proxy: "python" }); });
+// xlink-fix native routes
+cadRoutes.get("/xlink-fix/prefs", (c) => {
+  try {
+    const ws = getWorkspace(c);
+    if (!ws) return c.json({ error: "workspace is required" }, 400);
+    return c.json(getXlinkPrefs(ws));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
+});
+
+cadRoutes.put("/xlink-fix/prefs", async (c) => {
+  try {
+    const ws = getWorkspace(c);
+    if (!ws) return c.json({ error: "workspace is required" }, 400);
+    return c.json(saveXlinkPrefs(ws, await c.req.json().catch(() => ({}))));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
+});
+
+cadRoutes.post("/xlink-fix/analyze", async (c) => {
+  try {
+    const ws = getWorkspace(c);
+    if (!ws) return c.json({ error: "workspace is required" }, 400);
+    return c.json(analyzeXlinkFix(ws, await c.req.json().catch(() => ({}))));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
+});
+
+cadRoutes.post("/xlink-fix/run", async (c) => {
+  try {
+    const ws = getWorkspace(c);
+    if (!ws) return c.json({ error: "workspace is required" }, 400);
+    return c.json(runXlinkFix(ws, await c.req.json().catch(() => ({}))));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
+});
+
+cadRoutes.post("/xlink-fix/apply-override", async (c) => {
+  try {
+    const ws = getWorkspace(c);
+    if (!ws) return c.json({ error: "workspace is required" }, 400);
+    return c.json(applyXlinkFixOverride(ws, await c.req.json().catch(() => ({}))));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
+});
+
+cadRoutes.get("/xlink-fix/candidates", (c) => {
+  try {
+    const ws = getWorkspace(c);
+    if (!ws) return c.json({ error: "workspace is required" }, 400);
+    return c.json(listXlinkFixCandidates(ws, {
+      basename: c.req.query("basename") || "",
+      part_number: c.req.query("part_number") || "",
+      part_version: c.req.query("part_version") || "",
+      exclude_repo_rel: c.req.query("exclude_repo_rel") || "",
+    }));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
+});
 
 // rename-analysis
-cadRoutes.get("/rename/logs", async (c) => { const qs = new URL(c.req.url).searchParams.toString(); const res = await proxyToPython(`/api/rename-analysis/logs?${qs}`); if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/rename/analyze", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/rename-analysis/analyze`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/rename/apply", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/rename-analysis/apply`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.get("/rename/load", async (c) => { const qs = new URL(c.req.url).searchParams.toString(); const res = await proxyToPython(`/api/rename-analysis/load?${qs}`); if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/rename/export-report", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/rename-analysis/export-report`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
+cadRoutes.get("/rename/logs", (c) => {
+  try {
+    return c.json(listRenameLogs(getWorkspace(c), { limit: Number(c.req.query("limit") || 50), rel: c.req.query("rel") || "" }));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
+});
+cadRoutes.post("/rename/analyze", async (c) => {
+  try {
+    return c.json(analyzeRenameReferences(getWorkspace(c), await c.req.json().catch(() => ({}))));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
+});
+cadRoutes.post("/rename/apply", async (c) => {
+  try {
+    return c.json(applyRenameCorrections(getWorkspace(c), await c.req.json().catch(() => ({}))));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
+});
+cadRoutes.get("/rename/load", (c) => {
+  try {
+    return c.json(loadRenameAnalysis(getWorkspace(c), Number(c.req.query("rename_log_id") || 0)));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
+});
+cadRoutes.post("/rename/export-report", async (c) => {
+  try {
+    return c.json(exportRenameReport(getWorkspace(c), await c.req.json().catch(() => ({}))));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
+});
 
-// ── 编号查重（代理 Python）────────────────────────────
+// ── Part dedup native routes ──────────────────────────────────────────────────
 
 cadRoutes.get("/part-dedup/prefs", async (c) => {
-  const res = await proxyToPython("/api/part-dedup/prefs");
-  if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true });
-  return c.json({ ...await res.json(), _proxy: "python" });
+  try {
+    const ws = getWorkspace(c);
+    if (!ws) return c.json({ error: "workspace is required" }, 400);
+    return c.json(getPartDedupPrefs(ws));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
 });
 
 cadRoutes.put("/part-dedup/prefs", async (c) => {
-  const body = await c.req.json();
-  const res = await fetch(`${PYTHON_API}/api/part-dedup/prefs`, {
-    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-  });
-  if (!res.ok) return c.json({ _stub: true });
-  return c.json({ ...await res.json(), _proxy: "python" });
+  try {
+    const ws = getWorkspace(c);
+    if (!ws) return c.json({ error: "workspace is required" }, 400);
+    const body = await c.req.json().catch(() => ({}));
+    return c.json(savePartDedupPrefs(ws, body));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
 });
 
 cadRoutes.post("/part-dedup/scan", async (c) => {
-  const body = await c.req.json();
-  const res = await fetch(`${PYTHON_API}/api/part-dedup/scan`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-  });
-  if (!res.ok) return c.json({ _stub: true });
-  return c.json({ ...await res.json(), _proxy: "python" });
+  try {
+    const ws = getWorkspace(c);
+    if (!ws) return c.json({ error: "workspace is required" }, 400);
+    const body = await c.req.json().catch(() => ({}));
+    return c.json(scanPartDedup(ws, body));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
 });
 
 cadRoutes.post("/part-dedup/export-csv", async (c) => {
-  const body = await c.req.json();
-  const res = await fetch(`${PYTHON_API}/api/part-dedup/export-csv`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-  });
-  if (!res.ok) return c.json({ _stub: true });
-  return c.json({ ...await res.json(), _proxy: "python" });
+  try {
+    const ws = getWorkspace(c);
+    if (!ws) return c.json({ error: "workspace is required" }, 400);
+    const body = await c.req.json().catch(() => ({}));
+    return c.json(exportPartDedupCsv(ws, body));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
 });
-
-cadRoutes.get("/fcstd-map/prefs", async (c) => { const res = await proxyToPython("/api/fcstd-map/prefs"); if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.put("/fcstd-map/prefs", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/fcstd-map/prefs`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/fcstd-map/scan", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/fcstd-map/scan`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/fcstd-map/purge-missing", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/fcstd-map/purge-missing`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/fcstd-map/scan/start", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/fcstd-map/scan/start`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.get("/fcstd-map/scan/progress", async (c) => { const qs = new URL(c.req.url).searchParams.toString(); const res = await proxyToPython(`/api/fcstd-map/scan/progress?${qs}`); if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/fcstd-map/scan/cancel", async (c) => { const qs = new URL(c.req.url).searchParams.toString(); const res = await fetch(`${PYTHON_API}/api/fcstd-map/scan/cancel?${qs}`, { method: "POST" }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.get("/fcstd-map/scan/history", async (c) => { const qs = new URL(c.req.url).searchParams.toString(); const res = await proxyToPython(`/api/fcstd-map/scan/history?${qs}`); if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.get("/fcstd-map/scan/resume", async (c) => { const res = await proxyToPython("/api/fcstd-map/scan/resume"); if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true }); return c.json({ ...await res.json(), _proxy: "python" }); });
-cadRoutes.post("/fcstd-map/export-json", async (c) => { const body = await c.req.json(); const res = await fetch(`${PYTHON_API}/api/fcstd-map/export-json`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!res.ok) return c.json({ _stub: true, error: `Python API 错误` }); return c.json({ ...await res.json(), _proxy: "python" }); });
-
-// ── 扫描进度 + 工作集（代理 Python）───────────────────
-
-cadRoutes.get("/scan/progress", async (c) => {
-  const res = await proxyToPython("/api/scan/progress");
-  if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true });
-  return c.json({ ...await res.json(), _proxy: "python" });
-});
-
-cadRoutes.get("/scan/recent", async (c) => {
-  const res = await proxyToPython("/api/scan/recent");
-  if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true });
-  return c.json({ ...await res.json(), _proxy: "python" });
-});
-
-cadRoutes.get("/worksets", async (c) => {
-  const res = await proxyToPython("/api/worksets");
-  if (!res) return c.json({ entries: [], items: [], hosts: [], files: [], results: {}, _stub: true, _stub: true });
-  return c.json({ ...await res.json(), _proxy: "python" });
-});
-
-cadRoutes.get("/bom/batch", async (c) => c.json({ error: "batch 暂未实现" }, 501));
