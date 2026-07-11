@@ -54,7 +54,7 @@ const nativeToolsLoading = ref(false);
 const defaultFreecadDir = computed(() => launcher.value?.default_freecad_dir ?? "");
 
 const nonHomeTabCount = computed(
-  () => shell.tabs.value.filter((t) => t.pageId !== "home").length,
+  () => shell.openToolTabCount(),
 );
 
 function normalizePath(p: string) {

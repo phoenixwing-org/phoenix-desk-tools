@@ -62,11 +62,15 @@ function pathParent(absPath: string): string {
   return norm.slice(0, idx);
 }
 
+function isWorkspaceBlockingTab(pageId: string) {
+  return pageId !== "home" && pageId !== "welcome" && pageId !== "config";
+}
+
 async function openWorkspace(entry: RecentWorkspaceEntry) {
   if (!entry.exists) return;
   const scope = entryScope(entry);
   if (entry.path !== workspacePath.value) {
-    const tabTitles = shell.tabs.value.map((t) => t.title);
+    const tabTitles = shell.tabs.value.filter((t) => isWorkspaceBlockingTab(t.pageId)).map((t) => t.title);
     if (tabTitles.length) {
       const ok = await confirmCloseTabsBeforeWorkspacePick(tabTitles, shell.toolTabDirtyTitles());
       if (!ok) {

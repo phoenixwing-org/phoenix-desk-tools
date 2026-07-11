@@ -6,10 +6,33 @@
 
 ## 快速启动
 
+首次运行先安装前端和服务端依赖（仓库使用 pnpm 9.15.9）：
+
 ```bash
-pnpm install                   # 需 Node.js
-pnpm dev                       # 全栈：Vite (:5173) + Node (:5180)
-# → 浏览器打开 http://localhost:5173
+corepack enable
+pnpm install --frozen-lockfile
+```
+
+### 浏览器开发模式
+
+```bash
+pnpm dev                       # 同时启动 Vite (:5173) 和 Node (:5180)
+# 浏览器打开 http://localhost:5173
+```
+
+### Tauri 桌面开发模式
+
+桌面模式还需要 Rust 和 Tauri 2 CLI。Tauri 会自行启动前端和本地服务，不需要同时运行 `pnpm dev`。
+
+```bash
+cargo install tauri-cli --version "^2.6" --locked  # 仅首次安装
+pnpm tauri:dev
+```
+
+如果启动时提示找不到 `vite/bin/vite.js` 或 `tsx/dist/cli.mjs`，说明本地依赖目录不完整，可强制按锁文件重新安装：
+
+```bash
+pnpm install --frozen-lockfile --force
 ```
 
 ### 构建 Rust 模块

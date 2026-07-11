@@ -334,6 +334,10 @@ function readWorkspaceSidebarTab(): "tree" | "workset" | "ignore" {
   }
 }
 
+function isWorkspaceBlockingTabPage(pageId: string): boolean {
+  return pageId !== "home" && pageId !== "welcome" && pageId !== "config";
+}
+
 export function provideAppShell(): AppShellContext {
   const appConfig = shallowRef<AppConfig | null>(null);
   const launcher = shallowRef<LauncherPrefs | null>(null);
@@ -988,7 +992,7 @@ export function provideAppShell(): AppShellContext {
   }
 
   function openToolTabCount(): number {
-    return wb.tabs.value.filter((t) => t.pageId !== "home").length;
+    return wb.tabs.value.filter((t) => isWorkspaceBlockingTabPage(t.pageId)).length;
   }
 
   function clearWorkbenchAfterWorkspaceClose() {

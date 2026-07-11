@@ -70,6 +70,7 @@ import {
 } from "../lib/runtimeCatalogService.js";
 import {
   loadWorkspaceNavModules,
+  normalizeWorkspaceNavModules,
   saveWorkspaceNavModules,
   type WorkspaceNavModules,
 } from "../lib/workspaceStateService.js";
@@ -805,12 +806,21 @@ shellRoutes.get("/api/workspace", (c) => {
 shellRoutes.post("/api/workspace", async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
-    recordRecentWorkspace(body?.path, true);
+    const prefs = recordRecentWorkspace(body?.path, true);
     const workspace = currentWorkspace();
+    let navModules: WorkspaceNavModules;
+    let navWarning = "";
+    try {
+      navModules = loadWorkspaceNavModules(workspace);
+    } catch (error: any) {
+      navModules = normalizeWorkspaceNavModules(prefs.nav_modules);
+      navWarning = error?.message || String(error);
+    }
     return c.json({
       path: workspace,
       name: workspaceName(workspace),
-      nav_modules: loadWorkspaceNavModules(workspace),
+      nav_modules: navModules,
+      nav_warning: navWarning || undefined,
     });
   } catch (e: any) {
     return c.json({ detail: e.message || String(e) }, 400);

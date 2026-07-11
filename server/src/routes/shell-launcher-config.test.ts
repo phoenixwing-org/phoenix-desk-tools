@@ -164,6 +164,34 @@ describe("launcher config routes", () => {
     });
   });
 
+  it("activates the workspace even when workspace-local nav prefs cannot be read", async () => {
+    const home = makeTempRoot();
+    const workspace = makeWorkspaceRoot();
+    process.env.HOME = home;
+    process.env.USERPROFILE = home;
+    fs.mkdirSync(path.join(workspace, ".phoenix"), { recursive: true });
+    fs.writeFileSync(path.join(workspace, ".phoenix", "phoenix-workspace.sqlite"), "not sqlite");
+    vi.resetModules();
+    const { shellRoutes } = await import("./shell.js");
+
+    const activated = await shellRoutes.request("/api/workspace", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: workspace }),
+    });
+
+    expect(activated.status).toBe(200);
+    await expect(activated.json()).resolves.toMatchObject({
+      path: workspace,
+      nav_modules: { scope: "all", enabled: ["cad", "code"] },
+      nav_warning: expect.any(String),
+    });
+    await expect((await shellRoutes.request("/api/workspace")).json()).resolves.toEqual({
+      path: workspace,
+      name: path.basename(workspace),
+    });
+  });
+
   it("prunes missing recent workspaces while preserving valid entries", async () => {
     const home = makeTempRoot();
     const workspace = makeWorkspaceRoot();
