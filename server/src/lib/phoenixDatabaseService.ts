@@ -1,11 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
+import { createRequire } from "node:module";
+import { spawnSync } from "node:child_process";
 import { pnwCreateDb, type PnwDbAdapter } from "phoenix-wing/db/pnwDbAdapter";
 
 export const PHOENIX_SCHEMA_VERSION = 13;
 
 const DATABASE_FILENAME = "phoenix-workspace.sqlite";
 const LEGACY_DATABASE_FILENAMES = ["cad-database.sqlite", "phoenix-cad.sqlite"];
+const require = createRequire(import.meta.url);
 const OLD_TABLE_NAMES = [
   "meta",
   "fcstd_scan",
@@ -394,6 +397,53 @@ function phoenixDir(workspace: string): string {
   return path.join(workspace, ".phoenix");
 }
 
+/**
+ * node-sqlite3-wasm does not implement SQLite's WAL VFS. A workspace created
+ * by a native SQLite client can retain WAL mode in its database header even
+ * after its `-wal` file has been checkpointed, so normalize that case before
+ * handing the file to the WASM adapter.
+ */
+function migrateWalJournalForWasm(filename: string): void {
+  let header: Buffer;
+  try {
+    header = fs.readFileSync(filename);
+  } catch {
+    return;
+  }
+  // SQLite header bytes 18 and 19 are the file-format write/read versions.
+  // Both are 2 when the database uses WAL journaling.
+  if (header.length < 20 || header[18] !== 2 || header[19] !== 2) return;
+
+  try {
+    const { DatabaseSync } = require("node:sqlite") as typeof import("node:sqlite");
+    const db = new DatabaseSync(filename);
+    try {
+      db.exec("PRAGMA journal_mode = DELETE");
+    } finally {
+      db.close();
+    }
+    return;
+  } catch (error: any) {
+    // node:sqlite was added after the Node versions used by some Electron
+    // shells. macOS ships sqlite3, which is sufficient for this one-time
+    // compatibility migration without adding a native npm dependency.
+    if (error?.code === "ERR_UNKNOWN_BUILTIN_MODULE" || /No such built-in module/.test(String(error?.message))) {
+      const sqlite3 = process.platform === "darwin" ? "/usr/bin/sqlite3" : "sqlite3";
+      const result = spawnSync(sqlite3, [filename, "PRAGMA journal_mode = DELETE;"], {
+        encoding: "utf8",
+      });
+      if (!result.error && result.status === 0) return;
+      const detail = result.error?.message || result.stderr?.trim() || `exit code ${result.status}`;
+      throw new Error(
+        `Cannot migrate WAL SQLite database for the WASM adapter (${filename}): sqlite3 ${detail}`,
+      );
+    }
+    throw new Error(
+      `Cannot migrate WAL SQLite database for the WASM adapter (${filename}): ${error?.message || String(error)}`,
+    );
+  }
+}
+
 export function phoenixDatabasePath(workspace: string): string {
   return path.join(path.resolve(workspace), ".phoenix", DATABASE_FILENAME);
 }
@@ -415,7 +465,10 @@ function createSchema(db: PnwDbAdapter): void {
 export function ensurePhoenixDatabase(workspace: string): string {
   const resolved = assertWorkspace(workspace);
   const filename = phoenixDatabasePath(resolved);
-  if (fs.existsSync(filename)) return filename;
+  if (fs.existsSync(filename)) {
+    migrateWalJournalForWasm(filename);
+    return filename;
+  }
   fs.mkdirSync(path.dirname(filename), { recursive: true });
   const db = pnwCreateDb(filename);
   try {

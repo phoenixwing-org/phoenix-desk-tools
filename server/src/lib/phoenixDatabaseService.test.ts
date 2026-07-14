@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { pnwCreateDb } from "phoenix-wing/db/pnwDbAdapter";
 import {
@@ -23,6 +24,30 @@ afterEach(() => {
 });
 
 describe("Phoenix workspace database", () => {
+  it("migrates a legacy WAL database before the WASM adapter opens it", () => {
+    const workspace = makeWorkspace();
+    const filename = path.join(workspace, ".phoenix", "phoenix-workspace.sqlite");
+    fs.mkdirSync(path.dirname(filename), { recursive: true });
+    const nativeDb = new DatabaseSync(filename);
+    try {
+      nativeDb.exec("CREATE TABLE legacy_value (value TEXT); PRAGMA journal_mode = WAL");
+    } finally {
+      nativeDb.close();
+    }
+
+    expect(fs.readFileSync(filename)[18]).toBe(2);
+    expect(ensurePhoenixDatabase(workspace)).toBe(filename);
+    expect(fs.readFileSync(filename)[18]).toBe(1);
+
+    const db = pnwCreateDb(filename);
+    try {
+      expect(db.get<{ value: string }>("SELECT name AS value FROM sqlite_master WHERE name = 'legacy_value'"))
+        .toEqual({ value: "legacy_value" });
+    } finally {
+      db.close();
+    }
+  });
+
   it("creates the complete v13 schema and reports it as current", () => {
     const workspace = makeWorkspace();
     expect(getPhoenixDatabaseStatus(workspace)).toMatchObject({
