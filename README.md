@@ -1,6 +1,6 @@
 # phoenix-desk-tools
 
-[Gitee](https://gitee.com/PhoenixWing321/phoenix-desk-tools.git) · MIT
+[Gitee](https://gitee.com/PhoenixWing321/phoenix-desk-tools.git) · Apache-2.0
 
 围绕 FreeCAD 工作空间的 **Web 桌面辅助工具**：CAD 索引与检索、BOM、Code 工具等。
 
@@ -84,3 +84,8 @@ python3 -m http.server 4173 --directory test-report
 | `phoenix/` | Python 包（逐步退役） |
 | `scripts/` | 命令行工具 |
 | `doc/` | 文档 |
+# Phoenix Desk Tools
+
+## 许可证
+
+Copyright © 2024–2026 上海锟钛。项目使用 [Apache License 2.0](LICENSE) 开源。

@@ -1,5 +1,7 @@
 {
   "name": "phoenix-desk-tools",
+  "author": "上海锟钛",
+  "license": "Apache-2.0",
   "private": true,
   "description": "Phoenix 桌面辅助工具 — 根目录 pnpm 命令转发至 web-ui",
   "scripts": {

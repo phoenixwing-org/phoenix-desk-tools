@@ -42,8 +42,8 @@ importers:
         specifier: ^0.8.59
         version: 0.8.59
       phoenix-wing:
-        specifier: ^0.1.4
-        version: 0.1.4(element-plus@2.14.2(vue@3.5.35(typescript@5.7.3)))(pinia@3.0.4(typescript@5.7.3)(vue@3.5.35(typescript@5.7.3)))(vue@3.5.35(typescript@5.7.3))
+        specifier: link:../../phoenix-wing
+        version: link:../../phoenix-wing
     devDependencies:
       '@types/node':
         specifier: ^26.0.1

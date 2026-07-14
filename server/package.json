@@ -22,7 +22,7 @@
     "hono": "^4.7.4",
     "iconv-lite": "0.6.3",
     "node-sqlite3-wasm": "^0.8.59",
-    "phoenix-wing": "^0.1.4"
+    "phoenix-wing": "link:../../phoenix-wing"
   },
   "devDependencies": {
     "@types/node": "^26.0.1",
