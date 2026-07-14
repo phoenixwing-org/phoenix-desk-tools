@@ -2,7 +2,7 @@
 export const ONBOARDING_PAGES_ALWAYS = new Set(["welcome", "home", "config", "unit_tests", "test_fixtures"]);
 
 /** 依赖本机 FreeCAD 目录（仅限制「开始任务」类操作，不拦进入页面） */
-export const ONBOARDING_PAGES_FREECAD_TASKS = new Set(["step_batch", "sw_step_export"]);
+export const ONBOARDING_PAGES_FREECAD_TASKS = new Set(["step_batch"]);
 
 export const FILE_DETAIL_PAGE_IDS = new Set(["file_detail", "bom_apply"]);
 

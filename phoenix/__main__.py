@@ -1,15 +1,18 @@
-"""Phoenix 桌面启动器 — 已迁移到 Node.js + Rust。
+"""Compatibility entry point for the retired Python desktop launcher."""
 
-使用 `pnpm dev` 启动。
-"""
+from __future__ import annotations
 
 import sys
 
+
+def main() -> int:
+    print("Phoenix desktop has migrated to the Node/Rust/Tauri stack.", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("  pnpm dev          # browser development", file=sys.stderr)
+    print("  pnpm tauri:dev    # desktop development", file=sys.stderr)
+    print("  pnpm tauri:build  # desktop package", file=sys.stderr)
+    return 1
+
+
 if __name__ == "__main__":
-    print("Phoenix 桌面启动器已迁移到 Node.js + Rust。", file=sys.stderr)
-    print("", file=sys.stderr)
-    print("  启动方式：", file=sys.stderr)
-    print("    pnpm dev           # Node.js :5180 + Vue :5173", file=sys.stderr)
-    print("", file=sys.stderr)
-    print("  Python 后端已关闭。详见 doc/cad/ 迁移计划。", file=sys.stderr)
-    sys.exit(1)
+    raise SystemExit(main())

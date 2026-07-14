@@ -5,7 +5,6 @@ import {
   fetchTestCaseCatalog,
   fetchUnitTestPlan,
   fetchUnitTestSuites,
-  fetchVitestTestList,
   cancelUnitTestRun,
   runUnitTestsStream,
   type TestModuleCatalogEntry,
@@ -15,7 +14,6 @@ import {
   type UnitTestCaseResult,
   type UnitTestRunOptions,
   type UnitTestRunResult,
-  type UnitTestStreamEvent,
   type UnitTestSuiteInfo,
 } from "../api";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
@@ -31,7 +29,6 @@ import {
 import {
   clearWatchlist,
   excludeCaseIdsForFullRun,
-  includeCaseIdsForWatchlistRun,
   loadWatchlist,
   recordWatchlistFailure,
   removeWatchlistEntry,
@@ -49,7 +46,6 @@ import {
   sortPlanModules,
   type ModuleHistoryMap,
 } from "../utils/unitTestModuleHistory";
-import { mergeSuites } from "../utils/unitTestBackendSplit";
 
 const shell = useAppShell();
 const pageStore = useUnitTestsPageStore();
@@ -86,8 +82,6 @@ const runScopeCollapsed = ref(false);
 const rerunningWatchlistId = ref<string | null>(null);
 const rerunningModule = ref<string | null>(null);
 const moduleHistory = ref<ModuleHistoryMap>(loadModuleHistory());
-const currentRunId = ref<string | null>(null);
-let runAbortController: AbortController | null = null;
 
 const runChecked = computed(() => pageStore.runCheckedSuiteIds);
 const runCheckedCount = computed(() => pageStore.runCheckedCount);
@@ -306,25 +300,10 @@ function caseDescriptionBrief(entry: UnitTestWatchlistEntry, maxLen = 56): strin
   return `${text.slice(0, maxLen - 1)}…`;
 }
 
-/** 与后端 suite_registry 前缀一致，仅用于模块表展示 */
-function classifyModule(module: string): string {
-  const stem = module.replace(/^tests\./, "");
-  if (stem.startsWith("test_code_") || stem.startsWith("test_reorder_") || stem === "test_text_encoding") {
-    return "code";
-  }
-  if (
-    stem.startsWith("test_fcstd_") ||
-    stem.startsWith("test_bom_") ||
-    stem.startsWith("test_part_") ||
-    stem.startsWith("test_batch_step_") ||
-    stem.startsWith("test_xlink_") ||
-    stem.startsWith("test_cad_") ||
-    stem.startsWith("test_rename_ref_fix") ||
-    stem.startsWith("test_solidworks_")
-  ) {
-    return "cad";
-  }
-  return "platform";
+function moduleSuiteId(module: string): string {
+  return result.value?.cases.find((testCase) => testCase.module === module)?.suite_id
+    ?? runPlan.value?.modules.find((item) => item.module === module)?.suite_id
+    ?? "";
 }
 
 function onModuleSortChange(sortBy: "plan" | "last_run_at" | "run_count") {
@@ -423,15 +402,7 @@ function cancelRun() {
   if (!running.value) return;
   shell.appendLog("[单元测试] 请求终止…（当前用例结束后停止）", { source: "unit_tests" });
   shell.setStatus("正在终止…");
-  if (currentRunId.value) {
-    void cancelUnitTestRun(currentRunId.value).catch((e) => {
-      shell.setStatus(String(e));
-    });
-  }
-  // 同时 abort stream
-  if (runAbortController) {
-    runAbortController.abort();
-  }
+  void testProgressUI.cancel();
 }
 
 function onWatchlistRunOnFullChange(entry: UnitTestWatchlistEntry, checked: boolean) {
@@ -537,13 +508,8 @@ async function loadCaseCatalog(caseIds?: string[]) {
 async function loadSuites() {
   loadError.value = "";
   try {
-    // 并行从 Python + Node 获取套件列表
-    const [pyData, vitestData] = await Promise.all([
-      fetchUnitTestSuites().catch(() => ({ suites: [] as UnitTestSuiteInfo[] })),
-      fetchVitestTestList().catch(() => ({ modules: [] as { file: string; count: number; tests: string[] }[] })),
-    ]);
-
-    suites.value = mergeSuites(pyData.suites, vitestData.modules ?? []);
+    const data = await fetchUnitTestSuites();
+    suites.value = data.suites;
     void loadRunPlan();
   } catch (e) {
     loadError.value = String(e);
@@ -648,21 +614,15 @@ async function executeRun(args: {
   running.value = true;
   result.value = null;
   expandedCase.value = null;
-  currentRunId.value = null;
   activeTab.value = "results";
-  console.log("[unit-tests] executeRun start", { suiteIds: args.suiteIds, logLabel: args.logLabel });
   shell.appendLog(`[单元测试] 运行 ${args.logLabel}…`, { source: "unit_tests", open: true });
-  runAbortController = new AbortController();
   let cancelled = false;
   try {
     // 进度统一走 AsyncProgressOverlay（新架构），仅保留 watchlist/结果同步
-    console.log("[unit-tests] calling runUnitTestsStream", args.suiteIds);
     result.value = (await testProgressUI.startStreaming(
       (onEvent) =>
         runUnitTestsStream(args.suiteIds, (event) => {
-          console.log("[unit-tests] stream event", event.type);
           if (event.type === "start") {
-            currentRunId.value = event.run_id ?? null;
             if (event.load_errors.length) {
               for (const err of event.load_errors) {
                 shell.appendLog(`  ✗ 加载 ${err}`, { source: "unit_tests" });
@@ -675,13 +635,15 @@ async function executeRun(args: {
           onEvent(event); // → overlay 处理全部进度展示
         }, {
           ...args.runOptions,
-          signal: runAbortController.signal,
         }),
       (runId) => cancelUnitTestRun(runId),
       { taskName: "单元测试" },
     )) ?? null as unknown as UnitTestRunResult;
-    console.log("[unit-tests] stream result", result.value);
-    if (!result.value) { shell.appendLog("❌ 流式响应返回为空", { source: "unit_tests" }); running.value = false; return; }
+    if (!result.value) {
+      shell.appendLog("测试运行未返回结果", { source: "unit_tests" });
+      shell.setStatus("测试运行未返回结果");
+      return;
+    }
     cancelled = !!result.value.summary.cancelled;
     recordRunHistoryFromResult(result.value);
     lastRunSuites.value = args.lastRunSuiteIds ?? [...runChecked.value];
@@ -711,7 +673,6 @@ async function executeRun(args: {
       activeTab.value = "watchlist";
     }
   } catch (e) {
-    console.error("[unit-tests] executeRun FAILED", e);
     const msg = String(e);
     if (msg.includes("终止") || msg.includes("aborted")) {
       shell.appendLog("[单元测试] 运行已终止", { source: "unit_tests" });
@@ -721,8 +682,6 @@ async function executeRun(args: {
       shell.setStatus(msg);
     }
   } finally {
-    runAbortController = null;
-    currentRunId.value = null;
     running.value = false;
   }
 }
@@ -1029,7 +988,7 @@ onMounted(() => {
           <el-table-column label="后端" width="66" align="center">
             <template #default="{ row }">
               <el-tag v-if="row.backend === 'vitest'" size="small" type="warning" effect="plain">vitest</el-tag>
-              <span v-else class="muted" style="font-size:0.7rem">py</span>
+              <el-tag v-else size="small" type="success" effect="plain">runtime</el-tag>
             </template>
           </el-table-column>
           <el-table-column label="用例" width="56" align="center">
@@ -1345,7 +1304,7 @@ onMounted(() => {
               <td class="module-desc" :title="moduleDescription(m.module)">
                 {{ moduleDescriptionBrief(m.module) }}
               </td>
-              <td>{{ suiteLabelById.get(classifyModule(m.module)) ?? "—" }}</td>
+              <td>{{ suiteLabelById.get(moduleSuiteId(m.module)) ?? "—" }}</td>
               <td>{{ m.passed }}</td>
               <td>{{ m.failed }}</td>
               <td>{{ m.errors }}</td>

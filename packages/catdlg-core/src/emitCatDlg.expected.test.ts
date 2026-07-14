@@ -29,6 +29,9 @@ const WRITE = process.env.CAA_WRITE_EXPECTED === "1";
 function read(dir: string, name: string) {
   return readFileSync(resolve(dir, name), "utf8");
 }
+function normalizeEol(text: string) {
+  return text.replace(/\r\n/g, "\n");
+}
 function writeJson(subdir: string, name: string, data: unknown) {
   const dir = resolve(EXPECTED, subdir);
   mkdirSync(dir, { recursive: true });
@@ -110,7 +113,7 @@ describe("PNXBomAnalysisDlg 预期输出", () => {
       }
 
       const expected = read(EXPECTED, `PNXBomAnalysisDlg/${op.name}/PNXBomAnalysisDlg.CATDlg`);
-      expect(emitted).toBe(expected);
+      expect(normalizeEol(emitted)).toBe(normalizeEol(expected));
     });
 
     it(`${op.name}: CATNls`, () => {
@@ -125,7 +128,7 @@ describe("PNXBomAnalysisDlg 预期输出", () => {
       }
 
       const expected = read(EXPECTED, `PNXBomAnalysisDlg/${op.name}/PNXBomAnalysisDlg.CATNls`);
-      expect(patched).toBe(expected);
+      expect(normalizeEol(patched)).toBe(normalizeEol(expected));
     });
   }
 });

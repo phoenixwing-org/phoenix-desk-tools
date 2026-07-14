@@ -4,19 +4,30 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build:bundle": "node scripts/build-server-bundle.mjs",
+    "build:native": "node scripts/build-native-tools.mjs",
+    "build:tauri-runtime": "pnpm build:native && pnpm build:bundle && pnpm smoke:bundle && pnpm prepare:tauri-runtime && pnpm smoke:tauri-runtime",
     "dev": "tsx watch src/server.ts",
+    "prepare:tauri-runtime": "node scripts/prepare-tauri-runtime.mjs",
+    "smoke:bundle": "node scripts/smoke-server-bundle.mjs",
+    "smoke:tauri-runtime": "node scripts/smoke-tauri-runtime.mjs",
     "start": "tsx src/server.ts",
-    "test": "vitest run src/lib/"
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit --pretty false"
   },
   "dependencies": {
     "@desk-tools/catdlg-core": "workspace:*",
     "@hono/node-server": "^1.13.8",
+    "fflate": "0.8.3",
     "hono": "^4.7.4",
+    "iconv-lite": "0.6.3",
     "node-sqlite3-wasm": "^0.8.59",
     "phoenix-wing": "^0.1.4"
   },
   "devDependencies": {
+    "@types/node": "^26.0.1",
     "@vitest/ui": "^4.1.10",
+    "esbuild": "0.25.12",
     "tsx": "^4.19.3",
     "typescript": "~5.7.2",
     "vitest": "^4.1.9"

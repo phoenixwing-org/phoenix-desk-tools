@@ -232,8 +232,8 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
   unit_tests: {
     title: "单元测试",
     bullets: [
-      "在本机运行仓库 tests/ 下的 unittest；勾选套件后运行，无需工作空间。",
-      "运行范围：勾选 Code / CAD / 平台 套件；展开「列出运行范围」可再按模块勾选（默认全选）。",
+      "开发态运行 server、web-ui 与 catdlg-core 的 Vitest；桌面发行版运行打包资源、原生工具和核心算法自检，无需工作空间。",
+      "运行范围：勾选 Code / CAD / 平台 / CAA 套件；展开「列出运行范围」可再按模块勾选（默认全选）。",
       "有结果后，用「结果 · 套件 / 状态」勾选筛选明细，与运行范围分开。",
     ],
     tourSteps: [
@@ -245,8 +245,8 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
     title: "检出测试工程",
     bullets: [
       "可引用的测试工程为系统内置（test_fixture_catalog.json），如 KtAlarmClock、PNXCaaStudy；随仓库提交，本页不可增删。",
-      "本机偏好（launcher.json → test_fixtures）：检出根目录、勾选列表，不提交进 Git。",
-      "勾选仅标记「要引用」并写入本机偏好；点页头或卡片内「检出并链接」才执行 git clone + 链到 tests/fixtures/<名>。",
+      "本机偏好（launcher-prefs.json → test_fixtures）保存检出根目录与启用列表，不提交进 Git。",
+      "勾选仅标记启用；点页头或卡片内「检出」后才执行 git clone，并写入检出根目录下的同名子目录。",
     ],
   },
 };

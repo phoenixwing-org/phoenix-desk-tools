@@ -42,7 +42,7 @@ function shortName(fileName: string) {
   return fileName.replace(/\.CATDlg$/i, "");
 }
 
-let searchTimer: ReturnType<typeof window.setTimeout> | null = null;
+let searchTimer: number | null = null;
 
 async function loadIndex(q = query.value) {
   if (!workspaceReady.value) {
@@ -54,7 +54,7 @@ async function loadIndex(q = query.value) {
   loading.value = true;
   errorText.value = "";
   try {
-    const data = await fetchCaaIndexGroups(q, { fallbackWorkspaceRoot: shell.workspacePath.value.trim() });
+    const data = await fetchCaaIndexGroups(q, { workspaceRoot: shell.workspacePath.value.trim() });
     groups.value = data.groups;
     count.value = data.count;
     indexed.value = data.indexed;
@@ -80,7 +80,7 @@ async function rescan() {
   scanning.value = true;
   errorText.value = "";
   try {
-    const data = await scanCaaIndex({ fallbackWorkspaceRoot: shell.workspacePath.value.trim() });
+    const data = await scanCaaIndex({ workspaceRoot: shell.workspacePath.value.trim() });
     groups.value = data.groups;
     count.value = data.count;
     indexed.value = data.indexed;

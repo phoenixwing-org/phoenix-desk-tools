@@ -93,6 +93,9 @@ export type AppShellContext = {
   clearLog: () => void;
   setLogOpen: (open: boolean) => void;
   setPropertiesOpen: (open: boolean) => void;
+  configOverlayOpen: Ref<boolean>;
+  openConfig: () => void;
+  closeConfig: () => void;
   goToPage: (pageId: string) => void;
   canNavigateToPage: (pageId: string) => boolean;
   /** 进入工作台并开始界面巡游（driver.js 逐步介绍壳层） */
@@ -329,6 +332,10 @@ function readWorkspaceSidebarTab(): "tree" | "workset" | "ignore" {
   } catch {
     return "tree";
   }
+}
+
+function isWorkspaceBlockingTabPage(pageId: string): boolean {
+  return pageId !== "home" && pageId !== "welcome" && pageId !== "config";
 }
 
 export function provideAppShell(): AppShellContext {
@@ -603,6 +610,7 @@ export function provideAppShell(): AppShellContext {
       ? "welcome"
       : (wb.activeTab()?.pageId ?? WORKBENCH_IDLE_PAGE),
   );
+  const configOverlayOpen = computed(() => currentPage.value === "config");
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let persistenceReady = false;
 
@@ -695,6 +703,15 @@ export function provideAppShell(): AppShellContext {
     }
     wb.navigateToPage(id);
     navHover.value = null;
+  }
+
+  function openConfig() {
+    goToPage("config");
+  }
+
+  function closeConfig() {
+    const active = wb.activeTab();
+    if (active?.pageId === "config") void closeTab(active.id);
   }
 
   function openPartKeyDetail(
@@ -975,7 +992,7 @@ export function provideAppShell(): AppShellContext {
   }
 
   function openToolTabCount(): number {
-    return wb.tabs.value.filter((t) => t.pageId !== "home").length;
+    return wb.tabs.value.filter((t) => isWorkspaceBlockingTabPage(t.pageId)).length;
   }
 
   function clearWorkbenchAfterWorkspaceClose() {
@@ -1519,6 +1536,9 @@ export function provideAppShell(): AppShellContext {
     clearLog,
     setLogOpen,
     setPropertiesOpen,
+    configOverlayOpen,
+    openConfig,
+    closeConfig,
     goToPage,
     canNavigateToPage,
     openOnboardingGuide: () => {

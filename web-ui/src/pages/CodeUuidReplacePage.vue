@@ -5,6 +5,7 @@ import {
   scanCodeUuids,
   type CodeUuidHit,
   type UuidApplyStrategy,
+  type UuidKind,
 } from "../api";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import GitDiffPreviewButton from "../components/git/GitDiffPreviewButton.vue";
@@ -46,6 +47,10 @@ const worksetStore = useFileWorksetsStore();
 const worksetScope = useWorksetPageScope("code_uuid");
 
 const strategy = ref<UuidApplyStrategy>("map_per_value");
+const includeGuid32 = ref(false);
+const scanKinds = computed<UuidKind[]>(() => (
+  includeGuid32.value ? ["uuid", "guid32"] : ["uuid"]
+));
 
 useCodeUuidPropertySheet("code_uuid", strategy);
 const hits = ref<CodeUuidHit[]>([]);
@@ -170,11 +175,12 @@ async function onScan() {
   try {
     const out = await scanCodeUuids({
       ...worksetScope.buildScanBody(),
+      kinds: scanKinds.value,
     });
     hits.value = out.hits || [];
     engineMessage.value = out.message || "";
     shell.appendLog(out.message || `扫描完成 · 命中 ${hits.value.length}`, { source: "code_uuid" });
-    shell.setStatus(out.implemented ? `命中 ${hits.value.length}` : out.message || "引擎尚未接入");
+    shell.setStatus(out.implemented === false ? out.message || "扫描不可用" : `命中 ${hits.value.length}`);
   } catch (e) {
     const msg = String(e);
     shell.appendLog(msg, { source: "code_uuid" });
@@ -187,7 +193,7 @@ async function onScan() {
 async function scanFromActiveWorkset() {
   const ws = worksetStore.activeWorkset;
   const wsPaths = (ws?.entries ?? ws?.paths ?? []).map((e: any) => (typeof e === "string" ? e : e.path));
-  if (!wsPaths.length) {
+  if (!ws || !wsPaths.length) {
     shell.setStatus("侧栏当前工作集为空，请先加入文件");
     await shell.openWorksetSidebar();
     return;
@@ -254,7 +260,7 @@ async function onApply(dryRun: boolean) {
     replacementsWritten.value = !dryRun && Object.keys(next).length > 0;
     const logText = out.lines?.join("\n") || out.log || out.message || "完成";
     shell.appendLog(logText, { source: "code_uuid" });
-    shell.setStatus(out.implemented ? "完成" : out.message || "引擎尚未接入");
+    shell.setStatus(out.implemented === false ? out.message || `${mode}不可用` : `${mode}完成`);
   } catch (e) {
     shell.appendLog(String(e), { source: "code_uuid" });
     shell.setStatus(String(e));
@@ -305,6 +311,7 @@ function thClass(key: string) {
             :value="w.id"
           />
         </el-select>
+        <el-checkbox v-model="includeGuid32" size="small">包含 32 位 GUID</el-checkbox>
         <div class="toolbar-group">
           <el-button size="small" plain @click="openIgnorePanel">忽略设定</el-button>
         </div>
@@ -469,7 +476,7 @@ function thClass(key: string) {
             </template>
           </tbody>
         </table>
-        <el-empty v-else description="点击「扫描 UUID」；引擎接入前表格为空" :image-size="64" />
+        <el-empty v-else description="点击「扫描 UUID」查看命中" :image-size="64" />
       </div>
     </section>
   </div>

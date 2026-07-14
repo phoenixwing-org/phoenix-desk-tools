@@ -83,10 +83,11 @@ function onRemovePath(path: string) {
 }
 
 async function onPruneMissing() {
-  if (!activeEntryCount.value) return;
+  const activeWorkset = active.value;
+  if (!activeEntryCount.value || !activeWorkset) return;
   pruning.value = true;
   try {
-    const removed = await store.pruneMissing(active.value.id);
+    const removed = await store.pruneMissing(activeWorkset.id);
     shell.setStatus(removed ? `已剔除 ${removed} 条缺失路径` : "当前工作集无缺失路径");
   } catch (e) {
     shell.setStatus(String(e));

@@ -45,13 +45,6 @@ const selectedWorkset = computed(() => {
   return worksetStore.worksetById(selectedWorksetId.value);
 });
 
-const worksetEntryCount = computed(() => {
-  const ws = selectedWorkset.value;
-  if (!ws) return 0;
-  const list = ws.entries ?? ws.paths;
-  return list?.length ?? 0;
-});
-
 const worksetPathsForApi = computed(() => {
   const ws = selectedWorkset.value;
   if (!ws) return [] as string[];

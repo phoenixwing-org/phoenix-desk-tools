@@ -45,7 +45,7 @@ import { useCaaDialogPageStore } from "../stores/caaDialogPage";
 import type { CaaDialogIr, CaaDialogNode } from "../types/caaDialogIr";
 import type { CaaDialogDraft } from "../types/caaDialogDraft";
 import { dialogNameFromCatDlgRel } from "../utils/caaDialogDisplay";
-import { addChildNode, collectDescendantIds, findCaaNode, insertGridCol, insertGridRow, nlsFlatMapsEqual, removeChildNode, renumberGrid } from "../utils/caaDialogTree";
+import { addChildNode, findCaaNode, insertGridCol, insertGridRow, nlsFlatMapsEqual, removeChildNode, renumberGrid } from "../utils/caaDialogTree";
 import { buildBuilderRecord, type BuilderRecord } from "../utils/caaDropZone";
 import { createBlankCaaDialogIr } from "../utils/createBlankCaaDialogIr";
 
@@ -63,6 +63,11 @@ useCaaDialogPropertySheet(PAGE_ID, {
     if (!localIr.value) return;
     const node = findCaaNode(localIr.value.root, change.nodeId);
     if (!node) return;
+    const previousValue = nlsEditorLocale.value === "default"
+      ? currentNlsFlat.value[change.key]
+      : localeNlsFlats.value[nlsEditorLocale.value]?.[change.key];
+    if ((previousValue ?? "") === change.value) return;
+    recordHistorySnapshot();
     // 更新 IR 树（画布即时反映）
     applyNlsPropToNode(node, change.prop, change.value, change.columnIndex);
     if (change.nodeId === localIr.value.root.id && change.prop === "title") {
@@ -128,6 +133,8 @@ type CaaIrHistoryEntry = {
   ir: CaaDialogIr;
   selectedId: string | null;
   irWriteMode: IrWriteMode;
+  nlsFlat?: Record<string, string>;
+  localeNlsFlats?: Record<string, Record<string, string>>;
 };
 
 const HISTORY_LIMIT = 50;
@@ -191,10 +198,14 @@ function normalizeIrWriteMode(value: unknown, fallback: IrWriteMode): IrWriteMod
 
 function historyEntryFromSession(value: unknown): CaaIrHistoryEntry | null {
   if (!isRecord(value) || !isCaaDialogIr(value.ir)) return null;
+  const nlsFlat = stringMapFromSession(value.nlsFlat);
+  const localeNlsFlats = localeMapsFromSession(value.localeNlsFlats);
   return {
     ir: clonePlain(value.ir),
     selectedId: typeof value.selectedId === "string" ? value.selectedId : null,
     irWriteMode: normalizeIrWriteMode(value.irWriteMode, "full"),
+    ...(nlsFlat ? { nlsFlat } : {}),
+    ...(localeNlsFlats ? { localeNlsFlats } : {}),
   };
 }
 
@@ -211,6 +222,8 @@ function historyStackForSession(stack: CaaIrHistoryEntry[]): CaaIrHistoryEntry[]
     ir: irForSession(entry.ir),
     selectedId: entry.selectedId ?? null,
     irWriteMode: entry.irWriteMode,
+    ...(entry.nlsFlat ? { nlsFlat: { ...entry.nlsFlat } } : {}),
+    ...(entry.localeNlsFlats ? { localeNlsFlats: clonePlain(entry.localeNlsFlats) } : {}),
   }));
 }
 
@@ -593,6 +606,8 @@ function snapshotHistoryEntry(): CaaIrHistoryEntry | null {
     ir: clonePlain(localIr.value),
     selectedId: localSelectedId.value,
     irWriteMode: irWriteMode.value,
+    nlsFlat: { ...currentNlsFlat.value },
+    localeNlsFlats: clonePlain(localeNlsFlats.value),
   };
 }
 
@@ -608,6 +623,8 @@ function restoreHistoryEntry(entry: CaaIrHistoryEntry) {
   localSelectedId.value = entry.selectedId ?? entry.ir.root.id;
   irWriteMode.value = entry.irWriteMode;
   irDirty.value = entry.irWriteMode !== "none";
+  if (entry.nlsFlat) currentNlsFlat.value = { ...entry.nlsFlat };
+  if (entry.localeNlsFlats) localeNlsFlats.value = clonePlain(entry.localeNlsFlats);
   syncToSidebar();
   syncTabDirty();
 }
@@ -721,6 +738,11 @@ function commitNlsEdit(key: string, value: string, target: CaaNlsEditTarget) {
   if (!localIr.value) return;
   const node = findCaaNode(localIr.value.root, target.nodeId);
   if (!node) return;
+  const previousValue = nlsEditorLocale.value === "default"
+    ? currentNlsFlat.value[key]
+    : localeNlsFlats.value[nlsEditorLocale.value]?.[key];
+  if ((previousValue ?? "") === value) return;
+  recordHistorySnapshot();
   // 更新 IR 树（画布即时反映）
   applyNlsPropToNode(node, target.prop, value, target.columnIndex);
   if (target.nodeId === localIr.value.root.id && target.prop === "title") {
@@ -915,9 +937,6 @@ function removeControlImpl(containerId: string, nodeId: string) {
 
   // 记录 BuilderRecord
   if (removed) {
-    const descIds = collectDescendantIds(removed);
-    console.log("[CAA delete] Record: removed=%s type=%s descendants=%d",
-      removed.id, removed.type, descIds.length);
     lastBuilderRecord.value = buildBuilderRecord({
       operation: "DELETE",
       sourceContainerId: null,
@@ -965,7 +984,7 @@ provide(CAA_CONTROL_KEY, {
     // 如果是已存在的节点 ID（跨容器移动），直接复用
     const existing = findCaaNode(root, typeOrNodeId);
     if (existing) {
-      existing.grid = { row, col, rowSpan: 1, colSpan: 1 };
+      existing.grid = { ...existing.grid, row, col, rowSpan: 1, colSpan: 1 };
       existing.father = containerId;
       container.children.push(existing);
     } else {
@@ -1237,56 +1256,6 @@ async function parseDialog() {
     parsing.value = false;
     syncToSidebar();
   }
-}
-
-// ── 开发用：最小测试 IR（只有 Group + MultiList + Button）──
-
-function loadTestDlg() {
-  const root: CaaDialogNode = {
-    id: "TestDlg",
-    type: "CATDlgDialog",
-    style: ["CATDlgWndBtn"],
-    gridLayout: { rowResizable: [0], colResizable: [0] },
-    children: [
-      {
-        id: "FrameGroup",
-        type: "CATDlgFrame",
-        grid: { row: 0, col: 0, rowSpan: 1, colSpan: 1 },
-        gridLayout: { rowResizable: [0], colResizable: [0] },
-        nls: { title: " Test Group " },
-        children: [
-          {
-            id: "MultiListInGroup",
-            type: "CATDlgMultiList",
-            grid: { row: 0, col: 0, rowSpan: 1, colSpan: 1 },
-            size: { textHeight: 5, textWidth: 20, columnCount: 3 },
-            nls: { title: "表格", columnTitles: ["A", "B", "C"] },
-            children: [],
-          },
-          {
-            id: "BtnInGroup",
-            type: "CATDlgPushButton",
-            grid: { row: 1, col: 0, rowSpan: 1, colSpan: 1 },
-            nls: { title: "Test Button" },
-            children: [],
-          },
-        ],
-      },
-    ],
-  };
-
-  localIr.value = {
-    schemaVersion: 1,
-    dialogName: "TestDlg",
-    title: "Test Group Dialog",
-    root,
-    sources: { catDlg: "__test__/TestDlg.CATDlg" },
-  };
-  localSelectedId.value = "TestDlg";
-  hasParsed.value = true;
-  openIsDemo.value = false;
-  syncToSidebar();
-  ElMessage.success("已加载测试 DLG（Group + MultiList + Button）");
 }
 
 /** 收集 IR 中所有容器的 gridLayout → patch 列表 */

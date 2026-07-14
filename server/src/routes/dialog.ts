@@ -5,6 +5,7 @@ import {
   caaDialogGroupLabel,
   extractCatDlgDialogName,
   patchCatNls,
+  patchCatDlgGridLayout,
   emitCatDlg,
   PNX_BOM_ANALYSIS_DEMO,
   emitCatNlsFile,
@@ -18,13 +19,18 @@ import {
   patchWizardCppConstruction,
   validateCaaDialogIrRoot,
   type CaaDialogNode,
+  type GridLayoutPatch,
 } from "@desk-tools/catdlg-core";
 import { findRepoRoot } from "@desk-tools/catdlg-core/node";
 import { Hono } from "hono";
-import { cors } from "hono/cors";
 import { parseDialogFull } from "../parseDialogFull.js";
 import { walkCatDlgRelPaths } from "../scanWorkspaceCatDlg.js";
 import { caaLog } from "../caaLog.js";
+import {
+  loadCaaDialogIndex,
+  scanCaaDialogIndex,
+} from "../lib/caaIndexService.js";
+import { runtimeUserDataDir } from "../lib/appRuntimePaths.js";
 
 export const dialogRoutes = new Hono();
 
@@ -51,6 +57,14 @@ async function pathExists(filePath: string): Promise<boolean> {
   try {
     await fs.access(filePath);
     return true;
+  } catch {
+    return false;
+  }
+}
+
+async function directoryExists(dirPath: string): Promise<boolean> {
+  try {
+    return (await fs.stat(dirPath)).isDirectory();
   } catch {
     return false;
   }
@@ -92,6 +106,24 @@ function groupListItems(items: CaaDialogListItem[]): CaaDialogListGroup[] {
         a.dialogName.localeCompare(b.dialogName, undefined, { sensitivity: "base" }),
       ),
     }));
+}
+
+async function loadWorkspaceRootFromPrefs(): Promise<string> {
+  try {
+    const prefsPath = path.join(runtimeUserDataDir(), "launcher-prefs.json");
+    const raw = JSON.parse(await fs.readFile(prefsPath, "utf8"));
+    return String(raw.workspace || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+async function resolveIndexWorkspaceRoot(c: any, body?: { workspaceRoot?: string; workspace?: string }): Promise<string> {
+  const fromBody = String(body?.workspaceRoot || body?.workspace || "").trim();
+  if (fromBody) return fromBody;
+  const fromQuery = String(c.req.query("workspaceRoot") || c.req.query("workspace") || "").trim();
+  if (fromQuery) return fromQuery;
+  return loadWorkspaceRootFromPrefs();
 }
 
 async function loadDialogName(root: string, catDlgRel: string): Promise<string> {
@@ -275,17 +307,21 @@ dialogRoutes.post("/save-dialog", async (c) => {
     workspaceRoot?: string;
     catDlgRel?: string;
     root?: Record<string, unknown>;
+    patches?: GridLayoutPatch[];
   };
   const root = body.workspaceRoot?.trim();
   const catDlgRel = body.catDlgRel?.trim();
   const rootNode = body.root;
-  if (!root || !catDlgRel || !rootNode) {
-    return c.json({ error: "workspaceRoot, catDlgRel, root 必填" }, 400);
+  const patches = Array.isArray(body.patches) ? body.patches : [];
+  if (!root || !catDlgRel || (!rootNode && !patches.length)) {
+    return c.json({ error: "workspaceRoot, catDlgRel 以及 root/patches 必填" }, 400);
   }
   caaLog("POST /save-dialog", { root, catDlgRel });
   try {
     const abs = resolveUnderRoot(root, catDlgRel);
-    const emitted = emitCatDlg(rootNode as any);
+    const emitted = rootNode
+      ? emitCatDlg(rootNode as any)
+      : patchCatDlgGridLayout(await readUtf8(abs), patches);
     await fs.writeFile(abs, emitted, "utf8");
     caaLog("save-dialog OK", { abs, bytes: emitted.length });
     return c.json({ ok: true, catDlgRel, absPath: abs, bytes: emitted.length });
@@ -585,7 +621,10 @@ dialogRoutes.post("/write", async (c) => {
         return c.json({ error: `.CATNls 不存在：${catNlsRel}` }, 404);
       }
       prevCatNlsText = body.sourceText?.length ? body.sourceText : await readUtf8(catNlsAbs);
-      nextCatNlsText = patchCatNls(prevCatNlsText, body.nlsKeys);
+      nextCatNlsText = patchCatNls(
+        prevCatNlsText,
+        Object.entries(body.nlsKeys).map(([key, value]) => ({ key, value })),
+      );
       catNlsChanged = prevCatNlsText !== nextCatNlsText;
     }
 
@@ -740,7 +779,6 @@ dialogRoutes.post("/create", async (c) => {
 export function createCaaApp() {
   const port = Number(process.env.CAA_SERVER_PORT || 5180);
   const app = new Hono();
-  app.use("*", cors());
   app.get("/api/caa/health", (c) =>
     c.json({
       ok: true,
@@ -750,6 +788,25 @@ export function createCaaApp() {
       proxyPath: "/api/caa",
     }),
   );
+  app.get("/api/caa/index/groups", async (c) => {
+    try {
+      const workspaceRoot = await resolveIndexWorkspaceRoot(c);
+      return c.json(loadCaaDialogIndex(workspaceRoot, c.req.query("q")));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: msg }, 500);
+    }
+  });
+  app.post("/api/caa/index/scan", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as { workspaceRoot?: string; workspace?: string };
+    try {
+      const workspaceRoot = await resolveIndexWorkspaceRoot(c, body);
+      return c.json(await scanCaaDialogIndex(workspaceRoot));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ error: msg }, 400);
+    }
+  });
   app.route("/api/caa/dialog", dialogRoutes);
   return app;
 }

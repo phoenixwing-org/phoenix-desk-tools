@@ -151,12 +151,12 @@
             "id": "unit_tests",
             "label": "单元测试",
             "page": "unit_tests",
-            "description": "在本机运行 tests/ 下 unittest（Code / CAD / 平台套件）"
+            "description": "开发态运行 Vitest 套件；桌面发行版运行打包资源与原生工具自检"
         }, {
             "id": "test_fixtures",
             "label": "检出测试工程",
             "page": "test_fixtures",
-            "description": "系统内置开源 C++ 样例；本机 git 检出并链接到 tests/fixtures"
+            "description": "按内置目录将开源 C++ 样例 Git 检出到所选测试工程目录"
         }
     ],
     "workbench": {
@@ -221,19 +221,6 @@
             },
             "bom_export": {
                 "max_tabs": 1
-            },
-            "cr_bom_export": {
-                "max_tabs": 1
-            },
-            "cr_part_catalog": {
-                "max_tabs": 1
-            },
-            "cr_fcstd_map": {
-                "max_tabs": 1
-            },
-            "cr_file_detail": {
-                "max_tabs": 4,
-                "tab_enabled": true
             },
             "welcome": {
                 "max_tabs": 1

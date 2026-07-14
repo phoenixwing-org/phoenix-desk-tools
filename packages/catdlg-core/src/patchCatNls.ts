@@ -1,5 +1,3 @@
-const LINE_RE = /^([A-Za-z0-9_.]+)\s*=\s*"(.*)"\s*;\s*$/;
-
 export function escapeCatNlsValue(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }

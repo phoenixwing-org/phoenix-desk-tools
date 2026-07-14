@@ -4,7 +4,7 @@ import { CircleCloseFilled, Loading, Plus } from "@element-plus/icons-vue";
 import { useAppShell } from "../composables/useAppShell";
 import { ribbonIconFor } from "./ribbon/ribbonIcons";
 
-const props = withDefaults(
+withDefaults(
   defineProps<{
     inHeader?: boolean;
   }>(),

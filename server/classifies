@@ -1,0 +1,2 @@
+
+D:\kevin\phoenix-desk-tools\server>  "D:\kevin\phoenix-desk-tools\server\node_modules\.bin\\node.exe"  "D:\kevin\phoenix-desk-tools\server\node_modules\.bin\\..\vitest\vitest.mjs" run src/lib/pdtCodeService.test.ts --reporter=json --passWithNoTests --testNamePattern (?:pdtCodeService code kinds  code asset kinds)$

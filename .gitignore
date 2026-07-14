@@ -23,5 +23,9 @@ web-ui/dist
 # Rust
 server/target/
 server/**/target/
+server/bin/
+server/dist-sidecar/
 server/fcstd-reader/Cargo.lock
+src-tauri/target/
+src-tauri/resources/runtime/
 test-report/

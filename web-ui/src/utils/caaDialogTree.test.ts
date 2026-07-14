@@ -5,8 +5,6 @@ import {
   findCaaNode,
   renumberGrid,
   isContainerNode,
-  generateNodeId,
-  createControlNode,
 } from "./caaDialogTree";
 import { applyDropTransform, findOverlaps, buildBuilderRecord, type BuilderRecord } from "./caaDropZone";
 import type { CaaDialogNode } from "../types/caaDialogIr";
@@ -490,7 +488,6 @@ describe("doDrop 跨容器完整流程", () => {
   it("跨容器移动到空容器", () => {
     // Frame3 是空容器
     const tree = makeNestedTree();
-    const frame1 = findCaaNode(tree, "Frame1")!;
     const frame3: CaaDialogNode = {
       id: "Frame3", type: "CATDlgFrame", father: "Root",
       grid: { row: 2, col: 0, rowSpan: 1, colSpan: 1 },

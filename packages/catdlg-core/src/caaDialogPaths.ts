@@ -7,7 +7,7 @@ export function normalizeRepoRel(rel: string): string {
 /** 按 `*UI.m` 模块目录分组；否则取父目录名。 */
 export function caaDialogGroupKey(catDlgRel: string): string {
   const norm = normalizeRepoRel(catDlgRel);
-  const uiMatch = norm.match(/\/([^/]+UI\.m)\//i);
+  const uiMatch = norm.match(/(?:^|\/)([^/]+UI\.m)(?:\/|$)/i);
   if (uiMatch) return uiMatch[1];
   const parts = norm.split("/");
   if (parts.length >= 2) return parts[parts.length - 2]!;
@@ -44,7 +44,12 @@ function uiModulePrefix(catDlgRel: string): { parent: string; uiModule: string }
 export function inferCatNlsRelCandidates(catDlgRel: string): string[] {
   const nlsName = catDlgNlsBasename(catDlgRel);
   const parts = uiModulePrefix(catDlgRel);
-  if (!nlsName || !parts) return [];
+  if (!nlsName) return [];
+
+  const normalized = normalizeRepoRel(catDlgRel);
+  const slash = normalized.lastIndexOf("/");
+  const adjacent = slash >= 0 ? `${normalized.slice(0, slash)}/${nlsName}` : nlsName;
+  if (!parts) return [adjacent];
 
   const { parent, uiModule } = parts;
   const out: string[] = [];
@@ -60,6 +65,10 @@ export function inferCatNlsRelCandidates(catDlgRel: string): string[] {
       out.push(`${parent}/${frmModule}/CNext/resources/msgcatalog/${nlsName}`);
     }
   }
+
+  // The dialog creator and lightweight workspaces keep CATDlg/CATNls together.
+  // Probe that layout after the canonical CNext/msgcatalog locations.
+  if (!out.includes(adjacent)) out.push(adjacent);
 
   return out;
 }

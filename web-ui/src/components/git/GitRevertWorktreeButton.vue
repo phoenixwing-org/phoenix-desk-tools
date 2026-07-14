@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { RefreshLeft } from "@element-plus/icons-vue";
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     path: string;
     loading?: boolean;
@@ -20,20 +20,20 @@ const emit = defineEmits<{
 }>();
 
 function onClick() {
-  if (loading || disabled) return;
+  if (props.loading || props.disabled) return;
   emit("click");
 }
 </script>
 
 <template>
-  <el-tooltip :content="tooltip" placement="top" :show-after="400">
+  <el-tooltip :content="props.tooltip" placement="top" :show-after="400">
     <el-button
       link
       size="small"
       class="git-icon-btn"
-      :disabled="disabled"
-      :loading="loading"
-      :aria-label="`${tooltip} ${path}`"
+      :disabled="props.disabled"
+      :loading="props.loading"
+      :aria-label="`${props.tooltip} ${props.path}`"
       @click.stop="onClick"
     >
       <el-icon><RefreshLeft /></el-icon>

@@ -29,17 +29,25 @@ pub fn parse_document_xml(xml: &str) -> Result<FcstdDocument, FcstdError> {
             Ok(Event::Start(ref e)) if e.name().as_ref() == b"Object" => {
                 if let Some(parsed) = parse_object(&mut reader, e, &type_map) {
                     for child in &parsed.object.children {
-                        children_of.entry(parsed.object.name.clone()).or_default().push(child.clone());
-                        parent_of.entry(child.clone()).or_default().push(parsed.object.name.clone());
+                        children_of
+                            .entry(parsed.object.name.clone())
+                            .or_default()
+                            .push(child.clone());
+                        parent_of
+                            .entry(child.clone())
+                            .or_default()
+                            .push(parsed.object.name.clone());
                     }
                     xlinks.extend(parsed.xlinks);
                     objects.push(parsed.object);
                 }
             }
             Ok(Event::Eof) => break,
-            Err(e) => return Err(FcstdError::Xml {
-                msg: format!("parse error at {}: {e}", reader.buffer_position()),
-            }),
+            Err(e) => {
+                return Err(FcstdError::Xml {
+                    msg: format!("parse error at {}: {e}", reader.buffer_position()),
+                })
+            }
             _ => {}
         }
         buf.clear();
@@ -47,13 +55,19 @@ pub fn parse_document_xml(xml: &str) -> Result<FcstdDocument, FcstdError> {
 
     let root_names: Vec<String> = objects
         .iter()
-        .filter(|o| o.is_valid_bom_item && !parent_of.contains_key(&o.name) && o.type_id != "App::Link")
+        .filter(|o| {
+            o.is_valid_bom_item && !parent_of.contains_key(&o.name) && o.type_id != "App::Link"
+        })
         .map(|o| o.name.clone())
         .collect();
 
     assign_levels(&root_names, &children_of, &mut objects);
 
-    Ok(FcstdDocument { objects, xlinks, root_names })
+    Ok(FcstdDocument {
+        objects,
+        xlinks,
+        root_names,
+    })
 }
 
 /// Collect object names that are referenced by Group LinkLists (i.e., children of other objects).
@@ -106,9 +120,16 @@ pub fn parse_objects_type_map(xml: &str) -> HashMap<String, String> {
     map
 }
 
-struct ParsedObject { object: FcstdObject, xlinks: Vec<XLinkRef> }
+struct ParsedObject {
+    object: FcstdObject,
+    xlinks: Vec<XLinkRef>,
+}
 
-fn parse_object(reader: &mut Reader<&[u8]>, start: &BytesStart, type_map: &HashMap<String, String>) -> Option<ParsedObject> {
+fn parse_object(
+    reader: &mut Reader<&[u8]>,
+    start: &BytesStart,
+    type_map: &HashMap<String, String>,
+) -> Option<ParsedObject> {
     let name = parse_attr(start, b"name")?;
     // type_id: first check direct attribute (old format), then type_map (1.x format)
     let type_id = parse_attr(start, b"type")
@@ -131,11 +152,27 @@ fn parse_object(reader: &mut Reader<&[u8]>, start: &BytesStart, type_map: &HashM
                     let pn = parse_attr(e, b"name").unwrap_or_default();
                     let pt = parse_attr(e, b"type").unwrap_or_default();
                     match pn.as_str() {
-                        "Label" => { if let Some(v) = parse_string(reader) { label = v; } }
-                        "Group" => { children = parse_link_list(reader); }
-                        "Placement" => { placement = parse_placement(reader); }
-                        "Material" => { if let Some(v) = parse_string(reader) { material = Some(v); } }
-                        _ => { if let Some(v) = parse_any_value(reader, &pt) { properties.insert(pn, v); } }
+                        "Label" => {
+                            if let Some(v) = parse_string(reader) {
+                                label = v;
+                            }
+                        }
+                        "Group" => {
+                            children = parse_link_list(reader);
+                        }
+                        "Placement" => {
+                            placement = parse_placement(reader);
+                        }
+                        "Material" => {
+                            if let Some(v) = parse_string(reader) {
+                                material = Some(v);
+                            }
+                        }
+                        _ => {
+                            if let Some(v) = parse_any_value(reader, &pt) {
+                                properties.insert(pn, v);
+                            }
+                        }
                     }
                 }
             }
@@ -145,12 +182,17 @@ fn parse_object(reader: &mut Reader<&[u8]>, start: &BytesStart, type_map: &HashM
                 if ename.as_ref() == b"Property" {
                     let pn = parse_attr(e, b"name").unwrap_or_default();
                     if pn == "Group" {
-                        if let Some(v) = parse_attr(e, b"value") { children.push(v); }
+                        if let Some(v) = parse_attr(e, b"value") {
+                            children.push(v);
+                        }
                     }
                 } else if ename.as_ref() == b"XLink" {
                     if let Some(x) = parse_xlink(e) {
                         let lbl = x.label.clone().or_else(|| Some(label.clone()));
-                        xlinks.push(XLinkRef { file: x.file, label: lbl });
+                        xlinks.push(XLinkRef {
+                            file: x.file,
+                            label: lbl,
+                        });
                     }
                 }
             }
@@ -163,7 +205,17 @@ fn parse_object(reader: &mut Reader<&[u8]>, start: &BytesStart, type_map: &HashM
 
     let is_valid = FcstdObject::is_valid(&type_id);
     Some(ParsedObject {
-        object: FcstdObject { name, label, type_id, children, properties, material, placement, is_valid_bom_item: is_valid, level: 0 },
+        object: FcstdObject {
+            name,
+            label,
+            type_id,
+            children,
+            properties,
+            material,
+            placement,
+            is_valid_bom_item: is_valid,
+            level: 0,
+        },
         xlinks,
     })
 }
@@ -172,12 +224,21 @@ fn parse_string(reader: &mut Reader<&[u8]>) -> Option<String> {
     let mut buf = Vec::new();
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Empty(ref e)) if e.name().as_ref() == b"String" => return parse_attr(e, b"value"),
+            Ok(Event::Empty(ref e)) if e.name().as_ref() == b"String" => {
+                return parse_attr(e, b"value")
+            }
             Ok(Event::Start(ref e)) if e.name().as_ref() == b"String" => {
-                let t = reader.read_text(e.name().clone()).ok().map(|t| t.to_string());
+                let t = reader
+                    .read_text(e.name().clone())
+                    .ok()
+                    .map(|t| t.to_string());
                 return t.or_else(|| parse_attr(e, b"value"));
             }
-            Ok(Event::End(ref e)) if e.name().as_ref() == b"Property" || e.name().as_ref() == b"Properties" => return None,
+            Ok(Event::End(ref e))
+                if e.name().as_ref() == b"Property" || e.name().as_ref() == b"Properties" =>
+            {
+                return None
+            }
             Ok(Event::Eof) => return None,
             Err(_) => return None,
             _ => {}
@@ -220,7 +281,11 @@ fn parse_link_list(reader: &mut Reader<&[u8]>) -> Vec<String> {
                     links.push(n);
                 }
             }
-            Ok(Event::End(ref e)) if e.name().as_ref() == b"Property" || e.name().as_ref() == b"Properties" => break,
+            Ok(Event::End(ref e))
+                if e.name().as_ref() == b"Property" || e.name().as_ref() == b"Properties" =>
+            {
+                break
+            }
             Ok(Event::Eof) => break,
             Err(_) => break,
             _ => {}
@@ -237,17 +302,29 @@ fn parse_any_value(reader: &mut Reader<&[u8]>, _pt: &str) -> Option<PropertyValu
             Ok(Event::Empty(ref e)) => {
                 let ename = e.name();
                 match ename.as_ref() {
-                    b"String" => { if let Some(v) = parse_attr(e, b"value") { return Some(PropertyValue::String(v)); } }
+                    b"String" => {
+                        if let Some(v) = parse_attr(e, b"value") {
+                            return Some(PropertyValue::String(v));
+                        }
+                    }
                     b"Float" | b"PropertyLength" | b"PropertyDistance" | b"PropertyFloat" => {
-                        if let Some(v) = parse_attr_f64(e, b"value") { return Some(PropertyValue::Float(v)); }
+                        if let Some(v) = parse_attr_f64(e, b"value") {
+                            return Some(PropertyValue::Float(v));
+                        }
                     }
                     b"Integer" | b"PropertyInteger" => {
-                        if let Some(v) = parse_attr_i64(e, b"value") { return Some(PropertyValue::Integer(v)); }
+                        if let Some(v) = parse_attr_i64(e, b"value") {
+                            return Some(PropertyValue::Integer(v));
+                        }
                     }
                     _ => {}
                 }
             }
-            Ok(Event::End(ref e)) if e.name().as_ref() == b"Property" || e.name().as_ref() == b"Properties" => return None,
+            Ok(Event::End(ref e))
+                if e.name().as_ref() == b"Property" || e.name().as_ref() == b"Properties" =>
+            {
+                return None
+            }
             Ok(Event::Eof) => return None,
             Err(_) => return None,
             _ => {}
@@ -265,26 +342,46 @@ fn parse_xlink(e: &BytesStart) -> Option<XLinkRef> {
 // ── helpers ────────────────────────────────────────────────
 
 fn parse_attr(e: &BytesStart, name: &[u8]) -> Option<String> {
-    e.attributes().flatten().find(|a| a.key.as_ref() == name)
+    e.attributes()
+        .flatten()
+        .find(|a| a.key.as_ref() == name)
         .and_then(|a| String::from_utf8(a.value.to_vec()).ok())
 }
-fn parse_attr_f64(e: &BytesStart, name: &[u8]) -> Option<f64> { parse_attr(e, name).and_then(|s| s.parse().ok()) }
-fn parse_attr_i64(e: &BytesStart, name: &[u8]) -> Option<i64> { parse_attr(e, name).and_then(|s| s.parse().ok()) }
+fn parse_attr_f64(e: &BytesStart, name: &[u8]) -> Option<f64> {
+    parse_attr(e, name).and_then(|s| s.parse().ok())
+}
+fn parse_attr_i64(e: &BytesStart, name: &[u8]) -> Option<i64> {
+    parse_attr(e, name).and_then(|s| s.parse().ok())
+}
 
-fn assign_levels(roots: &[String], children_of: &HashMap<String, Vec<String>>, objects: &mut [FcstdObject]) {
+fn assign_levels(
+    roots: &[String],
+    children_of: &HashMap<String, Vec<String>>,
+    objects: &mut [FcstdObject],
+) {
     let mut idx: HashMap<String, usize> = HashMap::new();
-    for (i, o) in objects.iter().enumerate() { idx.insert(o.name.clone(), i); }
+    for (i, o) in objects.iter().enumerate() {
+        idx.insert(o.name.clone(), i);
+    }
 
     let mut q: VecDeque<(String, u32)> = VecDeque::new();
-    for r in roots { q.push_back((r.clone(), 0)); }
+    for r in roots {
+        q.push_back((r.clone(), 0));
+    }
     let mut visited: HashSet<String> = HashSet::new();
 
     while let Some((name, level)) = q.pop_front() {
-        if !visited.insert(name.clone()) { continue; }
-        if let Some(&i) = idx.get(&name) { objects[i].level = level; }
+        if !visited.insert(name.clone()) {
+            continue;
+        }
+        if let Some(&i) = idx.get(&name) {
+            objects[i].level = level;
+        }
         if let Some(kids) = children_of.get(&name) {
             for kid in kids {
-                if !visited.contains(kid) { q.push_back((kid.clone(), level + 1)); }
+                if !visited.contains(kid) {
+                    q.push_back((kid.clone(), level + 1));
+                }
             }
         }
     }
@@ -323,7 +420,14 @@ mod tests {
         assert_eq!(doc.objects.len(), 3);
         assert_eq!(doc.root_names, vec!["Assy"]);
         assert_eq!(doc.objects[0].level, 0);
-        assert_eq!(doc.objects.iter().find(|o| o.name == "Body1").unwrap().level, 1);
+        assert_eq!(
+            doc.objects
+                .iter()
+                .find(|o| o.name == "Body1")
+                .unwrap()
+                .level,
+            1
+        );
     }
 
     #[test]

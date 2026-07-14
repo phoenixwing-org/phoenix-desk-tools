@@ -120,10 +120,6 @@ function cellOccupied(row: number, col: number): boolean {
 
 /** 根据实际渲染的 cell DOM 元素计算鼠标所在位置（使用纯函数规则）；返回 cell 矩形供 overlay 定位 */
 function cellFromPoint(gridEl: HTMLElement, clientX: number, clientY: number): { row: number; col: number; edge: "inside" | "right" | "bottom" | "left" | "top"; rect: DOMRect } | null {
-  const gridId = gridEl.getAttribute("data-grid-host") ?? props.node.id;
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const hasChildren = props.node.children.length > 0 || gridId !== props.node.id;
-
   // 先尝试精确 hit-test
   const cells = gridEl.querySelectorAll(".caa-grid-cell");
   let bestCell: HTMLElement | null = null;
@@ -216,13 +212,6 @@ function doDrop(row: number, col: number, edge: string, payload: string, targetI
   const targetContainer = findCaaNode(root, targetId);
   if (!targetContainer) return;
 
-  const isCross = payload.startsWith("MOVE:")
-    ? payload.slice(payload.lastIndexOf(":") + 1) !== targetId
-    : false;
-  console.log("[CAA drop] ═══ doDrop ═══ row=%d col=%d edge=%s payload=%s target=%s isCross=%s children=%d",
-    row, col, edge, payload, targetId, isCross, targetContainer.children.length);
-  console.log("[CAA drop] 现有控件：", targetContainer.children.map(c => ({ id: c.id, grid: c.grid })));
-
   // ── ① 快照（用于回退）──
   const snapChildren = targetContainer.children.map((c) => ({
     ...c,
@@ -285,7 +274,13 @@ function doDrop(row: number, col: number, edge: string, payload: string, targetI
     newNode.father = targetId;
     newChildren.push(newNode);
   } else if (payload.startsWith("MOVE:") && sourceNode) {
-    sourceNode.grid = { row: result.placedRow, col: result.placedCol, rowSpan: 1, colSpan: 1 };
+    sourceNode.grid = {
+      ...sourceNode.grid,
+      row: result.placedRow,
+      col: result.placedCol,
+      rowSpan: 1,
+      colSpan: 1,
+    };
     sourceNode.father = targetId;
     newChildren.push(sourceNode);
   }
@@ -336,8 +331,6 @@ function doDrop(row: number, col: number, edge: string, payload: string, targetI
       affectedNodeId: affectedId,
       affectedNodeType: affectedType,
     });
-    console.log("[CAA drop] Record: op=%s affected=%s type=%s",
-      record.operation, record.affectedNodeId, record.affectedNodeType);
     ctx.lastBuilderRecord.value = record;
   }
 }
@@ -400,7 +393,6 @@ function onCellMouseDown(e: MouseEvent, child: CaaDialogNode) {
   if (!editMode.value) return;
   if (e.button !== 0) return;
   e.stopPropagation();
-  console.log("[CAA drag] mousedown: node=%s container=%s type=%s", child.id, props.node.id, child.type);
   internalDrag.value = {
     sourceNodeId: child.id,
     sourceContainerId: props.node.id,
@@ -506,13 +498,6 @@ function finishInternalDrag() {
   if (d && d.active && dragOverCell.value && ctx) {
     const { row, col, edge } = dragOverCell.value;
     const targetId = d.dragOverGridId || props.node.id;
-    const srcNode = ctx.dialogRoot ? findCaaNode(ctx.dialogRoot, d.sourceNodeId) : null;
-    console.log("[CAA drag] finishInternalDrag: sourceNode=%s grid=(%d,%d) srcCtr=%s -> target=%s cell=(%d,%d) edge=%s%s",
-      d.sourceNodeId,
-      srcNode?.grid?.row ?? -1, srcNode?.grid?.col ?? -1,
-      d.sourceContainerId,
-      targetId, row, col, edge,
-      targetId !== d.sourceContainerId ? " ★跨容器" : "");
     doDrop(row, col, edge, `MOVE:${d.sourceNodeId}:${d.sourceContainerId}`, targetId);
   }
   // 无论是否完成拖放，都抑制后续 click（防止拖拽后误触发选中）
@@ -540,19 +525,8 @@ function onWindowMouseMove(e: MouseEvent) {
     return;
   }
   const foundId = gridEl.getAttribute("data-grid-host") || "";
-  const prevGridId = d.dragOverGridId;
   d.dragOverGridId = foundId;
   const cell = cellFromPoint(gridEl, e.clientX, e.clientY);
-  // 只在进入新 grid 时打一次（减少刷屏）
-  if (foundId !== prevGridId) {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const srcNode = ctx?.dialogRoot ? findCaaNode(ctx.dialogRoot, d.sourceNodeId) : null;
-    console.log("[CAA drag] 切换目标: %s -> %s  cell=(%d,%d) edge=%s",
-      prevGridId || "(none)", foundId,
-      cell?.row ?? -1, cell?.col ?? -1, cell?.edge ?? "?");
-  }
-  dragOverCell.value = cell;
-  writeDropIndicator(cell, gridEl, e.clientX, e.clientY);
   dragOverCell.value = cell;
   writeDropIndicator(cell, gridEl, e.clientX, e.clientY);
 }
@@ -581,7 +555,6 @@ function onGridMouseMove(e: MouseEvent) {
   if (firstGrid) {
     const hitId = firstGrid.getAttribute("data-grid-host") || "";
     if (hitId !== props.node.id) {
-      console.log("[CAA drag] onGridMouseMove 检测到跨容器: source=%s target=%s (放行)", props.node.id, hitId);
       // 鼠标在子容器内 → 不放行 stopPropagation，让事件冒泡到 onWindowMouseMove
       return;
     }
@@ -593,7 +566,6 @@ function onGridMouseMove(e: MouseEvent) {
   if (!d.active) {
     d.active = true;
     dragOverGrid.value = true;
-    console.log("[CAA drag] 激活: sourceNode=%s sourceContainer=%s", d.sourceNodeId, d.sourceContainerId);
     window.addEventListener("mouseup", onWindowMouseUp);
     window.addEventListener("mousemove", onWindowMouseMove);
     window.addEventListener("keydown", onWindowKeyDown);

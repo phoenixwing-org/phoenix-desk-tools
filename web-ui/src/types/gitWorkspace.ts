@@ -8,6 +8,7 @@ export type GitWorkspaceInfo = {
 
 export type GitChangeEntry = {
   path: string;
+  original_path?: string;
   index_status: string;
   worktree_status: string;
   staged: boolean;

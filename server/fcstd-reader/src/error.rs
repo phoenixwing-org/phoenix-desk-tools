@@ -3,7 +3,11 @@ use std::path::PathBuf;
 #[derive(Debug, thiserror::Error)]
 pub enum FcstdError {
     #[error("I/O error reading {path}: {source}")]
-    Io { path: PathBuf, #[source] source: std::io::Error },
+    Io {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
 
     #[error("Invalid ZIP {path}: {msg}")]
     Zip { path: PathBuf, msg: String },

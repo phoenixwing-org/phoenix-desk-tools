@@ -33,7 +33,12 @@ useSwStepExportPropertySheet("sw_step_export", {
   onPersist: schedulePrefsSave,
 });
 
-const prefsMeta = ref<Pick<SwStepPrefs, "com_available" | "platform"> | null>(null);
+type SwStepMeta = Pick<
+  SwStepPrefs,
+  "com_available" | "adapter_available" | "solidworks_registered" | "availability_code" | "platform"
+>;
+
+const prefsMeta = ref<SwStepMeta | null>(null);
 
 const saving = ref(false);
 const previewing = ref(false);
@@ -48,12 +53,32 @@ function prefsPayload() {
   };
 }
 
+function updatePrefsMeta(prefs: SwStepPrefs) {
+  prefsMeta.value = {
+    com_available: prefs.com_available,
+    adapter_available: prefs.adapter_available,
+    solidworks_registered: prefs.solidworks_registered,
+    availability_code: prefs.availability_code,
+    platform: prefs.platform,
+  };
+}
+
+function unavailableMessage(meta: SwStepMeta): string {
+  if (meta.availability_code === "unsupported_platform") {
+    return `当前平台 ${meta.platform} 不支持 SolidWorks COM 批量导出；预览与保存偏好仍可用。`;
+  }
+  if (meta.availability_code === "solidworks_not_registered") {
+    return "未检测到 SldWorks.Application COM 注册；请安装或修复 SolidWorks。预览与保存偏好仍可用。";
+  }
+  return "未找到 PowerShell COM 适配器；请检查 PowerShell 与导出脚本。预览与保存偏好仍可用。";
+}
+
 async function loadPrefs() {
   const prefs = await fetchSwStepPrefs();
   sourceDir.value = prefs.source_dir;
   outStepDir.value = prefs.out_step_dir;
   recursiveScan.value = prefs.recursive_scan;
-  prefsMeta.value = { com_available: prefs.com_available, platform: prefs.platform };
+  updatePrefsMeta(prefs);
 }
 
 async function onSave() {
@@ -62,6 +87,7 @@ async function onSave() {
     const prefs = await saveSwStepPrefs(prefsPayload());
     sourceDir.value = prefs.source_dir;
     outStepDir.value = prefs.out_step_dir;
+    updatePrefsMeta(prefs);
     shell.setStatus("已保存 SW→STEP 偏好");
   } catch (e) {
     shell.setStatus(String(e));
@@ -75,6 +101,7 @@ async function onPreview() {
   shell.appendLog("SW→STEP 预览模型数量…", { source: "sw_step_export", open: true });
   try {
     const data = await previewSwStepExport(prefsPayload());
+    updatePrefsMeta(data.prefs);
     modelCount.value = data.model_count;
     const msg = `${data.source_display} · ${data.model_count} 个模型`;
     shell.appendLog(msg, { source: "sw_step_export" });
@@ -92,6 +119,7 @@ async function onRun() {
   shell.appendLog("SolidWorks COM 导出…", { source: "sw_step_export", open: true });
   try {
     const data = await runSwStepExport(prefsPayload());
+    updatePrefsMeta(data.prefs);
     shell.appendLog(data.log, { source: "sw_step_export" });
     shell.setStatus(`成功 ${data.ok_count} · 失败 ${data.failed_count} · 输出 ${data.out_display}`);
   } catch (e) {
@@ -137,7 +165,7 @@ onMounted(async () => {
       type="warning"
       :closable="false"
       show-icon
-      :title="`当前平台 ${prefsMeta.platform} 不支持 COM 批量导出；预览与保存偏好仍可用。`"
+      :title="unavailableMessage(prefsMeta)"
     />
 
     <section v-if="modelCount !== null" class="controls card" data-tour-page-sw-form>

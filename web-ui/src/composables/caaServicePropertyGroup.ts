@@ -2,15 +2,13 @@ import { computed } from "vue";
 import {
   CAA_SERVICE_DEFAULT_PORT,
   CAA_SERVICE_PROXY_PATH,
-  PHOENIX_API_DEFAULT_PORT,
   caaServiceBaseUrl,
-  formatCaaServiceStartHint,
 } from "../constants/caaService";
 import { useCaaDialogPageStore } from "../stores/caaDialogPage";
 import { pnwPropGroup, pnwPropReadonly } from "phoenix-wing";
 import type { PnwPagePropertyGroup } from "phoenix-wing";
 
-/** CAA 服务 · 侧栏属性分组（端口、代理、启动说明） */
+/** 统一 Node 服务中的 CAA API 状态。 */
 export function caaServicePropertyGroup(): PnwPagePropertyGroup {
   const store = useCaaDialogPageStore();
 
@@ -33,26 +31,14 @@ export function caaServicePropertyGroup(): PnwPagePropertyGroup {
       value: computed(() => serviceUrl.value),
       mono: true,
     }),
-    pnwPropReadonly("caa_proxy", "Web 代理", {
-      value: computed(() => `${CAA_SERVICE_PROXY_PATH} → :${port.value}`),
+    pnwPropReadonly("caa_api", "API 路径", {
+      value: computed(() => CAA_SERVICE_PROXY_PATH),
       mono: true,
-      hint: "开发模式由 Vite 转发；生产由 Phoenix 或反向代理配置",
-    }),
-    pnwPropReadonly("phoenix_api", "Phoenix API", {
-      value: computed(
-        () => `http://127.0.0.1:${PHOENIX_API_DEFAULT_PORT} · python -m phoenix.web --dev`,
-      ),
-      mono: true,
-      hint: "Code 索引、工作空间等 /api（非 /api/caa）",
+      hint: "由统一 Phoenix Node 服务提供",
     }),
     pnwPropReadonly("caa_health", "健康检查", {
       value: computed(() => `${CAA_SERVICE_PROXY_PATH}/health`),
       mono: true,
-    }),
-    pnwPropReadonly("caa_start", "如何启动", {
-      value: computed(() => formatCaaServiceStartHint()),
-      multiline: true,
-      hidden: computed(() => store.caaOnline === true),
     }),
   ]);
 }

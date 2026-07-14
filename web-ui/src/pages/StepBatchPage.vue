@@ -80,7 +80,6 @@ async function onSave() {
 }
 
 async function onPreview() {
-  if (!assertFreecadForTask()) return;
   previewing.value = true;
   shell.appendLog("STEP 批量转换预览…", { source: "step_batch", open: true });
   try {
@@ -135,7 +134,7 @@ onMounted(async () => {
       <template #actions>
         <div data-tour-page-step-run class="head-actions-inner">
           <el-button size="small" :loading="saving" @click="onSave">保存偏好</el-button>
-          <el-button size="small" :loading="previewing" :disabled="freecadBlocked" @click="onPreview">预览数量</el-button>
+          <el-button size="small" :loading="previewing" @click="onPreview">预览数量</el-button>
           <el-button type="primary" size="small" :loading="running" :disabled="freecadBlocked" @click="onRun">
             开始转换
           </el-button>

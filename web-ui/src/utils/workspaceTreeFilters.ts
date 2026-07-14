@@ -1,5 +1,5 @@
 import type { Ref } from "vue";
-import type { AppConfig, NavItem } from "../types/config";
+import type { NavItem } from "../types/config";
 
 export type WorkspaceTreeFilterProfile = "cad" | "code";
 

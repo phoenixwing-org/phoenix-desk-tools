@@ -198,7 +198,7 @@ export function createWorkbench(appConfig: Ref<AppConfig | null>) {
   function toolTabDirtyTitles(): string[] {
     const out: string[] = [];
     for (const tab of tabs.value) {
-      if (tab.pageId === "home") continue;
+      if (EPHEMERAL_TAB_PAGES.has(tab.pageId)) continue;
       const api = getPageSession(tab.id);
       if (api?.isDirty() ?? tab.dirty) out.push(tab.title);
     }

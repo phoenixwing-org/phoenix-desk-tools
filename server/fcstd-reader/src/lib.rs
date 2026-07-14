@@ -50,22 +50,32 @@ pub fn read_fcstd_from_bytes(data: &[u8]) -> Result<FcstdDocument, FcstdError> {
 /// Corresponds to Python: is_drawing_primary_document()
 pub fn is_drawing_primary(path: &Path) -> Result<bool, FcstdError> {
     let doc = read_fcstd(path)?;
-    let has_techdraw = doc.objects.iter().any(|o| o.type_id.starts_with("TechDraw::"));
-    let has_bom_mount = doc.objects.iter().any(|o| FcstdObject::is_valid(&o.type_id) && o.type_id != "App::Link");
+    let has_techdraw = doc
+        .objects
+        .iter()
+        .any(|o| o.type_id.starts_with("TechDraw::"));
+    let has_bom_mount = doc
+        .objects
+        .iter()
+        .any(|o| FcstdObject::is_valid(&o.type_id) && o.type_id != "App::Link");
     Ok(has_techdraw && !has_bom_mount)
 }
 
 #[cfg(test)]
 mod drawing_tests {
-    use super::*;
-
     #[test]
     fn test_is_drawing_primary_part() {
         // A PartDesign::Body → not drawing
         let xml = r#"<?xml version="1.0"?><Document><Objects><Object type="PartDesign::Body" name="Box"/></Objects><ObjectData><Object name="Box"><Properties><Property name="Label" type="App::PropertyString"><String value="Box"/></Property></Properties></Object></ObjectData></Document>"#;
         let doc = crate::xml::parse_document_xml(xml).unwrap();
-        let has_td = doc.objects.iter().any(|o| o.type_id.starts_with("TechDraw::"));
-        let has_bm = doc.objects.iter().any(|o| crate::types::FcstdObject::is_valid(&o.type_id) && o.type_id != "App::Link");
+        let has_td = doc
+            .objects
+            .iter()
+            .any(|o| o.type_id.starts_with("TechDraw::"));
+        let has_bm = doc
+            .objects
+            .iter()
+            .any(|o| crate::types::FcstdObject::is_valid(&o.type_id) && o.type_id != "App::Link");
         assert!(!has_td);
         assert!(has_bm);
         assert!(!(has_td && !has_bm));
@@ -75,8 +85,14 @@ mod drawing_tests {
     fn test_is_drawing_primary_techdraw() {
         let xml = r#"<?xml version="1.0"?><Document><Objects><Object type="TechDraw::DrawPage" name="Page"/><Object type="App::Link" name="Link"/></Objects><ObjectData><Object name="Page"><Properties><Property name="Label" type="App::PropertyString"><String value="Page"/></Property></Properties></Object><Object name="Link"><Properties><Property name="Label" type="App::PropertyString"><String value="Link"/></Property></Properties></Object></ObjectData></Document>"#;
         let doc = crate::xml::parse_document_xml(xml).unwrap();
-        let has_td = doc.objects.iter().any(|o| o.type_id.starts_with("TechDraw::"));
-        let has_bm = doc.objects.iter().any(|o| crate::types::FcstdObject::is_valid(&o.type_id) && o.type_id != "App::Link");
+        let has_td = doc
+            .objects
+            .iter()
+            .any(|o| o.type_id.starts_with("TechDraw::"));
+        let has_bm = doc
+            .objects
+            .iter()
+            .any(|o| crate::types::FcstdObject::is_valid(&o.type_id) && o.type_id != "App::Link");
         assert!(has_td);
         assert!(!has_bm);
         assert!(has_td && !has_bm);

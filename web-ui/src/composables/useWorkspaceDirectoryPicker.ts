@@ -24,8 +24,12 @@ export function useWorkspaceDirectoryPicker() {
   const onboarding = useOnboardingStore();
   const picking = ref(false);
 
+  function isWorkspaceBlockingTab(pageId: string) {
+    return pageId !== "home" && pageId !== "welcome" && pageId !== "config";
+  }
+
   function openToolTabTitles(): string[] {
-    return shell.tabs.value.map((t) => t.title);
+    return shell.tabs.value.filter((t) => isWorkspaceBlockingTab(t.pageId)).map((t) => t.title);
   }
 
   function workspaceSwitchBlocked(targetPath: string) {

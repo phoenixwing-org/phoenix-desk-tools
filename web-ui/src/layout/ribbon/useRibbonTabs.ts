@@ -2,7 +2,7 @@ import { computed, ref, watch, type Ref } from "vue";
 import type { NavItem } from "../../types/config";
 import type { ModuleScope } from "../../constants/moduleScope";
 import { ribbonTabIdForModuleScope } from "../../utils/moduleScopeNavigation";
-import { RIBBON_SHELL_TAB_ID, RIBBON_TABS, type RibbonTabDef } from "./ribbonConfig";
+import { buildRibbonTabs, RIBBON_SHELL_TAB_ID, type RibbonTabDef } from "./ribbonConfig";
 import { WORKBENCH_IDLE_PAGE } from "../../constants/workbench";
 
 export function useRibbonTabs(options: {
@@ -13,8 +13,7 @@ export function useRibbonTabs(options: {
 }) {
   const activeTab = ref(RIBBON_SHELL_TAB_ID);
 
-  /** 从 navigation 动态生成 Ribbon Tab 配置 */
-  const ribbonTabs = computed(() => RIBBON_TABS);
+  const ribbonTabs = computed(() => buildRibbonTabs(options.navigation.value));
 
   const visibleTabs = computed(() =>
     ribbonTabs.value.filter((tab) => {

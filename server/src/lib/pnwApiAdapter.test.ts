@@ -1,7 +1,7 @@
 /** 接口规则测试 — 确保返回格式与 Python 接口 100% 一致 */
 
 import { describe, it, expect } from "vitest";
-import { toFcstdMapEntry, toPartKeyEntry, toBomHost } from "./pnwApiAdapter";
+import { toFcstdMapEntry, toPartKeyEntry, toBomHost } from "./pnwApiAdapter.js";
 
 describe("pnwApiAdapter — Rust → Python 字段转换", () => {
   it("toFcstdMapEntry: snake_case → PascalCase BOM字段", () => {

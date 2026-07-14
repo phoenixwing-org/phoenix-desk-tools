@@ -28,7 +28,7 @@ type PageSubTab = "catalog" | "settings";
 
 const shell = useAppShell();
 const onboarding = useOnboardingStore();
-const { queryText, pickedRel, clearPickedOnInput, applyTreeSelection, registerTreeSelectHandler, unregisterTreeSelectHandler } =
+const { queryText, pickedRel, applyTreeSelection, registerTreeSelectHandler, unregisterTreeSelectHandler } =
   useWorkspaceFileQuery(props.workbenchTabId);
 
 const catalogColumns: PnwTableColumnDef[] = [
@@ -115,7 +115,7 @@ async function loadCatalog() {
     const msg = String(e);
     catalogError.value =
       msg === "Not Found"
-        ? "无法加载总成列表（API 未就绪）。请重启 python -m phoenix.web --dev 后重试。"
+        ? "当前 Node 后端未注册 BOM 列表 API，请确认前后端版本一致。"
         : msg;
     catalogHosts.value = [];
     shell.appendLog(`[BOM列表] ${catalogError.value}`, { source: "bom_xref" });

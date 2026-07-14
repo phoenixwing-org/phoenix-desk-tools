@@ -467,6 +467,21 @@ describe("computeDropPlacement", () => {
 });
 
 describe("applyDropTransform", () => {
+  it("preserves GRID anchor metadata while shifting existing controls", () => {
+    const result = applyDropTransform({
+      children: [{
+        id: "anchored",
+        grid: { row: 0, col: 0, rowSpan: 1, colSpan: 1, anchor: "CATGRID_4SIDES" },
+      }],
+      targetRow: 0,
+      targetCol: 0,
+      edge: "right",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.children[0].grid?.anchor).toBe("CATGRID_4SIDES");
+  });
+
   it("拒绝 inside 覆盖已有控件，并且不修改输入 children", () => {
     const child = c(0, 0);
     const result = applyDropTransform({

@@ -1,26 +1,16 @@
-# server/scripts/ — 保留 Python 程序
+# Server engine adapters
 
-这里放置暂不迁移的 Python 模块，通过 `pnwPythonSidecar` 调用。
+This directory contains platform engine adapters launched and supervised by Node services. They do
+not implement HTTP routes or workspace preference logic.
 
-## 调用方式
+## `sw-step-export.ps1`
 
-```typescript
-import { runPython } from "../lib/pnwPythonSidecar";
-const result = await runPython("step_batch.py", ["--input", "..."]);
-```
+`server/src/lib/pnwSwStepExportService.ts` writes a JSON job and launches this PowerShell adapter on
+Windows. The adapter attaches to or starts `SldWorks.Application`, exports `.sldprt` and `.sldasm`
+models to STEP, and returns a JSON result. Documents that were already open before the job are left
+open; documents opened by the adapter are closed after export.
 
-Python 路径由 `PHOENIX_PYTHON_PATH` 环境变量指定，或自动检测。
-
-## 脚本清单
-
-| 脚本 | Python 源 | 功能 | 依赖 |
-|------|----------|------|------|
-| `step_batch.py` | `phoenix/services/step_batch_service.py` | STEP→FCStd 批量转换 | freecadcmd |
-| `freecad_dimensions.py` | 新建 | FCStd 几何包围盒提取 | freecadcmd |
-| `sw_step_export.py` | `phoenix/services/sw_step_export_service.py` | SolidWorks→STEP | Windows + COM |
-
-## 迁移计划
-
-- `step_batch.py` — 长期保留（freecadcmd 无替代）
-- `freecad_dimensions.py` — 长期保留（OpenCASCADE 无 Rust/JS 替代）
-- `sw_step_export.py` — Windows only，可选拆除
+STEP Batch uses `scripts/freecad_batch_step_runner.py` and `scripts/freecad_batch_step_fc.py` at the
+repository root. Those files execute inside FreeCADCmd because FreeCAD exposes STEP import and FCStd
+creation through its Python API. Node still owns the corresponding HTTP, preferences, validation,
+preview, launch, and result parsing behavior.
