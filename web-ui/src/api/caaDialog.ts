@@ -16,7 +16,34 @@ export type CaaHealthPayload = {
   port?: number;
   url?: string;
   proxyPath?: string;
+  protocol_version?: number;
 };
+
+export type CaaDialogOpenRequest = {
+  id: number;
+  workspaceRoot: string;
+  catDlgRel: string;
+  receivedAt: string;
+};
+
+/** List CATDlg requests submitted by the VS Code bridge or desktop CLI. */
+export async function fetchCaaDialogOpenRequests(): Promise<CaaDialogOpenRequest[]> {
+  const res = await caaFetch("/api/caa/dialog/open-requests");
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error ?? `open requests failed ${res.status}`);
+  return Array.isArray(data?.requests) ? data.requests as CaaDialogOpenRequest[] : [];
+}
+
+export async function acknowledgeCaaDialogOpenRequests(ids: number[]): Promise<number[]> {
+  const res = await caaFetch("/api/caa/dialog/open-requests/ack", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error ?? `ack open requests failed ${res.status}`);
+  return Array.isArray(data?.acknowledged) ? data.acknowledged as number[] : [];
+}
 
 export type CaaControlTypeCoverageRow = {
   type: string;

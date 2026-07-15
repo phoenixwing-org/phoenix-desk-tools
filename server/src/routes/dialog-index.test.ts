@@ -26,6 +26,45 @@ afterEach(() => {
 });
 
 describe("CAA index routes", () => {
+  it("queues an external CATDlg open request for the desktop UI", async () => {
+    const root = workspace();
+    const app = createCaaApp();
+    const file = path.join(root, "SampleUI.m", "Sample.CATDlg");
+    const accepted = await app.request("/api/caa/dialog/open", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ workspaceRoot: root, file }),
+    });
+    expect(accepted.status).toBe(202);
+    await expect(accepted.json()).resolves.toMatchObject({
+      accepted: true,
+      requests: [{ workspaceRoot: root, catDlgRel: "SampleUI.m/Sample.CATDlg" }],
+    });
+
+    const first = await app.request("/api/caa/dialog/open-requests");
+    await expect(first.json()).resolves.toMatchObject({ requests: [{ catDlgRel: "SampleUI.m/Sample.CATDlg" }] });
+    const second = await app.request("/api/caa/dialog/open-requests");
+    await expect(second.json()).resolves.toMatchObject({ requests: [{ catDlgRel: "SampleUI.m/Sample.CATDlg" }] });
+    const ack = await app.request("/api/caa/dialog/open-requests/ack", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ids: [1] }),
+    });
+    await expect(ack.json()).resolves.toEqual({ acknowledged: [1] });
+    const afterAck = await app.request("/api/caa/dialog/open-requests");
+    await expect(afterAck.json()).resolves.toEqual({ requests: [] });
+
+    const invalidAck = await app.request("/api/caa/dialog/open-requests/ack", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ids: [0] }),
+    });
+    expect(invalidAck.status).toBe(400);
+
+    const health = await app.request("/api/caa/health");
+    await expect(health.json()).resolves.toMatchObject({ ok: true, service: "caa", protocol_version: 1 });
+  });
+
   it("persists scan results and serves filtered groups", async () => {
     const root = workspace();
     const app = createCaaApp();

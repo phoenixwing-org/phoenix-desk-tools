@@ -29,6 +29,24 @@ cargo install tauri-cli --version "^2.6" --locked  # 仅首次安装
 pnpm tauri:dev
 ```
 
+### 从 VS Code / EXE 打开 CAA 对话框
+
+运行中的 Desk Tools 接受本地 HTTP 请求，并在界面中切换到对应工作空间、打开 `.CATDlg` 编辑 Tab：
+
+```bash
+curl -X POST http://127.0.0.1:5180/api/caa/dialog/open \
+  -H 'Content-Type: application/json' \
+  -d '{"workspaceRoot":"/path/to/workspace","file":"/path/to/workspace/UI/Sample.CATDlg"}'
+```
+
+Tauri 可执行文件也接受启动参数；程序已运行时会由单实例桥接转交给现有窗口：
+
+```bash
+phoenix-desktop --workspace /path/to/workspace --catdlg /path/to/workspace/UI/Sample.CATDlg
+```
+
+也可只传一个 `.CATDlg` 位置；此时文件必须位于当前 Desk Tools 工作空间内。接口还直接接受 `phoenix-desk-tools.caa-dialog.v1` VS Code handoff JSON。
+
 如果启动时提示找不到 `vite/bin/vite.js` 或 `tsx/dist/cli.mjs`，说明本地依赖目录不完整，可强制按锁文件重新安装：
 
 ```bash

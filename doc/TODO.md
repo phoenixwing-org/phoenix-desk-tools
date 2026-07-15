@@ -242,6 +242,8 @@
 
 > [Phoenix平台-多应用壳层-规划讨论.md](platform/Phoenix平台-多应用壳层-规划讨论.md)
 
+- [ ] **Primary Bar / VS Code 界面对齐试点**：先以 Code 改名做 Activity Bar + Primary Side Bar 样板，复用工具 DTO、Block 状态、图标和文案；保留 Ribbon 与旧布局开关，不在首期统一工作集存储 — 见 [想法文档](platform/Web壳层-Primary-Bar与VSCode插件界面对齐-想法.md)
+
 - [ ] 确认：同仓分包 vs 独立 `phoenix-shell` 仓库
 - [ ] `web-ui/src/plugins/freecad/` 页面分包（无行为变化）
 - [ ] Python 路由 `register_freecad_routes` 拆分
@@ -268,6 +270,8 @@
 ### CAA 模块 · 对话框编辑器（单前端 · 双后端）
 
 > **CAA 细项**：[TODO-CAA.md](TODO-CAA.md) · **`web-ui` + `server/caa` + `catdlg-core`** · Python 无 CAA 业务
+>
+> **人工验收**：[CAA VS Code / EXE 交接点检清单](caa/CAA-VSCode交接-人工点检清单.md)
 
 | 里程碑 | 状态 |
 | --- | --- |

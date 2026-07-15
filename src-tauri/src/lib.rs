@@ -43,6 +43,58 @@ struct ShutdownResponse {
     status: &'static str,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+struct CaaDialogLaunchRequest {
+    workspace: Option<String>,
+    file: String,
+}
+
+fn resolve_cli_path(value: &str, cwd: &str) -> String {
+    let path = PathBuf::from(value);
+    if path.is_absolute() {
+        path.to_string_lossy().into_owned()
+    } else {
+        PathBuf::from(cwd).join(path).to_string_lossy().into_owned()
+    }
+}
+
+fn parse_caa_dialog_launch_args(args: &[String], cwd: &str) -> Option<CaaDialogLaunchRequest> {
+    let mut workspace: Option<String> = None;
+    let mut file: Option<String> = None;
+    let mut index = 0;
+    while index < args.len() {
+        let arg = &args[index];
+        if arg == "--workspace" {
+            if let Some(value) = args.get(index + 1) {
+                workspace = Some(resolve_cli_path(value, cwd));
+                index += 1;
+            }
+        } else if let Some(value) = arg.strip_prefix("--workspace=") {
+            workspace = Some(resolve_cli_path(value, cwd));
+        } else if arg == "--catdlg" || arg == "--file" {
+            if let Some(value) = args.get(index + 1) {
+                file = Some(value.clone());
+                index += 1;
+            }
+        } else if let Some(value) = arg
+            .strip_prefix("--catdlg=")
+            .or_else(|| arg.strip_prefix("--file="))
+        {
+            file = Some(value.to_string());
+        } else if arg.to_ascii_lowercase().ends_with(".catdlg") {
+            file = Some(arg.clone());
+        }
+        index += 1;
+    }
+    file.map(|file| {
+        let resolved_file = resolve_cli_path(&file, workspace.as_deref().unwrap_or(cwd));
+        CaaDialogLaunchRequest {
+            workspace,
+            file: resolved_file,
+        }
+    })
+}
+
 fn http_request(request: &[u8]) -> std::io::Result<String> {
     let address: SocketAddr = SERVER_ADDR.parse().expect("valid Phoenix server address");
     let mut stream = TcpStream::connect_timeout(&address, Duration::from_millis(300))?;
@@ -52,6 +104,33 @@ fn http_request(request: &[u8]) -> std::io::Result<String> {
     let mut response = String::new();
     stream.read_to_string(&mut response)?;
     Ok(response)
+}
+
+fn dispatch_caa_dialog_launch_args(args: &[String], cwd: &str) -> Result<bool, String> {
+    let Some(request) = parse_caa_dialog_launch_args(args, cwd) else {
+        return Ok(false);
+    };
+    let body = serde_json::to_vec(&serde_json::json!({
+        "workspaceRoot": request.workspace,
+        "file": request.file,
+    }))
+    .map_err(|error| error.to_string())?;
+    let header = format!(
+        "POST /api/caa/dialog/open HTTP/1.1\r\nHost: 127.0.0.1:5180\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    let mut wire = header.into_bytes();
+    wire.extend_from_slice(&body);
+    let response = http_request(&wire).map_err(|error| error.to_string())?;
+    if response.starts_with("HTTP/1.1 202") || response.starts_with("HTTP/1.0 202") {
+        Ok(true)
+    } else {
+        Err(response
+            .lines()
+            .next()
+            .unwrap_or("invalid HTTP response")
+            .to_string())
+    }
 }
 
 fn phoenix_server_healthy() -> bool {
@@ -298,11 +377,14 @@ fn shutdown_desktop(app: AppHandle) -> ShutdownResponse {
 
 pub fn run() {
     let app = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
                 let _ = window.show();
                 let _ = window.set_focus();
+            }
+            if let Err(error) = dispatch_caa_dialog_launch_args(&args, &cwd) {
+                eprintln!("[tauri] cannot dispatch CATDlg open request: {error}");
             }
         }))
         .plugin(tauri_plugin_window_state::Builder::default().build())
@@ -326,6 +408,14 @@ pub fn run() {
                     .blocking_show();
                 return Err(std::io::Error::other(error).into());
             }
+            let args: Vec<String> = std::env::args().collect();
+            let cwd = std::env::current_dir()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned();
+            if let Err(error) = dispatch_caa_dialog_launch_args(&args, &cwd) {
+                eprintln!("[tauri] cannot dispatch startup CATDlg open request: {error}");
+            }
             Ok(())
         })
         .build(tauri::generate_context!())
@@ -345,5 +435,32 @@ mod tests {
     #[test]
     fn source_repo_root_contains_the_workspace_manifest() {
         assert!(repo_root().join("pnpm-workspace.yaml").is_file());
+    }
+
+    #[test]
+    fn parses_catdlg_cli_arguments_and_file_association_style_arguments() {
+        assert_eq!(
+            parse_caa_dialog_launch_args(
+                &[
+                    "phoenix".into(),
+                    "--workspace".into(),
+                    "/work".into(),
+                    "--catdlg".into(),
+                    "UI/Sample.CATDlg".into()
+                ],
+                "/cwd",
+            ),
+            Some(CaaDialogLaunchRequest {
+                workspace: Some("/work".into()),
+                file: "/work/UI/Sample.CATDlg".into(),
+            })
+        );
+        assert_eq!(
+            parse_caa_dialog_launch_args(&["phoenix".into(), "Dialog.CATDlg".into()], "/project"),
+            Some(CaaDialogLaunchRequest {
+                workspace: None,
+                file: "/project/Dialog.CATDlg".into()
+            })
+        );
     }
 }

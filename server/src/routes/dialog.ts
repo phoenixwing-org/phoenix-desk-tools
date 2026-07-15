@@ -31,6 +31,11 @@ import {
   scanCaaDialogIndex,
 } from "../lib/caaIndexService.js";
 import { runtimeUserDataDir } from "../lib/appRuntimePaths.js";
+import {
+  enqueueCaaDialogOpenPayload,
+  acknowledgeCaaDialogOpenRequests,
+  listCaaDialogOpenRequests,
+} from "../lib/caaDialogOpenRequestService.js";
 
 export const dialogRoutes = new Hono();
 
@@ -783,6 +788,7 @@ export function createCaaApp() {
     c.json({
       ok: true,
       service: "caa",
+      protocol_version: 1,
       port,
       url: `http://127.0.0.1:${port}`,
       proxyPath: "/api/caa",
@@ -806,6 +812,24 @@ export function createCaaApp() {
       const msg = err instanceof Error ? err.message : String(err);
       return c.json({ error: msg }, 400);
     }
+  });
+  app.post("/api/caa/dialog/open", async (c) => {
+    const body = await c.req.json().catch(() => null);
+    try {
+      const requests = await enqueueCaaDialogOpenPayload(body, await loadWorkspaceRootFromPrefs());
+      return c.json({ accepted: true, requests }, 202);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return c.json({ accepted: false, error: msg }, 400);
+    }
+  });
+  app.get("/api/caa/dialog/open-requests", (c) => c.json({ requests: listCaaDialogOpenRequests() }));
+  app.post("/api/caa/dialog/open-requests/ack", async (c) => {
+    const body = await c.req.json().catch(() => null) as { ids?: unknown } | null;
+    if (!body || !Array.isArray(body.ids) || body.ids.some((id) => !Number.isSafeInteger(id) || Number(id) <= 0)) {
+      return c.json({ error: "ids 必须是正整数数组" }, 400);
+    }
+    return c.json({ acknowledged: acknowledgeCaaDialogOpenRequests(body.ids.map(Number)) });
   });
   app.route("/api/caa/dialog", dialogRoutes);
   return app;

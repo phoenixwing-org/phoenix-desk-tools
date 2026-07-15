@@ -37,7 +37,7 @@ import { runShellTour } from "./useShellTour";
 import { CAA_EDITOR_PAGE_ID, CAA_HOME_PAGE_ID, CAA_NAV_MODULE } from "../constants/caaPages";
 import { dialogNameFromCatDlgRel, shortCatDlgPath } from "../utils/caaDialogDisplay";
 import { createBlankCaaDialogIr } from "../utils/createBlankCaaDialogIr";
-import { saveCaaDraft } from "../api/caaDialog";
+import { acknowledgeCaaDialogOpenRequests, fetchCaaDialogOpenRequests, saveCaaDraft } from "../api/caaDialog";
 import type { CaaDialogDraft } from "../types/caaDialogDraft";
 import { resolveTabForModuleScope } from "../utils/moduleScopeNavigation";
 
@@ -828,8 +828,8 @@ export function provideAppShell(): AppShellContext {
     isDemo?: boolean;
   }) {
     const rel = normalizeCaaDlgRel(opts.catDlgRel);
-    if (!rel) return;
-    if (!opts.isDemo && !requireWorkspace()) return;
+    if (!rel) return false;
+    if (!opts.isDemo && !requireWorkspace()) return false;
 
     const title = dialogNameFromCatDlgRel(rel) || opts.dialogName?.trim() || "CAA 对话框";
 
@@ -847,7 +847,7 @@ export function provideAppShell(): AppShellContext {
       existing.payloadConsumed = false;
       caaDialogTabByRel.set(rel, existing.id);
       shellActivateTab(existing.id);
-      return;
+      return true;
     }
 
     try {
@@ -866,8 +866,10 @@ export function provideAppShell(): AppShellContext {
         forceNew: true,
       });
       caaDialogTabByRel.set(rel, tabId);
+      return true;
     } catch (e) {
       setStatus(String(e));
+      return false;
     }
   }
 
@@ -1217,6 +1219,37 @@ export function provideAppShell(): AppShellContext {
     shellLogPollTimer = setInterval(pollShellLog, 2500);
   }
 
+  let caaOpenRequestPollTimer: ReturnType<typeof setInterval> | null = null;
+  let caaOpenRequestPolling = false;
+
+  async function pollCaaDialogOpenRequests() {
+    if (caaOpenRequestPolling) return;
+    caaOpenRequestPolling = true;
+    try {
+      const requests = await fetchCaaDialogOpenRequests();
+      for (const request of requests) {
+        const targetWorkspace = request.workspaceRoot.trim();
+        if (!targetWorkspace || !request.catDlgRel.trim()) continue;
+        if (workspacePath.value !== targetWorkspace) await switchWorkspace(targetWorkspace);
+        if (!openCaaDialogForRel({ catDlgRel: request.catDlgRel })) {
+          throw new Error(`无法创建 CAA 编辑页：${request.catDlgRel}`);
+        }
+        await acknowledgeCaaDialogOpenRequests([request.id]);
+        appendLog(`[CAA 对话框] 已接收外部打开请求：${request.catDlgRel}`, { source: CAA_EDITOR_PAGE_ID });
+      }
+    } catch {
+      // The backend may be restarting; the regular health/status UI reports it.
+    } finally {
+      caaOpenRequestPolling = false;
+    }
+  }
+
+  function setupCaaDialogOpenRequestPolling() {
+    if (caaOpenRequestPollTimer) clearInterval(caaOpenRequestPollTimer);
+    void pollCaaDialogOpenRequests();
+    caaOpenRequestPollTimer = setInterval(() => void pollCaaDialogOpenRequests(), 750);
+  }
+
   async function persistShellLayout(patch: Partial<ShellLayout>) {
     const safe = sanitizeShellLayoutPatch(patch);
     if (!Object.keys(safe).length) return;
@@ -1511,6 +1544,7 @@ export function provideAppShell(): AppShellContext {
     setupWorkbenchPersistence();
     syncShellUrl();
     setupShellLogPolling();
+    setupCaaDialogOpenRequestPolling();
     if (workspacePath.value) {
       void useFileWorksetsStore().hydrate(workspacePath.value);
     }
