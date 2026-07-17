@@ -116,6 +116,14 @@
             "ribbonGroup": "编辑",
             "description": "按 cxx-code-style 重排选定模块下 .h/.cpp 类成员"
         }, {
+            "id": "kt_codegen",
+            "label": "KT Codegen",
+            "page": "kt_codegen",
+            "module": "code",
+            "ribbonGroup": "生成",
+            "ribbonLabel": "自动代码",
+            "description": "编辑参数配置并预检 Kevin 自动代码控制块"
+        }, {
             "id": "caa_dialog_home",
             "label": "CAA 对话框",
             "page": "caa_dialog_home",
@@ -199,6 +207,10 @@
             },
             "reorder_members": {
                 "max_tabs": 1
+            },
+            "kt_codegen": {
+                "max_tabs": 32,
+                "tab_enabled": true
             },
             "caa_dialog_home": {
                 "max_tabs": 1

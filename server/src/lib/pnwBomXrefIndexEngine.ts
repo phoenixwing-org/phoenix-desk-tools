@@ -2,7 +2,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { strFromU8, unzipSync } from "fflate";
-import { pnwCreateDb, type PnwDbAdapter } from "phoenix-wing/db/pnwDbAdapter";
+import {
+  pnwCadXlinkRuleLabel,
+  pnwExtractXlinksFromDocumentXml,
+  pnwResolveXlinkTarget,
+  type PnwCadXlinkRef,
+  type PnwCadResolvedXlinkTarget,
+} from "@phoenix-wing/cad-core";
+import { pnwCreateDb, type PnwDbAdapter } from "@phoenix-wing/db-node";
 
 const GRAPH_TARGET_STATUSES = new Set(["resolved", "ambiguous", "self"]);
 
@@ -20,13 +27,9 @@ type AssetRow = {
   file_status?: string | null;
 };
 
-type XlinkRef = { file: string; label: string };
+type XlinkRef = PnwCadXlinkRef;
 
-type ResolvedTarget = {
-  targetRel: string | null;
-  status: "resolved" | "ambiguous" | "missing" | "self" | "non_fcstd";
-  candidates: string[];
-};
+type ResolvedTarget = PnwCadResolvedXlinkTarget;
 
 type XrefEdge = {
   host_file_asset_id: number;
@@ -245,45 +248,7 @@ function relForAbs(ws: string, abs: string): string | null {
   return normKey(diff);
 }
 
-function decodeXmlAttr(value: string): string {
-  return value
-    .replace(/&#x([0-9a-f]+);/gi, (_m, hex) => String.fromCodePoint(Number.parseInt(hex, 16)))
-    .replace(/&#(\d+);/g, (_m, dec) => String.fromCodePoint(Number.parseInt(dec, 10)))
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&");
-}
-
-function tagAttr(tag: string, name: string): string {
-  const match = new RegExp(`\\b${name}\\s*=\\s*(["'])([\\s\\S]*?)\\1`, "i").exec(tag);
-  return match ? decodeXmlAttr(match[2]) : "";
-}
-
-export function extractXlinksFromDocumentXml(xml: string): XlinkRef[] {
-  const byFile = new Map<string, XlinkRef>();
-  const addFromFragment = (fragment: string, objectLabel: string) => {
-    const xlinkRe = /<XLink\b[^>]*>/gi;
-    for (const match of fragment.matchAll(xlinkRe)) {
-      const file = tagAttr(match[0], "file").trim();
-      if (!isFcstd(file)) continue;
-      const label = objectLabel || tagAttr(match[0], "label").trim();
-      const existing = byFile.get(file);
-      if (!existing) byFile.set(file, { file, label });
-      else if (!existing.label && label) existing.label = label;
-    }
-  };
-
-  const objectRe = /<Object(?:\s[^>]*)?>([\s\S]*?)<\/Object>/gi;
-  for (const objectMatch of xml.matchAll(objectRe)) {
-    const block = objectMatch[0];
-    const labelMatch = /<Property\b[^>]*\bname\s*=\s*(["'])Label\1[^>]*>[\s\S]*?<String\b[^>]*\bvalue\s*=\s*(["'])([\s\S]*?)\2/i.exec(block);
-    addFromFragment(block, labelMatch ? decodeXmlAttr(labelMatch[3]) : "");
-  }
-  addFromFragment(xml, "");
-  return [...byFile.values()];
-}
+export const extractXlinksFromDocumentXml = pnwExtractXlinksFromDocumentXml;
 
 function unzipDocumentXml(raw: Uint8Array): string | null {
   try {
@@ -315,113 +280,33 @@ async function readFcstdXlinksAsync(filePath: string): Promise<XlinkRef[]> {
   }
 }
 
-function freecadWorkspaceDir(docDir: string): string {
-  if (path.basename(docDir).toLowerCase() === "freecad") return docDir;
-  if (path.basename(path.dirname(docDir)).toLowerCase() === "freecad") return path.dirname(docDir);
-  return docDir;
-}
-
-function folderThreeDigitSuffix(ws: string, docDir: string): string {
-  for (const part of path.relative(ws, docDir).split(/[\\/]+/)) {
-    const match = /(\d{3})$/.exec(part);
-    if (match) return match[1];
-  }
-  return "";
-}
-
-function fileVersionToken(filePath: string): string {
-  return /\.(\d{3})[-.]/.exec(path.basename(filePath))?.[1] || "";
-}
-
-function pickTarget(ctx: IndexContext, hostRel: string, basename: string, candidateRels: string[]): ResolvedTarget {
-  if (!candidateRels.length) return { targetRel: null, status: "missing", candidates: [] };
-  const hostAbs = absForRel(ctx.ws, hostRel);
-  const docDir = hostAbs ? path.dirname(hostAbs) : ctx.ws;
-  const direct = path.resolve(docDir, basename);
-  if (fs.existsSync(direct) && fs.statSync(direct).isFile()) {
-    const rel = relForAbs(ctx.ws, direct);
-    if (rel) return { targetRel: rel, status: rel === hostRel ? "self" : "resolved", candidates: [] };
-  }
-
-  const normalized = [...new Set(candidateRels.map(normKey).filter(Boolean))];
-  let existing = normalized
-    .map((rel) => ({ rel, abs: absForRel(ctx.ws, rel) }))
-    .filter((item): item is { rel: string; abs: string } => Boolean(item.abs && fs.existsSync(item.abs) && fs.statSync(item.abs).isFile()));
-  if (existing.length === 1) {
-    const rel = existing[0].rel;
-    return { targetRel: rel, status: rel === hostRel ? "self" : "resolved", candidates: [] };
-  }
-
-  const currentDir = freecadWorkspaceDir(docDir);
-  const inCurrent = existing.filter((item) => path.dirname(item.abs) === currentDir);
-  if (inCurrent.length === 1) {
-    const rel = inCurrent[0].rel;
-    return { targetRel: rel, status: rel === hostRel ? "self" : "resolved", candidates: [] };
-  }
-  if (inCurrent.length > 1) existing = inCurrent;
-
-  const projectVersion = folderThreeDigitSuffix(ctx.ws, docDir);
-  if (projectVersion && existing.length) {
-    const sameVersion = existing.filter((item) => fileVersionToken(item.abs) === projectVersion);
-    if (sameVersion.length === 1) {
-      const rel = sameVersion[0].rel;
-      return { targetRel: rel, status: rel === hostRel ? "self" : "resolved", candidates: [] };
-    }
-    if (sameVersion.length) existing = sameVersion;
-  }
-
-  const docMarkers = new Set(path.relative(ctx.ws, docDir).split(/[\\/]+/).filter((part) => /\d{3}$/.test(part)));
-  if (docMarkers.size && existing.length) {
-    const sameProject = existing.filter((item) => path.relative(ctx.ws, item.abs).split(/[\\/]+/).some((part) => docMarkers.has(part)));
-    if (sameProject.length === 1) {
-      const rel = sameProject[0].rel;
-      return { targetRel: rel, status: rel === hostRel ? "self" : "resolved", candidates: [] };
-    }
-    if (sameProject.length) existing = sameProject;
-  }
-
-  if (!existing.length) return { targetRel: null, status: "missing", candidates: normalized.sort() };
-  if (existing.length > 1) {
-    const best = [...existing].sort((a, b) => path.relative(docDir, a.abs).length - path.relative(docDir, b.abs).length)[0];
-    return { targetRel: best.rel, status: "ambiguous", candidates: existing.map((item) => item.rel).sort() };
-  }
-  const rel = existing[0].rel;
-  return { targetRel: rel, status: rel === hostRel ? "self" : "resolved", candidates: [] };
-}
-
 function resolveTarget(ctx: IndexContext, hostRel: string, attr: string): ResolvedTarget {
   const normalizedAttr = String(attr || "").replace(/\\/g, "/").trim();
   const basename = basenameOf(normalizedAttr);
-  if (!isFcstd(basename)) return { targetRel: null, status: "non_fcstd", candidates: [] };
-  const stripped = normalizedAttr.replace(/^(\.\/)+/, "");
   const candidates = ctx.basenameMap.get(basename.toLowerCase()) || [];
-  if (normalizedAttr === basename || !stripped.includes("/")) return pickTarget(ctx, hostRel, basename, candidates);
-
   const hostAbs = absForRel(ctx.ws, hostRel);
-  const direct = hostAbs ? path.resolve(path.dirname(hostAbs), normalizedAttr) : "";
-  if (direct && fs.existsSync(direct) && fs.statSync(direct).isFile()) {
-    const rel = relForAbs(ctx.ws, direct);
-    if (rel) return { targetRel: rel, status: rel === hostRel ? "self" : "resolved", candidates: [] };
+  const hostDir = hostAbs ? path.dirname(hostAbs) : ctx.ws;
+  let directTargetRel: string | null = null;
+  const stripped = normalizedAttr.replace(/^(\.\/)+/, "");
+  const directAttrs = stripped.includes("/") ? [normalizedAttr] : [];
+  if (candidates.length) directAttrs.push(basename);
+  for (const directAttr of directAttrs) {
+    const direct = path.resolve(hostDir, directAttr);
+    if (!fs.existsSync(direct) || !fs.statSync(direct).isFile()) continue;
+    directTargetRel = relForAbs(ctx.ws, direct);
+    if (directTargetRel) break;
   }
-  return pickTarget(ctx, hostRel, basename, candidates);
-}
-
-function basenameLabelFallback(value: string): string {
-  const name = basenameOf(value);
-  for (const suffix of [".drawing.fcstd", ".assy.fcstd", ".fcstd"]) {
-    if (name.toLowerCase().endsWith(suffix)) return name.slice(0, -suffix.length) || name;
-  }
-  return name;
-}
-
-function ruleLabel(asset: AssetRow | undefined, targetBase: string, targetRel: string | null): string {
-  const label = String(asset?.label || "").trim();
-  if (label) return label;
-  const pn = String(asset?.part_number || "").trim();
-  const pv = String(asset?.part_version || "").trim();
-  const partName = String(asset?.part_name || "").trim();
-  if (pn && pv) return partName ? `${pn}.${pv}-${partName}` : `${pn}.${pv}`;
-  return basenameLabelFallback(targetBase || targetRel || "");
+  const existingCandidateRels = candidates.filter((candidate) => {
+    const absolute = absForRel(ctx.ws, candidate);
+    return Boolean(absolute && fs.existsSync(absolute) && fs.statSync(absolute).isFile());
+  });
+  return pnwResolveXlinkTarget({
+    hostRel,
+    xlinkFile: normalizedAttr,
+    candidateRels: candidates,
+    existingCandidateRels,
+    directTargetRel,
+  });
 }
 
 function edgeForXlink(ctx: IndexContext, host: AssetRow, xlink: XlinkRef): XrefEdge {
@@ -433,7 +318,7 @@ function edgeForXlink(ctx: IndexContext, host: AssetRow, xlink: XlinkRef): XrefE
     host_repo_rel_path: host.repo_rel_path,
     xlink_file_attr: xlink.file,
     link_label: xlink.label,
-    rule_label: ruleLabel(targetAsset, targetBase, resolved.targetRel),
+    rule_label: pnwCadXlinkRuleLabel(targetAsset, targetBase, resolved.targetRel),
     target_basename: targetBase,
     target_file_asset_id: targetAsset?.id ?? null,
     target_repo_rel_path: resolved.targetRel,

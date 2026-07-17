@@ -1,6 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import { pnwCreateDb, type PnwDbAdapter } from "phoenix-wing/db/pnwDbAdapter";
+import {
+  pnwBuildAssemblyTreeFromXrefs,
+  pnwResolveIncomingXlinkHosts,
+} from "@phoenix-wing/cad-core";
+import { pnwCreateDb, type PnwDbAdapter } from "@phoenix-wing/db-node";
 import {
   bomXrefIndexTimestamp,
   discoverBomXrefSubtree,
@@ -12,8 +16,6 @@ import {
   type BomXrefIndexOptions,
 } from "./pnwBomXrefIndexEngine.js";
 import { patchFcstdReferenceLabels } from "./fcstdReferenceLabelService.js";
-
-const GRAPH_TARGET_STATUSES = new Set(["resolved", "ambiguous", "self"]);
 
 function dbPath(ws: string): string {
   return path.join(ws, ".phoenix", "phoenix-workspace.sqlite");
@@ -216,61 +218,6 @@ export function searchOutgoingRefs(ws: string, rel: string, opts: { limit?: numb
   }
 }
 
-function parentMap(edges: any[]): Map<string, Set<string>> {
-  const parents = new Map<string, Set<string>>();
-  for (const edge of edges) {
-    if (!GRAPH_TARGET_STATUSES.has(edge.resolve_status)) continue;
-    const target = normKey(edge.target_repo_rel_path || "");
-    const host = normKey(edge.host_repo_rel_path || "");
-    if (!target || !host) continue;
-    if (!parents.has(target)) parents.set(target, new Set());
-    parents.get(target)!.add(host);
-  }
-  return parents;
-}
-
-function directRefsForHost(refs: any[], host: string): any[] {
-  const key = normKey(host);
-  return refs.filter((r) => normKey(r.host_repo_rel_path) === key);
-}
-
-function resolveIncomingHosts(edges: any[], directRefs: any[], targets: Set<string>, transitive: boolean, limit: number): any[] {
-  if (!transitive) {
-    const hosts = new Map<string, any>();
-    for (const ref of directRefs) {
-      const host = normKey(ref.host_repo_rel_path);
-      if (!hosts.has(host)) hosts.set(host, { host_repo_rel_path: host, depth: 0, usage_kind: "direct", via_chain: [], direct_refs: [] });
-      hosts.get(host).direct_refs.push(ref);
-    }
-    return [...hosts.values()].slice(0, limit);
-  }
-
-  const parents = parentMap(edges);
-  const out: any[] = [];
-  const visited = new Set<string>();
-  const queue: Array<{ host: string; depth: number; via_chain: string[] }> = [];
-  for (const target of targets) {
-    for (const host of parents.get(target) || []) queue.push({ host, depth: 0, via_chain: [] });
-  }
-  while (queue.length && out.length < limit) {
-    const item = queue.shift()!;
-    const host = normKey(item.host);
-    if (!host || visited.has(host)) continue;
-    visited.add(host);
-    out.push({
-      host_repo_rel_path: host,
-      depth: item.depth,
-      usage_kind: item.depth === 0 ? "direct" : "indirect",
-      via_chain: item.via_chain,
-      direct_refs: directRefsForHost(directRefs, host),
-    });
-    for (const parent of parents.get(host) || []) {
-      if (!visited.has(parent)) queue.push({ host: parent, depth: item.depth + 1, via_chain: [host, ...item.via_chain] });
-    }
-  }
-  return out;
-}
-
 export function searchIncomingRefs(
   ws: string,
   opts: { rel?: string; basename?: string; limit?: number; transitive?: boolean } = {},
@@ -315,7 +262,7 @@ export function searchIncomingRefs(
     }
     for (const ref of refs) if (ref.target_repo_rel_path) targets.add(normKey(ref.target_repo_rel_path));
 
-    const hosts = resolveIncomingHosts(edges, refs, targets, opts.transitive !== false, limit);
+    const hosts = pnwResolveIncomingXlinkHosts(edges, refs, targets, opts.transitive !== false, limit);
     return {
       query: { repo_rel: relKey || null, basename: base || null, transitive: opts.transitive !== false },
       count: hosts.length,
@@ -462,53 +409,8 @@ export function loadAssemblyTreeFromXrefs(ws: string, hostRel: string, opts: { f
     if (!hasBomXrefTable(db)) {
       return { host_repo_rel_path: hostKey, mode, node_count: 0, nodes: [], index_pending: true };
     }
-    const edges = allEdges(db);
-    const byHost = new Map<string, any[]>();
-    for (const edge of edges) {
-      const host = normKey(edge.host_repo_rel_path || "");
-      if (!host) continue;
-      if (!byHost.has(host)) byHost.set(host, []);
-      byHost.get(host)!.push(edge);
-    }
-
-    let nodeCount = 0;
-    function build(host: string, seen: Set<string>): any[] {
-      const rows = byHost.get(normKey(host)) || [];
-      return rows.map((edge, index) => {
-        const target = normKey(edge.target_repo_rel_path || "");
-        const basename = String(edge.target_basename || (target ? path.basename(target) : edge.xlink_file_attr || ""));
-        const canRecurse = Boolean(opts.full && target && !seen.has(target) && byHost.has(target));
-        nodeCount += 1;
-        return {
-          id: `${normKey(host)}::${edge.xlink_file_attr || index}`,
-          host_repo_rel: normKey(host),
-          repo_rel_path: target || "",
-          basename,
-          resolve_status: edge.resolve_status || "missing",
-          xlink_file_attr: edge.xlink_file_attr || "",
-          part_number: edge.target_part_number || "",
-          part_version: edge.target_part_version || "",
-          part_key: partKey(edge.target_part_number || "", edge.target_part_version || ""),
-          TypeCode: edge.target_type_code || "",
-          ModelSeries: edge.target_model_series || "",
-          PartName: edge.target_part_name || "",
-          label: edge.target_asset_label || "",
-          link_label: edge.link_label || "",
-          link_labels: edge.link_label ? [edge.link_label] : [],
-          xref_instances: [{
-            xlink_file_attr: edge.xlink_file_attr || "",
-            link_label: edge.link_label || "",
-          }],
-          rule_label: edge.rule_label || "",
-          ref_count: 1,
-          file_role: fileRole(basename),
-          children: canRecurse ? build(target, new Set([...seen, target])) : [],
-        };
-      });
-    }
-
-    const nodes = build(hostKey, new Set([hostKey]));
-    return { host_repo_rel_path: hostKey, mode, node_count: nodeCount, nodes };
+    const tree = pnwBuildAssemblyTreeFromXrefs(allEdges(db), hostKey, Boolean(opts.full));
+    return { host_repo_rel_path: hostKey, mode, ...tree };
   } finally {
     db.close();
   }

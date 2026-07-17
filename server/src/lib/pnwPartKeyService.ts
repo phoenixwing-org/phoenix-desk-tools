@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { pnwCreateDb, type PnwDbAdapter } from "phoenix-wing/db/pnwDbAdapter";
+import { pnwCreateDb, type PnwDbAdapter } from "@phoenix-wing/db-node";
 import { loadAssemblyTreeFromXrefs } from "./pnwBomXrefService.js";
 
 const FILE_STATUS_PRESENT = "present";

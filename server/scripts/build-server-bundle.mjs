@@ -7,15 +7,6 @@ const serverRoot = path.resolve(scriptDir, "..");
 const repoRoot = path.resolve(serverRoot, "..");
 const outputDir = path.join(serverRoot, "dist-sidecar");
 const outputFile = path.join(outputDir, "server.mjs");
-const phoenixWingDbAdapter = path.join(
-  serverRoot,
-  "node_modules",
-  "phoenix-wing",
-  "src",
-  "db",
-  "pnwDbAdapter.ts",
-);
-
 async function loadEsbuild() {
   try {
     return await import("esbuild");
@@ -52,14 +43,6 @@ await esbuild.build({
     js: 'import { createRequire as __phoenixCreateRequire } from "node:module"; const require = __phoenixCreateRequire(import.meta.url);',
   },
   external: ["node-sqlite3-wasm"],
-  plugins: [{
-    name: "phoenix-wing-typescript-export",
-    setup(build) {
-      build.onResolve({ filter: /^phoenix-wing\/db\/pnwDbAdapter$/ }, () => ({
-        path: phoenixWingDbAdapter,
-      }));
-    },
-  }],
   logLevel: "info",
 });
 

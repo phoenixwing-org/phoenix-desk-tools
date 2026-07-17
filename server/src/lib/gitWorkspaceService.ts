@@ -90,9 +90,19 @@ function gitRootForWorkspace(workspace: string): string | null {
   const result = runGit(root, ["rev-parse", "--show-toplevel"]);
   if (result.status !== 0) return null;
   const top = path.resolve(result.stdout.trim());
+  const comparableRoot = canonicalPath(root);
+  const comparableTop = canonicalPath(top);
   return process.platform === "win32"
-    ? top.toLowerCase() === root.toLowerCase() ? root : null
-    : top === root ? root : null;
+    ? comparableTop.toLowerCase() === comparableRoot.toLowerCase() ? root : null
+    : comparableTop === comparableRoot ? root : null;
+}
+
+function canonicalPath(value: string): string {
+  try {
+    return fs.realpathSync.native(value);
+  } catch {
+    return path.resolve(value);
+  }
 }
 
 export function normalizeGitRepoPath(raw: string): string {

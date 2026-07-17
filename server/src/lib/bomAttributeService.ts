@@ -1,7 +1,17 @@
 import { execFile, execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { pnwCreateDb } from "phoenix-wing/db/pnwDbAdapter";
+import {
+  pnwComposeBomLabel,
+  pnwComposeRecommendedBomFilename,
+  pnwInferBomDocumentKinds,
+  pnwInferBomFieldsFromFilename,
+  pnwInferFcstdSuffix,
+  pnwNormalizeCadRelativePath,
+  type PnwCadBomFields,
+  type PnwCadDocumentKinds,
+} from "@phoenix-wing/cad-core";
+import { pnwCreateDb } from "@phoenix-wing/db-node";
 import { updateFcstdMapEntryRename } from "./pnwFcstdMapService.js";
 import { executeDiskFileRename } from "./pnwRenameService.js";
 import {
@@ -13,16 +23,7 @@ import { requireNativeTool, resolveNativeTool } from "./nativeToolService.js";
 const DEFAULT_PART_VERSION = "001";
 const DEFAULT_TYPE_CODE = "H";
 
-export type BomFields = {
-  repo_rel_path: string;
-  filename: string;
-  PartNumber: string;
-  PartVersion: string;
-  TypeCode: string;
-  ModelSeries: string;
-  PartName: string;
-  label: string;
-};
+export type BomFields = PnwCadBomFields;
 
 export type BomKindFilters = {
   part: boolean;
@@ -30,13 +31,7 @@ export type BomKindFilters = {
   drawing: boolean;
 };
 
-export type BomDocumentKinds = {
-  part: boolean;
-  assembly: boolean;
-  drawing: boolean;
-  display: string;
-  recommended_suffix: string;
-};
+export type BomDocumentKinds = PnwCadDocumentKinds;
 
 export type BomPreview = {
   rel_path: string;
@@ -83,11 +78,7 @@ function cleanUpper(v: unknown): string {
 }
 
 function normalizeRelPath(rel: string): string {
-  const normalized = rel.replace(/\\/g, "/").trim().replace(/^\.\//, "");
-  if (!normalized || normalized.split("/").includes("..") || path.isAbsolute(normalized)) {
-    throw new Error(`Invalid workspace relative path: ${rel}`);
-  }
-  return normalized;
+  return pnwNormalizeCadRelativePath(rel);
 }
 
 function resolveUnderWorkspace(workspaceRoot: string, rel: string): { rel: string; abs: string } {
@@ -134,46 +125,7 @@ function validateBomTargetFilename(filename: string): string {
   return cleanName;
 }
 
-function inferFcstdNameSuffix(filename: string): string {
-  if (/\.drawing\.fcstd$/i.test(filename)) return ".Drawing.FCStd";
-  if (/\.assy\.fcstd$/i.test(filename)) return ".ASSY.FCStd";
-  return ".FCStd";
-}
-
-function stripKnownFcstdSuffix(filename: string): string {
-  return filename
-    .replace(/\.drawing\.fcstd$/i, "")
-    .replace(/\.assy\.fcstd$/i, "")
-    .replace(/\.fcstd$/i, "");
-}
-
-export function inferBomFieldsFromFilename(rel: string): BomFields {
-  const safeRel = normalizeRelPath(rel);
-  const filename = path.posix.basename(safeRel);
-  const stem = stripKnownFcstdSuffix(filename);
-  const fields = emptyFields(safeRel);
-  const pieces = stem.split("-").map((p) => p.trim()).filter(Boolean);
-  const head = pieces.shift() || stem;
-  const headMatch = /^([^.]+)\.([^.]+)$/.exec(head);
-  if (headMatch) {
-    fields.PartNumber = headMatch[1];
-    fields.PartVersion = headMatch[2];
-  } else if (head && !headMatch) {
-    fields.PartName = head;
-  }
-
-  if (pieces.length) {
-    if (/^[A-Za-z]$/.test(pieces[0])) {
-      fields.TypeCode = pieces.shift()!.toUpperCase();
-    }
-    if (fields.TypeCode !== "S" && pieces.length >= 2 && /^[A-Za-z0-9_]+$/.test(pieces[0])) {
-      fields.ModelSeries = pieces.shift()!;
-    }
-    fields.PartName = pieces.join("-") || fields.PartName;
-  }
-  fields.label = composeBomLabel(fields) || "";
-  return fields;
-}
+export const inferBomFieldsFromFilename = pnwInferBomFieldsFromFilename;
 
 function emptyFields(rel: string): BomFields {
   const safeRel = normalizeRelPath(rel);
@@ -290,24 +242,7 @@ function requireExecFile(file: string, args: string[]): string {
   return execFileSync(file, args, { encoding: "utf8", timeout: 15_000 });
 }
 
-export function inferBomDocumentKinds(relOrFilename: string): BomDocumentKinds {
-  const filename = path.posix.basename(relOrFilename.replace(/\\/g, "/"));
-  const drawing = /\.drawing\.fcstd$/i.test(filename);
-  const assembly = /\.assy\.fcstd$/i.test(filename);
-  const part = !drawing && !assembly;
-  const labels = [
-    part ? "Part" : "",
-    assembly ? "Assembly" : "",
-    drawing ? "Drawing" : "",
-  ].filter(Boolean);
-  return {
-    part,
-    assembly,
-    drawing,
-    display: labels.join(" / ") || "Unknown",
-    recommended_suffix: inferFcstdNameSuffix(filename),
-  };
-}
+export const inferBomDocumentKinds = pnwInferBomDocumentKinds;
 
 function defaultPrefs(): BomPrefsStored {
   return {
@@ -399,13 +334,7 @@ export function fillRecommendedValues(workspaceRoot: string, rel: string, values
   return { fields, filled_keys };
 }
 
-export function composeBomLabel(fields: Partial<BomFields>): string {
-  const pn = clean(fields.PartNumber);
-  const pv = clean(fields.PartVersion);
-  if (!pn || !pv) return "";
-  const tail = clean(fields.PartName) || clean(fields.label);
-  return tail ? `${pn}.${pv}-${tail}` : `${pn}.${pv}`;
-}
+export const composeBomLabel = pnwComposeBomLabel;
 
 export function applyBomLabelFormula(workspaceRoot: string, rel: string, values: any = {}, fillEmptyFromPrefs = true) {
   let fields = bodyToFields(rel, values);
@@ -422,17 +351,7 @@ export function applyBomLabelFormula(workspaceRoot: string, rel: string, values:
 }
 
 function composeRecommendedFilename(fields: Partial<BomFields>, suffix: string): string {
-  const pn = clean(fields.PartNumber);
-  const pv = clean(fields.PartVersion);
-  if (!pn || !pv) return "";
-  const typeCode = cleanUpper(fields.TypeCode);
-  const modelSeries = cleanUpper(fields.ModelSeries);
-  const partName = clean(fields.PartName) || clean(fields.label);
-  const parts = [`${pn}.${pv}`];
-  if (typeCode) parts.push(typeCode);
-  if (typeCode !== "S" && modelSeries) parts.push(modelSeries);
-  const prefix = parts.join("-");
-  return `${partName ? `${prefix}-${partName}` : prefix}${suffix}`;
+  return pnwComposeRecommendedBomFilename(fields, suffix);
 }
 
 function recommendValueFromHints(workspaceRoot: string, rel: string, field: string, values: any = {}) {
@@ -442,7 +361,7 @@ function recommendValueFromHints(workspaceRoot: string, rel: string, field: stri
   const prefs = loadBomApplyPrefs(workspaceRoot).recommended_fill as any;
   if (field === "label") return { value: composeBomLabel(current), source_note: "Label formula" };
   if (field === "filename") {
-    const suffix = inferFcstdNameSuffix(path.posix.basename(rel));
+    const suffix = pnwInferFcstdSuffix(path.posix.basename(rel));
     const value = composeRecommendedFilename(current, suffix);
     return { value, source_note: "Filename formula" };
   }
@@ -502,7 +421,7 @@ export function recommendBomFilename(workspaceRoot: string, rel: string, values:
   const filled = fillRecommendedValues(workspaceRoot, rel, values);
   const fields = filled.fields;
   const document_kinds = inferBomDocumentKinds(rel);
-  const suffix = document_kinds.recommended_suffix || inferFcstdNameSuffix(rel);
+  const suffix = document_kinds.recommended_suffix || pnwInferFcstdSuffix(rel);
   const recommended_filename = composeRecommendedFilename(fields, suffix);
   if (!recommended_filename) throw new Error("PartNumber and PartVersion are required to recommend filename");
   return {

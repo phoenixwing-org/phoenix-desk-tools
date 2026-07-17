@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import ribbonFixture from "phoenix-wing/fixtures/ribbon-contribution-v1.json";
+import { pnwCheckRibbonContributionCompatibility } from "phoenix-wing";
 import type { NavItem } from "../../types/config";
 import { buildRibbonTabs } from "./ribbonConfig";
 
@@ -10,6 +12,18 @@ function navigationConfig(): NavItem[] {
 }
 
 describe("Ribbon navigation contract", () => {
+  it("直接消费 Registry v1 fixture 并对未知版本 fail-closed", () => {
+    expect(pnwCheckRibbonContributionCompatibility(ribbonFixture)).toMatchObject({
+      compatible: true,
+      document: ribbonFixture,
+    });
+    expect(pnwCheckRibbonContributionCompatibility({ ...ribbonFixture, schemaVersion: 2 })).toMatchObject({
+      compatible: false,
+      code: "contribution.unsupported-schema-version",
+      actualSchemaVersion: 2,
+    });
+  });
+
   it("builds shell and module groups from app_config without exposing context-only pages", () => {
     const tabs = buildRibbonTabs(navigationConfig());
     expect(tabs.map((tab) => tab.id)).toEqual(["system", "cad", "code"]);
@@ -35,8 +49,14 @@ describe("Ribbon navigation contract", () => {
       "reorder_members",
       "code_rename",
       "code_uuid",
+      "kt_codegen",
       "caa_dialog_home",
     ]);
+    expect(
+      tabs.find((tab) => tab.id === "code")
+        ?.groups.flatMap((group) => group.items)
+        .find((item) => item.pageId === "kt_codegen")?.label,
+    ).toBe("自动代码");
     expect(Object.values(pages).flat()).not.toEqual(expect.arrayContaining([
       "welcome",
       "file_detail",

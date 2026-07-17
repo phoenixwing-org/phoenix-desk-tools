@@ -1,7 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { pnwCreateDb, type PnwDbAdapter } from "phoenix-wing/db/pnwDbAdapter";
+import { pnwCreateDb, type PnwDbAdapter } from "@phoenix-wing/db-node";
+import {
+  pnwIsWorkspacePathWithin,
+  pnwNormalizeWorkspacePath,
+} from "@phoenix-wing/code-core";
 import { ensurePhoenixDatabase } from "./phoenixDatabaseService.js";
 
 export type WorksetEntry = {
@@ -76,11 +80,8 @@ function emptyPayload(workspaceRoot: string): FileWorksetPayload {
 }
 
 function normalizeRelPath(raw: unknown): string | null {
-  let s = String(raw || "").trim().replace(/\\/g, "/");
-  while (s.startsWith("./")) s = s.slice(2);
-  s = s.replace(/^\/+/, "").replace(/\/+$/, "");
-  if (!s || s.split("/").includes("..") || path.isAbsolute(s)) return null;
-  return s;
+  const normalized = pnwNormalizeWorkspacePath(String(raw || ""));
+  return normalized && normalized !== "." ? normalized : null;
 }
 
 export function normalizeWorksetEntries(rawEntries: unknown): WorksetEntry[] {
@@ -285,10 +286,8 @@ export function loadFileWorksets(workspaceRoot: string): FileWorksetPayload {
   return payload(root, readDb(root).worksets);
 }
 
-function pathInside(candidate: string, parent: string): boolean {
-  const childKey = candidate.toLowerCase();
-  const parentKey = parent.toLowerCase();
-  return childKey === parentKey || childKey.startsWith(`${parentKey}/`);
+function worksetPathWithin(candidate: string, parent: string): boolean {
+  return pnwIsWorkspacePathWithin(candidate.toLowerCase(), parent.toLowerCase());
 }
 
 export function resolveFileWorksetScope(workspaceRoot: string, worksetId: string): ResolvedFileWorksetScope {
@@ -301,12 +300,12 @@ export function resolveFileWorksetScope(workspaceRoot: string, worksetId: string
   const rawDirs = workset.entries.filter((entry) => entry.type === "dir").map((entry) => entry.path);
   const dirs: string[] = [];
   for (const dir of rawDirs.sort((a, b) => a.length - b.length || a.localeCompare(b))) {
-    if (!dirs.some((parent) => pathInside(dir, parent))) dirs.push(dir);
+    if (!dirs.some((parent) => worksetPathWithin(dir, parent))) dirs.push(dir);
   }
   const files = workset.entries
     .filter((entry) => entry.type === "file")
     .map((entry) => entry.path)
-    .filter((file) => !dirs.some((dir) => pathInside(file, dir)));
+    .filter((file) => !dirs.some((dir) => worksetPathWithin(file, dir)));
   if (!dirs.length && !files.length) throw new Error(`File workset is empty: ${workset.name}`);
   return { id: workset.id, name: workset.name, dirs, files };
 }
@@ -330,8 +329,8 @@ export function saveFileWorksets(workspaceRoot: string, body: any): FileWorksetP
 function entryExists(workspaceRoot: string, entry: WorksetEntry): boolean {
   try {
     const abs = path.resolve(workspaceRoot, entry.path);
-    const back = path.relative(workspaceRoot, abs);
-    if (back.startsWith("..") || path.isAbsolute(back)) return false;
+    const back = path.relative(workspaceRoot, abs).replace(/\\/g, "/");
+    if (!pnwNormalizeWorkspacePath(back)) return false;
     const stat = fs.statSync(abs);
     return entry.type === "dir" ? stat.isDirectory() : stat.isFile();
   } catch {

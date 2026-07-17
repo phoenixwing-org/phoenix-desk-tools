@@ -166,6 +166,33 @@ fn repo_root() -> PathBuf {
         .to_path_buf()
 }
 
+fn configured_app_data_override(
+    value: Option<std::ffi::OsString>,
+) -> Result<Option<PathBuf>, String> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    if value.is_empty() {
+        return Ok(None);
+    }
+    let path = PathBuf::from(value);
+    if !path.is_absolute() {
+        return Err("PHOENIX_TAURI_USER_DATA_DIR must be an absolute path".to_string());
+    }
+    Ok(Some(path))
+}
+
+fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    if let Some(path) =
+        configured_app_data_override(std::env::var_os("PHOENIX_TAURI_USER_DATA_DIR"))?
+    {
+        return Ok(path);
+    }
+    app.path()
+        .app_data_dir()
+        .map_err(|error| format!("cannot resolve Tauri application data directory: {error}"))
+}
+
 #[cfg(debug_assertions)]
 fn backend_command(_app: &AppHandle) -> Result<Command, String> {
     let root = repo_root();
@@ -192,10 +219,7 @@ fn backend_command(app: &AppHandle) -> Result<Command, String> {
         .resource_dir()
         .map_err(|error| format!("cannot resolve Tauri resource directory: {error}"))?
         .join("runtime");
-    let user_data = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| format!("cannot resolve Tauri application data directory: {error}"))?;
+    let user_data = app_data_dir(app)?;
     std::fs::create_dir_all(&user_data)
         .map_err(|error| format!("cannot create {}: {error}", user_data.display()))?;
     let node_name = if cfg!(windows) { "node.exe" } else { "node" };
@@ -246,11 +270,7 @@ fn start_managed_server(app: &AppHandle) -> Result<(), String> {
     if cfg!(debug_assertions) {
         command.stdout(Stdio::inherit()).stderr(Stdio::inherit());
     } else {
-        let log_dir = app
-            .path()
-            .app_data_dir()
-            .map_err(|error| format!("cannot resolve Tauri application data directory: {error}"))?
-            .join("logs");
+        let log_dir = app_data_dir(app)?.join("logs");
         std::fs::create_dir_all(&log_dir)
             .map_err(|error| format!("cannot create {}: {error}", log_dir.display()))?;
         let log_path = log_dir.join("phoenix-server.log");
@@ -332,7 +352,7 @@ fn stop_managed_server(app: &AppHandle) {
 }
 
 fn persist_startup_error(app: &AppHandle, error: &str) -> Option<PathBuf> {
-    let log_dir = app.path().app_data_dir().ok()?.join("logs");
+    let log_dir = app_data_dir(app).ok()?.join("logs");
     std::fs::create_dir_all(&log_dir).ok()?;
     let log_path = log_dir.join("phoenix-startup-error.log");
     std::fs::write(&log_path, format!("{error}\n")).ok()?;
@@ -435,6 +455,18 @@ mod tests {
     #[test]
     fn source_repo_root_contains_the_workspace_manifest() {
         assert!(repo_root().join("pnpm-workspace.yaml").is_file());
+    }
+
+    #[test]
+    fn validates_the_optional_tauri_user_data_override() {
+        assert_eq!(configured_app_data_override(None).unwrap(), None);
+        assert_eq!(configured_app_data_override(Some("".into())).unwrap(), None);
+        assert!(configured_app_data_override(Some("relative".into())).is_err());
+        let absolute = std::env::temp_dir().join("phoenix-user-data");
+        assert_eq!(
+            configured_app_data_override(Some(absolute.clone().into_os_string())).unwrap(),
+            Some(absolute)
+        );
     }
 
     #[test]

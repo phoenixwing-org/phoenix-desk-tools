@@ -3,6 +3,7 @@
 export type ShellPanelToggleKey =
   | "leftSidebar"
   | "rightSidebar"
+  | "pageBlock"
   | "tree"
   | "properties"
   | "log"
@@ -11,14 +12,19 @@ export type ShellPanelToggleKey =
 
 export const shellPanelToggleCopy = {
   leftSidebar: {
-    name: "左栏",
-    open: "展开左栏",
-    close: "收起左栏",
+    name: "左侧 Primary",
+    open: "展开左侧 Primary",
+    close: "收起左侧 Primary",
   },
   rightSidebar: {
-    name: "右栏",
-    open: "展开右栏",
-    close: "收起右栏",
+    name: "右侧 Secondary",
+    open: "展开右侧 Secondary",
+    close: "收起右侧 Secondary",
+  },
+  pageBlock: {
+    name: "页面 Block",
+    open: "显示页面 Block",
+    close: "隐藏页面 Block",
   },
   tree: {
     name: "工作空间树",
@@ -31,9 +37,9 @@ export const shellPanelToggleCopy = {
     close: "收起页面属性",
   },
   log: {
-    name: "运行日志",
-    open: "展开运行日志",
-    close: "收起运行日志",
+    name: "下方全局面板",
+    open: "展开下方全局面板",
+    close: "收起下方全局面板",
     pending: "有新的运行输出",
   },
   workset: {
@@ -49,15 +55,16 @@ export const shellPanelToggleCopy = {
 /** 单行 tooltip：名称 — 动作 */
 export function shellPanelToggleTip(
   key: ShellPanelToggleKey,
-  opts?: { open?: boolean; logPending?: boolean },
+  opts?: { open?: boolean; logPending?: boolean; name?: string },
 ): string {
   const c = shellPanelToggleCopy[key];
+  const name = opts?.name?.trim() || c.name;
   if ("action" in c) {
-    return `${c.name} — ${c.action}`;
+    return `${name} — ${c.action}`;
   }
   const open = opts?.open ?? false;
   const action = open ? c.close : c.open;
-  let tip = `${c.name} — ${action}`;
+  let tip = `${name} — ${action}`;
   if ("pending" in c && opts?.logPending && !open) {
     tip += `（${c.pending}）`;
   }

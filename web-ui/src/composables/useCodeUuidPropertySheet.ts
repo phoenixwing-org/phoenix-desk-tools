@@ -4,7 +4,7 @@ import { usePnwPagePropertySheet } from "phoenix-wing";
 import { useWorksetScopePropertyGroups } from "./useWorksetScopePropertyGroups";
 import { pnwPropEnum, pnwPropGroup, pnwPropSheet } from "phoenix-wing";
 
-const STRATEGY_OPTIONS = [
+export const CODE_UUID_STRATEGY_OPTIONS = [
   {
     value: "map_per_value",
     label: "同值一组",
@@ -27,13 +27,13 @@ export function useCodeUuidPropertySheet(pageId: string, strategy: Ref<UuidApply
         pnwPropGroup("replace", "替换", [
           pnwPropEnum("strategy", "替换策略", {
             value: computed(() => strategy.value),
-            options: STRATEGY_OPTIONS.map((o) => ({
+            options: CODE_UUID_STRATEGY_OPTIONS.map((o) => ({
               value: o.value,
               label: o.label,
               description: o.description,
             })),
             hint: computed(
-              () => STRATEGY_OPTIONS.find((o) => o.value === strategy.value)?.description ?? "",
+              () => CODE_UUID_STRATEGY_OPTIONS.find((o) => o.value === strategy.value)?.description ?? "",
             ),
             onChange: (v) => {
               strategy.value = v as UuidApplyStrategy;

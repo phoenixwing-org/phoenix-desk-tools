@@ -3,14 +3,12 @@ import { computed, onUnmounted, ref, watch } from "vue";
 import TreeBranch from "../components/TreeBranch.vue";
 import CodeIgnorePanel from "../components/CodeIgnorePanel.vue";
 import FileWorksetPanel from "../components/FileWorksetPanel.vue";
-import PnwShellLogPanel from "phoenix-wing/layout/PnwShellLogPanel.vue";
 import PagePropertiesPanel from "../components/PagePropertiesPanel.vue";
 import GitCommitPanel from "../components/shell/GitCommitPanel.vue";
-import CaaDialogIndexPanel from "../components/caa/CaaDialogIndexPanel.vue";
-import CaaDialogTreePanel from "../components/caa/CaaDialogTreePanel.vue";
 import { usePnwPagePropertiesHost, pnwSetPropertiesActivePage } from "phoenix-wing";
 import { fetchTree, type TreeNode } from "../api";
 import { useAppShell } from "../composables/useAppShell";
+import { pageSideBlockComponent } from "./pageSideBlockRegistry";
 import { useFileWorksetsStore } from "../stores/fileWorksets";
 import { countTreeFiles, filterTreeNode } from "../utils/workspaceTreeFilter";
 import { collectTreeFilePaths } from "../utils/treeFilePaths";
@@ -23,11 +21,9 @@ import {
 } from "../utils/workspaceTreeFilters";
 import { pnwBindPointerDrag } from "phoenix-wing";
 import {
-  maxStoredLogHeightPx,
   maxStoredPropsFooterHeightPx,
   maxStoredPropsHeightPx,
   resolveSidebarStackLayout,
-  SIDEBAR_LOG_MIN_H,
   SIDEBAR_PROPS_FOOTER_MIN_H,
   SIDEBAR_PROPS_MIN_H,
 } from "../utils/sidebarStackLayout";
@@ -36,8 +32,8 @@ const props = withDefaults(
   defineProps<{
     dockSide?: "left" | "right";
     showTree?: boolean;
-    showCaaTree?: boolean;
-    showLog?: boolean;
+    pageBlockId?: string;
+    pageBlockTabId?: string;
     showProps?: boolean;
     showGitCommit?: boolean;
     showWorksetBlock?: boolean;
@@ -45,21 +41,14 @@ const props = withDefaults(
   {
     dockSide: "right",
     showTree: true,
-    showCaaTree: false,
-    showLog: true,
+    pageBlockId: "",
+    pageBlockTabId: "",
     showProps: false,
     showGitCommit: false,
   },
 );
 
 const shell = useAppShell();
-
-const sourceLabel = computed(() => {
-  const src = shell.logSource.value;
-  if (!src) return "";
-  const nav = shell.appConfig.value?.navigation.find((n) => n.page === src);
-  return nav?.label ?? src;
-});
 
 const worksetStore = useFileWorksetsStore();
 const worksetBlockMode = computed(() => props.showWorksetBlock ?? false);
@@ -144,7 +133,6 @@ const panelWidth = computed(() => {
   return `${px}px`;
 });
 
-const logOpen = computed(() => shellLayout.value.log_panel_open);
 const propsOpen = computed(() => shellLayout.value.properties_panel_open);
 const gitCommitBodyExpanded = ref(true);
 
@@ -160,26 +148,30 @@ const showPropsWrap = computed(() => showPropsPanel.value || showGitCommitPanel.
 const showGitCommitStandalone = computed(
   () => showGitCommitPanel.value && !gitCommitStackedWithProps.value,
 );
+const pageBlockComponent = computed(() => pageSideBlockComponent(props.pageBlockId));
 
 const panelVisible = computed(
   () =>
     props.showTree ||
-    props.showCaaTree ||
-    (props.showLog && logOpen.value) ||
+    Boolean(pageBlockComponent.value) ||
     showPropsWrap.value,
 );
 
-const showMainBlock = computed(() => props.showTree || props.showCaaTree);
+const showMainBlock = computed(() => props.showTree || Boolean(pageBlockComponent.value));
+const mainBlockCount = computed(() =>
+  Number(props.showTree) + Number(Boolean(pageBlockComponent.value)),
+);
 
 const stackLayout = computed(() =>
   resolveSidebarStackLayout({
     totalHeightPx: sidebarHeight.value,
     showMain: showMainBlock.value,
+    mainBlockCount: mainBlockCount.value,
     showPropsWrap: showPropsWrap.value,
     showPropsMain: showPropsPanel.value,
     showPropsFooter: showGitCommitPanel.value && gitCommitStackedWithProps.value,
     propsFooterExpanded: gitCommitBodyExpanded.value,
-    showLog: props.showLog && logOpen.value,
+    showLog: false,
     storedPropsHeightPx: shellLayout.value.properties_panel_height_px,
     storedLogHeightPx: shellLayout.value.log_panel_height_px,
     storedPropsFooterHeightPx: shellLayout.value.properties_footer_height_px,
@@ -213,18 +205,10 @@ const propsFooterStyle = computed(() => {
   return { height: `${stackLayout.value.propsFooterHeightPx}px`, flexShrink: "0" };
 });
 
-const logPanelStyle = computed(() => {
-  if (!logOpen.value || !props.showLog) return undefined;
-  if (stackLayout.value.logFlex) {
-    return { flex: "1 1 auto", minHeight: "0" };
-  }
-  return { height: `${stackLayout.value.logHeightPx}px`, flexShrink: "0" };
-});
-
 const hasBottomFixed = computed(
   () =>
     showMainBlock.value &&
-    ((props.showLog && logOpen.value) || showPropsWrap.value),
+    showPropsWrap.value,
 );
 
 let resizeObserver: ResizeObserver | null = null;
@@ -305,8 +289,9 @@ function onPropsResizeStart(e: PointerEvent) {
       const maxH = maxStoredPropsHeightPx(
         sidebarEl.clientHeight,
         showMainBlock.value,
-        props.showLog && logOpen.value,
+        false,
         shell.shellLayout.value.log_panel_height_px,
+        mainBlockCount.value,
       );
       const next = Math.min(maxH, Math.max(SIDEBAR_PROPS_MIN_H, startH - delta));
       shell.shellLayout.value = {
@@ -343,37 +328,6 @@ function onPropsFooterResizeStart(e: PointerEvent) {
     onEnd() {
       void shell.persistShellLayout({ properties_footer_height_px: nextFooterH }).catch((err) => {
         shell.setStatus(String(err));
-      });
-    },
-  });
-}
-
-function onLogResizeStart(e: PointerEvent) {
-  if (!props.showLog || !logOpen.value) return;
-  const sidebarEl = sidebarRef.value;
-  if (!sidebarEl) return;
-  const startY = e.clientY;
-  const startH = shellLayout.value.log_panel_height_px;
-
-  pnwBindPointerDrag(e, {
-    cursor: "row-resize",
-    onMove(ev) {
-      const delta = ev.clientY - startY;
-      const maxH = maxStoredLogHeightPx(
-        sidebarEl.clientHeight,
-        showMainBlock.value,
-        showPropsWrap.value,
-        shell.shellLayout.value.properties_panel_height_px,
-      );
-      const next = Math.min(maxH, Math.max(SIDEBAR_LOG_MIN_H, startH - delta));
-      shell.shellLayout.value = {
-        ...shell.shellLayout.value,
-        log_panel_height_px: next,
-      };
-    },
-    onEnd() {
-      void shell.persistShellLayout({
-        log_panel_height_px: shell.shellLayout.value.log_panel_height_px,
       });
     },
   });
@@ -426,21 +380,24 @@ onUnmounted(() => {
     :class="[
       `dock-${dockSide}`,
       {
-        'log-only': showLog && !showMainBlock && !showPropsWrap,
-        'props-only': showPropsWrap && !showMainBlock && !(showLog && logOpen),
+        'props-only': showPropsWrap && !showMainBlock,
         'git-commit-only':
-          showGitCommitPanel && !showPropsPanel && !showMainBlock && !(showLog && logOpen),
+          showGitCommitPanel && !showPropsPanel && !showMainBlock,
         'has-stack': hasBottomFixed,
         'has-props-stack-split': stackLayout.propsStackResizer,
-        'has-caa-tree': showCaaTree,
+        'has-page-block': pageBlockComponent,
       },
     ]"
     data-tour="workspace-tree"
     :style="{ width: panelWidth }"
   >
-    <div v-if="showCaaTree" class="ws-body ws-caa-tree-body" :style="bodyStyle">
-      <CaaDialogIndexPanel />
-      <CaaDialogTreePanel />
+    <div v-if="pageBlockComponent" class="ws-body ws-page-block-body" :style="bodyStyle">
+      <component
+        :is="pageBlockComponent"
+        :key="pageBlockTabId || pageBlockId"
+        :page-id="pageBlockId"
+        :workbench-tab-id="pageBlockTabId"
+      />
     </div>
 
     <div v-if="showTree" class="ws-body" :style="bodyStyle">
@@ -576,7 +533,7 @@ onUnmounted(() => {
 
     <template v-if="showGitCommitStandalone">
       <div
-        v-if="showMainBlock || (showLog && logOpen)"
+        v-if="showMainBlock"
         class="props-resizer panel-resizer"
         title="拖拽调节 Git 提交区高度"
         @pointerdown="onPropsResizeStart"
@@ -594,7 +551,7 @@ onUnmounted(() => {
 
     <template v-else-if="showPropsPanel || gitCommitStackedWithProps">
       <div
-        v-if="showMainBlock || (showLog && logOpen)"
+        v-if="showMainBlock"
         class="props-resizer panel-resizer"
         title="拖拽调节属性区高度"
         @pointerdown="onPropsResizeStart"
@@ -620,22 +577,6 @@ onUnmounted(() => {
       </div>
     </template>
 
-    <template v-if="showLog && logOpen">
-      <div
-        v-if="showMainBlock || showPropsWrap"
-        class="log-resizer panel-resizer"
-        title="拖拽调节日志区高度"
-        @pointerdown="onLogResizeStart"
-      />
-      <div class="ws-log-wrap" :style="logPanelStyle">
-        <PnwShellLogPanel
-          :log-text="shell.logText.value"
-          :source-label="sourceLabel"
-          @clear="shell.clearLog()"
-          @close="shell.setLogOpen(false)"
-        />
-      </div>
-    </template>
   </aside>
 </template>
 
@@ -661,7 +602,6 @@ onUnmounted(() => {
   border-right: 1px solid var(--border);
 }
 
-.ws-sidebar.log-only .ws-log-wrap,
 .ws-sidebar.props-only .ws-props-wrap,
 .ws-sidebar.git-commit-only .ws-props-wrap {
   flex: 1;
@@ -763,21 +703,8 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-.ws-caa-tree-body {
-  min-height: 0;
-}
-
-.ws-caa-tree-body :deep(.caa-dialog-tree-panel) {
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-.ws-log-wrap {
-  min-height: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
+.ws-page-block-body {
+  min-height: 220px;
 }
 
 .ws-tab-bar {

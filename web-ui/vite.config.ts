@@ -14,7 +14,13 @@ const localWingSrc = resolvePhoenixWingPath(webRoot);
 
 export default defineConfig({
   plugins: [
-    vue(),
+    vue({
+      template: {
+        compilerOptions: {
+          isCustomElement: (tag) => tag.startsWith("kt-codegen-"),
+        },
+      },
+    }),
     AutoImport({
       resolvers: [ElementPlusResolver()],
       dts: "auto-imports.d.ts",
@@ -28,11 +34,14 @@ export default defineConfig({
     alias: {
       ...(localWingSrc ? { "phoenix-wing": localWingSrc } : {}),
     },
+    dedupe: ["vue", "pinia", "phoenix-wing"],
   },
-  // Choice-dialog refs are shared between the root barrel and Vue subpath components.
-  // Prebundling only the barrel creates a second singleton in development.
-  optimizeDeps: {
-    exclude: ["phoenix-wing"],
+  test: {
+    server: {
+      deps: {
+        inline: ["phoenix-wing"],
+      },
+    },
   },
   server: {
     port: 5173,

@@ -1,10 +1,11 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-import { pnwCreateDb } from "phoenix-wing/db/pnwDbAdapter";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { pnwCreateDb } from "@phoenix-wing/db-node";
 import {
   loadWorkspacePrefs,
+  loadWorkspacePrefsSnapshot,
   loadWorkspaceSection,
   saveWorkspaceSection,
   workspacePrefsStorageInfo,
@@ -96,6 +97,91 @@ describe("workspace preference SQLite service", () => {
     } finally {
       db.close();
     }
+  });
+
+  it("reads a disposable snapshot without initializing or locking the workspace database", () => {
+    const root = workspace();
+    const phoenixDir = path.join(root, ".phoenix");
+    const legacyPath = path.join(phoenixDir, "phoenix-workspace-prefs.json");
+    const databasePath = path.join(phoenixDir, "phoenix-workspace.sqlite");
+    fs.mkdirSync(phoenixDir, { recursive: true });
+    fs.writeFileSync(legacyPath, JSON.stringify({ code_ignore: { custom_ignore: ["legacy"] } }), "utf8");
+
+    expect(loadWorkspacePrefsSnapshot(root)).toMatchObject({
+      code_ignore: { custom_ignore: ["legacy"] },
+    });
+    expect(fs.existsSync(databasePath)).toBe(false);
+
+    loadWorkspacePrefs(root);
+    const before = fs.statSync(databasePath);
+    expect(loadWorkspacePrefsSnapshot(root)).toMatchObject({
+      code_ignore: { custom_ignore: ["legacy"] },
+    });
+    const after = fs.statSync(databasePath);
+    expect(after.size).toBe(before.size);
+    expect(after.mtimeMs).toBe(before.mtimeMs);
+    expect(fs.existsSync(`${databasePath}.lock`)).toBe(false);
+  });
+
+  it("retries when the preference database changes while it is copied", () => {
+    const root = workspace();
+    saveWorkspaceSection(root, "code_ignore", { custom_ignore: ["before"] }, { custom_ignore: [] });
+    const databasePath = workspacePrefsStorageInfo(root).database_path;
+    const originalCopy = fs.copyFileSync.bind(fs);
+    let injectedUpdate = false;
+    const copySpy = vi.spyOn(fs, "copyFileSync").mockImplementation((source, destination, mode) => {
+      originalCopy(source, destination, mode);
+      if (String(source) !== databasePath || injectedUpdate) return;
+      injectedUpdate = true;
+      const db = pnwCreateDb(databasePath);
+      try {
+        db.run(
+          "UPDATE phoenix_workspace_pref SET value_json = ? WHERE section = ?",
+          [JSON.stringify({ custom_ignore: ["after"] }), "code_ignore"],
+        );
+      } finally {
+        db.close();
+      }
+    });
+
+    try {
+      expect(loadWorkspacePrefsSnapshot(root)).toMatchObject({
+        code_ignore: { custom_ignore: ["after"] },
+      });
+      expect(copySpy).toHaveBeenCalledTimes(2);
+    } finally {
+      copySpy.mockRestore();
+    }
+  });
+
+  it("reuses an immutable-by-copy snapshot until the database signature changes", () => {
+    const root = workspace();
+    saveWorkspaceSection(root, "code_ignore", { custom_ignore: ["before"] }, { custom_ignore: [] });
+    const first = loadWorkspacePrefsSnapshot(root);
+    (first.code_ignore as { custom_ignore: string[] }).custom_ignore.push("caller-mutation");
+
+    expect(loadWorkspacePrefsSnapshot(root)).toMatchObject({
+      code_ignore: { custom_ignore: ["before"] },
+    });
+
+    saveWorkspaceSection(root, "code_ignore", { custom_ignore: ["after"] }, { custom_ignore: [] });
+    expect(loadWorkspacePrefsSnapshot(root)).toMatchObject({
+      code_ignore: { custom_ignore: ["after"] },
+    });
+  });
+
+  it("does not follow a symlink masquerading as the workspace preference database", () => {
+    const root = workspace();
+    const outside = workspace();
+    saveWorkspaceSection(outside, "code_ignore", { custom_ignore: ["outside"] }, { custom_ignore: [] });
+    const phoenixDir = path.join(root, ".phoenix");
+    fs.mkdirSync(phoenixDir, { recursive: true });
+    fs.symlinkSync(
+      workspacePrefsStorageInfo(outside).database_path,
+      path.join(phoenixDir, "phoenix-workspace.sqlite"),
+    );
+
+    expect(() => loadWorkspacePrefsSnapshot(root)).toThrow("not a regular file");
   });
 
   it("rejects invalid workspaces and section names", () => {

@@ -1,8 +1,22 @@
 # Web 壳层 · 页面参数与属性 — MVC 分离研讨
 
 > [文档索引](../文档索引.md)  
-> 状态：**研讨稿 · 暂不执行**（待评审后再决定是否替代/优化现有属性架构）  
+> 状态：**current · KT Codegen 试点已实施 · 2026-07-17**
 > 关联：[Web壳层-页面属性面板-规划.md](Web壳层-页面属性面板-规划.md) · [Web壳层-页面属性面板.md](Web壳层-页面属性面板.md) · [Web壳层-Tab与状态持久化-规划讨论.md](Web壳层-Tab与状态持久化-规划讨论.md)
+
+---
+
+## 0. 试点决策与实现
+
+2026-07-17 已选择 `kt_codegen` 完成 D1/D2 小范围试点，不进行全站 Big Bang：
+
+- Model：`web-ui/src/models/ktCodegenPageParam.ts` 保存 UI 无关的文档、预检、Apply 与会话参数快照，并规范化计数；不引用 Vue、Element、文件系统或 API。
+- PropertySchema / derive：`web-ui/src/models/ktCodegenPagePropertySchema.ts` 声明分组、字段和读取键，并从 Page Param 纯派生属性值、状态文案和页面摘要。
+- View bridge：`web-ui/src/composables/useKtCodegenPagePropertySheet.ts` 只把纯 derive 结果包装为 Wing `PnwPagePropertiesSheet`，处理 KeepAlive 下的注册/注销，不读取 store 或路径。
+- Controller / Host adapter：Pinia `stores/ktCodegen.ts` 继续负责请求取消、冲突恢复、预检、Apply 和 API 编排；server 继续负责工作区边界、编码与原子写。`KtCodegenPage.vue` 只组装 controller 快照和 View 事件，不持有文件系统真相。
+- 自动门禁：PropertySchema 作为 AST pure entrypoint，禁止 Vue/Pinia/Element/Node/Tauri 与浏览器全局；纯测试覆盖空页、dirty、外部变化、草稿冲突、预检/Apply 状态和无效计数。
+
+刷新/会话恢复、按 Tab 隔离、Bottom contribution 保活和冲突恢复继续由既有 `ktCodegenSession`、scoped store 与 `useWorkbenchBottomContribution` 测试覆盖。本试点只替换 KtCodegen 的手写属性描述，不宣称其它页面已经迁移。
 
 ---
 
@@ -298,14 +312,15 @@ async function onScan() {
 
 ---
 
-## 10. 结论（研讨态）
+## 10. 结论（试点后）
 
 | 结论 | 说明 |
 | --- | --- |
 | **方向合理** | 「Page Param + 无 UI Property schema + derive → 现有 Panel」符合 MVC，且可渐进替换手写 composable |
 | **暂不建议 Big Bang** | 现有 7+ 页已接 `useXxxPropertySheet`；应先 D1 桥接 + `code_uuid` spike |
 | **View 可保留** | `PagePropertiesPanel` 已是稳定 View；优化点在 Model/元数据分离 |
-| **下一步** | 评审本文 §9；若采纳，再开 spike PR，**不**在本研讨稿阶段改生产代码 |
+| **试点结果** | `kt_codegen` 已落地 interface + 纯函数 Param、静态 Schema、pure derive 与 Vue bridge；旧 Panel/Host 无需重写 |
+| **下一步** | 先观察一个发布周期；只有第二页出现相同收益时才提炼通用 `derivePageProperties`，不立即全站迁移 |
 
 ---
 

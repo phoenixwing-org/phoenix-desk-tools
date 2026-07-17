@@ -1,14 +1,17 @@
 import fs from 'fs'
-import { resolve } from 'path'
+import { isAbsolute, resolve } from 'path'
 
 /**
- * 检测上级目录是否存在 phoenix-wing 本地源码。
- * 存在则返回本地路径（用于 Vite alias），否则返回 null（走 npm 版本）。
+ * 仅在显式配置 PHOENIX_WING_SRC 时启用源码联调 alias。
+ * 默认始终消费 package.json 锁定的 npm 包，避免相邻仓库掩盖发布物问题。
  */
 export function resolvePhoenixWingPath(
   projectRoot: string,
-  relativePath = '../../phoenix-wing/src',
+  configuredPath = process.env.PHOENIX_WING_SRC,
 ): string | null {
-  const localSrc = resolve(projectRoot, relativePath)
+  if (!configuredPath?.trim()) return null
+  const localSrc = isAbsolute(configuredPath)
+    ? configuredPath
+    : resolve(projectRoot, configuredPath)
   return fs.existsSync(localSrc) ? localSrc : null
 }

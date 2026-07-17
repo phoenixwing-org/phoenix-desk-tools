@@ -1,8 +1,8 @@
 # Web 壳层 — 使用说明
 
-浏览器中的 **Phoenix 桌面辅助工具** 界面（Vue3 + Element Plus + Python API）。首次使用请先读 [新手指引.md](新手指引.md) 或 [快速开始.md](快速开始.md)。
+浏览器或 Tauri 中的 **Phoenix 桌面辅助工具** 界面（Vue 3 + Element Plus + Node/Hono 本地 API）。首次使用请先读 [新手指引.md](新手指引.md) 或 [快速开始.md](快速开始.md)。
 
-启动方式见 [web-ui/README.md](../web-ui/README.md)。壳层改型规划见 [Web壳层-Ribbon改型-规划.md](../platform/Web壳层-Ribbon改型-规划.md)。
+启动方式见[仓库 README](../../README.md)与[web-ui README](../../web-ui/README.md)。完成态 Ribbon 改造记录已归档；本文只描述当前界面。
 
 ---
 
@@ -140,6 +140,6 @@
 
 ---
 
-## 9. 与桌面启动器的关系
+## 9. 浏览器与 Tauri
 
-`python -m phoenix` 桌面窗口仅用于选工作空间、打开浏览器；**功能均在 Web 壳** 完成，与本节描述一致。
+浏览器开发模式和 Tauri 桌面模式复用同一 Vue 页面与 Node/Hono API。Tauri 负责窗口、单实例启动参数和 packaged runtime；领域页面不应根据宿主复制第二套状态或算法。构建与运行时验收见 [Tauri 指南](../tauri-构建启动与验收指南.md)。

@@ -3,6 +3,7 @@ import path from "node:path";
 import { runtimeUserDataDir } from "./appRuntimePaths.js";
 import {
   loadWorkspacePrefs,
+  loadWorkspacePrefsSnapshot,
   replaceWorkspaceSection,
 } from "./workspacePrefsService.js";
 
@@ -179,9 +180,15 @@ function readJsonObject(filename: string): Record<string, any> {
   }
 }
 
-function prefsForWorkspace(workspaceRoot: string, ctx?: CodeIgnoreContext) {
+function prefsForWorkspace(
+  workspaceRoot: string,
+  ctx?: CodeIgnoreContext,
+  options: { readOnly?: boolean } = {},
+) {
   const workspaceStore = workspaceRoot && fs.existsSync(workspaceRoot) && fs.statSync(workspaceRoot).isDirectory()
-    ? loadWorkspacePrefs(workspaceRoot)
+    ? options.readOnly
+      ? loadWorkspacePrefsSnapshot(workspaceRoot)
+      : loadWorkspacePrefs(workspaceRoot)
     : {};
   const workspaceSection = workspaceStore.code_ignore && typeof workspaceStore.code_ignore === "object"
     ? workspaceStore.code_ignore
@@ -315,7 +322,7 @@ export function getCodeIgnorePrefs(
     ignore_file_patterns: fileInfo.patterns,
     ignore_custom_patterns: custom,
     ignore_patterns: ignorePatterns,
-    consumers: ["code_index", "reorder_members", "code_rename", "code_uuid"],
+    consumers: ["code_index", "reorder_members", "kt_codegen", "code_rename", "code_uuid"],
     process_dir_suggestions: suggestions,
     process_dirs_auto_seeded: autoSeeded,
     process_dirs_seeded: pref.process_dirs_seeded,
@@ -337,5 +344,26 @@ export function listCodeIgnoreSuggestions(workspaceRoot: string, ctx?: CodeIgnor
 }
 
 export function effectiveCodeIgnorePatterns(workspaceRoot: string, ctx?: CodeIgnoreContext): string[] {
-  return getCodeIgnorePrefs(workspaceRoot, ctx, { autoSeed: false }).ignore_patterns;
+  try {
+    const root = workspaceRoot.trim();
+    const pref = prefsForWorkspace(root, ctx, { readOnly: true });
+    const fileInfo = ignoreFileInfo(root);
+    const custom = dedupePatterns([
+      ...pref.custom_ignore,
+      ...(pref.ignore_preset ? IGNORE_PRESETS[pref.ignore_preset] : []),
+    ]);
+    return dedupePatterns([
+      ...DEFAULT_BUILTIN_PATTERNS,
+      ...fileInfo.patterns,
+      ...custom,
+    ]);
+  } catch {
+    // 索引、预检等只读消费者不应因工作空间数据库只读/损坏而完全不可用。
+    // 偏好配置 API 仍保留原错误；这里只退回无需数据库的稳定规则。
+    const fileInfo = ignoreFileInfo(workspaceRoot.trim());
+    return dedupePatterns([
+      ...DEFAULT_BUILTIN_PATTERNS,
+      ...fileInfo.patterns,
+    ]);
+  }
 }

@@ -1,6 +1,8 @@
 import fs from "node:fs";
+import { createHash } from "node:crypto";
+import os from "node:os";
 import path from "node:path";
-import { pnwCreateDb, type PnwDbAdapter } from "phoenix-wing/db/pnwDbAdapter";
+import { pnwCreateDb, type PnwDbAdapter } from "@phoenix-wing/db-node";
 import { ensurePhoenixDatabase } from "./phoenixDatabaseService.js";
 
 export type WorkspacePrefs = Record<string, unknown>;
@@ -8,6 +10,8 @@ export type WorkspacePrefs = Record<string, unknown>;
 const PREFS_TABLE = "phoenix_workspace_pref";
 const META_SECTION = "__meta__";
 const LEGACY_JSON_BASENAME = "phoenix-workspace-prefs.json";
+const SNAPSHOT_CACHE_LIMIT = 32;
+const snapshotCache = new Map<string, { signature: string; prefs: WorkspacePrefs }>();
 
 function assertWorkspace(workspace: string): string {
   const resolved = path.resolve(String(workspace || "").trim());
@@ -48,6 +52,63 @@ function readLegacyJson(workspace: string): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+function fileSnapshotSignature(filename: string): string {
+  const stat = fs.lstatSync(filename, { bigint: true });
+  if (!stat.isFile()) throw new Error(`Workspace preference database is not a regular file: ${filename}`);
+  return [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(":");
+}
+
+function fileSha256(filename: string): string {
+  return createHash("sha256").update(fs.readFileSync(filename)).digest("hex");
+}
+
+/**
+ * Copy a database only when both the identity metadata and content remain
+ * stable for the duration of the copy. Preference databases are small, so the
+ * extra hash is preferable to occasionally handing a torn SQLite image to the
+ * WASM adapter while another process commits a preference update.
+ */
+function copyStableDatabase(source: string, destination: string): string {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const before = fileSnapshotSignature(source);
+      fs.copyFileSync(source, destination);
+      const copiedHash = fileSha256(destination);
+      const sourceHash = fileSha256(source);
+      const after = fileSnapshotSignature(source);
+      if (before === after && copiedHash === sourceHash) return after;
+      lastError = new Error("database changed while creating the snapshot");
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw new Error(
+    `Cannot create a stable workspace preference snapshot: ${
+      lastError instanceof Error ? lastError.message : String(lastError)
+    }`,
+  );
+}
+
+function clonePrefs(prefs: WorkspacePrefs): WorkspacePrefs {
+  return structuredClone(prefs);
+}
+
+function rememberSnapshot(
+  databasePath: string,
+  signature: string,
+  prefs: WorkspacePrefs,
+): WorkspacePrefs {
+  snapshotCache.delete(databasePath);
+  snapshotCache.set(databasePath, { signature, prefs: clonePrefs(prefs) });
+  while (snapshotCache.size > SNAPSHOT_CACHE_LIMIT) {
+    const oldest = snapshotCache.keys().next().value;
+    if (typeof oldest !== "string") break;
+    snapshotCache.delete(oldest);
+  }
+  return clonePrefs(prefs);
 }
 
 function ensureSchema(db: PnwDbAdapter): void {
@@ -149,6 +210,65 @@ export function loadWorkspacePrefs(workspace: string): WorkspacePrefs {
     return out;
   } finally {
     db.close();
+  }
+}
+
+/**
+ * Reads preferences through a disposable database snapshot. This deliberately
+ * avoids ensurePhoenixDatabase(), schema creation, SQLite lock files, and any
+ * other write beside the workspace. It is intended for discovery/indexing
+ * paths whose contract is read-only.
+ */
+export function loadWorkspacePrefsSnapshot(workspace: string): WorkspacePrefs {
+  const resolved = assertWorkspace(workspace);
+  const databasePath = path.join(resolved, ".phoenix", "phoenix-workspace.sqlite");
+  if (!fs.existsSync(databasePath)) {
+    return readLegacyJson(resolved);
+  }
+
+  const currentSignature = fileSnapshotSignature(databasePath);
+  const cached = snapshotCache.get(databasePath);
+  if (cached?.signature === currentSignature) {
+    snapshotCache.delete(databasePath);
+    snapshotCache.set(databasePath, cached);
+    return clonePrefs(cached.prefs);
+  }
+
+  const snapshotDir = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-prefs-snapshot-"));
+  const snapshotPath = path.join(snapshotDir, "phoenix-workspace.sqlite");
+  let db: PnwDbAdapter | null = null;
+  try {
+    const snapshotSignature = copyStableDatabase(databasePath, snapshotPath);
+    db = pnwCreateDb(snapshotPath);
+    const table = db.get<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+      [PREFS_TABLE],
+    );
+    if (!table) return rememberSnapshot(
+      databasePath,
+      snapshotSignature,
+      readLegacyJson(resolved),
+    );
+
+    const out: WorkspacePrefs = {};
+    const rows = db.all<{ section: string; value_json: string }>(
+      `SELECT section, value_json FROM ${PREFS_TABLE} ORDER BY section`,
+    );
+    for (const row of rows) {
+      const payload = parseObject(row.value_json);
+      if (row.section === META_SECTION) {
+        if (Number.isInteger(payload.version)) out.version = payload.version;
+        if (Object.prototype.hasOwnProperty.call(payload, "PartVersion")) {
+          out.PartVersion = payload.PartVersion;
+        }
+      } else if (validSection(row.section)) {
+        out[row.section] = payload;
+      }
+    }
+    return rememberSnapshot(databasePath, snapshotSignature, out);
+  } finally {
+    db?.close();
+    fs.rmSync(snapshotDir, { recursive: true, force: true });
   }
 }
 

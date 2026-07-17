@@ -128,11 +128,15 @@ export function createWorkbench(appConfig: Ref<AppConfig | null>) {
     if (getTab(tabId)) activeTabId.value = tabId;
   }
 
-  function updateTab(tabId: string, patch: Partial<Pick<WorkbenchTab, "title" | "subtitle" | "dirty">>): void {
+  function updateTab(
+    tabId: string,
+    patch: Partial<Pick<WorkbenchTab, "title" | "subtitle" | "contextKey" | "dirty">>,
+  ): void {
     const tab = getTab(tabId);
     if (!tab) return;
     if (patch.title !== undefined) tab.title = patch.title;
     if (patch.subtitle !== undefined) tab.subtitle = patch.subtitle;
+    if (patch.contextKey !== undefined) tab.contextKey = patch.contextKey;
     if (patch.dirty !== undefined) tab.dirty = patch.dirty;
   }
 

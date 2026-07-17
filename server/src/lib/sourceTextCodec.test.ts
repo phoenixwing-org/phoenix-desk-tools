@@ -28,6 +28,8 @@ describe("sourceTextCodec", () => {
 
   it("rejects binary and refuses lossy GBK writes", () => {
     expect(decodeSourceBuffer(Buffer.from([0x41, 0, 0x42]))).toBeNull();
+    expect(decodeSourceBuffer(Buffer.from([0x81]))).toBeNull();
+    expect(decodeSourceBuffer(Buffer.from([0xef, 0xbb, 0xbf, 0xff]))).toBeNull();
     const payload = decodeSourceBuffer(iconv.encode("中文", "gbk"))!;
     expect(() => encodeSourceText(payload, "emoji: \u{1f600}")).toThrow(/cannot be represented in GBK/);
   });

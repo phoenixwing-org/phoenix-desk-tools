@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import {
   fetchSwStepPrefs,
   previewSwStepExport,
@@ -10,6 +10,14 @@ import {
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useSwStepExportPropertySheet } from "../composables/useSwStepExportPropertySheet";
+import {
+  usePagePrimaryContribution,
+  type PagePrimarySection,
+} from "../composables/usePagePrimaryContribution";
+
+const props = defineProps<{
+  workbenchTabId?: string;
+}>();
 
 const shell = useAppShell();
 
@@ -129,6 +137,77 @@ async function onRun() {
     running.value = false;
   }
 }
+
+usePagePrimaryContribution("sw_step_export", props.workbenchTabId, {
+  summary: computed(() => {
+    if (prefsMeta.value && !prefsMeta.value.com_available) return unavailableMessage(prefsMeta.value);
+    if (modelCount.value == null) return "尚未预览 SolidWorks 模型";
+    return `发现 ${modelCount.value} 个 SolidWorks 模型`;
+  }),
+  sections: computed<PagePrimarySection[]>(() => [
+    {
+      id: "export",
+      title: "导出范围",
+      description: "通过 Windows SolidWorks COM 将三维模型批量导出为 STEP。",
+      controls: [
+        {
+          id: "source",
+          kind: "text",
+          label: "SolidWorks 模型",
+          modelValue: sourceDir,
+          placeholder: "相对工作空间",
+          mono: true,
+          onUpdate: (value) => {
+            sourceDir.value = value;
+            schedulePrefsSave();
+          },
+        },
+        {
+          id: "output",
+          kind: "text",
+          label: "STEP 输出",
+          modelValue: outStepDir,
+          placeholder: "相对工作空间",
+          mono: true,
+          onUpdate: (value) => {
+            outStepDir.value = value;
+            schedulePrefsSave();
+          },
+        },
+        {
+          id: "recursive",
+          kind: "boolean",
+          label: "递归扫描子目录",
+          modelValue: recursiveScan,
+          onUpdate: (checked) => {
+            recursiveScan.value = checked;
+            schedulePrefsSave();
+          },
+        },
+        { id: "platform", kind: "readonly", label: "平台", value: computed(() => prefsMeta.value?.platform || "—") },
+        {
+          id: "availability",
+          kind: "readonly",
+          label: "COM 状态",
+          value: computed(() => prefsMeta.value?.com_available ? "可用" : "不可用"),
+        },
+        { id: "models", kind: "readonly", label: "模型数量", value: computed(() => modelCount.value ?? "—") },
+      ],
+      actions: [
+        { id: "save", label: "保存偏好", loading: saving, run: onSave },
+        { id: "preview", label: "预览数量", loading: previewing, run: onPreview },
+        {
+          id: "run",
+          label: "开始导出",
+          tone: "primary",
+          loading: running,
+          disabled: computed(() => !prefsMeta.value?.com_available),
+          run: onRun,
+        },
+      ],
+    },
+  ]),
+});
 
 onMounted(async () => {
   try {

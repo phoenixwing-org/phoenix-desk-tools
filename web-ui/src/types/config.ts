@@ -46,7 +46,7 @@ export type ShellLayout = {
   ribbon_mode: 0 | 1;
   right_panel_open: boolean;
   mid_right_sash_px: number | null;
-  /** 左侧停靠栏宽度（树 / 日志在左时） */
+  /** 左侧 Primary 宽度 */
   left_panel_width_px: number;
   right_panel_width_px: number;
   log_panel_open: boolean;
@@ -54,7 +54,7 @@ export type ShellLayout = {
   log_auto_open_on_append: boolean;
   /** 工作空间树停靠侧 */
   workspace_tree_dock: SideDock;
-  /** 运行日志停靠侧 */
+  /** 遗留字段；运行日志现固定在下方全局面板，不再消费该停靠值。 */
   shell_log_dock: SideDock;
   /** 页面属性面板是否展开 */
   properties_panel_open: boolean;
@@ -114,6 +114,7 @@ export const DEFAULT_PAGE_ICONS: Record<string, string> = {
   part_key_detail: "◎",
   part_dedup: "≡",
   reorder_members: "{ }",
+  kt_codegen: "⚙",
   code_index: "⌗",
   code_ignore: "⊘",
   code_rename: "↦",

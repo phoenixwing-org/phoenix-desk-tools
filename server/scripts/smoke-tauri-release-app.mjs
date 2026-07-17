@@ -1,0 +1,365 @@
+import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import fs from "node:fs";
+import net from "node:net";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  KtCodegenController,
+  KtCodegenItem,
+  KtCodegenParam,
+} from "@phoenix-wing/kt-codegen";
+import { zipSync } from "fflate";
+
+if (!["darwin", "win32"].includes(process.platform)) {
+  throw new Error("The Tauri release app smoke currently supports macOS and Windows only");
+}
+
+const serverRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const repoRoot = path.resolve(serverRoot, "..");
+const packageVersion = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8")).version;
+const macApp = path.join(
+  repoRoot,
+  "src-tauri",
+  "target",
+  "release",
+  "bundle",
+  "macos",
+  "Phoenix Desktop Tools.app",
+);
+const configuredExecutable = String(process.env.PHOENIX_TAURI_EXECUTABLE || "").trim();
+const executable = configuredExecutable || (process.platform === "darwin"
+  ? path.join(macApp, "Contents", "MacOS", "phoenix-desktop")
+  : "");
+const installRoot = path.resolve(String(process.env.PHOENIX_TAURI_INSTALL_ROOT || (
+  process.platform === "darwin" ? macApp : path.dirname(executable)
+)));
+const infoPlist = process.platform === "darwin" ? path.join(macApp, "Contents", "Info.plist") : "";
+const fixtureXml = path.join(
+  repoRoot,
+  "tests",
+  "fixtures",
+  "workspaces",
+  "minimal",
+  "document-xml",
+  "图纸-通过link来创建-Document.xml",
+);
+const port = 5180;
+const origin = `http://127.0.0.1:${port}`;
+const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-tauri-app-smoke-"));
+const home = path.join(tempRoot, "home");
+const workspace = path.join(tempRoot, "workspace");
+const output = [];
+let child;
+
+try {
+  for (const required of [executable, fixtureXml, ...(infoPlist ? [infoPlist] : [])]) assertFile(required);
+  await assertPortAvailable();
+  fs.mkdirSync(home, { recursive: true });
+  fs.mkdirSync(workspace, { recursive: true });
+  writeCodegenFixture();
+  writeFcstdFixture();
+
+  child = spawn(executable, [], {
+    cwd: workspace,
+    env: {
+      ...process.env,
+      HOME: home,
+      USERPROFILE: home,
+      CFFIXED_USER_HOME: home,
+      PHOENIX_TAURI_USER_DATA_DIR: path.join(home, "user-data"),
+      APPDATA: path.join(home, "AppData", "Roaming"),
+      LOCALAPPDATA: path.join(home, "AppData", "Local"),
+      TMPDIR: tempRoot,
+      TEMP: tempRoot,
+      TMP: tempRoot,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  child.stdout?.on("data", (chunk) => output.push(chunk.toString()));
+  child.stderr?.on("data", (chunk) => output.push(chunk.toString()));
+
+  const health = await waitForHealth();
+  const launcher = await api("/api/config/launcher");
+  const launcherConfigPath = path.resolve(String(launcher.launcher_config_path || ""));
+  assertUnder(tempRoot, launcherConfigPath, "Tauri user data");
+
+  const activeWorkspace = await api("/api/workspace", {
+    method: "POST",
+    body: { path: workspace },
+  });
+  assert(activeWorkspace.path === workspace, "release app did not activate the isolated workspace");
+
+  const nativeTools = await api("/api/native-tools/status");
+  assert(nativeTools.ok === true && nativeTools.tools?.length === 3, "packaged native tools are incomplete");
+  const runtimeRoots = new Set();
+  for (const tool of nativeTools.tools) {
+    assert(tool.available === true, `${tool.name} is unavailable in the release app`);
+    const toolPath = path.resolve(tool.path);
+    assertUnder(installRoot, toolPath, `${tool.name} runtime path`);
+    runtimeRoots.add(path.dirname(path.dirname(toolPath)));
+  }
+  assert(runtimeRoots.size === 1, "packaged native tools did not resolve from one runtime root");
+  const runtimeRoot = [...runtimeRoots][0];
+  const runtimeManifest = path.join(runtimeRoot, "runtime-manifest.json");
+  assertFile(runtimeManifest);
+
+  const documents = await api("/api/code/codegen/documents");
+  assert(documents.documents?.length === 1, "release app did not discover the Codegen fixture");
+  const opened = await api("/api/code/codegen/open", {
+    method: "POST",
+    body: { path: "route.codegen.json" },
+  });
+  const preflight = await api("/api/code/codegen/preflight", {
+    method: "POST",
+    body: {
+      param: opened.param,
+      table: opened.table,
+      block_keys: ["PARAM DECLARATION"],
+    },
+  });
+  assert(preflight.safe_to_apply === true, "release Codegen preflight was not safe to apply");
+  assert(preflight.plan?.markerRegions?.length === 1, "release Codegen preflight did not find one marker region");
+  const apply = await api("/api/code/codegen/apply", {
+    method: "POST",
+    body: {
+      param: opened.param,
+      table: opened.table,
+      block_keys: ["PARAM DECLARATION"],
+      expected_plan_fingerprint: preflight.plan_fingerprint,
+    },
+  });
+  assert(apply.verified === true && apply.region_count === 1, "release Codegen Apply was not verified");
+  assert(
+    fs.readFileSync(path.join(workspace, "Route.h"), "utf8").includes("int value;"),
+    "release Codegen Apply did not update the source marker",
+  );
+
+  const bom = await api(`/api/cad/bom/file?rel=${encodeURIComponent("8003.001-H-PHOENIX-滑轨.FCStd")}`);
+  assert(bom.is_fcstd === true && bom.file_size_bytes > 0, "release CAD route did not read the real FCStd archive");
+  assert(
+    String(bom.source_note || "").includes("embedded FCStd properties"),
+    "release CAD route did not use the packaged fcstd-read tool",
+  );
+
+  const version = process.platform === "darwin"
+    ? plistValue("CFBundleShortVersionString")
+    : String(process.env.PHOENIX_TAURI_EXPECTED_VERSION || "").trim();
+  assert(version === packageVersion, `unexpected app version: ${version || "missing"}; expected ${packageVersion}`);
+  const binarySha256 = sha256(fs.readFileSync(executable));
+  const manifestSha256 = sha256(fs.readFileSync(runtimeManifest));
+
+  gracefulQuit();
+  await waitForExit(child, 10_000);
+  await waitForPortRelease();
+
+  const receipt = {
+    kind: "phoenix.desk.tauri-release-app-smoke",
+    schemaVersion: 1,
+    platform: `${process.platform}-${process.arch}`,
+    appVersion: version,
+    executable: displayPath(executable),
+    binarySha256,
+    runtimeManifestSha256: manifestSha256,
+    health,
+    userDataIsolated: true,
+    nativeTools: nativeTools.tools.map((tool) => tool.name),
+    flows: {
+      launch: true,
+      codegenPreflight: true,
+      codegenApply: true,
+      realFcstdRead: true,
+      gracefulExit: true,
+      sidecarReleased: true,
+    },
+  };
+  const serialized = `${JSON.stringify(receipt, null, 2)}\n`;
+  const receiptPath = String(process.env.PHOENIX_TAURI_RECEIPT_PATH || "").trim();
+  if (receiptPath) {
+    fs.mkdirSync(path.dirname(path.resolve(receiptPath)), { recursive: true });
+    fs.writeFileSync(receiptPath, serialized, "utf8");
+  }
+  process.stdout.write(serialized);
+  process.stdout.write(`[q2] ${process.platform} Tauri ${version} release app smoke passed\n`);
+} finally {
+  await cleanup();
+}
+
+function writeCodegenFixture() {
+  const controller = new KtCodegenController({
+    param: new KtCodegenParam({
+      namePrefix: "Kt",
+      nameMiddle: "Route",
+      items: [new KtCodegenItem({
+        nameSuffix: "Base",
+        id: 1,
+        name: "Value",
+        paramString: "value",
+        dataType: "int",
+        defaultValue: "1",
+      })],
+    }),
+  });
+  const result = controller.writeJson();
+  assert(result.ok && result.value !== null, "cannot generate the Codegen fixture");
+  fs.writeFileSync(path.join(workspace, "route.codegen.json"), result.value, "utf8");
+  fs.writeFileSync(path.join(workspace, "Route.h"), [
+    "// START KEVIN CAA WIZARD SECTION KtRouteBase PARAM DECLARATION",
+    "int oldValue;",
+    "// END KEVIN CAA WIZARD SECTION KtRouteBase PARAM DECLARATION",
+    "",
+  ].join("\n"), "utf8");
+}
+
+function writeFcstdFixture() {
+  fs.writeFileSync(path.join(workspace, "8003.001-H-PHOENIX-滑轨.FCStd"), zipSync({
+    "Document.xml": fs.readFileSync(fixtureXml),
+    "GuiDocument.xml": new TextEncoder().encode("<?xml version=\"1.0\"?><GuiDocument/>"),
+  }, { level: 6 }));
+}
+
+async function api(route, options = {}) {
+  const response = await fetch(`${origin}${route}`, {
+    method: options.method || "GET",
+    headers: options.body ? { "content-type": "application/json" } : undefined,
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+  const text = await response.text();
+  let body;
+  try {
+    body = text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error(`${route} returned invalid JSON: ${text}`);
+  }
+  if (!response.ok) throw new Error(`${route} returned HTTP ${response.status}: ${text}`);
+  return body;
+}
+
+async function waitForHealth() {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    if (child.exitCode != null) {
+      throw new Error(`Tauri release app exited early (${child.exitCode})\n${output.join("")}`);
+    }
+    try {
+      const body = await api("/api/health");
+      if (body.status === "ok" && body.service === "phoenix-node" && body.protocol_version === 1) return body;
+    } catch {
+      // The release app starts its packaged Node service before the endpoint is ready.
+    }
+    await delay(100);
+  }
+  throw new Error(`Tauri release app did not become healthy\n${output.join("")}`);
+}
+
+function gracefulQuit() {
+  const command = process.platform === "darwin" ? "osascript" : "powershell.exe";
+  const args = process.platform === "darwin"
+    ? ["-e", 'tell application id "com.phoenix.desktools" to quit']
+    : [
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        `$process = Get-Process -Id ${child.pid} -ErrorAction Stop; if (-not $process.CloseMainWindow()) { exit 2 }`,
+      ];
+  const result = spawnSync(command, args, { encoding: "utf8", timeout: 10_000 });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(`cannot quit the Tauri release app: ${String(result.stderr).trim()}`);
+  }
+}
+
+async function waitForExit(processToWait, timeoutMs) {
+  if (processToWait.exitCode != null) return;
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Tauri release app did not exit gracefully")), timeoutMs);
+    processToWait.once("exit", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
+async function assertPortAvailable() {
+  if (await canConnect()) throw new Error(`${origin} is already in use; stop the other Phoenix instance first`);
+}
+
+async function waitForPortRelease() {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    if (!(await canConnect())) return;
+    await delay(100);
+  }
+  throw new Error("the packaged Node service still owns port 5180 after the app exited");
+}
+
+function canConnect() {
+  return new Promise((resolve) => {
+    const socket = net.createConnection({ host: "127.0.0.1", port });
+    const done = (connected) => {
+      socket.destroy();
+      resolve(connected);
+    };
+    socket.setTimeout(250, () => done(false));
+    socket.once("connect", () => done(true));
+    socket.once("error", () => done(false));
+  });
+}
+
+function plistValue(key) {
+  const result = spawnSync("plutil", ["-extract", key, "raw", "-o", "-", infoPlist], {
+    encoding: "utf8",
+    timeout: 5_000,
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(`cannot read ${key} from Info.plist`);
+  return String(result.stdout).trim();
+}
+
+function displayPath(filename) {
+  const relative = path.relative(repoRoot, filename);
+  return relative && !relative.startsWith("..") && !path.isAbsolute(relative)
+    ? relative.replaceAll(path.sep, "/")
+    : path.basename(filename);
+}
+
+async function cleanup() {
+  if (await canConnect()) {
+    try {
+      await fetch(`${origin}/api/shutdown`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+    } catch { /* best effort */ }
+  }
+  if (child?.exitCode == null) child.kill();
+  if (process.env.PHOENIX_KEEP_TAURI_APP_SMOKE === "1") {
+    process.stdout.write(`[q2] kept ${tempRoot}\n`);
+  } else {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+}
+
+function assertUnder(root, candidate, label) {
+  const relative = path.relative(path.resolve(root), candidate);
+  assert(relative && !relative.startsWith("..") && !path.isAbsolute(relative), `${label} escaped ${root}: ${candidate}`);
+}
+
+function assertFile(file) {
+  assert(fs.existsSync(file) && fs.statSync(file).isFile(), `required file is missing: ${file}`);
+}
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+function sha256(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

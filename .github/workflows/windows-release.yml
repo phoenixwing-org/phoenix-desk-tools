@@ -1,0 +1,58 @@
+name: Desk Tools Windows 0.2.0 release gate
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "desk-v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desk-tools-windows-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows-nsis-release:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Parse the Windows release gate
+        shell: powershell
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path "scripts/verify-windows-release.ps1"),
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | Format-List | Out-String | Write-Error
+          }
+      - name: Install locked-compatible Tauri CLI
+        run: cargo install tauri-cli --version "^2.6" --locked
+      - name: Build, install, exercise, and uninstall current NSIS
+        run: pnpm verify:tauri-release:windows
+      - name: Archive current installer and machine-readable receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoenix-desk-tools-0.2.0-windows-nsis
+          path: |
+            src-tauri/target/release/bundle/nsis/*0.2.0*setup.exe
+            src-tauri/target/release/bundle/nsis/*0.2.0*receipt.json
+          if-no-files-found: error
+          retention-days: 14

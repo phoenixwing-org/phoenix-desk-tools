@@ -14,6 +14,8 @@ export type SidebarStackInput = {
   totalHeightPx: number;
   /** 顶区（工作空间树 / Tab）是否显示 */
   showMain: boolean;
+  /** 同时参与弹性分配的顶区块数量；页面 Block 与工作空间树可并存。 */
+  mainBlockCount?: number;
   showPropsWrap: boolean;
   showPropsMain: boolean;
   showPropsFooter: boolean;
@@ -25,7 +27,7 @@ export type SidebarStackInput = {
 };
 
 export type SidebarStackLayout = {
-  /** 顶区 flex:1；为 false 时由 props / log 独占伸缩 */
+  /** 顶区 flex:1；极窄窗口下该值可低于首选 120px，避免多 Block 总高溢出。 */
   mainFlex: boolean;
   mainMinHeightPx: number;
   /** 下方块固定高度（mainFlex 时生效） */
@@ -76,6 +78,20 @@ function scaleFixedHeights(
   return out;
 }
 
+/** 极窄窗口下连各块最小高度也容纳不下时，按最小高度权重分完可用空间。 */
+function scaleBelowMinimumHeights(minimums: readonly number[], budget: number): number[] {
+  const safeBudget = Math.max(0, Math.floor(budget));
+  const sum = minimums.reduce((total, value) => total + Math.max(0, value), 0);
+  if (!minimums.length || !sum || !safeBudget) return minimums.map(() => 0);
+  const out = minimums.map((value) => Math.floor(safeBudget * Math.max(0, value) / sum));
+  let remaining = safeBudget - out.reduce((total, value) => total + value, 0);
+  for (let index = 0; remaining > 0; index = (index + 1) % out.length) {
+    out[index] += 1;
+    remaining -= 1;
+  }
+  return out;
+}
+
 function resolvePropsFooter(
   propsWrapH: number,
   showFooter: boolean,
@@ -112,6 +128,10 @@ export function resolveSidebarStackLayout(input: SidebarStackInput): SidebarStac
     storedLogHeightPx,
     storedPropsFooterHeightPx,
   } = input;
+  const mainBlockCount = showMain
+    ? Math.max(1, Math.trunc(input.mainBlockCount ?? 1))
+    : 0;
+  const mainMinTotal = SIDEBAR_MAIN_MIN_H * mainBlockCount;
 
   const empty: SidebarStackLayout = {
     mainFlex: false,
@@ -132,9 +152,22 @@ export function resolveSidebarStackLayout(input: SidebarStackInput): SidebarStac
   // 无顶区：下方块之一或两者独占侧栏（保持旧行为：单块 flex，双块时上 flex 下固定）
   if (!showMain) {
     if (showPropsWrap && showLog) {
-      let logH = clamp(storedLogHeightPx, SIDEBAR_LOG_MIN_H, totalH - SIDEBAR_RESIZER_H - SIDEBAR_PROPS_MIN_H);
-      const propsBudget = totalH - logH - SIDEBAR_RESIZER_H;
-      const propsH = Math.max(SIDEBAR_PROPS_MIN_H, propsBudget);
+      const contentBudget = Math.max(0, totalH - SIDEBAR_RESIZER_H);
+      let propsH: number;
+      let logH: number;
+      if (contentBudget < SIDEBAR_PROPS_MIN_H + SIDEBAR_LOG_MIN_H) {
+        [propsH, logH] = scaleBelowMinimumHeights(
+          [SIDEBAR_PROPS_MIN_H, SIDEBAR_LOG_MIN_H],
+          contentBudget,
+        );
+      } else {
+        logH = clamp(
+          storedLogHeightPx,
+          SIDEBAR_LOG_MIN_H,
+          contentBudget - SIDEBAR_PROPS_MIN_H,
+        );
+        propsH = contentBudget - logH;
+      }
       const footer = resolvePropsFooter(
         propsH,
         showPropsFooter,
@@ -151,7 +184,7 @@ export function resolveSidebarStackLayout(input: SidebarStackInput): SidebarStac
         logFlex: false,
         propsFooterHeightPx: footer.footerH,
         propsStackResizer: footer.stackResizer,
-        scaled: logH !== storedLogHeightPx,
+        scaled: logH !== storedLogHeightPx || propsH < SIDEBAR_PROPS_MIN_H,
       };
     }
     if (showPropsWrap) {
@@ -185,21 +218,26 @@ export function resolveSidebarStackLayout(input: SidebarStackInput): SidebarStac
   const fixedStored = () => (showLog ? logH : 0) + (showPropsWrap ? propsH : 0);
   let mainSpace = totalH - resizerTotal - fixedStored();
 
-  if (mainSpace < SIDEBAR_MAIN_MIN_H) {
+  if (mainSpace < mainMinTotal) {
     scaled = true;
-    mainSpace = SIDEBAR_MAIN_MIN_H;
-    const budget = Math.max(0, totalH - resizerTotal - SIDEBAR_MAIN_MIN_H);
+    mainSpace = mainMinTotal;
+    const budget = Math.max(0, totalH - resizerTotal - mainMinTotal);
     const parts: { stored: number; min: number }[] = [];
     if (showPropsWrap) parts.push({ stored: propsH, min: SIDEBAR_PROPS_MIN_H });
     if (showLog) parts.push({ stored: logH, min: SIDEBAR_LOG_MIN_H });
 
     if (totalH < SIDEBAR_TIGHT_THRESHOLD_H && budget < parts.reduce((s, p) => s + p.min, 0)) {
+      const contentBudget = Math.max(0, totalH - resizerTotal);
+      const minimums = parts.map((part) => part.min);
+      const heights = contentBudget < minimums.reduce((sum, value) => sum + value, 0)
+        ? scaleBelowMinimumHeights(minimums, contentBudget)
+        : minimums;
       let i = 0;
       if (showPropsWrap) {
-        propsH = parts[i].min;
+        propsH = heights[i] ?? 0;
         i += 1;
       }
-      if (showLog) logH = parts[i]?.min ?? SIDEBAR_LOG_MIN_H;
+      if (showLog) logH = heights[i] ?? 0;
     } else if (parts.length) {
       const heights = scaleFixedHeights(parts, budget);
       let i = 0;
@@ -212,6 +250,11 @@ export function resolveSidebarStackLayout(input: SidebarStackInput): SidebarStac
   }
 
   const propsWrapH = showPropsWrap ? propsH : 0;
+  const fixedHeight = (showLog ? logH : 0) + propsWrapH;
+  const mainMinHeightPx = Math.min(
+    SIDEBAR_MAIN_MIN_H,
+    Math.floor(Math.max(0, totalH - resizerTotal - fixedHeight) / mainBlockCount),
+  );
   const footer = resolvePropsFooter(
     propsWrapH,
     showPropsFooter,
@@ -225,7 +268,7 @@ export function resolveSidebarStackLayout(input: SidebarStackInput): SidebarStac
 
   return {
     mainFlex: true,
-    mainMinHeightPx: SIDEBAR_MAIN_MIN_H,
+    mainMinHeightPx,
     propsWrapHeightPx: propsWrapH,
     propsWrapFlex: false,
     logHeightPx: showLog ? logH : 0,
@@ -242,9 +285,10 @@ export function maxStoredPropsHeightPx(
   showMain: boolean,
   showLog: boolean,
   storedLogHeightPx: number,
+  mainBlockCount = showMain ? 1 : 0,
 ): number {
   const resizers = countOuterResizers(showMain, true, showLog) * SIDEBAR_RESIZER_H;
-  const mainReserve = showMain ? SIDEBAR_MAIN_MIN_H : 0;
+  const mainReserve = showMain ? SIDEBAR_MAIN_MIN_H * Math.max(1, Math.trunc(mainBlockCount)) : 0;
   const logReserve = showLog ? clamp(storedLogHeightPx, SIDEBAR_LOG_MIN_H, 4096) : 0;
   return Math.max(SIDEBAR_PROPS_MIN_H, totalHeightPx - resizers - mainReserve - logReserve);
 }
@@ -255,9 +299,10 @@ export function maxStoredLogHeightPx(
   showMain: boolean,
   showProps: boolean,
   storedPropsHeightPx: number,
+  mainBlockCount = showMain ? 1 : 0,
 ): number {
   const resizers = countOuterResizers(showMain, showProps, true) * SIDEBAR_RESIZER_H;
-  const mainReserve = showMain ? SIDEBAR_MAIN_MIN_H : 0;
+  const mainReserve = showMain ? SIDEBAR_MAIN_MIN_H * Math.max(1, Math.trunc(mainBlockCount)) : 0;
   const propsReserve = showProps ? clamp(storedPropsHeightPx, SIDEBAR_PROPS_MIN_H, 4096) : 0;
   return Math.max(SIDEBAR_LOG_MIN_H, totalHeightPx - resizers - mainReserve - propsReserve);
 }

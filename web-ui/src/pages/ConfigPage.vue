@@ -25,6 +25,14 @@ import {
   EXPAND_ICON_SIZE_MIN,
   expandGlyphSizePx,
 } from "../utils/expandIconTheme";
+import {
+  usePagePrimaryContribution,
+  type PagePrimarySection,
+} from "../composables/usePagePrimaryContribution";
+
+const props = defineProps<{
+  workbenchTabId?: string;
+}>();
 
 const uiPrefs = useUiPrefsStore();
 const onboarding = useOnboardingStore();
@@ -329,6 +337,83 @@ async function pruneRecentList() {
   }
 }
 
+usePagePrimaryContribution("config", props.workbenchTabId, {
+  summary: computed(() => {
+    const workspace = workspacePath.value || "未打开工作空间";
+    const server = webRunning.value ? "服务在线" : "服务离线";
+    return `${workspace} · ${server}`;
+  }),
+  sections: computed<PagePrimarySection[]>(() => [
+    {
+      id: "workspace",
+      title: "工作空间",
+      controls: [
+        {
+          id: "root",
+          kind: "text",
+          label: "工作空间根",
+          modelValue: repoInput,
+          mono: true,
+          onUpdate: (value) => { repoInput.value = value; },
+        },
+        { id: "current", kind: "readonly", label: "当前", value: computed(() => workspacePath.value || "—"), mono: true },
+        { id: "tabs", kind: "readonly", label: "工具 Tab", value: nonHomeTabCount },
+      ],
+      actions: [
+        {
+          id: "browse",
+          label: "浏览…",
+          loading: pickingWorkspace,
+          run: onBrowseWorkspace,
+        },
+        {
+          id: "save",
+          label: "保存偏好",
+          tone: "primary",
+          disabled: computed(() => !repoInput.value.trim() || workspaceSwitchBlockedForInput(repoInput.value)),
+          run: savePrefs,
+        },
+        { id: "refresh", label: "刷新字段", run: refreshFields },
+        {
+          id: "close",
+          label: "关闭工作空间",
+          disabled: computed(() => !workspacePath.value),
+          run: closeWorkspaceAction,
+        },
+      ],
+    },
+    {
+      id: "tools",
+      title: "本机工具",
+      controls: [
+        {
+          id: "freecad",
+          kind: "text",
+          label: "FreeCAD 目录",
+          modelValue: fcInput,
+          placeholder: defaultFreecadDir.value || "FreeCAD 安装目录",
+          mono: true,
+          onUpdate: (value) => { fcInput.value = value; },
+        },
+        { id: "runtime", kind: "readonly", label: "运行方式", value: desktopRuntime ? "桌面" : "Web" },
+        { id: "server", kind: "readonly", label: "本地服务", value: computed(() => webRunning.value ? "在线" : "离线") },
+        { id: "service-url", kind: "readonly", label: "服务地址", value: webUrl, mono: true },
+      ],
+      actions: [
+        {
+          id: "default-freecad",
+          label: "填入默认 FreeCAD",
+          disabled: computed(() => !defaultFreecadDir.value.trim()),
+          run: fillDefaultFreecad,
+        },
+        { id: "refresh-tools", label: "刷新工具状态", loading: nativeToolsLoading, run: refreshNativeTools },
+        { id: "cad-index", label: "打开 CAD 索引", run: openCadIndex },
+        { id: "tour", label: "界面指引", run: startShellTour },
+      ],
+    },
+  ]),
+});
+
 const navItems = () =>
   (appConfig.value?.navigation ?? []).filter(
     (n) => n.page !== "home" && n.page !== "config",
@@ -393,7 +478,7 @@ const navItems = () =>
       <h2 class="section-title">界面</h2>
       <SideDockPrefsPanel />
       <p class="hint">
-        日志收起后，可点 Ribbon 工具条 **运行日志**、底栏按钮，或顶栏 **侧栏** 重新打开。
+        Ribbon 与底栏都使用左、下、右三个经典布局图标；下方图标控制全局预检、问题与运行日志。
       </p>
       <label class="field-label" for="expand-icon-size">
         展开/折叠图标大小（{{ uiPrefs.expandControlSizePx }}px，三角约

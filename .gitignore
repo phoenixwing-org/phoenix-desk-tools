@@ -23,6 +23,7 @@ web-ui/dist
 # Rust
 server/target/
 server/**/target/
+server/.native-target/
 server/bin/
 server/dist-sidecar/
 server/fcstd-reader/Cargo.lock
@@ -30,3 +31,4 @@ src-tauri/target/
 src-tauri/resources/runtime/
 src-tauri/gen/schemas/
 test-report/
+*.tsbuildinfo

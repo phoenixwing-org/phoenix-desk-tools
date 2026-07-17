@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import {
   fetchStepBatchPrefs,
   previewStepBatch,
@@ -11,7 +11,18 @@ import OnboardingBanner from "../components/OnboardingBanner.vue";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useFreecadTaskGate } from "../composables/useFreecadTaskGate";
-import { useStepBatchPropertySheet } from "../composables/useStepBatchPropertySheet";
+import {
+  STEP_VIEW_FIT_OPTIONS,
+  useStepBatchPropertySheet,
+} from "../composables/useStepBatchPropertySheet";
+import {
+  usePagePrimaryContribution,
+  type PagePrimarySection,
+} from "../composables/usePagePrimaryContribution";
+
+const props = defineProps<{
+  workbenchTabId?: string;
+}>();
 
 const shell = useAppShell();
 const { blocked: freecadBlocked, assertFreecadForTask, hint: freecadHint } = useFreecadTaskGate();
@@ -118,6 +129,96 @@ async function onRun() {
     running.value = false;
   }
 }
+
+usePagePrimaryContribution("step_batch", props.workbenchTabId, {
+  summary: computed(() => {
+    if (freecadBlocked.value) return freecadHint;
+    if (!preview.value) return "尚未预览 STEP 批处理范围";
+    return `待转换 ${preview.value.batch_count} 个 STEP · 深层 ${preview.value.deep_total}`;
+  }),
+  sections: computed<PagePrimarySection[]>(() => [
+    {
+      id: "paths",
+      title: "转换范围",
+      description: "通过 FreeCAD 将 STEP 批量转换为 FCStd。目录相对当前工作空间。",
+      controls: [
+        {
+          id: "source",
+          kind: "text",
+          label: "STEP 目录",
+          modelValue: stepDir,
+          placeholder: "相对工作空间",
+          mono: true,
+          onUpdate: (value) => {
+            stepDir.value = value;
+            schedulePrefsSave();
+          },
+        },
+        {
+          id: "output",
+          kind: "text",
+          label: "FCStd 输出",
+          modelValue: outDir,
+          placeholder: "相对工作空间",
+          mono: true,
+          onUpdate: (value) => {
+            outDir.value = value;
+            schedulePrefsSave();
+          },
+        },
+        {
+          id: "recursive",
+          kind: "boolean",
+          label: "递归子目录",
+          modelValue: stepRecursive,
+          onUpdate: (checked) => {
+            stepRecursive.value = checked;
+            schedulePrefsSave();
+          },
+        },
+        {
+          id: "skip",
+          kind: "boolean",
+          label: "跳过已存在 FCStd",
+          modelValue: skipExisting,
+          onUpdate: (checked) => {
+            skipExisting.value = checked;
+            schedulePrefsSave();
+          },
+        },
+        {
+          id: "view-fit",
+          kind: "select",
+          label: "视图适应",
+          modelValue: viewFit,
+          options: STEP_VIEW_FIT_OPTIONS,
+          onUpdate: (value) => {
+            viewFit.value = STEP_VIEW_FIT_OPTIONS.some((option) => option.value === value) ? value : "none";
+            schedulePrefsSave();
+          },
+        },
+        { id: "batch", kind: "readonly", label: "待转换", value: computed(() => preview.value?.batch_count ?? "—") },
+      ],
+      actions: [
+        { id: "save", label: "保存偏好", loading: saving, run: onSave },
+        { id: "preview", label: "预览数量", loading: previewing, run: onPreview },
+        {
+          id: "run",
+          label: "开始转换",
+          tone: "primary",
+          loading: running,
+          disabled: freecadBlocked,
+          run: onRun,
+        },
+        ...(freecadBlocked.value ? [{
+          id: "config",
+          label: "打开配置",
+          run: () => shell.goToPage("config"),
+        }] : []),
+      ],
+    },
+  ]),
+});
 
 onMounted(async () => {
   try {

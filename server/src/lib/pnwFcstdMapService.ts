@@ -11,7 +11,7 @@ import { execFile, execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { pnwCreateDb, type PnwDbAdapter } from "phoenix-wing/db/pnwDbAdapter";
+import { pnwCreateDb, type PnwDbAdapter } from "@phoenix-wing/db-node";
 import { ensurePhoenixDatabase } from "./phoenixDatabaseService.js";
 import { rebuildBomXrefs, rebuildBomXrefsAsync } from "./pnwBomXrefService.js";
 import {

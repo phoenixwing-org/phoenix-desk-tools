@@ -1,7 +1,17 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { pnwCreateDb, type PnwDbAdapter } from "phoenix-wing/db/pnwDbAdapter";
+import { pnwCreateDb, type PnwDbAdapter } from "@phoenix-wing/db-node";
+import {
+  pnwApplyUuidReplacementPlan,
+  pnwFindUuidOccurrences,
+  pnwNormalizeUuid,
+  pnwNormalizeWorkspacePath,
+  pnwNormalizeWorkspacePaths,
+  pnwPlanUuidReplacements,
+  type PnwUuidKind,
+  type PnwUuidReplacementPlanHit,
+} from "@phoenix-wing/code-core";
 import {
   chooseSourceWritePayload,
   encodeSourceText,
@@ -191,7 +201,7 @@ export function isProcessDirName(name: string): boolean {
 }
 
 export function normalizeWorksetPaths(paths: string[]): string[] {
-  return [...new Set(paths.map((p) => p.replace(/\\/g, "/").trim()).filter(Boolean))];
+  return pnwNormalizeWorkspacePaths(paths);
 }
 
 export interface RenameScanOptions { levels: string[]; targetEncoding: string; }
@@ -1081,8 +1091,8 @@ type RenameTarget = {
 };
 
 function safeRepoRel(rel: string): string {
-  const normalized = normalizeRelPath(rel).replace(/^\.\//, "").trim();
-  if (!normalized || normalized.split("/").includes("..") || path.isAbsolute(normalized)) {
+  const normalized = pnwNormalizeWorkspacePath(rel);
+  if (!normalized || normalized === ".") {
     throw new Error(`Invalid repo relative path: ${rel}`);
   }
   return normalized;
@@ -1407,38 +1417,8 @@ type ParsedUuidHitId = {
   matched_text: string;
 };
 
-type CaaGuidStyle = "nested" | "flat_brace" | "flat_run";
-
 const UUID_KINDS: UuidKind[] = ["uuid", "guid32", "suspicious"];
 const DEFAULT_UUID_KINDS: UuidKind[] = ["uuid"];
-const UUID_HYPHEN_RE = /\{?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\}?/g;
-const UUID_32_RE = /\b[0-9a-fA-F]{32}\b/g;
-
-const CAA_BYTE_PATTERN = "0x([0-9a-fA-F]{2})";
-const CAA_BYTES_PATTERN = Array.from({ length: 8 }, () => CAA_BYTE_PATTERN).join("\\s*,\\s*");
-const CAA_GUID_PATTERN_SPECS: Array<{ style: CaaGuidStyle; source: string }> = [
-  {
-    style: "nested",
-    source:
-      "0x([0-9a-fA-F]{8})\\s*,\\s*0x([0-9a-fA-F]{4})\\s*,\\s*0x([0-9a-fA-F]{4})\\s*,\\s*\\{\\s*" +
-      CAA_BYTES_PATTERN +
-      "\\s*\\}",
-  },
-  {
-    style: "flat_brace",
-    source:
-      "\\{\\s*0x([0-9a-fA-F]{8})\\s*,\\s*0x([0-9a-fA-F]{4})\\s*,\\s*0x([0-9a-fA-F]{4})\\s*,\\s*" +
-      CAA_BYTES_PATTERN +
-      "\\s*\\}",
-  },
-  {
-    style: "flat_run",
-    source:
-      "0x([0-9a-fA-F]{8})\\s*,\\s*0x([0-9a-fA-F]{4})\\s*,\\s*0x([0-9a-fA-F]{4})\\s*,\\s*" +
-      CAA_BYTES_PATTERN +
-      "(?!\\s*,\\s*0x|\\s*\\})",
-  },
-];
 
 function emptyUuidSummary() {
   return { files_scanned: 0, total_hits: 0, unique_uuids: 0 };
@@ -1458,58 +1438,11 @@ function normalizeUuidStrategy(raw: unknown): UuidApplyStrategy {
   return raw === "fresh_per_hit" ? "fresh_per_hit" : "map_per_value";
 }
 
-function caaGuidGroupsToNormalized(groups: string[]): string {
-  return groups.slice(0, 11).join("").toLowerCase();
-}
-
-function matchCaaGuidText(text: string): { normalized: string; style: CaaGuidStyle } | null {
-  for (const spec of CAA_GUID_PATTERN_SPECS) {
-    const match = new RegExp(spec.source, "is").exec(text);
-    if (match) return { normalized: caaGuidGroupsToNormalized(match.slice(1)), style: spec.style };
-  }
-  return null;
-}
-
-function detectCaaGuidStyle(text: string): CaaGuidStyle | null {
-  return matchCaaGuidText(text)?.style || null;
-}
-
-function normalizeUuidText(text: string): string {
-  const caa = matchCaaGuidText(text);
-  if (caa) return caa.normalized;
-  return text.trim().replace(/^\{/, "").replace(/\}$/, "").replace(/-/g, "").toLowerCase();
-}
-
 export function classifyUuidMatch(matched: string): UuidKind {
-  const core = matched.trim().replace(/^\{/, "").replace(/\}$/, "");
-  if (matchCaaGuidText(matched)) return "uuid";
-  if (core.toLowerCase().startsWith("0x")) return "uuid";
-  if (core.includes("-") && core.replace(/-/g, "").length === 32) return "uuid";
-  if (!core.includes("-") && /^[0-9a-fA-F]{32}$/.test(core)) return "guid32";
+  const occurrence = pnwFindUuidOccurrences(matched)
+    .find((item) => item.offset === 0 && item.value.length === matched.length);
+  if (occurrence) return occurrence.kind === "guid32" ? "guid32" : "uuid";
   return "suspicious";
-}
-
-function lineColAtOffset(text: string, offset: number): { line: number; col: number } {
-  const before = text.slice(0, offset);
-  const line = before.split("\n").length;
-  const lastNl = before.lastIndexOf("\n");
-  return { line, col: offset - lastNl };
-}
-
-function offsetInText(text: string, line: number, col: number): number | null {
-  if (line < 1 || col < 1) return null;
-  let offset = 0;
-  for (let current = 1; current < line; current += 1) {
-    const next = text.indexOf("\n", offset);
-    if (next < 0) return null;
-    offset = next + 1;
-  }
-  const target = offset + col - 1;
-  return target >= 0 && target < text.length ? target : null;
-}
-
-function spanOverlaps(start: number, end: number, spans: Array<[number, number]>): boolean {
-  return spans.some(([s, e]) => !(end <= s || start >= e));
 }
 
 function makeUuidHitId(repoRelPath: string, line: number, col: number, matchedText: string): string {
@@ -1544,71 +1477,20 @@ function readUuidText(absPath: string): TextPayload | null {
   }
 }
 
-function addUuidHit(
-  hits: CodeUuidHit[],
-  spans: Array<[number, number]>,
-  rel: string,
-  text: string,
-  start: number,
-  end: number,
-  matched: string,
-  kind: UuidKind,
-  normalized = normalizeUuidText(matched),
-) {
-  if (spanOverlaps(start, end, spans)) return;
-  spans.push([start, end]);
-  const { line, col } = lineColAtOffset(text, start);
-  hits.push({
-    hit_id: makeUuidHitId(rel, line, col, matched),
-    repo_rel_path: rel,
-    line,
-    col,
-    matched_text: matched,
-    uuid_normalized: normalized,
-    kind,
-    file_hits: 0,
-  });
-}
-
 function scanUuidTextHits(text: string, rel: string, kinds: Set<UuidKind>): CodeUuidHit[] {
-  const hits: CodeUuidHit[] = [];
-  const spans: Array<[number, number]> = [];
-
-  if (kinds.has("uuid")) {
-    for (const spec of CAA_GUID_PATTERN_SPECS) {
-      const regex = new RegExp(spec.source, "gis");
-      let match: RegExpExecArray | null;
-      while ((match = regex.exec(text))) {
-        addUuidHit(
-          hits,
-          spans,
-          rel,
-          text,
-          match.index,
-          match.index + match[0].length,
-          match[0],
-          "uuid",
-          caaGuidGroupsToNormalized(match.slice(1)),
-        );
-      }
-    }
-  }
-
-  for (const [regex, forceKind] of [
-    [UUID_HYPHEN_RE, undefined],
-    [UUID_32_RE, "guid32" as UuidKind],
-  ] as const) {
-    regex.lastIndex = 0;
-    let match: RegExpExecArray | null;
-    while ((match = regex.exec(text))) {
-      const matched = match[0];
-      const kind = forceKind || classifyUuidMatch(matched);
-      if (!kinds.has(kind)) continue;
-      addUuidHit(hits, spans, rel, text, match.index, match.index + matched.length, matched, kind);
-    }
-  }
-
-  hits.sort((a, b) => a.line - b.line || a.col - b.col);
+  const hits = pnwFindUuidOccurrences(text)
+    .map((occurrence) => ({ occurrence, kind: occurrence.kind === "guid32" ? "guid32" as const : "uuid" as const }))
+    .filter(({ kind }) => kinds.has(kind))
+    .map(({ occurrence, kind }) => ({
+      hit_id: makeUuidHitId(rel, occurrence.line, occurrence.column, occurrence.value),
+      repo_rel_path: rel,
+      line: occurrence.line,
+      col: occurrence.column,
+      matched_text: occurrence.value,
+      uuid_normalized: occurrence.normalized,
+      kind,
+      file_hits: 0,
+    }));
   for (const hit of hits) hit.file_hits = hits.length;
   return hits;
 }
@@ -1675,62 +1557,6 @@ export function scanUuidsInWorkspace(workspaceRoot: string, opts: CodeUuidScanOp
   };
 }
 
-function usesUppercaseHex(template: string): boolean {
-  return /[A-F]/.test(template);
-}
-
-function groupHexUppercase(matchedTexts: string[]): boolean {
-  return matchedTexts.length > 0 && matchedTexts.every((text) => usesUppercaseHex(text));
-}
-
-function newUuidHex(): string {
-  return randomUUID().replace(/-/g, "");
-}
-
-function formatUuidLike(template: string, uuidHex: string, useUpper: boolean): string {
-  const trimmed = template.trim();
-  const inner = trimmed.replace(/^\{/, "").replace(/\}$/, "");
-  const useBraces = trimmed.startsWith("{") && trimmed.endsWith("}");
-  const useHyphens = inner.includes("-");
-  let body = useHyphens
-    ? `${uuidHex.slice(0, 8)}-${uuidHex.slice(8, 12)}-${uuidHex.slice(12, 16)}-${uuidHex.slice(16, 20)}-${uuidHex.slice(20)}`
-    : uuidHex;
-  if (useUpper) body = body.toUpperCase();
-  return useBraces ? `{${body}}` : body;
-}
-
-function formatCaaGuidLike(template: string, uuidHex: string, style: CaaGuidStyle, useUpper: boolean): string {
-  const hex = useUpper ? uuidHex.toUpperCase() : uuidHex;
-  const d1 = hex.slice(0, 8);
-  const d2 = hex.slice(8, 12);
-  const d3 = hex.slice(12, 16);
-  const bytes = Array.from({ length: 8 }, (_, i) => hex.slice(16 + i * 2, 18 + i * 2));
-  const byteList = bytes.map((b) => `0x${b}`).join(", ");
-  if (style === "flat_brace") return `{0x${d1}, 0x${d2}, 0x${d3}, ${byteList}}`;
-  if (style === "flat_run") return `0x${d1}, 0x${d2}, 0x${d3}, ${byteList}`;
-  if (template.includes("\n")) {
-    const indent = /\n(\s+)0x/.exec(template)?.[1] || "                 ";
-    return `0x${d1},\n${indent}0x${d2},\n${indent}0x${d3},\n${indent}{${byteList}}`;
-  }
-  return `0x${d1}, 0x${d2}, 0x${d3}, {${byteList}}`;
-}
-
-function formatUuidReplacement(template: string, uuidHex: string, useUpper: boolean): string {
-  const caaStyle = detectCaaGuidStyle(template);
-  return caaStyle ? formatCaaGuidLike(template, uuidHex, caaStyle, useUpper) : formatUuidLike(template, uuidHex, useUpper);
-}
-
-function findAllLiteral(text: string, needle: string): number[] {
-  const out: number[] = [];
-  if (!needle) return out;
-  let at = 0;
-  while ((at = text.indexOf(needle, at)) >= 0) {
-    out.push(at);
-    at += Math.max(1, needle.length);
-  }
-  return out;
-}
-
 function uuidApplyFailure(root: string, opts: CodeUuidApplyOptions, message: string) {
   return {
     ok: false,
@@ -1766,31 +1592,13 @@ export function applyUuidsInWorkspace(workspaceRoot: string, opts: CodeUuidApply
 
   const strategy = normalizeUuidStrategy(opts.strategy);
   const dryRun = Boolean(opts.dry_run);
-  const textsByNorm = new Map<string, string[]>();
-  for (const item of parsed) {
-    const norm = normalizeUuidText(item.matched_text);
-    textsByNorm.set(norm, [...(textsByNorm.get(norm) || []), item.matched_text]);
-  }
-  const uppercaseByNorm = new Map([...textsByNorm.entries()].map(([norm, texts]) => [norm, groupHexUppercase(texts)]));
-  const uuidByNorm = new Map<string, string>();
-  const uuidByHitId = new Map<string, string>();
-  for (const item of parsed) {
-    if (strategy === "fresh_per_hit") {
-      uuidByHitId.set(item.hit_id, newUuidHex());
-    } else {
-      const norm = normalizeUuidText(item.matched_text);
-      if (!uuidByNorm.has(norm)) uuidByNorm.set(norm, newUuidHex());
-    }
-  }
-
   const byFile = new Map<string, ParsedUuidHitId[]>();
   for (const item of parsed) byFile.set(item.repo_rel_path, [...(byFile.get(item.repo_rel_path) || []), item]);
-
   const mappings: Array<{ old: string; new: string; hit_id: string }> = [];
   const lines: string[] = [];
   let touchedFiles = 0;
-
-  for (const [rel, items] of [...byFile.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+  const payloadByFile = new Map<string, TextPayload>();
+  for (const [rel] of [...byFile.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
     let abs: string;
     try {
       abs = resolveUnderWorkspace(root, rel);
@@ -1803,51 +1611,53 @@ export function applyUuidsInWorkspace(workspaceRoot: string, opts: CodeUuidApply
       lines.push(`  [skip] ${rel}: cannot read text file`);
       continue;
     }
+    payloadByFile.set(rel, payload);
+  }
 
-    const replacements: Array<{ offset: number; old: string; newText: string; hit_id: string; line: number }> = [];
-    for (const item of items) {
-      const old = item.matched_text;
-      const norm = normalizeUuidText(old);
-      const newHex = strategy === "fresh_per_hit" ? uuidByHitId.get(item.hit_id)! : uuidByNorm.get(norm)!;
-      const useUpper = strategy === "fresh_per_hit" ? usesUppercaseHex(old) : Boolean(uppercaseByNorm.get(norm));
-      const newText = formatUuidReplacement(old, newHex, useUpper);
-      let offset = offsetInText(payload.content, item.line, item.col);
-      if (offset == null || payload.content.slice(offset, offset + old.length) !== old) {
-        const positions = findAllLiteral(payload.content, old);
-        offset = positions.length === 1 ? positions[0] : null;
-      }
-      if (offset == null || payload.content.slice(offset, offset + old.length) !== old) {
-        lines.push(`  [skip] ${rel}:${item.line} ${old}`);
-        continue;
-      }
-      replacements.push({ offset, old, newText, hit_id: item.hit_id, line: item.line });
+  const plan = pnwPlanUuidReplacements(
+    [...payloadByFile].map(([id, payload]) => ({ id, text: payload.content })),
+    { strategy, createUuid: randomUUID },
+  );
+  if (!plan.valid) return uuidApplyFailure(root, opts, plan.diagnostics.join("; ") || "Cannot plan UUID replacements");
+
+  const selectedWingIds = new Set<string>();
+  const deskByWingId = new Map<string, ParsedUuidHitId>();
+  for (const item of parsed) {
+    const candidates = plan.hits.filter((hit) => hit.fileId === item.repo_rel_path && hit.from === item.matched_text);
+    const exact = candidates.find((hit) => hit.line === item.line && hit.column === item.col);
+    const hit = exact || (candidates.length === 1 ? candidates[0] : undefined);
+    if (!hit || deskByWingId.has(hit.id)) {
+      lines.push(`  [skip] ${item.repo_rel_path}:${item.line} ${item.matched_text}`);
+      continue;
     }
+    selectedWingIds.add(hit.id);
+    deskByWingId.set(hit.id, item);
+  }
 
-    if (!replacements.length) continue;
-    let text = payload.content;
-    let fileChanged = false;
-    for (const replacement of replacements.sort((a, b) => b.offset - a.offset)) {
-      if (text.slice(replacement.offset, replacement.offset + replacement.old.length) !== replacement.old) {
-        lines.push(`  [skip] ${rel}:${replacement.line} ${replacement.old}`);
-        continue;
-      }
-      text = text.slice(0, replacement.offset) + replacement.newText + text.slice(replacement.offset + replacement.old.length);
-      mappings.push({ old: replacement.old, new: replacement.newText, hit_id: replacement.hit_id });
-      fileChanged = true;
-      lines.push(`  ${dryRun ? "[preview]" : "[write]"} ${rel}:${replacement.line} ${replacement.old} -> ${replacement.newText}`);
+  const hitById = new Map<string, PnwUuidReplacementPlanHit>(plan.hits.map((hit) => [hit.id, hit]));
+  for (const [rel, payload] of payloadByFile) {
+    const selectedForFile = new Set([...selectedWingIds].filter((id) => hitById.get(id)?.fileId === rel));
+    if (!selectedForFile.size) continue;
+    const projected = pnwApplyUuidReplacementPlan(payload.content, rel, plan, selectedForFile);
+    for (const diagnostic of projected.diagnostics) lines.push(`  [skip] ${diagnostic}`);
+    for (const appliedId of projected.appliedHitIds) {
+      const hit = hitById.get(appliedId)!;
+      const desk = deskByWingId.get(appliedId)!;
+      mappings.push({ old: hit.from, new: hit.formattedTo, hit_id: desk.hit_id });
+      lines.push(`  ${dryRun ? "[preview]" : "[write]"} ${rel}:${hit.line} ${hit.from} -> ${hit.formattedTo}`);
     }
-
-    if (fileChanged) {
+    if (projected.text !== payload.content) {
       touchedFiles += 1;
       if (!dryRun) {
-        const outputPayload = chooseSourceWritePayload(payload.source, text, opts.target_encoding);
-        writeSourceText(abs, outputPayload, text);
+        const abs = resolveUnderWorkspace(root, rel);
+        const outputPayload = chooseSourceWritePayload(payload.source, projected.text, opts.target_encoding);
+        writeSourceText(abs, outputPayload, projected.text);
       }
     }
   }
 
-  const unique = new Set(mappings.map((m) => normalizeUuidText(m.old))).size;
-  const uniqueNew = new Set(mappings.map((m) => normalizeUuidText(m.new))).size;
+  const unique = new Set(mappings.map((m) => pnwNormalizeUuid(m.old))).size;
+  const uniqueNew = new Set(mappings.map((m) => pnwNormalizeUuid(m.new))).size;
   const message = `${dryRun ? "Previewed" : "Applied"} ${mappings.length} UUID replacements in ${touchedFiles} files`;
   lines.unshift(message);
   const result: Record<string, any> = {

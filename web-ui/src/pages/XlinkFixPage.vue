@@ -17,8 +17,16 @@ import ExpandCaret from "phoenix-wing/components/PnwExpandCaret.vue";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useXlinkFixPropertySheet } from "../composables/useXlinkFixPropertySheet";
+import {
+  usePagePrimaryContribution,
+  type PagePrimarySection,
+} from "../composables/usePagePrimaryContribution";
 
 type FilterTab = "all" | "fixable" | "not_found";
+
+const props = defineProps<{
+  workbenchTabId?: string;
+}>();
 
 const shell = useAppShell();
 
@@ -316,6 +324,91 @@ function statusTagType(row: XlinkFixIssueRow): "success" | "warning" | "info" {
   if (row.status === "fixable" || row.status === "fixed_manual") return "success";
   return "warning";
 }
+
+usePagePrimaryContribution("xlink_fix", props.workbenchTabId, {
+  summary: computed(() => stats.value
+    ? `问题 ${stats.value.issue_count} · 可修正 ${stats.value.fixable_count} · 未找到 ${stats.value.not_found_count}`
+    : "尚未分析 XLink 路径"),
+  sections: computed<PagePrimarySection[]>(() => [
+    {
+      id: "scope",
+      title: "分析范围",
+      controls: [
+        {
+          id: "dir",
+          kind: "text",
+          label: "修正目录",
+          modelValue: batchDir,
+          placeholder: "相对工作空间，如 .",
+          mono: true,
+          onUpdate: (value) => {
+            batchDir.value = value;
+            schedulePrefsSave();
+          },
+        },
+        {
+          id: "all",
+          kind: "boolean",
+          label: "目录内全部 FCStd",
+          description: "扫描所选目录下全部 FCStd，而不只处理当前候选。",
+          modelValue: allInDir,
+          onUpdate: (checked) => {
+            allInDir.value = checked;
+            schedulePrefsSave();
+          },
+        },
+      ],
+      actions: [
+        { id: "save", label: "保存偏好", loading: saving, run: onSavePrefs },
+        {
+          id: "analyze",
+          label: "分析",
+          tone: "primary",
+          loading: analyzing,
+          disabled: applying,
+          run: onAnalyze,
+        },
+        {
+          id: "apply",
+          label: computed(() => stats.value?.fixable_count ? `执行修正（${stats.value.fixable_count}）` : "执行修正"),
+          tone: "danger",
+          loading: applying,
+          disabled: computed(() => !canApply.value || analyzing.value),
+          run: onApply,
+        },
+      ],
+    },
+    {
+      id: "issues",
+      title: "问题 View",
+      controls: [
+        {
+          id: "filter",
+          kind: "choice",
+          label: "问题类型",
+          modelValue: filterTab,
+          options: [
+            { value: "all", label: `全部（${stats.value?.issue_count ?? 0}）` },
+            { value: "fixable", label: `可修正（${stats.value?.fixable_count ?? 0}）` },
+            { value: "not_found", label: `未找到（${stats.value?.not_found_count ?? 0}）` },
+          ],
+          onUpdate: (value) => {
+            filterTab.value = value === "fixable" || value === "not_found" ? value : "all";
+          },
+        },
+        { id: "hosts", kind: "readonly", label: "扫描宿主", value: computed(() => stats.value?.host_count ?? 0) },
+        { id: "visible", kind: "readonly", label: "当前显示", value: computed(() => filteredRows.value.length) },
+        {
+          id: "show-log",
+          kind: "boolean",
+          label: "显示分析日志",
+          modelValue: showLog,
+          onUpdate: (checked) => { showLog.value = checked; },
+        },
+      ],
+    },
+  ]),
+});
 
 onMounted(async () => {
   try {

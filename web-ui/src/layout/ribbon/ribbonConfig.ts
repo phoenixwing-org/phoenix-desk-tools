@@ -1,25 +1,16 @@
 import type { NavItem } from "../../types/config";
+import {
+  pnwCheckRibbonContributionCompatibility,
+  type PnwRibbonGroupDef,
+  type PnwRibbonItemDef,
+  type PnwRibbonItemSize,
+  type PnwRibbonTabDef,
+} from "phoenix-wing";
 
-export type RibbonItemSize = "large" | "small";
-
-export type RibbonItemDef = {
-  pageId: string;
-  label?: string;
-  size?: RibbonItemSize;
-};
-
-export type RibbonGroupDef = {
-  id: string;
-  label: string;
-  items: RibbonItemDef[];
-};
-
-export type RibbonTabDef = {
-  id: string;
-  label: string;
-  module?: string;
-  groups: RibbonGroupDef[];
-};
+export type RibbonItemSize = PnwRibbonItemSize;
+export type RibbonItemDef = PnwRibbonItemDef;
+export type RibbonGroupDef = PnwRibbonGroupDef;
+export type RibbonTabDef = PnwRibbonTabDef;
 
 export const RIBBON_SHELL_TAB_ID = "system";
 
@@ -84,8 +75,17 @@ export function buildRibbonTabs(navigation: NavItem[]): RibbonTabDef[] {
     }
   }
 
-  return [
-    { id: RIBBON_SHELL_TAB_ID, label: "系统", groups: shellGroups },
-    ...moduleTabs.values(),
-  ];
+  const document = {
+    kind: "phoenix.ribbon-contributions" as const,
+    schemaVersion: 1 as const,
+    tabs: [
+      { id: RIBBON_SHELL_TAB_ID, label: "系统", groups: shellGroups },
+      ...moduleTabs.values(),
+    ],
+  };
+  const compatibility = pnwCheckRibbonContributionCompatibility(document);
+  if (!compatibility.compatible) {
+    throw new Error(`Wing Ribbon contribution rejected: ${compatibility.code}`);
+  }
+  return [...compatibility.document.tabs];
 }

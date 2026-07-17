@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { pnwCreateDb } from "phoenix-wing/db/pnwDbAdapter";
+import { pnwCreateDb } from "@phoenix-wing/db-node";
 import { rebuildBomXrefsFromLastScan } from "../lib/pnwBomXrefService.js";
 
 const tempRoots: string[] = [];

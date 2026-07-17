@@ -5,7 +5,7 @@ import { useFileWorksetsStore } from "../stores/fileWorksets";
 import type { KevinSystemCodeMode } from "../stores/reorderMembersPage";
 import { pnwPropBool, pnwPropEnum, pnwPropGroup, pnwPropReadonly, pnwPropSheet } from "phoenix-wing";
 
-const KEVIN_SYSTEM_CODE_OPTIONS: Array<{
+export const KEVIN_SYSTEM_CODE_OPTIONS: Array<{
   value: KevinSystemCodeMode;
   label: string;
   description: string;

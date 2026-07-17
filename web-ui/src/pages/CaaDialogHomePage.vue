@@ -2,17 +2,23 @@
 import { computed, onMounted, ref, watch } from "vue";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import CaaDialogHomeView from "../components/caa/CaaDialogHomeView.vue";
+import CaaDialogPrimaryBlock from "../components/caa/CaaDialogPrimaryBlock.vue";
 import { fetchCaaHealth, fetchCaaIndexGroups, scanCaaIndex, type CaaIndexStats } from "../api/caaDialog";
 import { CAA_HOME_PAGE_ID } from "../constants/caaPages";
 import { useAppShell } from "../composables/useAppShell";
 import { useCaaDialogHomePropertySheet } from "../composables/useCaaDialogHomePropertySheet";
 import { usePageSummary } from "../composables/usePageSummary";
+import { usePagePrimaryContribution } from "../composables/usePagePrimaryContribution";
 import { useCaaDialogPageStore } from "../stores/caaDialogPage";
 import type { CaaDialogListGroup, CaaDialogListItem } from "../types/caaDialogList";
 
 const PAGE_ID = CAA_HOME_PAGE_ID;
+const props = defineProps<{ workbenchTabId?: string }>();
 const shell = useAppShell();
 const store = useCaaDialogPageStore();
+usePagePrimaryContribution(PAGE_ID, props.workbenchTabId, {
+  content: { component: CaaDialogPrimaryBlock },
+});
 
 const workspacePath = computed(() => shell.workspacePath.value.trim());
 const workspaceReady = computed(() => workspacePath.value.length > 0);

@@ -14,6 +14,7 @@ const ENV_KEYS = [
   "PHOENIX_USER_DATA_DIR",
   "PHOENIX_FCSTD_READ",
   "PHOENIX_FCSTD_XLINK",
+  "PHOENIX_FCSTD_QUERY",
 ] as const;
 const originalEnv = new Map(ENV_KEYS.map((key) => [key, process.env[key]]));
 
@@ -70,6 +71,7 @@ describe("packagedRuntimeTestService", () => {
     const serverFile = writeFile(resources, "server/server.mjs", "server");
     const readFile = writeFile(resources, "bin/fcstd-read.bin", "read");
     const xlinkFile = writeFile(resources, "bin/fcstd-xlink.bin", "xlink");
+    const queryFile = writeFile(resources, "bin/fcstd-query.bin", "query");
     writeFile(resources, "phoenix/config/app_config.json", JSON.stringify({
       navigation: [{ id: "home", page: "home" }, { id: "code", page: "code_index" }],
     }));
@@ -84,6 +86,7 @@ describe("packagedRuntimeTestService", () => {
       native_tools: [
         { name: "fcstd-read", filename: path.basename(readFile), sha256: hash(readFile) },
         { name: "fcstd-xlink", filename: path.basename(xlinkFile), sha256: hash(xlinkFile) },
+        { name: "fcstd-query", filename: path.basename(queryFile), sha256: hash(queryFile) },
       ],
     }));
 
@@ -102,14 +105,15 @@ describe("packagedRuntimeTestService", () => {
     expect(fs.existsSync(userData)).toBe(true);
   });
 
-  it("probes both configured native executables", async () => {
+  it("probes all configured native executables", async () => {
     process.env.PHOENIX_FCSTD_READ = process.execPath;
     process.env.PHOENIX_FCSTD_XLINK = process.execPath;
+    process.env.PHOENIX_FCSTD_QUERY = process.execPath;
     const checks = packagedRuntimeChecks().filter((item) => item.module === "runtime/cad/native-tools");
     const results = [];
     for (const runtimeCheck of checks) results.push(await runPackagedRuntimeCheck(runtimeCheck));
 
-    expect(results).toHaveLength(2);
+    expect(results).toHaveLength(3);
     expect(results.every((result) => result.status === "passed")).toBe(true);
   });
 

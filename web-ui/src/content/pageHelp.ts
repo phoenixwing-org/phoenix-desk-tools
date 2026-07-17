@@ -65,7 +65,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
     ],
     docPath: "doc/cad/CAD索引-缺失条目.md",
     tourSteps: [
-      tour("[data-tour-page-fcstd-scan]", "工程内搜索", "首次使用或大改文件后请执行；日志在右侧运行日志。"),
+      tour("[data-tour-page-fcstd-scan]", "工程内搜索", "首次使用或大改文件后请执行；日志在下方全局面板。"),
       tour("[data-tour-page-fcstd-table]", "索引表", "浏览扫描结果；可导出 JSON。"),
     ],
   },
@@ -179,6 +179,18 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
       "排序摘要：.cpp/.h 各访问段内特殊成员优先，其余字母序；.cpp 补 //--- 分隔符。",
     ],
     docPath: "doc/code/成员函数排序-reorder_members.md",
+  },
+  kt_codegen: {
+    title: "KT Codegen",
+    bullets: [
+      "左侧 Block 发现并打开旧 v4 JSON / 17 列 CSV，编辑 Prefix/Middle/Namespace/Append，并选择 32 个 Kevin 自动代码控制符。",
+      "主 View 直接使用 Phoenix Wing 参数表格（含列宽自适应），下方可收缩工作区统一显示预检、问题与输出，不会打开并列 View。",
+      "问题行带源码位置时可点击定位并以黄色整行高亮；没有预检时点 Apply 会先自动预检。",
+      "Apply 会真实写回 Git 工作空间源码：服务端复核计划/源码指纹，保留 UTF-8/GBK、BOM、换行与权限，并用临时文件复读后原子替换。",
+      "源码扫描达到 5000 文件或 64 MiB 快照上限时仍可看部分预览，但 Apply 安全门禁关闭；请先在 Code Ignore 排除无关目录。",
+      "保存配置有磁盘指纹并发保护；文件在外部变化时需先还原或重新打开。",
+    ],
+    docPath: "doc/code/KT-Codegen-桌面工作台.md",
   },
   code_ignore: {
     title: "Code 忽略设定",

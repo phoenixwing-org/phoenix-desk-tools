@@ -17,7 +17,7 @@ const line = computed(() => {
 <template>
   <footer class="status">
     <span class="status-main">{{ line }}</span>
-    <ShellPanelToggleBar variant="footer" />
+    <ShellPanelToggleBar />
   </footer>
 </template>
 

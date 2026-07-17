@@ -2,6 +2,13 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { pnwIsCadNativeProviderManifestV1 } from "@phoenix-wing/cad-contracts";
+import {
+  PNW_WORKSPACE_DATABASE_FILENAME,
+  PNW_WORKSPACE_SCHEMA_ID,
+  PNW_WORKSPACE_SCHEMA_V13_SHA256,
+  PNW_WORKSPACE_SCHEMA_VERSION,
+} from "@phoenix-wing/workspace-schema";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const serverRoot = path.resolve(scriptDir, "..");
@@ -41,13 +48,18 @@ function sha256(filename) {
 }
 
 requireFile(bundleFile, "run pnpm -C server build:bundle");
-const nativeFiles = ["fcstd-read", "fcstd-xlink"].map((name) => ({
+const nativeFiles = ["fcstd-read", "fcstd-xlink", "fcstd-query"].map((name) => ({
   name,
   source: requireFile(
     path.join(serverRoot, "bin", `${name}${executableSuffix}`),
     "run pnpm -C server build:native",
   ),
 }));
+const nativeBuildManifestFile = requireFile(
+  path.join(serverRoot, "bin", "native-build-manifest.json"),
+  "run pnpm -C server build:native",
+);
+const nativeBuildManifest = JSON.parse(fs.readFileSync(nativeBuildManifestFile, "utf8"));
 const sqliteRoot = path.join(serverRoot, "node_modules", "node-sqlite3-wasm");
 requireFile(path.join(sqliteRoot, "dist", "node-sqlite3-wasm.wasm"), "run pnpm install");
 
@@ -74,8 +86,44 @@ copyTree(path.join(repoRoot, "phoenix", "freecad", "batch_step"), path.join("pho
 const nativeManifest = [];
 for (const tool of nativeFiles) {
   const target = copyFile(tool.source, path.join("bin", path.basename(tool.source)));
-  nativeManifest.push({ name: tool.name, filename: path.basename(target), sha256: sha256(target) });
+  const built = nativeBuildManifest.binaries?.[tool.name];
+  if (!built || built.sha256 !== sha256(target)) {
+    throw new Error(`${tool.name} does not match server/bin/native-build-manifest.json`);
+  }
+  nativeManifest.push({
+    name: tool.name,
+    filename: path.basename(target),
+    relative_path: path.posix.join("bin", path.basename(target)),
+    sha256: built.sha256,
+    capabilities: built.capabilities,
+  });
 }
+
+const providerManifest = {
+  schema_version: 1,
+  provider_id: "phoenix-desk-tools",
+  provider_version: "0.2.0",
+  platform: process.platform,
+  arch: process.arch,
+  native_protocol: nativeBuildManifest.native_protocol,
+  database_query_protocol: nativeBuildManifest.database_query_protocol,
+  workspace_schema: {
+    schema_id: PNW_WORKSPACE_SCHEMA_ID,
+    schema_version: PNW_WORKSPACE_SCHEMA_VERSION,
+    ddl_sha256: PNW_WORKSPACE_SCHEMA_V13_SHA256,
+    database_filename: PNW_WORKSPACE_DATABASE_FILENAME,
+  },
+  tools: Object.fromEntries(nativeManifest.map((tool) => [tool.name, {
+    relative_path: tool.relative_path,
+    sha256: tool.sha256,
+    capabilities: tool.capabilities,
+  }])),
+};
+if (!pnwIsCadNativeProviderManifestV1(providerManifest)) {
+  throw new Error("Generated native-provider.json does not satisfy @phoenix-wing/cad-contracts v1");
+}
+const providerManifestFile = path.join(runtimeRoot, "native-provider.json");
+fs.writeFileSync(providerManifestFile, `${JSON.stringify(providerManifest, null, 2)}\n`, "utf8");
 
 const manifest = {
   schema_version: 1,
@@ -85,6 +133,10 @@ const manifest = {
   node: { version: process.version, filename: path.basename(nodeTarget), sha256: sha256(nodeTarget) },
   server: { filename: path.basename(serverTarget), sha256: sha256(serverTarget) },
   native_tools: nativeManifest,
+  native_provider: {
+    filename: path.basename(providerManifestFile),
+    sha256: sha256(providerManifestFile),
+  },
 };
 fs.writeFileSync(path.join(runtimeRoot, "runtime-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 process.stdout.write(`[tauri] runtime resources -> ${runtimeRoot}\n`);

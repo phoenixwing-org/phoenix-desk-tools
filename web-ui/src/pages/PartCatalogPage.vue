@@ -6,6 +6,14 @@ import { useAppShell } from "../composables/useAppShell";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
 import type { PnwTableColumnDef } from "phoenix-wing";
+import {
+  usePagePrimaryContribution,
+  type PagePrimarySection,
+} from "../composables/usePagePrimaryContribution";
+
+const props = defineProps<{
+  workbenchTabId?: string;
+}>();
 
 const shell = useAppShell();
 
@@ -80,6 +88,62 @@ function openDetail(row: PartKeyEntry) {
     label: row.label,
   });
 }
+
+usePagePrimaryContribution("part_catalog", props.workbenchTabId, {
+  summary: computed(() => listData.value?.exists
+    ? `显示 ${filteredEntries.value.length} / ${listData.value.entries.length} 个零件键`
+    : "尚无零件目录数据"),
+  sections: computed<PagePrimarySection[]>(() => [
+    {
+      id: "filter",
+      title: "目录筛选",
+      controls: [
+        {
+          id: "search",
+          kind: "text",
+          label: "搜索",
+          modelValue: search,
+          placeholder: "零件号、名称、型号或备注",
+          onUpdate: (value) => { search.value = value; },
+        },
+        {
+          id: "status",
+          kind: "choice",
+          label: "状态",
+          modelValue: statusFilter,
+          options: [
+            { value: "all", label: "全部" },
+            { value: "active", label: "有效" },
+            { value: "obsolete", label: "失效" },
+          ],
+          onUpdate: (value) => {
+            statusFilter.value = value === "active" || value === "obsolete" ? value : "all";
+          },
+        },
+        { id: "total", kind: "readonly", label: "目录总数", value: computed(() => listData.value?.entries.length ?? 0) },
+        { id: "visible", kind: "readonly", label: "当前显示", value: computed(() => filteredEntries.value.length) },
+        {
+          id: "missing",
+          kind: "readonly",
+          label: "含缺失文件",
+          value: computed(() => (listData.value?.entries ?? []).filter((entry) => entry.missing_count > 0).length),
+        },
+      ],
+      actions: [
+        { id: "refresh", label: "刷新目录", tone: "primary", loading, run: refreshList },
+        {
+          id: "clear",
+          label: "清空筛选",
+          disabled: computed(() => !search.value && statusFilter.value === "all"),
+          run: () => {
+            search.value = "";
+            statusFilter.value = "all";
+          },
+        },
+      ],
+    },
+  ]),
+});
 
 onMounted(() => refreshList());
 </script>

@@ -1,23 +1,23 @@
 # Tauri 逐页功能二验矩阵
 
-> 更新于 2026-07-11。恢复入口和当前产物哈希见 [Tauri 迁移当前状态基线](tauri-当前迁移状态基线.md)。`F` 表示已在开发态用可丢弃工作区完成真实读写/回读；`D` 才表示 release Tauri 中验收完成。旧 checkpoint 不继承。
+> 更新于 2026-07-17。当前 macOS 产物哈希见 [Tauri 0.2.0 macOS 发布态验收](tauri-0.2.0-macOS发布态验收.md)。`F` 表示已在开发态用可丢弃工作区完成真实读写/回读；`D` 才表示同一用户工作流在 release Tauri 中验收完成。旧 checkpoint 和 0.1.0 Windows 产物不继承到当前 0.2.0。
 
 ## 判定摘要
 
 | 类别 | 数量/结论 |
 | --- | --- |
-| 注册 page id | 24；其中 2 组是兼容别名，共 22 个独立页面实现 |
+| 注册 page id | 25；其中 2 组是兼容别名，共 23 个独立页面实现 |
 | 已达 `F` | Home/Config、Git、Test Fixtures、Unit Tests 开发态、工作集、Code 全链、CAA 首页/编辑器、CAD 主链与查重 |
 | 仅达 `I` | 欢迎面的 Tauri 原生操作、STEP Batch、SW -> STEP |
-| 已达 `D` | 打包运行时与 sidecar 生命周期、配置页桌面状态/确认退出、发行版 Unit Tests；其他页面仍需在 release/安装态重复工作区主链 |
-| 下一验收点 | 不重做迁移审计；使用冻结哈希对应的 NSIS，在普通用户安装态检查页面可达性并按真实失败定点修正 |
+| 已达 `D` | macOS 0.2.0 `.app` 的打包运行时、隔离用户数据、Codegen/FCStd 代表性服务链与 sidecar 生命周期；页面级 `D` 仍需逐页 UI 工作流 |
+| 下一验收点 | 在 Windows runner/VM 构建当前 0.2.0 NSIS，并在普通用户安装态检查代表性页面、安装登记与卸载 |
 
 ## Shell / Core
 
 | 页面/入口 | 主要功能 | 当前所有者 | 证据 | 结论与剩余项 |
 | --- | --- | --- | --- | --- |
 | 启动/欢迎面 | 选择工作区、最近列表、模块范围、CAA 草稿 | Vue + Node prefs/workspace + Tauri picker | `I` | 浏览器工作区选择与恢复可用；原生 picker、最近列表删除和 release 用户目录待 `D` |
-| 主页 `home` | 模块入口、模块开关、onboarding/巡游 | Vue + Node prefs | `F` | 工作区状态、22 个独立页面入口、CAD/Code 模块开关及 Ribbon 同步通过；巡游内容未逐步点击，待 `D` |
+| 主页 `home` | 模块入口、模块开关、onboarding/巡游 | Vue + Node prefs | `F` | 工作区状态、23 个独立页面入口、CAD/Code 模块开关及 Ribbon 同步通过；巡游内容未逐步点击，待 `D` |
 | 配置 `config` | 工作区、外部工具、界面/模块偏好、最近列表、退出 | Node services + Tauri commands | `F` + `D`（桌面边界） | 偏好保存、工作区重载、无效最近项确认与清理达到 `F`；release 中两项原生工具路径/可用性、服务状态、退出确认及 sidecar 回收达到 `D`；原生 picker 与 factory reset 待验 |
 | Git `git` | init/status/diff/stage/restore/commit | Node subprocess Git | `F` | 临时仓库完整操作链通过；运行时数据库保护和仓库级 safe.directory 生效，待 `D` |
 | 检出测试工程 `test_fixtures` | 偏好、缺失仓库 shallow clone、状态 | Node + system Git | `F` | 4 项 catalog、勾选偏好、按钮状态和本地 Git clone 服务链通过；未联网下载，已有目录仍有意不自动 pull |
@@ -31,6 +31,7 @@
 | Code 索引 `code_index` | 扫描、范围/扩展名、分页搜索、missing purge、导出、CATDlg 子索引 | Node + SQLite | `F` | 真实工作区扫描、精确文件名/路径、搜索、导出、purge 与 CAA 子索引通过；大仓性能待测 |
 | Code 忽略 `code_ignore` | ignore 文件、预设、进程目录建议、下游生效 | Node prefs + `.phoenix/code.ignore` | `F` | 读写、旧存储迁移和 Index/Rename/UUID/Reorder 共用规则通过；首次自动 seed 行为需产品确认 |
 | C++ 成员排序 `reorder_members` | 范围、预览/写入、header/cpp、冻结区、编码 | Node TS engines | `F` | 真实 fixture 差分、构造函数边界、特殊成员、GBK/CRLF 与锁定区通过；更大 CAA 工程待 `D` |
+| KT Codegen `kt_codegen` | JSON/CSV 参数表、32 Block、源码预检、Artifact、源码 Apply | Wing + Node host + Vue | `F` + release API | JSON 保存/回读与指纹冲突 fixture 通过；macOS 0.2.0 `.app` 包内 host 已完成真实预检/Apply/复读，但尚未以页面操作完成完整 UI `D` |
 | Code 批量改名 `code_rename` | 文本/文件/目录预览写入、编码、冲突、报告 | Node | `F` | 精确文件名、大小写改名、目录/文本、GBK/UTF-8、冲突与 JSON 报告通过；多文件失败无全事务回滚 |
 | Code UUID `code_uuid` | UUID/GUID32/CAA GUID 扫描、选中写入、策略、报告 | Node | `F` | 扫描、dry-run、按命中写入、样式与 GBK 保留、报告通过；`suspicious` 仍为内部分类 |
 | CAA 首页 `caa_dialog_home` | SQLite 索引、搜索、分组、打开、新建 | Node CAA index + Vue | `F` | 真实扫描 2 个对话框；向导创建 CATDlg/CATNls 后重扫变 3，清理后恢复 2，待 `D` |
@@ -42,7 +43,7 @@
 | --- | --- | --- | --- | --- |
 | CAD 索引 `fcstd_map` | 范围扫描、进度/取消/恢复、历史、missing、导出、XRef | Node SQLite + Rust reader | `F` | 三文件真实 ZIP/Document.xml 工作区扫描、历史、XRef rebuild 与导出通过；超大文件取消和真实 FreeCAD 文件待验 |
 | BOM 列表 `bom_export` | 总成/BOM/树、搜索导出、链接标签修正 | Node SQLite + FCStd writer | `F` | 装配树/BOM 与标签实际写入 FCStd、回读和 ZIP 其他成员保留通过，待真实 FreeCAD 打开验证 |
-| 文件详情 `file_detail` | BOM 属性、推荐/公式、文档类型、改名、引用/树 | Node + Rust FCStd tools | `F` | 合成 FCStd 属性写入、预览、磁盘改名和引用链通过；Drawing/source-model 真实样本待验 |
+| 文件详情 `file_detail` | BOM 属性、推荐/公式、文档类型、改名、引用/树 | Node + Rust FCStd tools | `F` + release API | 合成 FCStd 属性写入、预览、磁盘改名和引用链通过；macOS 0.2.0 `.app` 包内 CAD 路由与 `fcstd-read` 已读取有效 FCStd，页面 UI 与真实 FreeCAD 复杂样本待验 |
 | 兼容入口 `bom_apply` | 与 `file_detail` 同页面 | 同上 | `F` | 有意兼容别名，不是重复实现 |
 | 零件目录 `part_catalog` | PartKey 同步、搜索、关联文件、详情入口 | Node SQLite | `F` | 扫描结果同步、目录搜索和详情跳转数据链通过；同步仍为页面读取触发而非扫描事务 |
 | 零件详情 `part_key_detail` | 元数据、文件角色/备注、装配树 | Node SQLite | `F` | 元数据/关联和装配树链通过；需再验证重复重扫不覆盖所有用户字段 |
@@ -57,5 +58,5 @@
 
 1. 原提交的 checkpoint 不可信，但当前工作区已经把大多数“页面打开但按钮空转”的主链改成真实 Node/Rust 实现。
 2. 自主可验证的 Code、CAA、CAD 主要读写功能已达 `F`；它们不是由测试数量推断，而是检查了磁盘产物并重新加载回读。
-3. release 打包运行时、NSIS 安装树/启动/卸载和发行版自检已不再是缺口；当前最大交付缺口是普通用户快捷方式/卸载登记补验、其余页面的 release `D` 重跑、Shell 边缘状态，以及 FreeCAD/SolidWorks 的真实引擎验证。
-4. 在上述缺口关闭前，项目应描述为“核心功能迁移已可接手，release 与安装主链已通过、逐页桌面验收未完”，不能描述为“全部页面全部功能迁移完成”。
+3. macOS 0.2.0 release 打包运行时与代表性服务链已经通过；当前版本的 Windows NSIS 构建/安装/卸载、逐页 release `D`、代码签名，以及 FreeCAD/SolidWorks 的真实引擎验证仍是缺口。
+4. 在上述缺口关闭前，项目应描述为“核心功能迁移已可接手，macOS 0.2.0 release 代表性链路已通过、Windows 0.2.0 与逐页桌面验收未完”，不能描述为“全部页面全部功能迁移完成”。

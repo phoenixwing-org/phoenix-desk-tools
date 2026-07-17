@@ -3,6 +3,7 @@
  */
 
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -104,6 +105,16 @@ import {
   type GitDiffScope,
   type GitRestoreScope,
 } from "../lib/gitWorkspaceService.js";
+import {
+  applyKtCodegen,
+  discoverKtCodegenDocuments,
+  inspectKtCodegenDocumentState,
+  inspectKtCodegenSourceStates,
+  loadKtCodegenDocument,
+  previewKtCodegenSource,
+  preflightKtCodegen,
+  saveKtCodegenDocument,
+} from "../lib/ktCodegenService.js";
 
 const APP_CONFIG_PATH = runtimeAppConfigPath();
 const REPO_ROOT = runtimeRepoRoot();
@@ -1144,12 +1155,94 @@ function codeIndexRouteError(c: any, err: unknown) {
   return c.json({ detail }, 500);
 }
 
+function codegenRouteError(c: any, err: unknown) {
+  const detail = err instanceof Error ? err.message : String(err);
+  const status = /已(?:再次)?变化/.test(detail) ? 409 : 400;
+  return c.json({ detail }, status);
+}
+
+shellRoutes.use("/api/code/codegen/*", bodyLimit({
+  maxSize: 16 * 1024 * 1024,
+  onError: (c) => c.json({ detail: "Codegen 请求体超过 16 MiB 限制" }, 413),
+}));
+
 shellRoutes.get("/api/code/index", (c) => {
   try {
     const ctx = codeIndexContext();
     return c.json(loadCodeIndex(ctx.workspace, { storageDir: ctx.storageDir }));
   } catch (err) {
     return codeIndexRouteError(c, err);
+  }
+});
+
+shellRoutes.get("/api/code/codegen/documents", (c) => {
+  try {
+    return c.json(discoverKtCodegenDocuments(currentWorkspace(), PREFS_DIR));
+  } catch (err) {
+    return codegenRouteError(c, err);
+  }
+});
+
+shellRoutes.post("/api/code/codegen/open", async (c) => {
+  try {
+    const body = await c.req.json<Record<string, unknown>>();
+    return c.json(loadKtCodegenDocument(currentWorkspace(), body.path));
+  } catch (err) {
+    return codegenRouteError(c, err);
+  }
+});
+
+shellRoutes.post("/api/code/codegen/document-state", async (c) => {
+  try {
+    const body = await c.req.json<Record<string, unknown>>();
+    return c.json(inspectKtCodegenDocumentState(currentWorkspace(), body));
+  } catch (err) {
+    return codegenRouteError(c, err);
+  }
+});
+
+shellRoutes.put("/api/code/codegen/document", async (c) => {
+  try {
+    const body = await c.req.json<Record<string, unknown>>();
+    return c.json(saveKtCodegenDocument(currentWorkspace(), body));
+  } catch (err) {
+    return codegenRouteError(c, err);
+  }
+});
+
+shellRoutes.post("/api/code/codegen/preflight", async (c) => {
+  try {
+    const body = await c.req.json<Record<string, unknown>>();
+    return c.json(preflightKtCodegen(currentWorkspace(), body, PREFS_DIR));
+  } catch (err) {
+    return codegenRouteError(c, err);
+  }
+});
+
+shellRoutes.post("/api/code/codegen/apply", async (c) => {
+  try {
+    const body = await c.req.json<Record<string, unknown>>();
+    return c.json(await applyKtCodegen(currentWorkspace(), body, PREFS_DIR));
+  } catch (err) {
+    return codegenRouteError(c, err);
+  }
+});
+
+shellRoutes.post("/api/code/codegen/source-preview", async (c) => {
+  try {
+    const body = await c.req.json<Record<string, unknown>>();
+    return c.json(previewKtCodegenSource(currentWorkspace(), body));
+  } catch (err) {
+    return codegenRouteError(c, err);
+  }
+});
+
+shellRoutes.post("/api/code/codegen/source-states", async (c) => {
+  try {
+    const body = await c.req.json<Record<string, unknown>>();
+    return c.json(inspectKtCodegenSourceStates(currentWorkspace(), body));
+  } catch (err) {
+    return codegenRouteError(c, err);
   }
 });
 shellRoutes.get("/api/code/index/catdlg", (c) => {
@@ -1336,4 +1429,3 @@ shellRoutes.get("/api/tree", (c) => {
   const tree = buildFileTree(ws, "", extensions);
   return c.json({ workspace: ws, workspace_name: ws.split("/").pop() || ws, file_count: countFiles(tree), tree });
 });
-

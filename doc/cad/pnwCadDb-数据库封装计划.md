@@ -2,6 +2,8 @@
 
 > 目标：替代 Python SQLite 访问，提供统一的 TS 查询接口。
 > `pnw-` 前缀 = Phoenix Wing，未来可拆到 phoenix-wing 包。
+>
+> 状态（2026-07）：本文保留为历史设计记录。生产服务现直接消费 `@phoenix-wing/db-node`；`fcstd-query` 没有进入 Desk 运行时，其源码已迁至 `@phoenix-wing/cad-rust-source/crates/fcstd-query`，并绑定 `phoenix-cad-query` v1 与 workspace Schema v13。
 
 ## 1. 现状
 
@@ -26,7 +28,7 @@ Python (FastAPI)          Node.js (Hono)           Rust
 
 ```
 server/src/lib/pnwCadDb.ts        ← TS 封装层（可拆到 phoenix-wing）
-server/fcstd-query/src/main.rs    ← Rust CLI（rusqlite）
+Wing cad-rust-source/fcstd-query ← Rust CLI（rusqlite，随 Desk provider 打包）
 ```
 
 **已实现**：
@@ -123,9 +125,9 @@ Rust rusqlite (CLI)  →  pnwCadDb (TS 封装)  →  node:sqlite (Node 24+)
 
 ### 4.3 Rust fcstd-query 的归宿
 
-- `fcstd-query` 保留作为 fallback（Node < 24 的环境）
-- 或完全删除（当所有环境都支持 node:sqlite）
-- `fcstd-reader` 保留（FCStd 文件解析是 Rust 的独特能力）
+- `fcstd-query` 已迁入 `@phoenix-wing/cad-rust-source`，绑定 workspace Schema v13，并随 Desk provider 发布供只读 companion 调用。
+- Node 数据库访问统一使用 `@phoenix-wing/db-node`。
+- `fcstd-reader`/`fcstd-xlink` 仍是产品 native 能力，但源码只保留在 Wing，由 Desk 构建阶段编译并随安装包发布。
 
 ## 5. 接口规范
 

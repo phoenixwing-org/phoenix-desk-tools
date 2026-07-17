@@ -5,9 +5,7 @@
 ## 启动
 
 ```bash
-cargo build --manifest-path server/fcstd-query/Cargo.toml --release
-cargo build --manifest-path server/cli/Cargo.toml
-cargo build --manifest-path server/fcstd-xlink/Cargo.toml
+pnpm build:native
 pnpm dev
 # → http://localhost:5173
 ```
@@ -45,8 +43,7 @@ CAA 对话框编辑完整可用。
 ## 单元测试
 
 ```bash
-pnpm test                    # 全量 161 pass
-pnpm test:rust               # Rust 11 pass
+pnpm test                    # Desk 应用层测试
 pnpm test:ts                 # TS 43 pass
 
 # 测试报告

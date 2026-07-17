@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { pnwCreateDb } from "phoenix-wing/db/pnwDbAdapter";
+import { pnwCreateDb } from "@phoenix-wing/db-node";
 import { ensurePhoenixDatabase } from "./phoenixDatabaseService.js";
 
 const SESSION_VERSION = 1;

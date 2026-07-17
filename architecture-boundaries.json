@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "currentDate": "2026-07-17",
+  "scanRoots": ["packages/catdlg-core/src", "server/src", "web-ui/src"],
+  "exclude": ["\\.test\\.", "\\.spec\\.", "(?:^|/)dist/"],
+  "pureEntrypoints": [
+    "packages/catdlg-core/src/index.ts",
+    "server/src/lib/reorderHeaderEngine.ts",
+    "server/src/lib/reorderCppEngine.ts",
+    "web-ui/src/models/ktCodegenPagePropertySchema.ts"
+  ],
+  "forbiddenPureImports": [
+    "^(?:node:|fs$|fs/|vue$|vue/|pinia$|pinia/|element-plus$|element-plus/|@tauri-apps/)"
+  ],
+  "forbiddenPureGlobals": ["Buffer", "process", "document", "window", "HTMLElement", "customElements", "localStorage"],
+  "viewRoots": ["web-ui/src"],
+  "forbiddenViewImports": ["^(?:node:fs|fs$|fs/|node:child_process|node:sqlite)"],
+  "forbiddenViewCalls": ["writeFile", "writeFileSync", "rename", "renameSync", "unlink", "unlinkSync", "rm", "rmSync"],
+  "hostRoots": ["server/src"],
+  "hostForbiddenDeclarations": [
+    "normalizeGeneratedEol",
+    "replacementPairs",
+    "stageKtCodegenFile",
+    "pathInside",
+    "caaGuidGroupsToNormalized",
+    "matchCaaGuidText",
+    "normalizeUuidText",
+    "addUuidHit",
+    "formatUuidLike",
+    "formatCaaGuidLike",
+    "formatUuidReplacement"
+  ],
+  "exceptions": []
+}

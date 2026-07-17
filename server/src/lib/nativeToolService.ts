@@ -4,7 +4,7 @@ import { runtimeRepoRoot } from "./appRuntimePaths.js";
 
 const DEFAULT_SERVER_ROOT = path.join(runtimeRepoRoot(), "server");
 
-export type NativeToolName = "fcstd-read" | "fcstd-xlink";
+export type NativeToolName = "fcstd-read" | "fcstd-xlink" | "fcstd-query";
 
 export type NativeToolResolveOptions = {
   env?: NodeJS.ProcessEnv;
@@ -13,16 +13,18 @@ export type NativeToolResolveOptions = {
   resourcesDir?: string;
 };
 
-const TOOL_CONFIG: Record<NativeToolName, { envKey: string; crateDir: string; manifest: string }> = {
+const TOOL_CONFIG: Record<NativeToolName, { envKey: string; manifest: string }> = {
   "fcstd-read": {
     envKey: "PHOENIX_FCSTD_READ",
-    crateDir: "cli",
-    manifest: "server/cli/Cargo.toml",
+    manifest: "@phoenix-wing/cad-rust-source/source-manifest.json#fcstd-read",
   },
   "fcstd-xlink": {
     envKey: "PHOENIX_FCSTD_XLINK",
-    crateDir: "fcstd-xlink",
-    manifest: "server/fcstd-xlink/Cargo.toml",
+    manifest: "@phoenix-wing/cad-rust-source/source-manifest.json#fcstd-xlink",
+  },
+  "fcstd-query": {
+    envKey: "PHOENIX_FCSTD_QUERY",
+    manifest: "@phoenix-wing/cad-rust-source/source-manifest.json#fcstd-query",
   },
 };
 
@@ -56,8 +58,6 @@ export function nativeToolCandidates(
     resourcesDir ? path.join(resourcesDir, "bin", filename) : "",
     resourcesDir ? path.join(resourcesDir, filename) : "",
     path.join(serverRoot, "bin", filename),
-    path.join(serverRoot, config.crateDir, "target", "release", filename),
-    path.join(serverRoot, config.crateDir, "target", "debug", filename),
   ];
   return [...new Set(candidates.map((candidate) => String(candidate || "").trim()).filter(Boolean))];
 }

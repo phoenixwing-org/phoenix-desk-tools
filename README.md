@@ -53,12 +53,15 @@ phoenix-desktop --workspace /path/to/workspace --catdlg /path/to/workspace/UI/Sa
 pnpm install --frozen-lockfile --force
 ```
 
+默认构建严格使用 `package.json` 锁定的 Wing Registry 0.4.2 包。Codegen Host/Apply、Workspace Schema、Ribbon、UUID/GUID 和 workspace path 契约直接消费包内 fixture；聚合根入口与 composable 子路径的 singleton 由自动测试保护。只有调试 Wing 源码时才显式设置 `PHOENIX_WING_SRC=/path/to/phoenix-wing/src`；不会自动探测相邻仓库。
+
 ### 构建 Rust 模块
 
 ```bash
-cargo build --manifest-path server/fcstd-query/Cargo.toml --release
-cargo build --manifest-path server/cli/Cargo.toml
+pnpm build:native
 ```
+
+`fcstd-read`、`fcstd-xlink` 与 `fcstd-query` 均从已安装的 `@phoenix-wing/cad-rust-source` 统一 Cargo workspace 编译；Desk Tools 不再保留 Rust 源码副本。查询工具通过 `phoenix-cad-query` v1 绑定 workspace Schema v13，继续供 Desk 构建/诊断使用；KT Auto CAD 的只读 BOM/引用查询已改接 Wing 无驱动查询核心与 VS Code 内置 SQLite，不再消费 Desk provider 中的 `fcstd-query`。
 
 ## 架构
 
@@ -75,13 +78,14 @@ Node.js Hono :5180
 ## 测试
 
 ```bash
-pnpm test                       # 全量：Rust + TS + CAA (161 pass)
+pnpm test                       # Desk 应用层：类型、TS、CAA
 
 # 分类运行
-pnpm test:rust                  # Rust 单元测试（fcstd-reader + fcstd-xlink）
 pnpm test:ts                    # TypeScript 测试（server/src/lib/）
 pnpm test:caa                   # CAA 测试（catdlg-core + web-ui vitest）
 ```
+
+Rust workspace 测试由 `phoenix-wing` 的 `test:workspace` 和 npm tarball 三平台门禁统一负责；Desk 的 `build:native` 负责消费端构建、协议握手和真实 fixture parity。
 
 ### 测试报告
 
@@ -102,7 +106,14 @@ python3 -m http.server 4173 --directory test-report
 | `phoenix/` | Python 包（逐步退役） |
 | `scripts/` | 命令行工具 |
 | `doc/` | 文档 |
-# Phoenix Desk Tools
+
+## 文档
+
+- [文档索引](doc/文档索引.md)：当前说明、草案和历史证据的唯一导航
+- [总待办](doc/TODO.md)：唯一维护的产品/技术债入口
+- [Tauri 当前状态](doc/tauri-当前迁移状态基线.md)与[构建验收](doc/tauri-构建启动与验收指南.md)
+- [CAA 当前架构与契约](doc/caa/CAA当前架构与契约.md)
+- [CAD 数据与 API 真源](doc/cad/CAD数据与API真源.md)
 
 ## 许可证
 

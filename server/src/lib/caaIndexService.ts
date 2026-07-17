@@ -8,7 +8,7 @@ import {
   extractCatDlgDialogName,
   isKnownCaaControlType,
 } from "@desk-tools/catdlg-core";
-import { pnwCreateDb, type PnwDbAdapter } from "phoenix-wing/db/pnwDbAdapter";
+import { pnwCreateDb, type PnwDbAdapter } from "@phoenix-wing/db-node";
 import {
   ensurePhoenixDatabase,
   phoenixDatabasePath,

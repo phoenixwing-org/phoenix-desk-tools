@@ -75,6 +75,7 @@ describe("codeIgnoreService", () => {
     fs.mkdirSync(path.join(workspace, "build-ui"));
 
     expect(effectiveCodeIgnorePatterns(workspace, { prefsDir })).not.toContain("artifacts");
+    expect(fs.existsSync(path.join(workspace, ".phoenix"))).toBe(false);
     expect(fs.existsSync(path.join(workspace, ".phoenix", "phoenix-workspace-prefs.json"))).toBe(false);
 
     const first = getCodeIgnorePrefs(workspace, { prefsDir });
@@ -105,5 +106,19 @@ describe("codeIgnoreService", () => {
     expect(saved.custom_ignore).toEqual(["LegacyGlobal", "WorkspaceOnly"]);
     const stored = loadWorkspacePrefs(workspace);
     expect((stored.code_ignore as any).custom_ignore).toEqual(["LegacyGlobal", "WorkspaceOnly"]);
+  });
+
+  it("keeps read-only scan consumers usable when the workspace preference database cannot open", () => {
+    const workspace = makeTempRoot();
+    const prefsDir = makeTempRoot();
+    const phoenixDir = path.join(workspace, ".phoenix");
+    fs.mkdirSync(phoenixDir);
+    fs.mkdirSync(path.join(phoenixDir, "phoenix-workspace.sqlite"));
+    fs.writeFileSync(path.join(phoenixDir, "code.ignore"), "GeneratedByTeam\n", "utf8");
+
+    const patterns = effectiveCodeIgnorePatterns(workspace, { prefsDir });
+
+    expect(patterns).toContain("node_modules");
+    expect(patterns).toContain("GeneratedByTeam");
   });
 });

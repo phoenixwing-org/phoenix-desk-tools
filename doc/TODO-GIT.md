@@ -1,5 +1,7 @@
 # Git 工作区插件 — 待办（TODO-GIT）
 
+> 状态：superseded（冻结历史快照）。当前未完成项已合并到 [总待办](TODO.md#域待办汇总)，请勿在本文件继续更新状态。
+
 > **总索引**：[TODO.md](TODO.md)  
 > **规划**：[Web壳层-Git工作区插件-规划.md](platform/Web壳层-Git工作区插件-规划.md)  
 > **G1 人工点检**：[Web壳层-Git工作区插件-G1点检清单.md](platform/Web壳层-Git工作区插件-G1点检清单.md)  
@@ -126,4 +128,3 @@ tests/test_shell_git_workspace.py
 | 2026-06-23 | §2.5 路径筛选标签（UI + 功能）点检通过 |
 | 2026-06-23 | 从 [TODO.md](TODO.md) 拆出独立 TODO-GIT；含框选批量 · SidebarBlock · 侧栏 persist 修复 |
 | 2026-06-22 | G1 核心落地摘要写入规划 |
-

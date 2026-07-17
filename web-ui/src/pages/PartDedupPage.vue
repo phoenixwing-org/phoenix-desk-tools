@@ -10,7 +10,18 @@ import {
 } from "../api";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import { useAppShell } from "../composables/useAppShell";
-import { usePartDedupPropertySheet } from "../composables/usePartDedupPropertySheet";
+import {
+  PART_DEDUP_EXTENSION_OPTIONS,
+  usePartDedupPropertySheet,
+} from "../composables/usePartDedupPropertySheet";
+import {
+  usePagePrimaryContribution,
+  type PagePrimarySection,
+} from "../composables/usePagePrimaryContribution";
+
+const props = defineProps<{
+  workbenchTabId?: string;
+}>();
 
 const shell = useAppShell();
 
@@ -124,6 +135,130 @@ usePartDedupPropertySheet("part_dedup", {
   checkVersion,
   codeMustBeDigit,
   onPersist: schedulePrefsSave,
+});
+
+usePagePrimaryContribution("part_dedup", props.workbenchTabId, {
+  summary: computed(() => scanResult.value?.summary || "尚未执行编号查重"),
+  sections: computed<PagePrimarySection[]>(() => [
+    {
+      id: "scan",
+      title: "扫描规则",
+      controls: [
+        {
+          id: "dir",
+          kind: "text",
+          label: "扫描目录",
+          modelValue: scanDir,
+          placeholder: "相对工作空间，如 .",
+          mono: true,
+          onUpdate: (value) => {
+            scanDir.value = value;
+            schedulePrefsSave();
+          },
+        },
+        {
+          id: "extension",
+          kind: "select",
+          label: "扩展名",
+          modelValue: extension,
+          options: PART_DEDUP_EXTENSION_OPTIONS.map((ext) => ({ value: ext, label: ext })),
+          onUpdate: (value) => {
+            extension.value = value;
+            schedulePrefsSave();
+          },
+        },
+        {
+          id: "code-len",
+          kind: "number",
+          label: "编号位数",
+          modelValue: codeLen,
+          min: 1,
+          max: 20,
+          onUpdate: (value) => {
+            codeLen.value = value;
+            schedulePrefsSave();
+          },
+        },
+        {
+          id: "version-len",
+          kind: "number",
+          label: "版本位数",
+          modelValue: verLen,
+          min: 1,
+          max: 10,
+          onUpdate: (value) => {
+            verLen.value = value;
+            schedulePrefsSave();
+          },
+        },
+        {
+          id: "check-code",
+          kind: "boolean",
+          label: "查编号",
+          modelValue: checkCode,
+          onUpdate: (checked) => {
+            checkCode.value = checked;
+            schedulePrefsSave();
+          },
+        },
+        {
+          id: "check-version",
+          kind: "boolean",
+          label: "查版本",
+          modelValue: checkVersion,
+          onUpdate: (checked) => {
+            checkVersion.value = checked;
+            schedulePrefsSave();
+          },
+        },
+        {
+          id: "digits",
+          kind: "boolean",
+          label: "编号须为数字",
+          modelValue: codeMustBeDigit,
+          onUpdate: (checked) => {
+            codeMustBeDigit.value = checked;
+            schedulePrefsSave();
+          },
+        },
+      ],
+      actions: [
+        { id: "save", label: "保存偏好", loading: saving, run: onSave },
+        { id: "scan", label: "开始扫描", tone: "primary", loading: scanning, run: onScan },
+      ],
+    },
+    {
+      id: "results",
+      title: "结果 View",
+      controls: [
+        {
+          id: "tab",
+          kind: "choice",
+          label: "重复类型",
+          modelValue: tab,
+          options: [
+            { value: "name_dup", label: `文件名（${stats.value?.name_dup ?? 0}）` },
+            { value: "code_dup", label: `编号（${stats.value?.code_dup ?? 0}）` },
+            { value: "ver_dup", label: `编号+版本（${stats.value?.ver_dup ?? 0}）` },
+          ],
+          onUpdate: (value) => {
+            tab.value = value === "code_dup" || value === "ver_dup" ? value : "name_dup";
+          },
+        },
+        { id: "files", kind: "readonly", label: "扫描文件", value: computed(() => scanResult.value?.file_count ?? 0) },
+        { id: "groups", kind: "readonly", label: "当前重复组", value: computed(() => activeGroups.value.length) },
+      ],
+      actions: [
+        {
+          id: "export",
+          label: "导出 CSV",
+          loading: exporting,
+          disabled: computed(() => !scanResult.value),
+          run: onExport,
+        },
+      ],
+    },
+  ]),
 });
 
 onMounted(async () => {

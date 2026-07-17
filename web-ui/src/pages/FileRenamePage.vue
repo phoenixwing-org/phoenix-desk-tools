@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onActivated, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onActivated, onMounted, onUnmounted, ref, watch } from "vue";
 import type { RefScanPayload, RenameLog } from "../api";
 import {
   analyzeRenameReferences,
@@ -16,6 +16,10 @@ import { useFileRenamePropertySheet } from "../composables/useFileRenameProperty
 import { useIncomingRefQuery } from "../composables/useIncomingRefQuery";
 import { usePageSession } from "../composables/usePageSession";
 import { logReferenceLabelApply } from "../utils/referenceLabelLog";
+import {
+  usePagePrimaryContribution,
+  type PagePrimarySection,
+} from "../composables/usePagePrimaryContribution";
 
 const props = defineProps<{
   workbenchTabId?: string;
@@ -467,6 +471,127 @@ watch(
   () => shell.scheduleWorkbenchSave(),
   { deep: true },
 );
+
+usePagePrimaryContribution("file_rename", props.workbenchTabId, {
+  summary: computed(() => scan.value
+    ? `宿主 ${scan.value.host_count} · 命中 ${scan.value.hit_count} · 待修正 ${scan.value.pending_hit_count ?? scan.value.hit_count}`
+    : "选择改名历史或手填旧名后开始分析"),
+  sections: computed<PagePrimarySection[]>(() => [
+    {
+      id: "source",
+      title: "改名来源",
+      controls: [
+        {
+          id: "mode",
+          kind: "choice",
+          label: "分析方式",
+          modelValue: panelMode,
+          options: [
+            { value: "history", label: "改名历史" },
+            { value: "manual", label: "手填旧名 / 新名" },
+          ],
+          onUpdate: (value) => { panelMode.value = value === "manual" ? "manual" : "history"; },
+        },
+        ...(panelMode.value === "history" ? [{
+          id: "history",
+          kind: "select" as const,
+          label: "改名记录",
+          modelValue: computed(() => renameLogId.value == null ? "" : String(renameLogId.value)),
+          options: computed(() => [
+            { value: "", label: "— 选择记录 —" },
+            ...renameLogs.value.map((row) => ({
+              value: String(row.id),
+              label: `#${row.id} · ${row.old_filename} → ${row.new_filename}`,
+            })),
+          ]),
+          clearable: true,
+          onUpdate: (value: string) => { renameLogId.value = value ? Number(value) : null; },
+        }] : [
+          {
+            id: "old-name",
+            kind: "text" as const,
+            label: "旧文件名",
+            modelValue: queryText,
+            placeholder: "部分文件名；或从树选择",
+            mono: true,
+            onUpdate: (value: string) => {
+              queryText.value = value;
+              clearPickedOnInput();
+            },
+          },
+          {
+            id: "new-name",
+            kind: "text" as const,
+            label: "新文件名",
+            modelValue: newBasename,
+            placeholder: "留空则只检查引用",
+            mono: true,
+            onUpdate: (value: string) => { newBasename.value = value; },
+          },
+          { id: "picked", kind: "readonly" as const, label: "树选择", value: computed(() => pickedRel.value || "—"), mono: true },
+        ]),
+        {
+          id: "transitive",
+          kind: "boolean",
+          label: "递归追踪间接引用",
+          modelValue: includeTransitive,
+          onUpdate: (checked) => { includeTransitive.value = checked; },
+        },
+      ],
+      actions: [
+        {
+          id: "analyze",
+          label: "开始分析",
+          tone: "primary",
+          loading: busy,
+          disabled: computed(() => !canAnalyze()),
+          run: onScanRefs,
+        },
+        { id: "refresh-history", label: "刷新历史", disabled: busy, run: loadLogs },
+      ],
+    },
+    {
+      id: "results",
+      title: "引用修正",
+      controls: [
+        { id: "hosts", kind: "readonly", label: "宿主", value: computed(() => scan.value?.host_count ?? 0) },
+        { id: "hits", kind: "readonly", label: "命中", value: computed(() => scan.value?.hit_count ?? 0) },
+        { id: "pending", kind: "readonly", label: "待修正", value: computed(() => scan.value?.pending_hit_count ?? 0) },
+        { id: "selected", kind: "readonly", label: "已选宿主", value: computed(() => selectedHosts.value.size) },
+      ],
+      actions: [
+        {
+          id: "select-pending",
+          label: "选择待修正",
+          disabled: computed(() => !scan.value),
+          run: selectPendingHosts,
+        },
+        {
+          id: "apply-xlink",
+          label: "修正 XLink",
+          tone: "danger",
+          loading: busy,
+          disabled: computed(() => !selectedHosts.value.size || !canApplyRefs()),
+          run: onApplyRefs,
+        },
+        {
+          id: "sync-label",
+          label: "同步引用显示名",
+          loading: busy,
+          disabled: computed(() => !selectedHosts.value.size || !canApplyIncomingLabels()),
+          run: onApplyIncomingLabels,
+        },
+        {
+          id: "export",
+          label: "导出报告",
+          loading: busy,
+          disabled: computed(() => !scan.value),
+          run: onExportReport,
+        },
+      ],
+    },
+  ]),
+});
 
 onMounted(async () => {
   await loadLogs();

@@ -20,6 +20,10 @@ import { useFileWorksetsStore } from "../stores/fileWorksets";
 import { useOnboardingStore } from "../stores/onboarding";
 import { usePageSession } from "../composables/usePageSession";
 import { usePageSummary } from "../composables/usePageSummary";
+import {
+  usePagePrimaryContribution,
+  type PagePrimarySection,
+} from "../composables/usePagePrimaryContribution";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
 import type { PnwTableColumnDef } from "phoenix-wing";
@@ -65,6 +69,13 @@ type KindFilter = (typeof KIND_OPTIONS)[number]["value"];
 
 const activeSubTab = ref<PageSubTab>("index");
 const worksetStore = useFileWorksetsStore();
+const primaryWorksetOptions = computed(() => [
+  { value: "", label: "全工作空间" },
+  ...worksetStore.worksetOptions.map((workset) => ({
+    value: workset.id,
+    label: `${workset.label}（${workset.count}）`,
+  })),
+]);
 const forceUpdatePartName = ref(false);
 const scanWorksetId = ref(localStorage.getItem("fcstd-scan-workset-id") || "");  // 空=全部
 watch(scanWorksetId, (v) => localStorage.setItem("fcstd-scan-workset-id", v || ""));
@@ -495,6 +506,132 @@ watch([forceUpdatePartName, statusFilter, kindFilter, searchQuery, pageOffset, p
 
 watch([statusFilter, kindFilter], () => scheduleEntriesReload(true));
 watch(searchQuery, () => scheduleEntriesReload(true));
+
+usePagePrimaryContribution("fcstd_map", props.workbenchTabId, {
+  summary: computed(() => pageSummary.value || "尚未建立 CAD 索引"),
+  sections: computed<PagePrimarySection[]>(() => [
+    {
+      id: "scan",
+      title: "工程内搜索",
+      description: "扫描 CAD 资产与零件元数据，写入当前工作空间索引。",
+      controls: [
+        {
+          id: "workset",
+          kind: "select",
+          label: "扫描工作集",
+          modelValue: scanWorksetId,
+          options: primaryWorksetOptions,
+          clearable: true,
+          disabled: scanning,
+          onUpdate: (value) => { scanWorksetId.value = value; },
+        },
+        {
+          id: "force-part-name",
+          kind: "boolean",
+          label: "强制更新零件名称",
+          description: "覆盖索引中已有的 PartName；默认保留人工调整。",
+          modelValue: forceUpdatePartName,
+          disabled: scanning,
+          onUpdate: (checked) => { forceUpdatePartName.value = checked; },
+        },
+        { id: "total", kind: "readonly", label: "索引条目", value: computed(() => stats.value?.total_entries ?? 0) },
+        { id: "present", kind: "readonly", label: "存在", value: computed(() => stats.value?.present ?? 0) },
+        { id: "missing", kind: "readonly", label: "缺失", value: computed(() => stats.value?.missing ?? 0) },
+      ],
+      actions: [
+        {
+          id: "scan",
+          label: "工程内搜索",
+          tone: "primary",
+          loading: scanning,
+          disabled: scanning,
+          run: onScan,
+        },
+        {
+          id: "cancel",
+          label: "取消扫描",
+          tone: "danger",
+          plain: true,
+          disabled: computed(() => !scanning.value),
+          run: onCancelScan,
+        },
+        { id: "save-options", label: "保存设置", loading: saving, run: onSaveScanOptions },
+      ],
+    },
+    {
+      id: "view",
+      title: "索引 View",
+      controls: [
+        {
+          id: "sub-view",
+          kind: "choice",
+          label: "中央内容",
+          modelValue: activeSubTab,
+          options: [
+            { value: "index", label: "索引列表" },
+            { value: "settings", label: "扫描设置" },
+          ],
+          onUpdate: (value) => { activeSubTab.value = value === "settings" ? "settings" : "index"; },
+        },
+        {
+          id: "search",
+          kind: "text",
+          label: "搜索",
+          modelValue: searchQuery,
+          placeholder: "文件名、零件标识或路径",
+          mono: true,
+          onUpdate: (value) => { searchQuery.value = value; },
+        },
+        {
+          id: "status",
+          kind: "choice",
+          label: "状态",
+          modelValue: statusFilter,
+          options: [
+            { value: "all", label: "全部" },
+            { value: "present", label: "存在" },
+            { value: "missing", label: "缺失" },
+          ],
+          onUpdate: (value) => {
+            statusFilter.value = value === "present" || value === "missing" ? value : "all";
+          },
+        },
+        {
+          id: "kind",
+          kind: "select",
+          label: "资产类型",
+          modelValue: kindFilter,
+          options: KIND_OPTIONS,
+          onUpdate: (value) => {
+            kindFilter.value = KIND_OPTIONS.some((option) => option.value === value)
+              ? value as KindFilter
+              : "all";
+          },
+        },
+        { id: "result-count", kind: "readonly", label: "当前结果", value: entriesTotal },
+      ],
+      actions: [
+        { id: "refresh", label: "刷新", loading, run: () => refresh() },
+        {
+          id: "export",
+          label: "导出 JSON",
+          loading: exporting,
+          disabled: computed(() => !data.value?.exists),
+          run: onExportJson,
+        },
+        {
+          id: "purge",
+          label: computed(() => stats.value?.missing ? `删除缺失（${stats.value.missing}）` : "删除缺失"),
+          tone: "danger",
+          plain: true,
+          loading: purging,
+          disabled: computed(() => loading.value || scanning.value || !(stats.value?.missing)),
+          run: onPurgeMissing,
+        },
+      ],
+    },
+  ]),
+});
 
 onMounted(() => {
   applyInitialTabState();

@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { strToU8, zipSync } from "fflate";
 import { afterEach, describe, expect, it } from "vitest";
-import { pnwCreateDb } from "phoenix-wing/db/pnwDbAdapter";
+import { pnwCreateDb } from "@phoenix-wing/db-node";
 import { searchOutgoingRefs } from "./pnwBomXrefService.js";
 import {
   exportFcstdMapToJson,

@@ -11,12 +11,20 @@ import {
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useCodeRenamePropertySheet } from "../composables/useCodeRenamePropertySheet";
+import {
+  usePagePrimaryContribution,
+  type PagePrimarySection,
+} from "../composables/usePagePrimaryContribution";
 import { useWorksetPageScope } from "../composables/useWorksetPageScope";
 import { useFileWorksetsStore } from "../stores/fileWorksets";
 import {
   CODE_RENAME_LEVEL_OPTIONS,
   useCodeRenamePageStore,
 } from "../stores/codeRenamePage";
+
+const props = defineProps<{
+  workbenchTabId?: string;
+}>();
 
 const shell = useAppShell();
 const pageStore = useCodeRenamePageStore();
@@ -33,6 +41,17 @@ const loading = ref(false);
 const saving = ref(false);
 const previewing = ref(false);
 const applying = ref(false);
+const primaryWorksetOptions = computed(() => [
+  { value: "", label: "全工作空间" },
+  ...worksetStore.worksetOptions.map((workset) => ({
+    value: workset.id,
+    label: `${workset.label}（${workset.count}）`,
+  })),
+]);
+const encodingOptions = [
+  { value: "utf-8", label: "UTF-8" },
+  { value: "gbk", label: "GBK" },
+] as const;
 
 function openIgnorePanel() {
   void shell.openCodeIgnoreSidebar();
@@ -149,7 +168,138 @@ function schedulePrefsSave() {
   }, 400);
 }
 
+function updateRenameLevel(id: (typeof CODE_RENAME_LEVEL_OPTIONS)[number]["id"], checked: boolean) {
+  const next = new Set(pageStore.levels);
+  if (checked) next.add(id);
+  else next.delete(id);
+  if (!next.size) {
+    shell.setStatus("至少勾选一种改名级别");
+    return;
+  }
+  pageStore.toggleLevel(id, checked);
+  schedulePrefsSave();
+}
+
 useCodeRenamePropertySheet("code_rename", schedulePrefsSave, (msg) => shell.setStatus(msg));
+
+usePagePrimaryContribution("code_rename", props.workbenchTabId, {
+  summary: computed(() => {
+    if (!previewSummary.value) return "尚未预览改名命中";
+    return `命中 ${previewSummary.value.total_hits} 处 · 文本 ${previewSummary.value.text_files} 个`;
+  }),
+  sections: computed<PagePrimarySection[]>(() => [
+    {
+      id: "scope",
+      title: "运行范围",
+      description: "选择工作集后仅扫描该工作集；不选则处理整个工作空间。",
+      controls: [
+        {
+          id: "workset",
+          kind: "select",
+          label: "工作集",
+          modelValue: computed(() => worksetScope.worksetId.value ?? ""),
+          options: primaryWorksetOptions,
+          clearable: true,
+          onUpdate: (value) => {
+            worksetScope.worksetId.value = value || null;
+            worksetScope.scopeMode.value = value ? "workset" : "all";
+          },
+        },
+      ],
+      actions: [
+        { id: "ignore", label: "忽略设定", run: openIgnorePanel },
+      ],
+    },
+    {
+      id: "rename",
+      title: "改名规则",
+      controls: [
+        {
+          id: "old",
+          kind: "text",
+          label: "旧名",
+          modelValue: computed(() => pageStore.old),
+          placeholder: "精确匹配",
+          mono: true,
+          onUpdate: (value) => {
+            pageStore.setOld(value);
+            schedulePrefsSave();
+          },
+        },
+        {
+          id: "new",
+          kind: "text",
+          label: "新名",
+          modelValue: computed(() => pageStore.new),
+          mono: true,
+          onUpdate: (value) => {
+            pageStore.setNew(value);
+            schedulePrefsSave();
+          },
+        },
+        ...CODE_RENAME_LEVEL_OPTIONS.map((option) => ({
+          id: `level-${option.id}`,
+          kind: "boolean" as const,
+          label: option.label,
+          modelValue: computed(() => pageStore.levelSet.has(option.id)),
+          onUpdate: (checked: boolean) => updateRenameLevel(option.id, checked),
+        })),
+        {
+          id: "encoding",
+          kind: "select",
+          label: "写回编码",
+          modelValue: computed(() => pageStore.targetEncoding),
+          options: encodingOptions,
+          onUpdate: (value) => {
+            pageStore.setTargetEncoding(value === "gbk" ? "gbk" : "utf-8");
+            schedulePrefsSave();
+          },
+        },
+        {
+          id: "rescan",
+          kind: "boolean",
+          label: "完成后重扫 Code 索引",
+          modelValue: computed(() => pageStore.rescanIndex),
+          onUpdate: (checked) => {
+            pageStore.setRescanIndex(checked);
+            schedulePrefsSave();
+          },
+        },
+        {
+          id: "include-ignored",
+          kind: "boolean",
+          label: "包含忽略目录",
+          description: "会处理 code.ignore 覆盖的目录，使用时请确认范围。",
+          tone: "warning",
+          modelValue: computed(() => pageStore.includeIgnored),
+          onUpdate: (checked) => {
+            pageStore.setIncludeIgnored(checked);
+            schedulePrefsSave();
+          },
+        },
+      ],
+      actions: [
+        { id: "save", label: "保存偏好", loading: saving, run: onSavePrefs },
+        {
+          id: "preview",
+          label: "预览",
+          tone: "primary",
+          loading: previewing,
+          disabled: computed(() => !canRun.value),
+          run: onPreview,
+        },
+        {
+          id: "apply",
+          label: "执行改名",
+          tone: "danger",
+          loading: applying,
+          disabled: computed(() => !canRun.value),
+          run: onApply,
+        },
+      ],
+    },
+  ]),
+});
 
 onMounted(async () => {
   pageStore.hydrate(shell.workspacePath.value);

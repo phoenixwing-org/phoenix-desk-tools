@@ -5,7 +5,7 @@ import { pnwPropBool, pnwPropEnum, pnwPropGroup, pnwPropPath, pnwPropReadonly, p
 const PAGE_INTRO =
   "使用 freecadcmd 批量将 STEP 转为 FCStd。请在「配置」页设置 FreeCAD 安装目录。";
 
-const VIEW_FIT_OPTIONS = [
+export const STEP_VIEW_FIT_OPTIONS = [
   { value: "none", label: "不调整" },
   { value: "last", label: "最后一个" },
   { value: "all", label: "全部" },
@@ -67,7 +67,7 @@ export function useStepBatchPropertySheet(
           }),
           pnwPropEnum("view_fit", "视图适应", {
             value: computed(() => viewFit.value),
-            options: VIEW_FIT_OPTIONS,
+            options: STEP_VIEW_FIT_OPTIONS,
             onChange: (v) => {
               viewFit.value = v;
               onPersist();

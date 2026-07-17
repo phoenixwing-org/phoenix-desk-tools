@@ -19,6 +19,10 @@ import { useAppShell } from "../composables/useAppShell";
 import { useCodeIndexPropertySheet } from "../composables/useCodeIndexPropertySheet";
 import { usePageSession } from "../composables/usePageSession";
 import { usePageSummary } from "../composables/usePageSummary";
+import {
+  usePagePrimaryContribution,
+  type PagePrimarySection,
+} from "../composables/usePagePrimaryContribution";
 import { useFileWorksetsStore } from "../stores/fileWorksets";
 import { matchesWorksetPath, type WorksetPathLike } from "../utils/worksetPathMatch";
 
@@ -28,6 +32,7 @@ const props = defineProps<{
 
 const shell = useAppShell();
 const worksetStore = useFileWorksetsStore();
+const PAGE_ID = "code_index";
 
 // --- 工作集过滤 ---
 const filterWorksetId = ref("");
@@ -131,6 +136,13 @@ const allPageChecked = computed(
   () => entries.value.length > 0 && entries.value.every((r) => selectedPaths.value.has(r.repo_rel_path)),
 );
 const selectedCount = computed(() => selectedPaths.value.size);
+const primaryWorksetOptions = computed(() => [
+  { value: "", label: "全工作空间" },
+  ...worksetStore.worksetOptions.map((workset) => ({
+    value: workset.id,
+    label: `${workset.label}（${workset.count}）`,
+  })),
+]);
 
 function toggleRow(path: string, checked: boolean) {
   const next = new Set(selectedPaths.value);
@@ -446,6 +458,109 @@ watch([statusFilter, kindFilter, searchQuery, searchMode, pageOffset, pageSize],
 );
 watch([statusFilter, kindFilter, searchMode], () => scheduleEntriesReload(true));
 watch(searchQuery, () => scheduleEntriesReload(true));
+
+usePagePrimaryContribution(PAGE_ID, props.workbenchTabId, {
+  summary: computed(() => headSummary.value || "尚未扫描 Code 索引"),
+  sections: computed<PagePrimarySection[]>(() => [
+    {
+      id: "scope",
+      title: "索引范围",
+      description: "选择工作集只过滤当前结果；工程内搜索仍建立完整工作空间索引。",
+      controls: [
+        {
+          id: "workset",
+          kind: "select",
+          label: "结果工作集",
+          modelValue: filterWorksetId,
+          options: primaryWorksetOptions,
+          clearable: true,
+          onUpdate: (value) => { filterWorksetId.value = value; },
+        },
+        {
+          id: "query",
+          kind: "text",
+          label: "搜索",
+          modelValue: searchQuery,
+          placeholder: searchPlaceholder.value,
+          mono: true,
+          onUpdate: (value) => { searchQuery.value = value; },
+        },
+        {
+          id: "search-mode",
+          kind: "choice",
+          label: "匹配方式",
+          modelValue: searchMode,
+          options: SEARCH_MODE_OPTIONS,
+          onUpdate: (value) => {
+            searchMode.value = value === "filename" ? "filename" : "contains";
+          },
+        },
+      ],
+    },
+    {
+      id: "filters",
+      title: "结果筛选",
+      controls: [
+        {
+          id: "status",
+          kind: "choice",
+          label: "状态",
+          modelValue: statusFilter,
+          options: STATUS_OPTIONS,
+          onUpdate: (value) => {
+            statusFilter.value = value === "present" || value === "missing" ? value : "all";
+          },
+        },
+        {
+          id: "kind",
+          kind: "select",
+          label: "类型",
+          modelValue: kindFilter,
+          options: KIND_OPTIONS,
+          onUpdate: (value) => {
+            kindFilter.value = KIND_OPTIONS.some((option) => option.value === value)
+              ? value as KindFilter
+              : "all";
+          },
+        },
+        { id: "shown", kind: "readonly", label: "当前结果", value: entriesTotal },
+        { id: "missing", kind: "readonly", label: "缺失", value: missingCount },
+        { id: "selected", kind: "readonly", label: "已勾选", value: selectedCount },
+      ],
+      actions: [
+        {
+          id: "scan",
+          label: "工程内搜索",
+          tone: "primary",
+          loading: scanning,
+          run: onScan,
+        },
+        {
+          id: "refresh",
+          label: "刷新",
+          loading,
+          run: () => refresh(true),
+        },
+        {
+          id: "export",
+          label: "导出 JSON",
+          loading: exporting,
+          disabled: computed(() => !hasScan.value || !data.value?.file_count),
+          run: onExportJson,
+        },
+        {
+          id: "purge",
+          label: computed(() => missingCount.value ? `删除缺失（${missingCount.value}）` : "删除缺失"),
+          tone: "danger",
+          plain: true,
+          loading: purging,
+          disabled: computed(() => missingCount.value <= 0),
+          run: onPurgeMissing,
+        },
+      ],
+    },
+  ]),
+});
 
 onMounted(() => applyInitialTabState());
 </script>

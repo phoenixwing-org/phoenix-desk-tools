@@ -18,6 +18,10 @@ import { useAppShell } from "../composables/useAppShell";
 import { isDrawingFcstdFile } from "../composables/useDrawingBomReadonly";
 import { usePageSession } from "../composables/usePageSession";
 import type { PnwTableColumnDef } from "phoenix-wing";
+import {
+  usePagePrimaryContribution,
+  type PagePrimarySection,
+} from "../composables/usePagePrimaryContribution";
 
 const props = defineProps<{
   workbenchTabId?: string;
@@ -359,6 +363,76 @@ watch(
   },
   { immediate: true },
 );
+
+usePagePrimaryContribution("part_key_detail", props.workbenchTabId, {
+  summary: computed(() => detail.value
+    ? `${detail.value.part_key} · ${detail.value.file_count} 个关联文件`
+    : "输入 PartKey 或从工作空间树选择 FCStd"),
+  sections: computed<PagePrimarySection[]>(() => [
+    {
+      id: "part-key",
+      title: "零件上下文",
+      controls: [
+        {
+          id: "part-key-input",
+          kind: "text",
+          label: "PartKey",
+          modelValue: partKeyInput,
+          placeholder: "8001.001",
+          mono: true,
+          disabled: loading,
+          onUpdate: (value) => { partKeyInput.value = value; },
+        },
+        { id: "current", kind: "readonly", label: "当前零件", value: computed(() => currentPartKey.value || "—"), mono: true },
+        { id: "files", kind: "readonly", label: "关联文件", value: computed(() => detail.value?.file_count ?? 0) },
+        {
+          id: "present",
+          kind: "readonly",
+          label: "磁盘存在",
+          value: computed(() => detail.value?.files.filter((file) => file.file_status === "present").length ?? 0),
+        },
+        {
+          id: "missing",
+          kind: "readonly",
+          label: "磁盘缺失",
+          value: computed(() => detail.value?.files.filter((file) => file.file_status === "missing").length ?? 0),
+        },
+        {
+          id: "status",
+          kind: "choice",
+          label: "零件状态",
+          modelValue: computed(() => editForm.value.status),
+          disabled: computed(() => !detail.value),
+          options: [
+            { value: "active", label: "有效" },
+            { value: "obsolete", label: "失效" },
+          ],
+          onUpdate: (value) => {
+            editForm.value = { ...editForm.value, status: value === "obsolete" ? "obsolete" : "active" };
+          },
+        },
+        { id: "dirty", kind: "readonly", label: "未保存", value: computed(() => hasUnsavedEdits() ? "是" : "否") },
+      ],
+      actions: [
+        { id: "search", label: "检索", tone: "primary", loading, run: onSearchPartKey },
+        {
+          id: "refresh",
+          label: "刷新",
+          loading,
+          disabled: computed(() => !currentPartKey.value),
+          run: loadDetail,
+        },
+        {
+          id: "save",
+          label: "保存属性",
+          loading: saving,
+          disabled: computed(() => !detail.value || !hasUnsavedEdits()),
+          run: savePartMeta,
+        },
+      ],
+    },
+  ]),
+});
 
 onMounted(() => {
   initPage();

@@ -16,6 +16,10 @@ import { usePageSession } from "../composables/usePageSession";
 import { pnwPromptChoice } from "phoenix-wing";
 import type { FileDetailSubTab } from "../types/fileDetail";
 import { normalizeFileDetailSubTab } from "../types/fileDetail";
+import {
+  usePagePrimaryContribution,
+  type PagePrimarySection,
+} from "../composables/usePagePrimaryContribution";
 
 const props = defineProps<{
   workbenchTabId?: string;
@@ -356,6 +360,54 @@ watch(
   },
   { immediate: true },
 );
+
+usePagePrimaryContribution("file_detail", props.workbenchTabId, {
+  summary: computed(() => rel.value
+    ? `${originalFilename.value || rel.value} · 入向 ${incomingCount.value} · 出向 ${outgoingCount.value}`
+    : "请从工作空间树选择文件"),
+  sections: computed<PagePrimarySection[]>(() => [
+    {
+      id: "document",
+      title: "当前文件",
+      controls: [
+        { id: "name", kind: "readonly", label: "文件", value: computed(() => originalFilename.value || "—"), mono: true },
+        { id: "path", kind: "readonly", label: "路径", value: computed(() => rel.value || "—"), mono: true },
+        {
+          id: "view",
+          kind: "choice",
+          label: "中央内容",
+          modelValue: activeSubTab,
+          options: [
+            { value: "overview", label: "属性" },
+            { value: "edit", label: editSubTabLabel.value },
+            { value: "xref", label: `引用（${incomingCount.value + outgoingCount.value}）` },
+            ...(showAssemblyTab.value ? [{ value: "assembly", label: "装配结构" }] : []),
+          ],
+          onUpdate: (value) => switchSubTab(normalizeFileDetailSubTab(value)),
+        },
+        { id: "incoming", kind: "readonly", label: "被引用", value: incomingCount },
+        { id: "outgoing", kind: "readonly", label: "出向引用", value: outgoingCount },
+        { id: "dirty", kind: "readonly", label: "未保存", value: computed(() => hasUnsavedEdits() ? "是" : "否") },
+      ],
+      actions: [
+        {
+          id: "reload",
+          label: "重新载入",
+          loading,
+          disabled: computed(() => !rel.value),
+          run: () => reloadFile(),
+        },
+        {
+          id: "rename",
+          label: "改名",
+          tone: "primary",
+          disabled: computed(() => !rel.value || !originalFilename.value),
+          run: () => triggerRename(),
+        },
+      ],
+    },
+  ]),
+});
 
 onMounted(() => {
   void bootstrapFileDetail();

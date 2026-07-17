@@ -168,7 +168,7 @@ function visibleFeatures(moduleId: NavModuleId): NavItem[] {
         <li>模块偏好保存在当前工作空间 SQLite；欢迎页最近工程可设 CAD / Code / 全部。</li>
         <li>首次使用请在配置中填写工作空间根目录。</li>
         <li>「CAD 索引」扫描后，BOM 与文件详情属性才完整可用。</li>
-        <li>运行日志在侧栏，便于查看批量任务输出。</li>
+        <li>预检、问题与运行日志固定在下方全局面板，切换 View 后仍会保留。</li>
       </ul>
     </section>
   </div>

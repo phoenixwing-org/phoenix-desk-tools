@@ -18,6 +18,10 @@ import type { PnwTableColumnDef } from "phoenix-wing";
 import { useWorkspaceFileQuery } from "../composables/useWorkspaceFileQuery";
 import { BOM_FIELD_LABELS as L } from "../utils/bomFieldLabels";
 import { basenameFromRel, normalizeRepoRelForApi } from "../utils/workspaceFileQuery";
+import {
+  usePagePrimaryContribution,
+  type PagePrimarySection,
+} from "../composables/usePagePrimaryContribution";
 
 const props = defineProps<{
   workbenchTabId?: string;
@@ -216,6 +220,58 @@ watch(activeSubTab, (tab) => {
   if (tab === "catalog" && !catalogHosts.value.length && hasIndex.value) {
     void loadCatalog();
   }
+});
+
+usePagePrimaryContribution("bom_export", props.workbenchTabId, {
+  summary: computed(() => meta.value
+    ? `总成 ${catalogHosts.value.length} · 引用边 ${meta.value.edge_count}`
+    : "尚未加载 BOM 引用信息"),
+  sections: computed<PagePrimarySection[]>(() => [
+    {
+      id: "catalog",
+      title: "BOM 目录",
+      controls: [
+        {
+          id: "view",
+          kind: "choice",
+          label: "中央内容",
+          modelValue: activeSubTab,
+          options: [
+            { value: "catalog", label: "总成列表" },
+            { value: "settings", label: "说明" },
+          ],
+          onUpdate: (value) => { activeSubTab.value = value === "settings" ? "settings" : "catalog"; },
+        },
+        {
+          id: "search",
+          kind: "text",
+          label: "筛选总成",
+          modelValue: catalogSearch,
+          placeholder: "文件名、路径、零件号或名称",
+          onUpdate: (value) => { catalogSearch.value = value; },
+        },
+        { id: "hosts", kind: "readonly", label: "总成", value: computed(() => catalogHosts.value.length) },
+        { id: "visible", kind: "readonly", label: "当前显示", value: computed(() => catalogFiltered.value.length) },
+        { id: "edges", kind: "readonly", label: "引用边", value: computed(() => meta.value?.edge_count ?? 0) },
+        { id: "picked", kind: "readonly", label: "树选择", value: computed(() => pickedRel.value || "—"), mono: true },
+      ],
+      actions: [
+        { id: "refresh", label: "刷新列表", tone: "primary", loading: catalogLoading, run: loadCatalog },
+        { id: "rebuild", label: "仅重建引用表", loading: rebuilding, run: onRebuild },
+        {
+          id: "clear",
+          label: "清空筛选",
+          disabled: computed(() => !catalogSearch.value),
+          run: () => { catalogSearch.value = ""; },
+        },
+        ...(!hasIndex.value ? [{
+          id: "cad-index",
+          label: "去 CAD 索引",
+          run: () => shell.goToPage("fcstd_map"),
+        }] : []),
+      ],
+    },
+  ]),
 });
 
 onMounted(() => {

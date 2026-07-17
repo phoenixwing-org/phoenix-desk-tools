@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { pnwCreateDb, type PnwDbAdapter } from "phoenix-wing/db/pnwDbAdapter";
+import { pnwCreateDb, type PnwDbAdapter } from "@phoenix-wing/db-node";
 import type { UnitTestCatalog, UnitTestSuiteId } from "./unitTestService.js";
 import { runtimeAppConfigPath, runtimeCatalogDatabasePath } from "./appRuntimePaths.js";
 

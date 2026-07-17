@@ -3,7 +3,12 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import { pnwCreateDb } from "phoenix-wing/db/pnwDbAdapter";
+import { pnwCreateDb } from "@phoenix-wing/db-node";
+import schemaFixture from "@phoenix-wing/workspace-schema/fixtures/workspace-schema-compatibility-v1.json" with { type: "json" };
+import {
+  PNW_WORKSPACE_SCHEMA_VERSION,
+  pnwClassifyWorkspaceSchemaVersion,
+} from "@phoenix-wing/workspace-schema";
 import {
   ensurePhoenixDatabase,
   getPhoenixDatabaseStatus,
@@ -24,6 +29,15 @@ afterEach(() => {
 });
 
 describe("Phoenix workspace database", () => {
+  it("直接消费 Registry schema fixture 并对未知版本 fail-closed", () => {
+    expect(PNW_WORKSPACE_SCHEMA_VERSION).toBe(schemaFixture.current_version);
+    for (const item of schemaFixture.cases) {
+      const classification = pnwClassifyWorkspaceSchemaVersion(item.actual_version);
+      expect(classification).toBe(item.classification);
+      expect(classification === "current").toBe(item.may_write);
+    }
+  });
+
   it("migrates a legacy WAL database before the WASM adapter opens it", () => {
     const workspace = makeWorkspace();
     const filename = path.join(workspace, ".phoenix", "phoenix-workspace.sqlite");

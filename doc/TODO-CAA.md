@@ -1,5 +1,7 @@
 # CAA 模块 — 待办（TODO-CAA）
 
+> 状态：superseded（冻结历史快照）。当前未完成项已合并到 [总待办](TODO.md#域待办汇总)，请勿在本文件继续更新状态。
+
 > **总索引**：[TODO.md](TODO.md)  
 > **概览**：[caa/CAA模块-概览.md](caa/CAA模块-概览.md)  
 > **规划**：[caa/CAA对话框-Web编辑器-规划.md](caa/CAA对话框-Web编辑器-规划.md)  

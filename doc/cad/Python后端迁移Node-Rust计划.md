@@ -3,6 +3,8 @@
 > 策略：新增 `cad-rust` 模块（`cr_` 前缀页面），与 Python CAD 模块并行共存。
 > 用户对比测试通过后，去掉 Python 后端和旧 CAD 模块。
 
+> 本文记录 Desk Tools 内部 Python → Node/Rust 的历史迁移设计。2026-07 起，Rust/CAD core 提升为 Wing 跨语言共享真源的后续工作，以 [Wing 共享 CAD 核心迁移计划](Wing共享CAD核心迁移计划.md) 为准。
+
 ## 1. 总体策略
 
 ### 1.1 三模块架构

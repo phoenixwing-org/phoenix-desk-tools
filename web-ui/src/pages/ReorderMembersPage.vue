@@ -18,8 +18,19 @@ import GitRevertWorktreeButton from "../components/git/GitRevertWorktreeButton.v
 import { useAppShell } from "../composables/useAppShell";
 import { useReorderMembersPageStore } from "../stores/reorderMembersPage";
 import { useFileWorksetsStore } from "../stores/fileWorksets";
-import { useReorderMembersPropertySheet } from "../composables/useReorderMembersPropertySheet";
+import {
+  KEVIN_SYSTEM_CODE_OPTIONS,
+  useReorderMembersPropertySheet,
+} from "../composables/useReorderMembersPropertySheet";
+import {
+  usePagePrimaryContribution,
+  type PagePrimarySection,
+} from "../composables/usePagePrimaryContribution";
 import { formatFileAtRepoDir } from "../utils/workspaceFileQuery";
+
+const props = defineProps<{
+  workbenchTabId?: string;
+}>();
 
 const shell = useAppShell();
 const pageStore = useReorderMembersPageStore();
@@ -35,9 +46,9 @@ type ChangedFileRow = {
 };
 
 // --- 工作集选择（页头 combo） ---
-const selectedWorksetId = ref(pageStore.selectedWorksetId || "");
-watch(selectedWorksetId, (v) => {
-  pageStore.setSelectedWorksetId(v || null);
+const selectedWorksetId = computed({
+  get: () => pageStore.selectedWorksetId || "",
+  set: (value: string) => pageStore.setSelectedWorksetId(value || null),
 });
 
 const selectedWorkset = computed(() => {
@@ -51,6 +62,13 @@ const worksetPathsForApi = computed(() => {
   const entries = ws.entries ?? ws.paths;
   return (entries ?? []).map((e: any) => (typeof e === "string" ? e : e.path));
 });
+const primaryWorksetOptions = computed(() => [
+  { value: "", label: "全工作空间" },
+  ...worksetStore.worksetOptions.map((workset) => ({
+    value: workset.id,
+    label: `${workset.label}（${workset.count}）`,
+  })),
+]);
 
 // --- 解析预览（可选的预检前预览文件列表） ---
 const resolvedFiles = ref<string[]>([]);
@@ -229,6 +247,22 @@ useReorderMembersPropertySheet(
   (msg) => shell.setStatus(msg),
 );
 
+function updateIncludeCpp(checked: boolean) {
+  if (!pageStore.setIncludeCpp(checked)) {
+    shell.setStatus("至少勾选一种源文件类型");
+    return;
+  }
+  schedulePrefsSave();
+}
+
+function updateIncludeHeader(checked: boolean) {
+  if (!pageStore.setIncludeHeader(checked)) {
+    shell.setStatus("至少勾选一种源文件类型");
+    return;
+  }
+  schedulePrefsSave();
+}
+
 async function onSave() {
   saving.value = true;
   try {
@@ -337,6 +371,99 @@ async function loadPrefsFromApi() {
     shell.setStatus(String(e));
   }
 }
+
+usePagePrimaryContribution("reorder_members", props.workbenchTabId, {
+  summary: computed(() => lastRunSummary.value
+    || (resolvedFiles.value.length ? `当前范围 ${resolvedFiles.value.length} 个 C++ 文件` : "尚未预检成员排序")),
+  sections: computed<PagePrimarySection[]>(() => [
+    {
+      id: "scope",
+      title: "运行范围",
+      description: "选择工作集限制处理范围；不选择时扫描整个工作空间。",
+      controls: [
+        {
+          id: "workset",
+          kind: "select",
+          label: "工作集",
+          modelValue: selectedWorksetId,
+          options: primaryWorksetOptions,
+          clearable: true,
+          onUpdate: (value) => { selectedWorksetId.value = value; },
+        },
+        {
+          id: "resolved-count",
+          kind: "readonly",
+          label: "预检文件",
+          value: computed(() => resolvedFiles.value.length || "—"),
+        },
+      ],
+      actions: [
+        { id: "resolve", label: "预检范围", loading: resolving, run: onResolve },
+        { id: "ignore", label: "忽略设定", run: openIgnorePanel },
+      ],
+    },
+    {
+      id: "options",
+      title: "排序选项",
+      controls: [
+        {
+          id: "cpp",
+          kind: "boolean",
+          label: ".cpp",
+          modelValue: computed(() => pageStore.includeCpp),
+          onUpdate: updateIncludeCpp,
+        },
+        {
+          id: "header",
+          kind: "boolean",
+          label: "头文件（.h / .hpp）",
+          modelValue: computed(() => pageStore.includeHeader),
+          onUpdate: updateIncludeHeader,
+        },
+        {
+          id: "verbose",
+          kind: "boolean",
+          label: "详细日志",
+          modelValue: computed(() => pageStore.verbose),
+          onUpdate: (checked) => {
+            pageStore.setVerbose(checked);
+            schedulePrefsSave();
+          },
+        },
+        {
+          id: "kevin-mode",
+          kind: "select",
+          label: "KEVIN_SYSTEM_CODE",
+          modelValue: computed(() => pageStore.kevinSystemCodeMode),
+          options: KEVIN_SYSTEM_CODE_OPTIONS,
+          description: KEVIN_SYSTEM_CODE_OPTIONS.find((option) => option.value === pageStore.kevinSystemCodeMode)
+            ?.description,
+          onUpdate: (value) => {
+            pageStore.setKevinSystemCodeMode(value as typeof pageStore.kevinSystemCodeMode);
+            schedulePrefsSave();
+          },
+        },
+      ],
+      actions: [
+        { id: "save", label: "保存偏好", loading: saving, run: onSave },
+        {
+          id: "dry-run",
+          label: "预检",
+          tone: "primary",
+          loading: running,
+          run: () => onRun(true),
+        },
+        {
+          id: "apply",
+          label: "执行排序",
+          tone: "danger",
+          loading: running,
+          run: () => onRun(false),
+        },
+      ],
+    },
+  ]),
+});
 </script>
 
 <template>

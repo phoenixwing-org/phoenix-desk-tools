@@ -1,4 +1,6 @@
-# CAD 数据库表结构（schema v10）
+# CAD 数据库表结构（schema v10 历史快照）
+
+> 注意：当前 Node 生产实现已经使用 Schema v13，以 `server/src/lib/phoenixDatabaseService.ts` 的 `PHOENIX_SCHEMA_VERSION` 为准；本文的 v10 表清单尚未完成 v13 对齐，不能作为迁移或建库真源。数据库契约提升至 Wing 的工作见 [Wing 共享 CAD 核心迁移计划](Wing共享CAD核心迁移计划.md)。
 
 > [文档索引](../文档索引.md) · 历史决策：[CAD数据库表结构-重命名规划.md](CAD数据库表结构-重命名规划.md)  
 > DDL 真源：`phoenix/freecad/phoenix_schema.py` · 访问：`phoenix_store.connect`

@@ -12,6 +12,14 @@ import {
 import { useAppShell } from "../composables/useAppShell";
 import { useTestFixturesPropertySheet } from "../composables/useTestFixturesPropertySheet";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
+import {
+  usePagePrimaryContribution,
+  type PagePrimarySection,
+} from "../composables/usePagePrimaryContribution";
+
+const props = defineProps<{
+  workbenchTabId?: string;
+}>();
 
 const shell = useAppShell();
 const loading = ref(false);
@@ -185,6 +193,59 @@ useTestFixturesPropertySheet("test_fixtures", {
   checkedOutCount,
   loading,
   syncing,
+});
+
+usePagePrimaryContribution("test_fixtures", props.workbenchTabId, {
+  summary: computed(() => `已启用 ${enabledCount.value} / ${items.value.length} · 已检出 ${checkedOutCount.value}`),
+  sections: computed<PagePrimarySection[]>(() => [
+    {
+      id: "checkout",
+      title: "检出目录",
+      controls: [
+        {
+          id: "root",
+          kind: "text",
+          label: "本机检出根",
+          modelValue: checkoutRootInput,
+          placeholder: "默认使用桌面应用数据目录",
+          mono: true,
+          disabled: syncing,
+          onUpdate: (value) => { checkoutRootInput.value = value; },
+        },
+        { id: "enabled", kind: "readonly", label: "已启用", value: enabledCount },
+        { id: "checked-out", kind: "readonly", label: "已检出", value: checkedOutCount },
+      ],
+      actions: [
+        { id: "default", label: "使用默认目录", disabled: syncing, run: useDefaultCheckoutRoot },
+        { id: "browse", label: "浏览…", loading: pickingRoot, disabled: syncing, run: browseCheckoutRoot },
+        { id: "refresh", label: "刷新状态", loading, disabled: syncing, run: reload },
+      ],
+    },
+    {
+      id: "projects",
+      title: "测试工程",
+      description: "勾选需要引用的系统内置工程，再执行检出。",
+      controls: items.value.map((item) => ({
+        id: `fixture-${item.name}`,
+        kind: "boolean" as const,
+        label: item.name,
+        description: item.checkout_exists ? "已检出" : item.description,
+        modelValue: computed(() => isEnabled(item.name)),
+        disabled: syncing,
+        onUpdate: (checked: boolean) => { void onToggleEnabled(item.name, checked); },
+      })),
+      actions: [
+        {
+          id: "sync",
+          label: primaryActionLabel,
+          tone: "primary",
+          loading: computed(() => syncing.value && !busyName.value),
+          disabled: computed(() => !enabledCount.value || (syncing.value && Boolean(busyName.value))),
+          run: syncFixtures,
+        },
+      ],
+    },
+  ]),
 });
 </script>
 

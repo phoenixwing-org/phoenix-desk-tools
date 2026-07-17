@@ -53,9 +53,9 @@ const TOUR_STEPS: DriveStep[] = [
   {
     element: "[data-tour='shell-log']",
     popover: {
-      title: "运行日志",
-      description: "批量扫描、STEP 转换等任务的输出会追加到这里；可在配置或侧栏调整高度与展开。",
-      side: "left",
+      title: "下方全局面板",
+      description: "预检、问题和所有模块的运行输出固定显示在这里；切换 View 不会销毁面板内容。",
+      side: "top",
       align: "end",
     },
   },

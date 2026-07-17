@@ -43,6 +43,7 @@ export const RIBBON_PAGE_ICONS: Record<string, Component> = {
   code_index: Files,
   code_ignore: Operation,
   reorder_members: Sort,
+  kt_codegen: Operation,
   code_rename: Refresh,
   code_uuid: MagicStick,
   unit_tests: Monitor,

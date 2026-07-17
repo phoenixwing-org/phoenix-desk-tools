@@ -1,10 +1,10 @@
 # Tauri 构建启动与验收指南
 
-> 更新于 2026-07-11。当前验收对象和产物哈希以 [Tauri 迁移当前状态基线](tauri-当前迁移状态基线.md) 为准。本文只记录当前 Tauri 2、Node sidecar 和 Rust FCStd 产品链；旧 Python 桌面启动器和 Python HTTP 服务不是生产启动方式。
+> 更新于 2026-07-17。当前 macOS 验收对象和产物哈希以 [Tauri 0.2.0 macOS 发布态验收](tauri-0.2.0-macOS发布态验收.md) 为准。本文只记录当前 Tauri 2、Node sidecar 和 Rust FCStd 产品链；旧 Python 桌面启动器和 Python HTTP 服务不是生产启动方式。下文 Windows 0.1.0 产物只保留历史迁移证据，不能计作当前 0.2.0 NSIS。
 
 ## 1. 构建环境
 
-已验证环境为 Windows x64、Node 22.16、pnpm 9.15、Rust MSVC stable、Tauri CLI 2.11。官方安装包使用 Tauri NSIS；当前 bundler 需要 NSIS 3.11 和 `nsis_tauri_utils` 0.5.3。
+已验证环境包括 macOS arm64 当前 0.2.0 release，以及 Windows x64 历史 0.1.0 迁移产物。官方 Windows 安装包使用 Tauri NSIS；当前 0.2.0 仍需 Windows runner/VM 重建验证。
 
 FreeCAD、SolidWorks 和系统 Git 不是构建 Tauri 壳的前置条件。Git 只影响 Git 页面和相应发行版自检；FreeCAD/SolidWorks 只影响各自外部引擎页面的成功执行。
 
@@ -31,6 +31,22 @@ debug Tauri 可以复用健康的 5180 开发服务。release 不允许复用，
 
 ## 3. Release 与安装包
 
+macOS 0.2.0 当前门禁：
+
+```bash
+pnpm verify:tauri-release:macos
+```
+
+该命令重建未签名 `.app`，再用隔离用户目录启动真实 Tauri 进程，完成健康、Codegen、真实 FCStd 和退出回收验收。已有产物可用 `pnpm -C server smoke:tauri-release-app` 复验。
+
+Windows 0.2.0 当前目标：
+
+```powershell
+pnpm verify:tauri-release:windows
+```
+
+该入口会执行当前 NSIS 的构建、一次性安装、卸载登记/快捷方式检查、安装态 Codegen 与 FCStd 代表链、正常退出和静默卸载，并写机器可读回执。详细成功条件见 [Windows 发布态门禁待办](tauri-Windows发布态门禁-待办.md)；必须以真实 runner 回执为准。
+
 构建可执行文件及相邻运行时：
 
 ```powershell
@@ -44,7 +60,7 @@ cargo tauri build --no-bundle
 pnpm tauri:installer
 ```
 
-当前产物：
+下表 Windows 产物是 2026-07-11 的 0.1.0 历史基线，不是当前 0.2.0：
 
 | 产物 | 路径 |
 | --- | --- |
@@ -56,9 +72,9 @@ pnpm tauri:installer
 
 2026-07-11 的 NSIS 产物为 26,037,429 字节，SHA256 为 `E3239C4C5737C4AD31F00AFDECD1A91CC7765D191164AE1D917F03D5CD24DA64`。重新构建后必须重新记录哈希。
 
-当前阶段应先验收上述冻结产物，不要在页面验收前无理由重新构建；否则必须先更新状态基线中的所有受影响哈希，避免把不同二进制的结果混在同一结论中。
+当前 0.2.0 Windows 验收必须重新构建同版本产物并记录新哈希，不得复用上述 0.1.0 结果。
 
-## 4. 已完成的产物验收
+## 4. 已完成的历史 Windows 产物验收
 
 停止开发后端并确认 5180 空闲后，直接启动 release EXE，已取得以下证据：
 
@@ -69,7 +85,7 @@ pnpm tauri:installer
 5. 配置页“退出 Phoenix”确认后，Tauri 和 Node 子进程均退出，5180 释放。
 6. 5180 被开发服务占用时，release 明确报错并写 `phoenix-startup-error.log`，不会静默借用开发服务。
 
-NSIS 已在 Codex 隔离账户上下文完成安装、从安装目录启动、安装态 14/14 自检、确认退出和卸载目录清理。Windows 会把该上下文的 shell known-folder/注册表写入隔离用户位置；因此开始菜单目标和卸载登记不作为普通用户证据。正式签收前仍需在普通用户上下文运行一次 setup，检查开始菜单、“已安装的应用”和逐页工作流后再卸载。
+0.1.0 NSIS 曾在 Codex 隔离账户上下文完成安装、从安装目录启动、安装态 14/14 自检、确认退出和卸载目录清理。它只证明迁移方案曾走通，不证明当前 0.2.0。0.2.0 仍需在 Windows 普通用户上下文运行 setup，检查开始菜单、“已安装的应用”和代表性工作流后再卸载。
 
 ## 5. 每次发布必须检查
 

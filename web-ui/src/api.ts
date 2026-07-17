@@ -1,6 +1,12 @@
 import type { AppConfig, LauncherPrefs, ShellLayout, WorkspaceNavModules } from "./types/config";
 import type { ModuleScope } from "./constants/moduleScope";
 import type { GitChangesPayload, GitCommitResult, GitFileDiff, GitWorkspaceInfo } from "./types/gitWorkspace";
+import type {
+  KtCodegenParam,
+  KtCodegenPlan,
+  KtCodegenDiagnostic,
+  KtCodegenTableData,
+} from "@phoenix-wing/kt-codegen";
 import { apiUrl, invokeTauri, isTauriRuntime } from "./utils/runtimeBridge";
 
 export type TreeNode = {
@@ -105,6 +111,17 @@ function formatApiErrorDetail(detail: unknown): string {
   return String(detail);
 }
 
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly payload: unknown,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   if (init?.body != null && init.body !== "" && !headers.has("Content-Type")) {
@@ -126,7 +143,7 @@ async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
         ? (data as { detail: unknown }).detail
         : res.statusText;
     const detail = formatApiErrorDetail(rawDetail);
-    throw new Error(detail || `HTTP ${res.status}`);
+    throw new ApiError(detail || `HTTP ${res.status}`, res.status, data);
   }
   return data as T;
 }
@@ -1616,6 +1633,204 @@ export function exportPartDedupCsv(results?: PartDedupScanResult["results"]) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(results ? { results } : {}),
+  });
+}
+
+export type KtCodegenDocumentFormat = "legacy-v4-json" | "legacy-17-column-csv";
+
+export type KtCodegenDocumentSummary = {
+  path: string;
+  file_name: string;
+  format: KtCodegenDocumentFormat;
+  class_name: string;
+  item_count: number;
+  diagnostic_count: number;
+};
+
+export type KtCodegenHostDocument = KtCodegenDocumentSummary & {
+  kind: "kt.codegen.host-document";
+  schema_version: 1;
+  fingerprint: string;
+  file_signature: string;
+  document_revision: number;
+  encoding: "utf8" | "utf8-bom" | "gbk";
+  param: KtCodegenParam;
+  table: KtCodegenTableData;
+  diagnostics: KtCodegenDiagnostic[];
+};
+
+export type KtCodegenDocumentsPayload = {
+  workspace: string;
+  documents: KtCodegenDocumentSummary[];
+  scanned_file_count: number;
+  truncated: boolean;
+  cache_hit_count: number;
+  files_read: number;
+  config_snapshot_bytes: number;
+  config_scan_byte_limit_reached: boolean;
+};
+
+export type KtCodegenPreflightPayload = {
+  plan: KtCodegenPlan;
+  plan_fingerprint: string;
+  safe_to_apply: boolean;
+  reused: boolean;
+  created_at: string;
+  indexed_file_count: number;
+  candidate_file_count: number;
+  source_scan_truncated: boolean;
+  source_scan_byte_limit_reached: boolean;
+  source_snapshot_bytes: number;
+  source_cache_hits: number;
+  source_files_read: number;
+  source_file_signatures: Record<string, string>;
+  source_file_fingerprints: Record<string, string>;
+  source_candidates: KtCodegenSourceCandidateSummary[];
+  source_candidates_truncated: boolean;
+};
+
+export type KtCodegenAppliedFile = {
+  path: string;
+  encoding: "utf8" | "utf8-bom" | "gbk";
+  eol: "lf" | "crlf";
+  region_count: number;
+  bytes_before: number;
+  bytes_after: number;
+  fingerprint_before: string;
+  fingerprint_after: string;
+};
+
+export type KtCodegenApplyPayload = {
+  kind: "kt.codegen.apply-result";
+  schema_version: 1;
+  applied_at: string;
+  plan_fingerprint: string;
+  region_count: number;
+  files: KtCodegenAppliedFile[];
+  diagnostics: KtCodegenDiagnostic[];
+  verified: true;
+};
+
+export type KtCodegenSourceCandidateSummary = {
+  path: string;
+  fingerprint: string;
+  encoding: "utf8" | "utf8-bom" | "gbk";
+  eol: "lf" | "crlf";
+  marker_line: number;
+};
+
+export type KtCodegenSourcePreviewPayload = {
+  path: string;
+  fingerprint: string;
+  file_signature: string;
+  expected_fingerprint: string;
+  stale: boolean;
+  encoding: "utf8" | "utf8-bom" | "gbk";
+  eol: "lf" | "crlf";
+  focus_start_line: number;
+  focus_end_line: number;
+  from_line: number;
+  to_line: number;
+  lines: Array<{ number: number; text: string; focus: boolean }>;
+};
+
+export type KtCodegenFileStatePayload = {
+  path: string;
+  exists: boolean;
+  file_signature: string;
+  fingerprint: string;
+  changed: boolean;
+};
+
+export type KtCodegenFileStatesPayload = {
+  files: KtCodegenFileStatePayload[];
+  changed_count: number;
+};
+
+export function fetchKtCodegenDocuments(options?: { signal?: AbortSignal }) {
+  return jsonFetch<KtCodegenDocumentsPayload>("/api/code/codegen/documents", {
+    signal: options?.signal,
+  });
+}
+
+export function openKtCodegenDocument(path: string) {
+  return jsonFetch<KtCodegenHostDocument>("/api/code/codegen/open", {
+    method: "POST",
+    body: JSON.stringify({ path }),
+  });
+}
+
+export function fetchKtCodegenDocumentState(body: {
+  path: string;
+  expected_file_signature: string;
+  expected_fingerprint: string;
+}, options?: { signal?: AbortSignal }) {
+  return jsonFetch<KtCodegenFileStatePayload>("/api/code/codegen/document-state", {
+    method: "POST",
+    body: JSON.stringify(body),
+    signal: options?.signal,
+  });
+}
+
+export function fetchKtCodegenSourceStates(files: Array<{
+  path: string;
+  expected_file_signature: string;
+  expected_fingerprint: string;
+}>, options?: { signal?: AbortSignal }) {
+  return jsonFetch<KtCodegenFileStatesPayload>("/api/code/codegen/source-states", {
+    method: "POST",
+    body: JSON.stringify({ files }),
+    signal: options?.signal,
+  });
+}
+
+export function saveKtCodegenDocument(body: {
+  path: string;
+  fingerprint: string;
+  param: KtCodegenParam;
+  table: KtCodegenTableData;
+}) {
+  return jsonFetch<KtCodegenHostDocument>("/api/code/codegen/document", {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+export function runKtCodegenPreflight(body: {
+  param: KtCodegenParam;
+  table: KtCodegenTableData;
+  block_keys: string[];
+}, options?: { signal?: AbortSignal }) {
+  return jsonFetch<KtCodegenPreflightPayload>("/api/code/codegen/preflight", {
+    method: "POST",
+    body: JSON.stringify(body),
+    signal: options?.signal,
+  });
+}
+
+export function applyKtCodegenPlan(body: {
+  param: KtCodegenParam;
+  table: KtCodegenTableData;
+  block_keys: string[];
+  expected_plan_fingerprint: string;
+}) {
+  return jsonFetch<KtCodegenApplyPayload>("/api/code/codegen/apply", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function fetchKtCodegenSourcePreview(body: {
+  path: string;
+  start_line: number;
+  end_line: number;
+  expected_fingerprint: string;
+  context_lines?: number;
+}, options?: { signal?: AbortSignal }) {
+  return jsonFetch<KtCodegenSourcePreviewPayload>("/api/code/codegen/source-preview", {
+    method: "POST",
+    body: JSON.stringify(body),
+    signal: options?.signal,
   });
 }
 

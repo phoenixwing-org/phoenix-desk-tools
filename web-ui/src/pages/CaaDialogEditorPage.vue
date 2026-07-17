@@ -11,6 +11,7 @@ import {
 } from "@desk-tools/catdlg-core";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import CaaDialogEditorView from "../components/caa/CaaDialogEditorView.vue";
+import CaaDialogPrimaryBlock from "../components/caa/CaaDialogPrimaryBlock.vue";
 import CaaNlsSupplementDialog from "../components/caa/CaaNlsSupplementDialog.vue";
 import CaaControlContextMenu from "../components/caa/CaaControlContextMenu.vue";
 import CaaDropOverlay from "../components/caa/CaaDropOverlay.vue";
@@ -41,6 +42,7 @@ import { CAA_CONTROL_KEY, type CaaContextMenuItem } from "../composables/useCaaC
 import { useAppShell } from "../composables/useAppShell";
 import { usePageSession } from "../composables/usePageSession";
 import { usePageSummary } from "../composables/usePageSummary";
+import { usePagePrimaryContribution } from "../composables/usePagePrimaryContribution";
 import { useCaaDialogPageStore } from "../stores/caaDialogPage";
 import type { CaaDialogIr, CaaDialogNode } from "../types/caaDialogIr";
 import type { CaaDialogDraft } from "../types/caaDialogDraft";
@@ -57,6 +59,9 @@ const props = defineProps<{
 
 const shell = useAppShell();
 const store = useCaaDialogPageStore();
+usePagePrimaryContribution(PAGE_ID, props.workbenchTabId, {
+  content: { component: CaaDialogPrimaryBlock },
+});
 
 useCaaDialogPropertySheet(PAGE_ID, {
   onNlsChange(change) {

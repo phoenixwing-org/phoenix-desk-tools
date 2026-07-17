@@ -11,11 +11,10 @@ import WelcomePage from "../pages/WelcomePage.vue";
 import WorkbenchIdlePage from "../pages/WorkbenchIdlePage.vue";
 import PlaceholderPage from "../pages/PlaceholderPage.vue";
 import { PAGE_COMPONENTS } from "./pageRegistry";
-import { pnwSideDockVisibility } from "phoenix-wing";
+import { isPageSideBlockOpen } from "../composables/usePageSideBlockVisibility";
 import { pnwBindPointerDrag } from "phoenix-wing";
 import { fetchPhoenixDatabaseStatus, recreatePhoenixDatabase } from "../api";
 import { provideAppShell } from "../composables/useAppShell";
-import { isCaaEditorPage } from "../constants/caaPages";
 import { WORKBENCH_IDLE_PAGE } from "../constants/workbench";
 import { usePnwDocumentTitle } from "phoenix-wing";
 import { useWorkspaceSwitcher } from "../composables/useWorkspaceSwitcher";
@@ -23,6 +22,7 @@ import ChoiceDialogHost from "phoenix-wing/components/PnwChoiceDialogHost.vue";
 import GitDiffPreviewHost from "../components/git/GitDiffPreviewHost.vue";
 import CaaRelatedFilePreviewHost from "../components/caa/CaaRelatedFilePreviewHost.vue";
 import AsyncProgressOverlay from "phoenix-wing/components/PnwAsyncProgressOverlay.vue";
+import GlobalWorkbenchBottomPanel from "../components/workbench/GlobalWorkbenchBottomPanel.vue";
 
 const shell = provideAppShell();
 const { workspacePath, workspaceShort } = useWorkspaceSwitcher(shell);
@@ -44,6 +44,9 @@ const ribbonLayout = computed(() => uiPrefs.ribbonLayoutMode === "inline" ? "inl
 
 const shellLayout = computed(() => shell.shellLayout.value);
 const navigation = computed(() => shell.appConfig.value?.navigation ?? []);
+const activePageBlockId = computed(() => isPageSideBlockOpen(shell.currentPage.value)
+  ? shell.currentPage.value
+  : "");
 
 const pageLabel = computed(() => {
   const page = shell.currentPage.value;
@@ -72,12 +75,35 @@ watch(ribbonActiveTab, (tabId) => {
   else shell.workbenchFocusScope.value = "all";
 });
 
-const dockVis = computed(() =>
-  pnwSideDockVisibility(shellLayout.value, {
-    onGitPage: shell.currentPage.value === "git",
-    onCaaPage: isCaaEditorPage(shell.currentPage.value),
-  }),
-);
+const dockVis = computed(() => {
+  const layout = shellLayout.value;
+  const rightShowTree = layout.right_panel_open;
+  const rightShowProps = layout.properties_panel_open;
+  const rightShowGitCommit = shell.currentPage.value === "git" && layout.git_commit_panel_open;
+  const rightShowWorkset = layout.workset_panel_open;
+  return {
+    // 左栏只承载页面贡献的 VS Code 式 Block；系统块统一固定在右栏。
+    leftVisible: Boolean(activePageBlockId.value),
+    leftShowTree: false,
+    leftShowLog: false,
+    leftShowProps: false,
+    leftShowGitCommit: false,
+    leftShowWorkset: false,
+    leftPageBlockId: activePageBlockId.value,
+    rightShowTree,
+    // 运行日志只允许出现在 AppShell 的全局底部面板。
+    rightShowLog: false,
+    rightShowProps,
+    rightShowGitCommit,
+    rightShowWorkset,
+    rightVisible: Boolean(
+      rightShowTree
+      || rightShowProps
+      || rightShowGitCommit
+      || rightShowWorkset
+    ),
+  };
+});
 
 const leftPanelWidth = computed(() => `${shellLayout.value.left_panel_width_px}px`);
 const rightPanelWidth = computed(() => `${shellLayout.value.right_panel_width_px}px`);
@@ -99,12 +125,13 @@ function onResizeStart(e: PointerEvent, side: "left" | "right") {
   const widthKey = side === "left" ? "left_panel_width_px" : "right_panel_width_px";
   const startX = e.clientX;
   const startW = shell.shellLayout.value[widthKey];
+  const minWidth = side === "left" ? 240 : 220;
 
   pnwBindPointerDrag(e, {
     cursor: "col-resize",
     onMove(ev) {
       const delta = side === "right" ? startX - ev.clientX : ev.clientX - startX;
-      const next = Math.min(560, Math.max(160, startW + delta));
+      const next = Math.min(560, Math.max(minWidth, startW + delta));
       shell.shellLayout.value[widthKey] = next;
     },
     onEnd() {
@@ -224,6 +251,7 @@ onUnmounted(() => {
             <WorkbenchIdlePage v-else key="workbench-idle" />
           </KeepAlive>
         </div>
+        <GlobalWorkbenchBottomPanel v-if="!isWelcomeFullscreen" />
       </main>
       <div
         v-if="!isWelcomeFullscreen && dockVis.leftVisible"
@@ -236,8 +264,8 @@ onUnmounted(() => {
         v-if="!isWelcomeFullscreen && dockVis.leftVisible"
         dock-side="left"
         :show-tree="dockVis.leftShowTree"
-        :show-caa-tree="dockVis.leftShowCaaTree"
-        :show-log="dockVis.leftShowLog"
+        :page-block-id="dockVis.leftPageBlockId"
+        :page-block-tab-id="activeTab?.id ?? ''"
         :show-props="dockVis.leftShowProps"
         :show-git-commit="dockVis.leftShowGitCommit"
         :show-workset-block="dockVis.leftShowWorkset"
@@ -253,7 +281,8 @@ onUnmounted(() => {
         v-if="!isWelcomeFullscreen && dockVis.rightVisible"
         dock-side="right"
         :show-tree="dockVis.rightShowTree"
-        :show-log="dockVis.rightShowLog"
+        page-block-id=""
+        page-block-tab-id=""
         :show-props="dockVis.rightShowProps"
         :show-git-commit="dockVis.rightShowGitCommit"
         :show-workset-block="dockVis.rightShowWorkset"

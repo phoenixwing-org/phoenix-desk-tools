@@ -17,8 +17,16 @@ import { pnwPromptChoice } from "phoenix-wing";
 import { useGitPropertySheet } from "../composables/useGitPropertySheet";
 import { useGitPathFilter } from "../composables/useGitPathFilter";
 import { useGitPageState } from "../composables/useGitPageState";
+import {
+  usePagePrimaryContribution,
+  type PagePrimarySection,
+} from "../composables/usePagePrimaryContribution";
 import { pushGitPathFilterHistory } from "../utils/gitPathFilterPrefs";
 import type { GitChangeEntry, GitChangesPayload, GitWorkspaceInfo } from "../types/gitWorkspace";
+
+const props = defineProps<{
+  workbenchTabId?: string;
+}>();
 
 const shell = useAppShell();
 const gitPageState = useGitPageState();
@@ -276,6 +284,140 @@ async function onBulkRevert(
     bulkBusy.value = null;
   }
 }
+
+usePagePrimaryContribution("git", props.workbenchTabId, {
+  summary: computed(() => {
+    if (loadError.value) return "Git 状态加载失败";
+    if (!gitInfo.value?.git_installed) return "本机未检测到 Git";
+    if (!gitInfo.value.repo_initialized) return "当前工作空间尚未初始化 Git";
+    const total = (changesPayload.value?.staged_count ?? 0)
+      + (changesPayload.value?.changes.length ?? 0)
+      + (changesPayload.value?.untracked_count ?? 0);
+    return total ? `工作区共 ${total} 项变更` : "工作区干净";
+  }),
+  sections: computed<PagePrimarySection[]>(() => [
+    {
+      id: "repository",
+      title: "仓库",
+      controls: [
+        {
+          id: "root",
+          kind: "readonly",
+          label: "Git 根",
+          value: computed(() => gitInfo.value?.git_root_display || "—"),
+          mono: true,
+        },
+        { id: "staged", kind: "readonly", label: "已暂存", value: computed(() => changesPayload.value?.staged_count ?? 0) },
+        { id: "changes", kind: "readonly", label: "更改", value: computed(() => changesPayload.value?.changes.length ?? 0) },
+        { id: "untracked", kind: "readonly", label: "未跟踪", value: computed(() => changesPayload.value?.untracked_count ?? 0) },
+      ],
+      actions: [
+        { id: "refresh", label: "刷新", loading, run: refresh },
+        {
+          id: "init",
+          label: "初始化 Git",
+          tone: "primary",
+          loading: initLoading,
+          disabled: computed(() => !gitInfo.value?.git_installed || Boolean(gitInfo.value?.repo_initialized)),
+          run: onInitGit,
+        },
+      ],
+    },
+    {
+      id: "filter",
+      title: "变更 View",
+      controls: [
+        {
+          id: "path-filter",
+          kind: "text",
+          label: "路径筛选",
+          description: "多个词以空格或逗号分隔，路径需同时包含所有词。",
+          modelValue: computed(() => filterTags.value.join(" ")),
+          placeholder: "模块、目录或扩展名",
+          mono: true,
+          onUpdate: (value) => {
+            filterTags.value = value.split(/[\s,，]+/).map((tag) => tag.trim()).filter(Boolean);
+          },
+        },
+        {
+          id: "view-mode",
+          kind: "choice",
+          label: "列表模式",
+          modelValue: gitPageState.listViewMode,
+          options: [
+            { value: "file", label: "文件" },
+            { value: "tree", label: "目录树" },
+          ],
+          onUpdate: (value) => gitPageState.setListViewMode(value === "tree" ? "tree" : "file"),
+        },
+        {
+          id: "show-staged",
+          kind: "boolean",
+          label: "显示已暂存",
+          modelValue: computed(() => sectionOpen.value.staged),
+          onUpdate: (checked) => { sectionOpen.value = { ...sectionOpen.value, staged: checked }; },
+        },
+        {
+          id: "show-changes",
+          kind: "boolean",
+          label: "显示更改",
+          modelValue: computed(() => sectionOpen.value.changes),
+          onUpdate: (checked) => { sectionOpen.value = { ...sectionOpen.value, changes: checked }; },
+        },
+        {
+          id: "show-untracked",
+          kind: "boolean",
+          label: "显示未跟踪",
+          modelValue: computed(() => sectionOpen.value.untracked),
+          onUpdate: (checked) => { sectionOpen.value = { ...sectionOpen.value, untracked: checked }; },
+        },
+      ],
+      actions: [
+        {
+          id: "remember-filter",
+          label: "记住筛选",
+          disabled: computed(() => !filterTags.value.length),
+          run: rememberFilters,
+        },
+        {
+          id: "clear-filter",
+          label: "清空筛选",
+          disabled: computed(() => !filterTags.value.length),
+          run: () => { filterTags.value = []; },
+        },
+      ],
+    },
+    {
+      id: "stage",
+      title: "暂存操作",
+      description: "提交说明与 Commit 固定在右侧 Secondary；这里管理当前筛选结果的暂存状态。",
+      actions: [
+        {
+          id: "unstage",
+          label: computed(() => `取消暂存（${filteredStaged.value.length}）`),
+          disabled: computed(() => !gitReady.value || !filteredStaged.value.length),
+          loading: computed(() => bulkBusy.value?.section === "staged"),
+          run: () => onBulkUnstage(filteredStaged.value),
+        },
+        {
+          id: "stage-changes",
+          label: computed(() => `暂存更改（${filteredChanges.value.length}）`),
+          tone: "primary",
+          disabled: computed(() => !gitReady.value || !filteredChanges.value.length),
+          loading: computed(() => bulkBusy.value?.section === "changes"),
+          run: () => onBulkStage("changes", filteredChanges.value),
+        },
+        {
+          id: "stage-untracked",
+          label: computed(() => `暂存未跟踪（${filteredUntracked.value.length}）`),
+          disabled: computed(() => !gitReady.value || !filteredUntracked.value.length),
+          loading: computed(() => bulkBusy.value?.section === "untracked"),
+          run: () => onBulkStage("untracked", filteredUntracked.value),
+        },
+      ],
+    },
+  ]),
+});
 
 onMounted(() => {
   void shell.setPropertiesOpen(true);

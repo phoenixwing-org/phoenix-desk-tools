@@ -10,12 +10,23 @@ import {
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import GitDiffPreviewButton from "../components/git/GitDiffPreviewButton.vue";
 import { useAppShell } from "../composables/useAppShell";
-import { useCodeUuidPropertySheet } from "../composables/useCodeUuidPropertySheet";
+import {
+  CODE_UUID_STRATEGY_OPTIONS,
+  useCodeUuidPropertySheet,
+} from "../composables/useCodeUuidPropertySheet";
+import {
+  usePagePrimaryContribution,
+  type PagePrimarySection,
+} from "../composables/usePagePrimaryContribution";
 import { pnwPromptChoice } from "phoenix-wing";
 import { useWorksetPageScope } from "../composables/useWorksetPageScope";
 import { useFileWorksetsStore } from "../stores/fileWorksets";
 import { usePnwResizableTable, type PnwTableColumnDef } from "phoenix-wing";
 import { basenameFromRel, repoDirFromRel } from "../utils/workspaceFileQuery";
+
+const props = defineProps<{
+  workbenchTabId?: string;
+}>();
 
 const hitColumns: PnwTableColumnDef[] = [
   { key: "check", label: "", width: 40, minWidth: 40 },
@@ -60,6 +71,13 @@ const engineMessage = ref("");
 
 const scanning = ref(false);
 const applying = ref(false);
+const primaryWorksetOptions = computed(() => [
+  { value: "", label: "全工作空间" },
+  ...worksetStore.worksetOptions.map((workset) => ({
+    value: workset.id,
+    label: `${workset.label}（${workset.count}）`,
+  })),
+]);
 
 const selectedCount = computed(() => selected.value.size);
 const allChecked = computed(
@@ -286,6 +304,94 @@ function thClass(key: string) {
   if (key === "filename") return "sticky-col-left sticky-col-filename filename-cell";
   return "";
 }
+
+usePagePrimaryContribution("code_uuid", props.workbenchTabId, {
+  summary: computed(() => hits.value.length
+    ? `命中 ${hits.value.length} 条 · ${uniqueUuidCount.value} 组 · 已选 ${selectedCount.value}`
+    : "尚未扫描 UUID"),
+  sections: computed<PagePrimarySection[]>(() => [
+    {
+      id: "scope",
+      title: "扫描范围",
+      description: "使用工作集可限制扫描文件；忽略规则与其他 Code 工具共用。",
+      controls: [
+        {
+          id: "workset",
+          kind: "select",
+          label: "工作集",
+          modelValue: computed(() => worksetScope.worksetId.value ?? ""),
+          options: primaryWorksetOptions,
+          clearable: true,
+          onUpdate: (value) => {
+            worksetScope.worksetId.value = value || null;
+            worksetScope.scopeMode.value = value ? "workset" : "all";
+          },
+        },
+        {
+          id: "guid32",
+          kind: "boolean",
+          label: "包含 32 位 GUID",
+          modelValue: includeGuid32,
+          onUpdate: (checked) => { includeGuid32.value = checked; },
+        },
+      ],
+      actions: [
+        { id: "scan", label: "扫描 UUID", tone: "primary", loading: scanning, run: onScan },
+        {
+          id: "scan-active",
+          label: computed(() => `当前工作集（${wsPathCount.value}）`),
+          loading: scanning,
+          disabled: computed(() => wsPathCount.value <= 0),
+          run: scanFromActiveWorkset,
+        },
+        { id: "ignore", label: "忽略设定", run: openIgnorePanel },
+      ],
+    },
+    {
+      id: "replace",
+      title: "替换计划",
+      controls: [
+        {
+          id: "strategy",
+          kind: "select",
+          label: "替换策略",
+          modelValue: strategy,
+          options: CODE_UUID_STRATEGY_OPTIONS,
+          description: CODE_UUID_STRATEGY_OPTIONS.find((option) => option.value === strategy.value)?.description,
+          onUpdate: (value) => {
+            strategy.value = value === "fresh_per_hit" ? "fresh_per_hit" : "map_per_value";
+          },
+        },
+        { id: "hits", kind: "readonly", label: "命中", value: computed(() => hits.value.length) },
+        { id: "groups", kind: "readonly", label: "UUID 组", value: uniqueUuidCount },
+        { id: "selected", kind: "readonly", label: "已选", value: selectedCount },
+      ],
+      actions: [
+        {
+          id: "toggle-all",
+          label: computed(() => allChecked.value ? "取消全选" : "全选命中"),
+          disabled: computed(() => !hits.value.length),
+          run: () => toggleAll(!allChecked.value),
+        },
+        {
+          id: "dry-run",
+          label: "预检",
+          loading: applying,
+          disabled: computed(() => !selectedCount.value),
+          run: () => onApply(true),
+        },
+        {
+          id: "apply",
+          label: "执行替换",
+          tone: "danger",
+          loading: applying,
+          disabled: computed(() => !selectedCount.value),
+          run: () => onApply(false),
+        },
+      ],
+    },
+  ]),
+});
 </script>
 
 <template>

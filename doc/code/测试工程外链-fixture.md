@@ -6,14 +6,14 @@ Phoenix 的部分 Code 回归（**成员排序**、**UUID 扫描**）依赖真�
 
 | 层级 | 文件 | 提交 Git | 内容 |
 | --- | --- | --- | --- |
-| **内置清单** | [`phoenix/config/test_fixture_catalog.json`](../phoenix/config/test_fixture_catalog.json) | 是 | 已编码的开源工程：名称、Gitee `clone_url`、fixture 路径、用途说明 |
+| **内置清单** | [`phoenix/config/test_fixture_catalog.json`](../../phoenix/config/test_fixture_catalog.json) | 是 | 已编码的开源工程：名称、Gitee `clone_url`、fixture 路径、用途说明 |
 | **本机偏好** | `launcher.json` → `test_fixtures` | 否 | 用户检出根目录、`enabled` 勾选列表 |
 
 Web **系统 → 引用测试工程** 读取内置清单展示卡片；勾选与检出目录写入本机 `launcher.json`。
 
 ## 内置工程
 
-配置见 [`phoenix/config/test_fixture_catalog.json`](../phoenix/config/test_fixture_catalog.json)。
+配置见 [`phoenix/config/test_fixture_catalog.json`](../../phoenix/config/test_fixture_catalog.json)。
 
 | 目录名 | 开源仓库 | 用途 |
 | --- | --- | --- |

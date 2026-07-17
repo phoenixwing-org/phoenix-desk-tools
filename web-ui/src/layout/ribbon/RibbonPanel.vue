@@ -7,7 +7,6 @@ import RibbonGroup, { type RibbonGroupItem } from "./RibbonGroup.vue";
 import RibbonModuleToggles from "./RibbonModuleToggles.vue";
 import RibbonWorkspaceSwitcher from "./RibbonWorkspaceSwitcher.vue";
 import RibbonToolButton from "./RibbonToolButton.vue";
-import RibbonPanelUtils from "./RibbonPanelUtils.vue";
 import { RIBBON_SHELL_TAB_ID, type RibbonGroupDef, type RibbonTabDef } from "./ribbonConfig";
 import { ribbonIconFor } from "./ribbonIcons";
 import { CAA_EDITOR_PAGE_ID, CAA_HOME_PAGE_ID } from "../../constants/caaPages";
@@ -95,9 +94,6 @@ const isShellTab = computed(() => props.tab.id === RIBBON_SHELL_TAB_ID);
       <RibbonWorkspaceSwitcher v-if="isShellTab" :layout="isInline ? 'inline' : 'group'" />
       <RibbonModuleToggles v-if="isShellTab" :layout="isInline ? 'inline' : 'group'" />
       <div class="ribbon-panel-spacer" aria-hidden="true" />
-      <div class="ribbon-panel-utils" :class="{ 'layout-inline': isInline }">
-        <RibbonPanelUtils :layout="isInline ? 'inline' : 'group'" />
-      </div>
     </div>
   </div>
 </template>
@@ -129,18 +125,6 @@ const isShellTab = computed(() => props.tab.id === RIBBON_SHELL_TAB_ID);
 .ribbon-panel-spacer {
   flex: 1;
   min-width: 8px;
-}
-
-.ribbon-panel-utils {
-  display: flex;
-  align-items: stretch;
-  flex-shrink: 0;
-  padding: 0 4px 0 0;
-}
-
-.ribbon-panel-utils.layout-inline {
-  align-items: center;
-  padding-right: 2px;
 }
 
 .ribbon-panel-inline {

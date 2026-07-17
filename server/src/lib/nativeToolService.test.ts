@@ -22,13 +22,19 @@ afterEach(() => {
 });
 
 describe("nativeToolService", () => {
-  it("prefers an explicit environment override and reports both tools", () => {
+  it("prefers explicit environment overrides and reports all provider tools", () => {
     const root = tempRoot();
     const read = path.join(root, "custom-read.exe");
     const xlink = path.join(root, "custom-xlink.exe");
+    const query = path.join(root, "custom-query.exe");
     fs.writeFileSync(read, "fixture");
     fs.writeFileSync(xlink, "fixture");
-    const env = { PHOENIX_FCSTD_READ: read, PHOENIX_FCSTD_XLINK: xlink };
+    fs.writeFileSync(query, "fixture");
+    const env = {
+      PHOENIX_FCSTD_READ: read,
+      PHOENIX_FCSTD_XLINK: xlink,
+      PHOENIX_FCSTD_QUERY: query,
+    };
 
     expect(resolveNativeTool("fcstd-read", { env, platform: "win32", serverRoot: root })).toBe(read);
     expect(nativeToolStatus({ env, platform: "win32", serverRoot: root })).toMatchObject({
@@ -36,11 +42,12 @@ describe("nativeToolService", () => {
       tools: [
         { name: "fcstd-read", available: true, path: read },
         { name: "fcstd-xlink", available: true, path: xlink },
+        { name: "fcstd-query", available: true, path: query },
       ],
     });
   });
 
-  it("uses stable bin before Cargo outputs and gives an actionable missing error", () => {
+  it("uses stable bin without treating legacy crate targets as runtime sources", () => {
     const root = tempRoot();
     const stable = path.join(root, "bin", "fcstd-read");
     const release = path.join(root, "cli", "target", "release", "fcstd-read");
@@ -50,8 +57,8 @@ describe("nativeToolService", () => {
     fs.writeFileSync(release, "release");
 
     const options = { env: {}, platform: "linux" as const, serverRoot: root };
-    expect(nativeToolCandidates("fcstd-read", options).indexOf(stable))
-      .toBeLessThan(nativeToolCandidates("fcstd-read", options).indexOf(release));
+    expect(nativeToolCandidates("fcstd-read", options)).toContain(stable);
+    expect(nativeToolCandidates("fcstd-read", options)).not.toContain(release);
     expect(resolveNativeTool("fcstd-read", options)).toBe(stable);
     expect(() => requireNativeTool("fcstd-xlink", options)).toThrow(/pnpm build:native/);
   });

@@ -40,6 +40,12 @@ import { createBlankCaaDialogIr } from "../utils/createBlankCaaDialogIr";
 import { acknowledgeCaaDialogOpenRequests, fetchCaaDialogOpenRequests, saveCaaDraft } from "../api/caaDialog";
 import type { CaaDialogDraft } from "../types/caaDialogDraft";
 import { resolveTabForModuleScope } from "../utils/moduleScopeNavigation";
+import {
+  findKtCodegenDocumentTab,
+  KT_CODEGEN_PAGE_ID,
+  normalizeKtCodegenDocumentPath,
+  reusableKtCodegenBlankTab,
+} from "../utils/ktCodegenTabBinding";
 
 export { WORKBENCH_IDLE_PAGE };
 
@@ -116,6 +122,8 @@ export type AppShellContext = {
       baseline?: Partial<BomFields>;
     },
   ) => void;
+  /** 一个配置文档对应一个 KT Codegen View；重复打开只激活既有 Tab。 */
+  openKtCodegenDocument: (repoRelPath: string) => string | undefined;
   openCaaDialogForRel: (opts: {
     catDlgRel: string;
     dialogName?: string;
@@ -175,7 +183,10 @@ export type AppShellContext = {
   closeAllTabs: () => Promise<boolean>;
   getTab: (tabId: string) => WorkbenchTab | undefined;
   activeTab: () => WorkbenchTab | undefined;
-  updateTab: (tabId: string, patch: Partial<Pick<WorkbenchTab, "title" | "subtitle" | "dirty">>) => void;
+  updateTab: (
+    tabId: string,
+    patch: Partial<Pick<WorkbenchTab, "title" | "subtitle" | "contextKey" | "dirty">>,
+  ) => void;
   setTabDirty: (tabId: string, dirty: boolean) => void;
   consumeTabPayload: (tabId: string) => WorkbenchTabPayload | undefined;
   consumeTabPageState: (tabId: string) => Record<string, unknown> | undefined;
@@ -198,20 +209,20 @@ const DEFAULT_SHELL: ShellLayout = {
   ribbon_mode: 1,
   right_panel_open: true,
   mid_right_sash_px: null,
-  left_panel_width_px: 300,
+  left_panel_width_px: 320,
   right_panel_width_px: 300,
   log_panel_open: true,
   log_panel_height_px: 180,
   log_auto_open_on_append: true,
   workspace_tree_dock: "right",
-  shell_log_dock: "left",
+  shell_log_dock: "right",
   properties_panel_open: true,
   properties_panel_height_px: 220,
   properties_footer_height_px: 160,
-  properties_panel_dock: "left",
+  properties_panel_dock: "right",
   properties_name_col_width_px: 132,
   git_commit_panel_open: true,
-  git_commit_panel_dock: "left",
+  git_commit_panel_dock: "right",
   workset_panel_dock: "right",
   workset_panel_open: false,
 };
@@ -259,11 +270,23 @@ function sanitizeShellLayoutPatch(patch: Partial<ShellLayout>): Partial<ShellLay
   if (out.ribbon_mode != null) {
     out.ribbon_mode = clampPxInt(out.ribbon_mode, 0, 1) as 0 | 1;
   }
+  // 框架布局约束：左侧仅承载 Primary；树、属性与 Git 固定右侧。
+  // shell_log_dock 仅为后端兼容字段，运行日志始终由下方全局面板承载。
+  out.workspace_tree_dock = "right";
+  out.shell_log_dock = "right";
+  out.properties_panel_dock = "right";
+  out.git_commit_panel_dock = "right";
+  out.workset_panel_dock = "right";
   return out;
 }
 
 function normalizeShellLayout(partial?: Partial<ShellLayout>): ShellLayout {
   const merged = { ...DEFAULT_SHELL, ...partial };
+  merged.workspace_tree_dock = "right";
+  merged.shell_log_dock = "right";
+  merged.properties_panel_dock = "right";
+  merged.git_commit_panel_dock = "right";
+  merged.workset_panel_dock = "right";
   merged.right_panel_width_px = clampPanelWidth(merged.right_panel_width_px);
   if (typeof merged.left_panel_width_px !== "number" || merged.left_panel_width_px < 160) {
     merged.left_panel_width_px = merged.right_panel_width_px;
@@ -276,17 +299,11 @@ function normalizeShellLayout(partial?: Partial<ShellLayout>): ShellLayout {
   if (typeof merged.properties_footer_height_px !== "number" || merged.properties_footer_height_px < 80) {
     merged.properties_footer_height_px = DEFAULT_SHELL.properties_footer_height_px;
   }
-  if (merged.properties_panel_dock !== "left" && merged.properties_panel_dock !== "right") {
-    merged.properties_panel_dock = DEFAULT_SHELL.properties_panel_dock;
-  }
   if (typeof merged.properties_panel_open !== "boolean") {
     merged.properties_panel_open = DEFAULT_SHELL.properties_panel_open;
   }
   if (typeof merged.git_commit_panel_open !== "boolean") {
     merged.git_commit_panel_open = DEFAULT_SHELL.git_commit_panel_open;
-  }
-  if (merged.git_commit_panel_dock !== "left" && merged.git_commit_panel_dock !== "right") {
-    merged.git_commit_panel_dock = merged.properties_panel_dock;
   }
   if (typeof merged.properties_name_col_width_px !== "number" || merged.properties_name_col_width_px < 72) {
     merged.properties_name_col_width_px = readLegacyNameColWidth() ?? DEFAULT_SHELL.properties_name_col_width_px;
@@ -663,7 +680,7 @@ export function provideAppShell(): AppShellContext {
     const wantOpen =
       opts?.open ??
       (shellLayout.value.log_auto_open_on_append && !logAutoOpenSuppressed.value);
-    if (wantOpen && shellLayout.value.right_panel_open && !shellLayout.value.log_panel_open) {
+    if (wantOpen && !shellLayout.value.log_panel_open) {
       shellLayout.value = { ...shellLayout.value, log_panel_open: true };
       void persistShellLayout({ log_panel_open: true });
     }
@@ -744,6 +761,45 @@ export function provideAppShell(): AppShellContext {
       });
     } catch (e) {
       setStatus(String(e));
+    }
+  }
+
+  function openKtCodegenDocument(repoRelPath: string): string | undefined {
+    const rel = normalizeKtCodegenDocumentPath(repoRelPath);
+    if (!rel || !requireWorkspace()) return undefined;
+
+    const existing = findKtCodegenDocumentTab(wb.tabs.value, rel);
+    if (existing) {
+      existing.title = basenameFromRel(rel);
+      existing.subtitle = rel;
+      existing.contextKey = rel;
+      shellActivateTab(existing.id);
+      return existing.id;
+    }
+
+    // Ribbon 首次进入会产生一个尚未绑定文档的空 View；第一次选择直接绑定它，
+    // 后续不同文档才创建新 View，避免留下无意义的空白 Tab。
+    const active = reusableKtCodegenBlankTab(wb.tabs.value, wb.activeTabId.value);
+    if (active) {
+      active.title = basenameFromRel(rel);
+      active.subtitle = rel;
+      active.contextKey = rel;
+      scheduleWorkbenchSave();
+      shellActivateTab(active.id);
+      return active.id;
+    }
+
+    try {
+      return shellOpenTab({
+        pageId: KT_CODEGEN_PAGE_ID,
+        title: basenameFromRel(rel),
+        subtitle: rel,
+        contextKey: rel,
+        forceNew: true,
+      });
+    } catch (error) {
+      setStatus(String(error));
+      return undefined;
     }
   }
 
@@ -1255,7 +1311,15 @@ export function provideAppShell(): AppShellContext {
     if (!Object.keys(safe).length) return;
     shellLayout.value = normalizeShellLayout({ ...shellLayout.value, ...safe });
     const updated = await patchShellLayout(safe);
-    shellLayout.value = normalizeShellLayout({ ...shellLayout.value, ...updated });
+    // API 返回完整 shell_layout；这里只接受本次补丁涉及的字段，避免并发面板操作
+    // 的旧响应覆盖其他区域刚刚更新的开关或尺寸。
+    const responsePatch = Object.fromEntries(
+      (Object.keys(safe) as (keyof ShellLayout)[]).map((key) => [
+        key,
+        updated[key] ?? safe[key],
+      ]),
+    ) as Partial<ShellLayout>;
+    shellLayout.value = normalizeShellLayout({ ...shellLayout.value, ...responsePatch });
   }
 
   async function persistNavModules(enabled: string[]) {
@@ -1582,6 +1646,7 @@ export function provideAppShell(): AppShellContext {
     openPartKeyDetail,
     openBomApplyForRel,
     openFileDetailForRel,
+    openKtCodegenDocument,
     openCaaDialogForRel,
     openNewCaaDialog,
     openCaaDialogForDraft,

@@ -2,7 +2,7 @@ import { computed, type Ref } from "vue";
 import { usePnwPagePropertySheet } from "phoenix-wing";
 import { pnwPropBool, pnwPropEnum, pnwPropGroup, pnwPropNumber, pnwPropPath, pnwPropReadonly, pnwPropSheet } from "phoenix-wing";
 
-const EXT_OPTIONS = [".FCStd", ".SLDPRT", ".SLDASM", ".SLDDRW", ".step", ".stp"];
+export const PART_DEDUP_EXTENSION_OPTIONS = [".FCStd", ".SLDPRT", ".SLDASM", ".SLDDRW", ".step", ".stp"];
 
 const PAGE_INTRO = "按扩展名扫描目录，检测文件名、编号、编号+版本三类重复。";
 
@@ -50,7 +50,7 @@ export function usePartDedupPropertySheet(
           }),
           pnwPropEnum("extension", "扩展名", {
             value: computed(() => extension.value),
-            options: EXT_OPTIONS.map((ext) => ({ value: ext, label: ext })),
+            options: PART_DEDUP_EXTENSION_OPTIONS.map((ext) => ({ value: ext, label: ext })),
             onChange: (v) => {
               extension.value = v;
               onPersist();

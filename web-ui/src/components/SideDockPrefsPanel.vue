@@ -1,212 +1,66 @@
 <script setup lang="ts">
-import type { SideDock } from "../types/config";
-import { useSideDockPrefs } from "../composables/useSideDockPrefs";
+import WorkbenchPanelToggleIcon from "./workbench/WorkbenchPanelToggleIcon.vue";
+import { useShellPanelToggles } from "../composables/useShellPanelToggles";
 
-withDefaults(
-  defineProps<{
-    compact?: boolean;
-  }>(),
-  {
-    compact: false,
-  },
-);
+withDefaults(defineProps<{ compact?: boolean }>(), { compact: false });
 
 const {
-  treeDock,
-  logDock,
-  propsDock,
-  treePanelOpen,
-  logPanelOpen,
-  propsPanelOpen,
-  gitCommitPanelOpen,
-  gitCommitDock,
-  onGitPage,
-  setTreeDock,
-  setLogDock,
-  setPropsDock,
-  setGitCommitDock,
-  setTreePanelOpen,
-  setLogPanelOpen,
-  setPropsPanelOpen,
-  setGitCommitPanelOpen,
-} = useSideDockPrefs();
+  leftSidebarOpen,
+  rightSidebarOpen,
+  logOpen: bottomPanelOpen,
+  toggleLeftSidebar,
+  toggleRightSidebar,
+  toggleLog: toggleBottomPanel,
+} = useShellPanelToggles();
 
-function onDockChange(
-  setter: (side: SideDock) => void | Promise<void>,
-  v: SideDock | string | number | boolean | undefined,
-) {
-  if (v === "left" || v === "right") void setter(v);
-}
-
-function onOpenChange(setter: (open: boolean) => void | Promise<void>, v: string | number | boolean) {
-  void setter(Boolean(v));
+function setPanel(open: boolean, current: boolean, toggle: () => void | Promise<void>): void {
+  if (open === current) return;
+  void toggle();
 }
 </script>
 
 <template>
   <div class="side-dock-panel" :class="{ compact }">
-    <el-form label-position="top" class="dock-form">
-      <div class="dock-block-list" role="list">
-        <div class="dock-block-row" role="listitem">
-          <span class="dock-block-label">工作空间树</span>
-          <el-radio-group
-            :model-value="treeDock"
-            size="small"
-            class="dock-side-group"
-            @update:model-value="(v: string | number | boolean | undefined) => onDockChange(setTreeDock, v)"
-          >
-            <el-radio-button value="left">左</el-radio-button>
-            <el-radio-button value="right">右</el-radio-button>
-          </el-radio-group>
-          <div class="dock-block-show">
-            <span class="dock-show-label">显示</span>
-            <el-switch
-              :model-value="treePanelOpen"
-              size="small"
-              @update:model-value="(v: string | number | boolean) => onOpenChange(setTreePanelOpen, v)"
-            />
-          </div>
-        </div>
-
-        <div class="dock-block-row" role="listitem">
-          <span class="dock-block-label">页面属性</span>
-          <el-radio-group
-            :model-value="propsDock"
-            size="small"
-            class="dock-side-group"
-            @update:model-value="(v: string | number | boolean | undefined) => onDockChange(setPropsDock, v)"
-          >
-            <el-radio-button value="left">左</el-radio-button>
-            <el-radio-button value="right">右</el-radio-button>
-          </el-radio-group>
-          <div class="dock-block-show">
-            <span class="dock-show-label">显示</span>
-            <el-switch
-              :model-value="propsPanelOpen"
-              size="small"
-              @update:model-value="(v: string | number | boolean) => onOpenChange(setPropsPanelOpen, v)"
-            />
-          </div>
-        </div>
-
-        <div v-if="onGitPage" class="dock-block-row" role="listitem">
-          <span class="dock-block-label">Git 提交</span>
-          <el-radio-group
-            :model-value="gitCommitDock"
-            size="small"
-            class="dock-side-group"
-            @update:model-value="(v: string | number | boolean | undefined) => onDockChange(setGitCommitDock, v)"
-          >
-            <el-radio-button value="left">左</el-radio-button>
-            <el-radio-button value="right">右</el-radio-button>
-          </el-radio-group>
-          <div class="dock-block-show">
-            <span class="dock-show-label">显示</span>
-            <el-switch
-              :model-value="gitCommitPanelOpen"
-              size="small"
-              @update:model-value="(v: string | number | boolean) => onOpenChange(setGitCommitPanelOpen, v)"
-            />
-          </div>
-        </div>
-
-        <div class="dock-block-row" role="listitem">
-          <span class="dock-block-label">运行日志</span>
-          <el-radio-group
-            :model-value="logDock"
-            size="small"
-            class="dock-side-group"
-            @update:model-value="(v: string | number | boolean | undefined) => onDockChange(setLogDock, v)"
-          >
-            <el-radio-button value="left">左</el-radio-button>
-            <el-radio-button value="right">右</el-radio-button>
-          </el-radio-group>
-          <div class="dock-block-show">
-            <span class="dock-show-label">显示</span>
-            <el-switch
-              :model-value="logPanelOpen"
-              size="small"
-              @update:model-value="(v: string | number | boolean) => onOpenChange(setLogPanelOpen, v)"
-            />
-          </div>
-        </div>
-      </div>
-    </el-form>
+    <div class="layout-row">
+      <WorkbenchPanelToggleIcon side="left" :active="leftSidebarOpen" />
+      <div><strong>左侧 Primary</strong><span>页面范围、筛选和上下文</span></div>
+      <el-switch
+        :model-value="leftSidebarOpen"
+        size="small"
+        @update:model-value="(value: string | number | boolean) => setPanel(Boolean(value), leftSidebarOpen, toggleLeftSidebar)"
+      />
+    </div>
+    <div class="layout-row">
+      <WorkbenchPanelToggleIcon side="bottom" :active="bottomPanelOpen" />
+      <div><strong>下方全局面板</strong><span>预检、问题与所有运行日志</span></div>
+      <el-switch
+        :model-value="bottomPanelOpen"
+        size="small"
+        @update:model-value="(value: string | number | boolean) => setPanel(Boolean(value), bottomPanelOpen, toggleBottomPanel)"
+      />
+    </div>
+    <div class="layout-row">
+      <WorkbenchPanelToggleIcon side="right" :active="rightSidebarOpen" />
+      <div><strong>右侧 Secondary</strong><span>工作空间树、属性和系统块</span></div>
+      <el-switch
+        :model-value="rightSidebarOpen"
+        size="small"
+        @update:model-value="(value: string | number | boolean) => setPanel(Boolean(value), rightSidebarOpen, toggleRightSidebar)"
+      />
+    </div>
     <p v-if="!compact" class="dock-hint">
-      每块可独立选左/右停靠与是否显示。页脚 <strong>左栏 / 右栏</strong> 图标可收起整侧（类似 VS Code）。
+      工作台固定为左、下、右三个区域；运行日志只能显示在下方全局面板。
     </p>
   </div>
 </template>
 
 <style scoped>
-.side-dock-panel.compact {
-  min-width: 268px;
-}
-
-.dock-block-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  width: 100%;
-}
-
-.dock-block-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 8px 10px;
-  align-items: center;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-  font-size: 13px;
-}
-
-.dock-block-row:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-
-.dock-block-row:first-child {
-  padding-top: 0;
-}
-
-.dock-block-label {
-  min-width: 0;
-  font-weight: 500;
-  color: var(--el-text-color-primary);
-}
-
-.dock-side-group {
-  flex-shrink: 0;
-}
-
-.dock-side-group :deep(.el-radio-button__inner) {
-  padding: 4px 10px;
-}
-
-.dock-block-show {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.dock-block-inherit {
-  flex-shrink: 0;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  white-space: nowrap;
-}
-
-.dock-show-label {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  white-space: nowrap;
-}
-
-.dock-hint {
-  margin: 10px 0 4px;
-  font-size: 0.78rem;
-  line-height: 1.55;
-  color: var(--muted, #64748b);
-}
+.side-dock-panel.compact { min-width: 268px; }
+.layout-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--el-border-color-lighter); }
+.layout-row:last-of-type { border-bottom: 0; }
+.layout-row > div { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.layout-row strong { color: var(--el-text-color-primary); font-size: 13px; }
+.layout-row span { color: var(--el-text-color-secondary); font-size: 11px; }
+.layout-row :deep(.workbench-panel-toggle-icon) { color: var(--el-text-color-secondary); }
+.dock-hint { margin: 10px 0 4px; color: var(--muted, #64748b); font-size: 0.78rem; line-height: 1.55; }
 </style>

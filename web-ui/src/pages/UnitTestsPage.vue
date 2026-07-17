@@ -18,6 +18,10 @@ import {
 } from "../api";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import { useUnitTestsPropertySheet } from "../composables/useUnitTestsPropertySheet";
+import {
+  usePagePrimaryContribution,
+  type PagePrimarySection,
+} from "../composables/usePagePrimaryContribution";
 import { useAsyncProgress } from "../composables/useAsyncProgress";
 import { pnwPromptChoice } from "phoenix-wing";
 import { useAppShell } from "../composables/useAppShell";
@@ -46,6 +50,10 @@ import {
   sortPlanModules,
   type ModuleHistoryMap,
 } from "../utils/unitTestModuleHistory";
+
+const props = defineProps<{
+  workbenchTabId?: string;
+}>();
 
 const shell = useAppShell();
 const pageStore = useUnitTestsPageStore();
@@ -811,6 +819,109 @@ watch(
     void loadRunPlan();
   },
 );
+
+usePagePrimaryContribution("unit_tests", props.workbenchTabId, {
+  summary: computed(() => {
+    if (running.value) return "单元测试正在运行";
+    const summary = result.value?.summary;
+    if (!summary) return `已选择 ${runCheckedCount.value} 个测试套件`;
+    return `通过 ${summary.passed}/${summary.tests_run} · 失败 ${summary.failed} · 错误 ${summary.errors}`;
+  }),
+  sections: computed<PagePrimarySection[]>(() => [
+    {
+      id: "suites",
+      title: "运行范围",
+      description: "选择测试套件；需要更精细范围时展开模块计划。",
+      controls: [
+        ...runnableSuites.value.map((suite) => ({
+          id: `suite-${suite.id}`,
+          kind: "boolean" as const,
+          label: suite.label,
+          description: `${suite.module_count} 个模块 · ${suite.description}`,
+          disabled: running,
+          modelValue: computed(() => runChecked.value.has(suite.id)),
+          onUpdate: (checked: boolean) => toggleRunSuite(suite.id, checked),
+        })),
+        {
+          id: "module-plan",
+          kind: "boolean",
+          label: "按模块选择",
+          modelValue: showRunScopeList,
+          disabled: running,
+          onUpdate: (checked) => { showRunScopeList.value = checked; },
+        },
+        {
+          id: "case-details",
+          kind: "boolean",
+          label: "加载用例明细",
+          modelValue: showRunScopeCases,
+          disabled: computed(() => running.value || !showRunScopeList.value),
+          onUpdate: (checked) => { showRunScopeCases.value = checked; },
+        },
+        {
+          id: "suite-count",
+          kind: "readonly",
+          label: "已选套件",
+          value: runCheckedCount,
+        },
+        {
+          id: "module-count",
+          kind: "readonly",
+          label: "已选模块",
+          value: computed(() => runScopeSelectedSummary.value
+            ? `${runScopeSelectedSummary.value.modules}/${runScopeSelectedSummary.value.totalModules}`
+            : "全部"),
+        },
+      ],
+      actions: [
+        { id: "all", label: "全选", disabled: running, run: selectAllRun },
+        { id: "clear", label: "清空", disabled: running, run: clearAllRun },
+        {
+          id: "run",
+          label: computed(() => `运行（${runCheckedCount.value}）`),
+          tone: "primary",
+          disabled: computed(() => running.value || !canRunFull.value),
+          run: () => onRun("full"),
+        },
+        {
+          id: "cancel",
+          label: "终止",
+          tone: "danger",
+          plain: true,
+          disabled: computed(() => !running.value),
+          run: cancelRun,
+        },
+      ],
+    },
+    {
+      id: "results",
+      title: "结果 View",
+      controls: [
+        {
+          id: "active-view",
+          kind: "choice",
+          label: "中央内容",
+          modelValue: activeTab,
+          options: [
+            { value: "results", label: "测试结果" },
+            { value: "watchlist", label: `失败关注（${watchlistCount.value}）` },
+          ],
+          onUpdate: (value) => { activeTab.value = value === "watchlist" ? "watchlist" : "results"; },
+        },
+        { id: "watch-count", kind: "readonly", label: "关注用例", value: watchlistCount },
+        { id: "watch-fails", kind: "readonly", label: "累计失败", value: watchlistTotalFails },
+      ],
+      actions: [
+        {
+          id: "rerun",
+          label: computed(() => `复测勾选（${watchlistCheckedCount.value}）`),
+          disabled: computed(() => running.value || !watchlistCheckedCount.value),
+          run: onRunWatchlistSelected,
+        },
+      ],
+    },
+  ]),
+});
 
 onMounted(() => {
   pageStore.hydrate();
