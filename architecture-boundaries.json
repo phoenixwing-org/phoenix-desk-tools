@@ -11,7 +11,8 @@
     "web-ui/src/models/fcstdMapViewModel.ts",
     "web-ui/src/models/assemblyTreeViewModel.ts",
     "web-ui/src/models/unitTestsViewModel.ts",
-    "web-ui/src/models/caaDialogSessionViewModel.ts"
+    "web-ui/src/models/caaDialogSessionViewModel.ts",
+    "web-ui/src/models/caaDialogNlsSessionViewModel.ts"
   ],
   "forbiddenPureImports": [
     "^(?:node:|fs$|fs/|vue$|vue/|pinia$|pinia/|element-plus$|element-plus/|@tauri-apps/)"

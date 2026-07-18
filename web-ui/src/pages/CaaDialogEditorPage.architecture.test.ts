@@ -24,4 +24,29 @@ describe("CAA dialog editor session boundary", () => {
     expect(model).toContain("CAA_SESSION_HISTORY_LIMIT = 12");
     expect(model).toContain("caaDialogIrForSession");
   });
+
+  it("NLS 六项 session 投影进入纯 ViewModel，Page 保留 refs、locale UI 与 Host", () => {
+    const page = source("./CaaDialogEditorPage.vue");
+    const model = source("../models/caaDialogNlsSessionViewModel.ts");
+    expect(page).toContain('from "../models/caaDialogNlsSessionViewModel"');
+    expect(page).toContain("buildCaaDialogNlsSessionFromIr");
+    expect(page).toContain("buildCaaDialogNlsSessionFromDraft");
+    expect(page).toContain("overlayCaaDialogNlsSnapshot");
+    expect(page).toContain("projectCaaNlsKeyCountMismatch");
+    for (const refName of [
+      "baselineNlsFlat",
+      "currentNlsFlat",
+      "nlsSourceText",
+      "localeNlsFlats",
+      "localeBaselineFlats",
+      "localeSourceTexts",
+    ]) {
+      expect(page).toContain(`const ${refName} = ref`);
+    }
+    expect(page).toContain("createCaaDialogLocaleNls(");
+    expect(page).toContain("saveCaaDialogNls(");
+    expect(page).toContain("setNlsEditorLocale(");
+    expect(model).not.toMatch(/from ["']vue["']|useAppShell|localStorage|window\.|document\.|\.vue["']|from ["']\.\.\/api/);
+  });
+
 });

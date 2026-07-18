@@ -30,10 +30,17 @@ VS Code / Tauri launch args
 - Wizard `.cpp` 构造段与 MultiList 签名在真实 CAA fixture/编译确认前保持保守生成和 warning，不猜测复杂业务表达式。
 - VS Code 只发送版本化 handoff 请求，不复制 CATDlg parser 或 Web 编辑器状态。
 
+## NLS 会话边界
+
+- `caaDialogNlsSessionViewModel.ts` 负责从 IR/草稿构建六项 NLS 普通值、PageSession current overlay、dirty 与 key 数量差异投影；它不拥有 Vue ref、locale UI、History 或 Host API。
+- `CaaDialogEditorPage.vue` 继续拥有六个响应式真值、active locale 与 canvas 翻译，并调用 locale 创建/保存 API；写盘和 IR sources/parseMeta 更新没有下沉到 ViewModel。
+- 兼容行为与验收证据见 [NLS 会话 ViewModel 验收](CAA对话框-NLS会话ViewModel验收.md)。
+
 ## 当前验证入口
 
 - [多后端测试规则](CAA单元测试-多后端规则.md)
 - [VS Code 交接人工点检](CAA-VSCode交接-人工点检清单.md)
+- [NLS 会话 ViewModel 验收](CAA对话框-NLS会话ViewModel验收.md)
 - [总待办中的 CAA 汇总](../TODO.md#caa)
 
 旧 `CAA模块-概览.md`、P0 原型与完成态规划由文档清单标记为 superseded/archived。

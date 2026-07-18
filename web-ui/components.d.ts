@@ -11,6 +11,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AssemblyTreeRowGroup: typeof import('./src/components/assembly-tree/AssemblyTreeRowGroup.vue')['default']
     AssemblyTreeTable: typeof import('./src/components/AssemblyTreeTable.vue')['default']
     CaaCatNlsEditDialog: typeof import('./src/components/caa/CaaCatNlsEditDialog.vue')['default']
     CaaControlCatalogBox: typeof import('./src/components/caa/controls/CaaControlCatalogBox.vue')['default']

@@ -7,7 +7,6 @@ import {
   CAA_NLS_LOCALE_SIMPLIFIED_CHINESE,
   collectNlsFlat,
   collectNlsOrdered,
-  parseCatNls,
 } from "@desk-tools/catdlg-core";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import CaaDialogEditorView from "../components/caa/CaaDialogEditorView.vue";
@@ -37,6 +36,7 @@ import {
 } from "../api/caaDialog";
 import { CAA_EDITOR_PAGE_ID } from "../constants/caaPages";
 import { useCaaDialogPropertySheet } from "../composables/useCaaDialogPropertySheet";
+import { useCaaDialogHistoryController } from "../composables/useCaaDialogHistoryController";
 import { CAA_NLS_EDIT_KEY, CAA_NLS_SESSION_KEY, type CaaNlsEditTarget } from "../composables/caaNlsEdit";
 import { CAA_CONTROL_KEY, type CaaContextMenuItem } from "../composables/useCaaControlContext";
 import { useAppShell } from "../composables/useAppShell";
@@ -51,18 +51,25 @@ import { addChildNode, findCaaNode, insertGridCol, insertGridRow, nlsFlatMapsEqu
 import { buildBuilderRecord, type BuilderRecord } from "../utils/caaDropZone";
 import { createBlankCaaDialogIr } from "../utils/createBlankCaaDialogIr";
 import {
-  CAA_IR_HISTORY_LIMIT as HISTORY_LIMIT,
   buildCaaDialogPageSnapshot,
-  caaHistoryStackFromSession as historyStackFromSession,
   caaLocaleMapsFromSession as localeMapsFromSession,
   caaStringMapFromSession as stringMapFromSession,
   cloneCaaDialogPlain,
   isCaaDialogIr,
   normalizeCaaIrWriteMode as normalizeIrWriteMode,
   type CaaDialogPageSnapshot,
-  type CaaIrHistoryEntry,
   type CaaIrWriteMode as IrWriteMode,
 } from "../models/caaDialogSessionViewModel";
+import {
+  addCaaDialogNlsLocale,
+  buildCaaDialogNlsSessionFromDraft,
+  buildCaaDialogNlsSessionFromIr,
+  isCaaDialogNlsFlatDirty,
+  isCaaDialogNlsSessionDirty,
+  overlayCaaDialogNlsSnapshot,
+  projectCaaNlsKeyCountMismatch,
+  type CaaDialogNlsSessionValue,
+} from "../models/caaDialogNlsSessionViewModel";
 
 const PAGE_ID = CAA_EDITOR_PAGE_ID;
 
@@ -153,6 +160,32 @@ const localeNlsFlats = ref<Record<string, Record<string, string>>>({});
 const localeBaselineFlats = ref<Record<string, Record<string, string>>>({});
 const localeSourceTexts = ref<Record<string, string>>({});
 
+function readNlsSessionValue(): CaaDialogNlsSessionValue {
+  return {
+    baselineNlsFlat: baselineNlsFlat.value,
+    currentNlsFlat: currentNlsFlat.value,
+    nlsSourceText: nlsSourceText.value,
+    localeNlsFlats: localeNlsFlats.value,
+    localeBaselineFlats: localeBaselineFlats.value,
+    localeSourceTexts: localeSourceTexts.value,
+  };
+}
+
+function assignNlsSessionValue(session: CaaDialogNlsSessionValue) {
+  baselineNlsFlat.value = session.baselineNlsFlat;
+  currentNlsFlat.value = session.currentNlsFlat;
+  nlsSourceText.value = session.nlsSourceText;
+  localeNlsFlats.value = session.localeNlsFlats;
+  localeBaselineFlats.value = session.localeBaselineFlats;
+  localeSourceTexts.value = session.localeSourceTexts;
+}
+
+/** API 草稿重载保持旧语义：只刷新主语言，locale 三项沿用当前 Page 会话。 */
+function assignDraftPrimaryNlsValue(session: CaaDialogNlsSessionValue) {
+  baselineNlsFlat.value = session.baselineNlsFlat;
+  currentNlsFlat.value = session.currentNlsFlat;
+}
+
 function clonePlain<T>(value: T): T {
   return cloneCaaDialogPlain(toRaw(value));
 }
@@ -172,21 +205,13 @@ const pageTitle = computed(() => {
   return "CAA 对话框";
 });
 
-const nlsIsDirty = () => !nlsFlatMapsEqual(baselineNlsFlat.value, currentNlsFlat.value);
+const nlsIsDirty = () => isCaaDialogNlsFlatDirty(
+  baselineNlsFlat.value,
+  currentNlsFlat.value,
+);
 
 function nlsIsDirtyAll(): boolean {
-  if (nlsIsDirty()) return true;
-  for (const id of Object.keys(localeNlsFlats.value)) {
-    if (
-      !nlsFlatMapsEqual(
-        localeBaselineFlats.value[id] ?? {},
-        localeNlsFlats.value[id] ?? {},
-      )
-    ) {
-      return true;
-    }
-  }
-  return false;
+  return isCaaDialogNlsSessionDirty(readNlsSessionValue());
 }
 
 const primaryCatNlsRel = computed(() => localIr.value?.sources.catNls?.trim() ?? "");
@@ -213,27 +238,11 @@ const nlsLocaleOptions = computed((): CaaNlsLocaleOption[] => {
   return opts;
 });
 
-const nlsKeyCountMismatch = computed<{
-  en: number;
-  cn: number;
-  missingInCn: string[];
-  missingInEn: string[];
-} | null>(() => {
-  if (!hasChineseLocale.value) return null;
-  const enFlat = currentNlsFlat.value;
-  const cnFlat = localeNlsFlats.value[CAA_NLS_LOCALE_SIMPLIFIED_CHINESE] ?? {};
-  const enKeys = Object.keys(enFlat);
-  const cnKeys = Object.keys(cnFlat);
-  if (enKeys.length === cnKeys.length) return null;
-  const cnKeySet = new Set(cnKeys);
-  const enKeySet = new Set(enKeys);
-  return {
-    en: enKeys.length,
-    cn: cnKeys.length,
-    missingInCn: enKeys.filter((k) => !cnKeySet.has(k)),
-    missingInEn: cnKeys.filter((k) => !enKeySet.has(k)),
-  };
-});
+const nlsKeyCountMismatch = computed(() => projectCaaNlsKeyCountMismatch({
+  hasChineseLocale: hasChineseLocale.value,
+  currentNlsFlat: currentNlsFlat.value,
+  localeNlsFlats: localeNlsFlats.value,
+}));
 
 const hasNlsKeyMismatch = computed(() => nlsKeyCountMismatch.value !== null);
 
@@ -341,16 +350,11 @@ async function createChineseLocale() {
       localeDir: CAA_NLS_LOCALE_SIMPLIFIED_CHINESE,
     });
     const id = CAA_NLS_LOCALE_SIMPLIFIED_CHINESE;
-    // 用英文值填充中文初始值：修改的修改，不修改的保留英文原值
-    const enFlat = currentNlsFlat.value;
-    const filledKeys: Record<string, string> = {};
-    for (const key of Object.keys(result.nlsKeys)) {
-      filledKeys[key] = enFlat[key] ?? "";
-    }
-    localeNlsFlats.value = { ...localeNlsFlats.value, [id]: filledKeys };
-    // baseline 保持空值（磁盘状态），使填充后的值全部标记为 dirty
-    localeBaselineFlats.value = { ...localeBaselineFlats.value, [id]: { ...result.nlsKeys } };
-    localeSourceTexts.value = { ...localeSourceTexts.value, [id]: result.sourceText };
+    assignNlsSessionValue(addCaaDialogNlsLocale(readNlsSessionValue(), {
+      localeId: id,
+      diskNlsFlat: result.nlsKeys,
+      sourceText: result.sourceText,
+    }));
     if (!ir.sources.nlsLocales) ir.sources.nlsLocales = {};
     ir.sources.nlsLocales[id] = result.catNlsRel;
     if (ir.parseMeta) {
@@ -474,13 +478,9 @@ function isActiveTab(): boolean {
 const irDirty = ref(false);
 const irWriteMode = ref<IrWriteMode>("none");
 const editMode = ref(false);
-const undoStack = ref<CaaIrHistoryEntry[]>([]);
-const redoStack = ref<CaaIrHistoryEntry[]>([]);
 const writePreviewOpen = ref(false);
 const writePreviewLoading = ref(false);
 const writePreviewResult = ref<CaaDialogWriteResult | null>(null);
-const canUndo = computed(() => undoStack.value.length > 0);
-const canRedo = computed(() => redoStack.value.length > 0);
 const canPreviewWrite = computed(
   () =>
     hasParsed.value &&
@@ -511,75 +511,42 @@ function markIrClean() {
   syncTabDirty();
 }
 
-function snapshotHistoryEntry(): CaaIrHistoryEntry | null {
-  if (!localIr.value) return null;
-  return {
-    ir: clonePlain(localIr.value),
-    selectedId: localSelectedId.value,
-    irWriteMode: irWriteMode.value,
-    nlsFlat: { ...currentNlsFlat.value },
-    localeNlsFlats: clonePlain(localeNlsFlats.value),
-  };
-}
-
-function recordHistorySnapshot() {
-  const entry = snapshotHistoryEntry();
-  if (!entry) return;
-  undoStack.value = [...undoStack.value.slice(-(HISTORY_LIMIT - 1)), entry];
-  redoStack.value = [];
-}
-
-function restoreHistoryEntry(entry: CaaIrHistoryEntry) {
-  localIr.value = clonePlain(entry.ir);
-  localSelectedId.value = entry.selectedId ?? entry.ir.root.id;
-  irWriteMode.value = entry.irWriteMode;
-  irDirty.value = entry.irWriteMode !== "none";
-  if (entry.nlsFlat) currentNlsFlat.value = { ...entry.nlsFlat };
-  if (entry.localeNlsFlats) localeNlsFlats.value = clonePlain(entry.localeNlsFlats);
-  syncToSidebar();
-  syncTabDirty();
-}
-
-function undoIrChange() {
-  const previous = undoStack.value[undoStack.value.length - 1];
-  const current = snapshotHistoryEntry();
-  if (!previous || !current) return;
-  undoStack.value = undoStack.value.slice(0, -1);
-  redoStack.value = [...redoStack.value.slice(-(HISTORY_LIMIT - 1)), current];
-  restoreHistoryEntry(previous);
-}
-
-function redoIrChange() {
-  const next = redoStack.value[redoStack.value.length - 1];
-  const current = snapshotHistoryEntry();
-  if (!next || !current) return;
-  redoStack.value = redoStack.value.slice(0, -1);
-  undoStack.value = [...undoStack.value.slice(-(HISTORY_LIMIT - 1)), current];
-  restoreHistoryEntry(next);
-}
-
-function resetHistory() {
-  undoStack.value = [];
-  redoStack.value = [];
-}
-
-function restoreHistoryFromSnapshot(snapshot?: CaaDialogPageSnapshot | null) {
-  undoStack.value = historyStackFromSession(snapshot?.undoStack);
-  redoStack.value = historyStackFromSession(snapshot?.redoStack);
-}
+const {
+  undoStack,
+  redoStack,
+  canUndo,
+  canRedo,
+  recordHistorySnapshot,
+  undoIrChange,
+  redoIrChange,
+  resetHistory,
+  restoreHistoryFromSnapshot,
+} = useCaaDialogHistoryController({
+  state: {
+    ir: localIr,
+    selectedId: localSelectedId,
+    dirty: irDirty,
+    writeMode: irWriteMode,
+    nlsFlat: currentNlsFlat,
+    localeNlsFlats,
+  },
+  onRestored() {
+    syncToSidebar();
+    syncTabDirty();
+  },
+});
 
 function restoreNlsCurrentFromSnapshot(snapshot?: CaaDialogPageSnapshot | null) {
   if (!snapshot) return;
   const flat = stringMapFromSession(snapshot.nlsFlat);
-  if (flat) currentNlsFlat.value = flat;
-  if (typeof snapshot.nlsSourceText === "string") nlsSourceText.value = snapshot.nlsSourceText;
   const locales = localeMapsFromSession(snapshot.localeNlsFlats);
-  if (locales) {
-    localeNlsFlats.value = {
-      ...localeNlsFlats.value,
-      ...locales,
-    };
-  }
+  assignNlsSessionValue(overlayCaaDialogNlsSnapshot(readNlsSessionValue(), {
+    ...(flat ? { currentNlsFlat: flat } : {}),
+    ...(typeof snapshot.nlsSourceText === "string"
+      ? { nlsSourceText: snapshot.nlsSourceText }
+      : {}),
+    ...(locales ? { localeNlsFlats: locales } : {}),
+  }));
 }
 
 function applyCurrentNlsFlatToIr() {
@@ -597,39 +564,7 @@ function syncTabDirty() {
 }
 
 function initNlsSession(ir: CaaDialogIr) {
-  const source = ir.parseMeta?.catNlsSourceText ?? "";
-  nlsSourceText.value = source;
-  const flat = source ? parseCatNls(source) : {};
-  baselineNlsFlat.value = { ...flat };
-  currentNlsFlat.value = { ...flat };
-
-  const flats: Record<string, Record<string, string>> = {};
-  const baselines: Record<string, Record<string, string>> = {};
-  const sources: Record<string, string> = {};
-  const metaTexts = ir.parseMeta?.localeNlsSourceTexts ?? {};
-
-  for (const loc of ir.parseMeta?.locales ?? []) {
-    if (loc.id === "default") continue;
-    const text = loc.sourceText ?? metaTexts[loc.id] ?? "";
-    if (!text) continue;
-    const parsed = parseCatNls(text);
-    flats[loc.id] = { ...parsed };
-    baselines[loc.id] = { ...parsed };
-    sources[loc.id] = text;
-  }
-
-  if (ir.localeNls) {
-    for (const [id, parsed] of Object.entries(ir.localeNls)) {
-      if (!flats[id] && Object.keys(parsed).length) {
-        flats[id] = { ...parsed };
-        baselines[id] = { ...parsed };
-      }
-    }
-  }
-
-  localeNlsFlats.value = flats;
-  localeBaselineFlats.value = baselines;
-  localeSourceTexts.value = sources;
+  assignNlsSessionValue(buildCaaDialogNlsSessionFromIr(ir));
   setNlsEditorLocale("default", "en");
   syncTabDirty();
 }
@@ -1004,11 +939,13 @@ function hydrateDraftSnapshot(snapshot?: Record<string, unknown>): boolean {
   isNewDraft.value = true;
   draftId.value = state.draftId?.trim() || draftId.value;
   localIr.value = clonePlain(state.ir);
-  currentNlsFlat.value = stringMapFromSession(state.nlsFlat) ?? {};
-  baselineNlsFlat.value = { ...currentNlsFlat.value };
-  nlsSourceText.value = state.nlsSourceText ?? "";
-  localeNlsFlats.value = localeMapsFromSession(state.localeNlsFlats) ?? {};
-  localeBaselineFlats.value = clonePlain(localeNlsFlats.value);
+  assignNlsSessionValue(buildCaaDialogNlsSessionFromDraft({
+    nlsFlat: stringMapFromSession(state.nlsFlat) ?? {},
+    nlsSourceText: state.nlsSourceText ?? "",
+    localeNlsFlats: localeMapsFromSession(state.localeNlsFlats) ?? {},
+    // 旧 snapshot 不携带 locale source text；同一 Page 重入时继续沿用现值。
+    localeSourceTexts: localeSourceTexts.value,
+  }));
   applyCurrentNlsFlatToIr();
   localSelectedId.value = state.selectedId?.trim() || state.ir.root.id;
   irDirty.value = state.irDirty ?? true;
@@ -1060,18 +997,17 @@ async function parseDialog() {
         const found = drafts.find((d: Record<string, unknown>) => d.id === target.draftId);
         if (found) {
           localIr.value = found.ir as CaaDialogIr;
-          currentNlsFlat.value = (found.nlsFlat as Record<string, string>) ?? {};
-          baselineNlsFlat.value = { ...currentNlsFlat.value };
+          assignDraftPrimaryNlsValue(buildCaaDialogNlsSessionFromDraft({
+            nlsFlat: (found.nlsFlat as Record<string, string>) ?? {},
+          }));
         } else {
           // 草稿丢失，用空白 IR
           localIr.value = createBlankCaaDialogIr(target.draftId === "" ? "NewDlg" : "NewDlg");
-          currentNlsFlat.value = {};
-          baselineNlsFlat.value = {};
+          assignDraftPrimaryNlsValue(buildCaaDialogNlsSessionFromDraft());
         }
       } else {
         localIr.value = createBlankCaaDialogIr();
-        currentNlsFlat.value = {};
-        baselineNlsFlat.value = {};
+        assignDraftPrimaryNlsValue(buildCaaDialogNlsSessionFromDraft());
       }
       restoreNlsCurrentFromSnapshot(restoredState);
       applyCurrentNlsFlatToIr();
