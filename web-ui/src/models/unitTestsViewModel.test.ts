@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
+  canRunUnitTestFull,
   deriveUnitTestModuleFilter,
   deriveUnitTestRunScopeSelection,
   filterUnitTestCases,
   filterUnitTestModuleSummaries,
   formatUnitTestRunSummary,
+  formatUnitTestModuleLastRun,
   groupUnitTestCasesByModule,
   mergeUnitTestRunOptions,
+  projectUnitTestRunScopeRows,
   syncUnitTestCheckedModules,
   unitTestPassRate,
+  unitTestModuleDescriptionBrief,
   type UnitTestCaseViewInput,
 } from "./unitTestsViewModel";
 
@@ -56,6 +60,41 @@ describe("unit tests view model", () => {
     expect(next.available).toEqual(["b", "c"]);
   });
 
+  it("把计划模块、catalog、history 与选择状态投影为稳定的 RunScope 行", () => {
+    const rows = projectUnitTestRunScopeRows(
+      [{
+        module: "tests.test_long_module",
+        suite_id: "custom",
+        backend: "vitest",
+        case_count: 2,
+        cases: [{ id: "case-1", class_name: "Demo", method: "works" }],
+      }],
+      new Set(["tests.test_long_module"]),
+      { "tests.test_long_module": { description_zh: "  很长的  模块简介  " } },
+      { "case-1": { summary: "正常路径" } },
+      { "tests.test_long_module": { run_count: 3, last_run_at: "2026-07-18T06:00:00.000Z" } },
+      new Map([["custom", "自定义"]]),
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      module: "tests.test_long_module",
+      moduleLabel: "test_long_module",
+      description: "很长的 模块简介",
+      suiteId: "custom",
+      suiteLabel: "自定义",
+      backend: "vitest",
+      caseCount: 2,
+      selected: true,
+      runCount: 3,
+      lastRunAt: "2026-07-18T06:00:00.000Z",
+      cases: [{ id: "case-1", label: "Demo.works", summary: "正常路径" }],
+    });
+    expect(rows[0]?.lastRunLabel).not.toBe("—");
+    expect(unitTestModuleDescriptionBrief({}, "tests.missing")).toBe("—");
+    expect(formatUnitTestModuleLastRun("invalid")).toBe("—");
+  });
+
   it("集中运行范围摘要与 include_modules 省略规则", () => {
     const plan = {
       total_cases: 8,
@@ -71,6 +110,32 @@ describe("unit tests view model", () => {
       .toEqual({ include_modules: ["b"] });
     expect(deriveUnitTestModuleFilter(true, ["a", "b"], new Set(["a", "b"])))
       .toBeUndefined();
+  });
+
+  it("范围计划未就绪、加载失败、空计划或零勾选时禁止静默扩大为全套件运行", () => {
+    const ready = {
+      checkedSuiteCount: 1,
+      showRunScopeList: true,
+      planLoading: false,
+      planError: "",
+      planReady: true,
+      planModuleCount: 2,
+      checkedModuleCount: 1,
+    };
+    expect(canRunUnitTestFull(ready)).toBe(true);
+    expect(canRunUnitTestFull({ ...ready, checkedSuiteCount: 0 })).toBe(false);
+    expect(canRunUnitTestFull({ ...ready, planLoading: true })).toBe(false);
+    expect(canRunUnitTestFull({ ...ready, planError: "offline" })).toBe(false);
+    expect(canRunUnitTestFull({ ...ready, planReady: false })).toBe(false);
+    expect(canRunUnitTestFull({ ...ready, planModuleCount: 0 })).toBe(false);
+    expect(canRunUnitTestFull({ ...ready, checkedModuleCount: 0 })).toBe(false);
+    expect(canRunUnitTestFull({
+      ...ready,
+      showRunScopeList: false,
+      planReady: false,
+      planModuleCount: 0,
+      checkedModuleCount: 0,
+    })).toBe(true);
   });
 
   it("合并关注排除、定向用例和模块过滤，不制造空 options", () => {

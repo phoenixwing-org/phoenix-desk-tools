@@ -62,6 +62,69 @@ export interface UnitTestCheckedModuleSync {
   readonly available: readonly string[];
 }
 
+export interface UnitTestRunScopeCaseInput {
+  readonly id: string;
+  readonly class_name: string;
+  readonly method: string;
+}
+
+export interface UnitTestRunScopeModuleInput {
+  readonly module: string;
+  readonly suite_id: string;
+  readonly backend?: "vitest" | "runtime";
+  readonly case_count: number;
+  readonly cases?: readonly UnitTestRunScopeCaseInput[];
+}
+
+export interface UnitTestRunScopeSuiteView {
+  readonly id: string;
+  readonly label: string;
+  readonly module_count: number;
+}
+
+export interface UnitTestRunScopePlanView {
+  readonly suite_label: string;
+  readonly total_modules: number;
+  readonly total_cases: number;
+  readonly ignored_cases: number;
+  readonly modules: readonly unknown[];
+}
+
+export interface UnitTestModuleCatalogTextInput {
+  readonly title?: string;
+  readonly description_zh?: string;
+}
+
+export interface UnitTestCaseCatalogTextInput {
+  readonly summary?: string;
+}
+
+export interface UnitTestModuleHistoryTextInput {
+  readonly run_count: number;
+  readonly last_run_at: string;
+}
+
+export interface UnitTestRunScopeCaseView {
+  readonly id: string;
+  readonly label: string;
+  readonly summary: string;
+}
+
+export interface UnitTestRunScopeRowView {
+  readonly module: string;
+  readonly moduleLabel: string;
+  readonly description: string;
+  readonly suiteId: string;
+  readonly suiteLabel: string;
+  readonly backend: "vitest" | "runtime";
+  readonly caseCount: number;
+  readonly selected: boolean;
+  readonly cases: readonly UnitTestRunScopeCaseView[];
+  readonly runCount: number;
+  readonly lastRunAt: string | null;
+  readonly lastRunLabel: string;
+}
+
 export function unitTestStatusLabel(status: string): string {
   if (status === "passed") return "通过";
   if (status === "failed") return "失败";
@@ -76,6 +139,84 @@ export function unitTestStatusClass(status: string): string {
 
 export function unitTestShortModule(module: string): string {
   return module.replace(/^tests\./u, "");
+}
+
+export function unitTestSuiteShortLabel(
+  suiteId: string,
+  suiteLabels: ReadonlyMap<string, string> = new Map(),
+): string {
+  if (suiteId === "cad") return "CAD";
+  if (suiteId === "code") return "Code";
+  if (suiteId === "platform") return "平台";
+  if (suiteId === "caa") return "CAA";
+  if (suiteId === "all") return "全部";
+  return suiteLabels.get(suiteId) ?? suiteId;
+}
+
+export function unitTestModuleDescription(
+  catalog: Readonly<Record<string, UnitTestModuleCatalogTextInput>>,
+  module: string,
+): string {
+  const entry = catalog[module] ?? catalog[`tests.${unitTestShortModule(module)}`];
+  return entry?.description_zh || entry?.title || "";
+}
+
+export function unitTestModuleDescriptionBrief(
+  catalog: Readonly<Record<string, UnitTestModuleCatalogTextInput>>,
+  module: string,
+  maxLength = 48,
+): string {
+  const text = unitTestModuleDescription(catalog, module).replace(/\s+/gu, " ").trim();
+  if (!text) return "—";
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(0, maxLength - 1))}…`;
+}
+
+export function formatUnitTestModuleLastRun(iso: string | null | undefined): string {
+  if (!iso || iso === new Date(0).toISOString()) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export function projectUnitTestRunScopeRows(
+  modules: readonly UnitTestRunScopeModuleInput[],
+  checkedModules: ReadonlySet<string>,
+  moduleCatalog: Readonly<Record<string, UnitTestModuleCatalogTextInput>>,
+  caseCatalog: Readonly<Record<string, UnitTestCaseCatalogTextInput>>,
+  history: Readonly<Record<string, UnitTestModuleHistoryTextInput>>,
+  suiteLabels: ReadonlyMap<string, string>,
+): UnitTestRunScopeRowView[] {
+  return modules.map((module) => {
+    const historyEntry = history[module.module];
+    const lastRunAt = historyEntry?.last_run_at
+      && historyEntry.last_run_at !== new Date(0).toISOString()
+      ? historyEntry.last_run_at
+      : null;
+    return {
+      module: module.module,
+      moduleLabel: unitTestShortModule(module.module),
+      description: unitTestModuleDescriptionBrief(moduleCatalog, module.module),
+      suiteId: module.suite_id,
+      suiteLabel: unitTestSuiteShortLabel(module.suite_id, suiteLabels),
+      backend: module.backend === "vitest" ? "vitest" : "runtime",
+      caseCount: module.case_count,
+      selected: checkedModules.has(module.module),
+      cases: (module.cases ?? []).map((testCase) => ({
+        id: testCase.id,
+        label: `${testCase.class_name}.${testCase.method}`,
+        summary: caseCatalog[testCase.id]?.summary ?? "",
+      })),
+      runCount: historyEntry?.run_count ?? 0,
+      lastRunAt,
+      lastRunLabel: formatUnitTestModuleLastRun(lastRunAt),
+    };
+  });
 }
 
 export function unitTestPassRate(summary: UnitTestRunSummaryViewInput | null | undefined): number {
@@ -141,6 +282,23 @@ export function deriveUnitTestRunScopeSelection(
     cases: selected.reduce((sum, module) => sum + module.case_count, 0),
     totalCases: plan.total_cases,
   };
+}
+
+export interface UnitTestFullRunAvailabilityInput {
+  readonly checkedSuiteCount: number;
+  readonly showRunScopeList: boolean;
+  readonly planLoading: boolean;
+  readonly planError: string;
+  readonly planReady: boolean;
+  readonly planModuleCount: number;
+  readonly checkedModuleCount: number;
+}
+
+export function canRunUnitTestFull(input: UnitTestFullRunAvailabilityInput): boolean {
+  if (!input.checkedSuiteCount) return false;
+  if (!input.showRunScopeList) return true;
+  if (input.planLoading || input.planError || !input.planReady) return false;
+  return input.planModuleCount > 0 && input.checkedModuleCount > 0;
 }
 
 export function syncUnitTestCheckedModules(

@@ -1,9 +1,14 @@
 import fs from 'fs'
 import { isAbsolute, resolve } from 'path'
 
+export {
+  createPhoenixWingSourceAliases,
+  resolvePhoenixWingContext,
+} from '../../scripts/phoenix-wing-mode.mjs'
+
 /**
- * 仅在显式配置 PHOENIX_WING_SRC 时启用源码联调 alias。
- * 默认始终消费 package.json 锁定的 npm 包，避免相邻仓库掩盖发布物问题。
+ * 旧调用兼容层：仅在显式配置 PHOENIX_WING_SRC 时返回源码目录。
+ * 新启动链统一使用 PHOENIX_WING_ROOT；此函数保留给旧配置与回归测试。
  */
 export function resolvePhoenixWingPath(
   projectRoot: string,

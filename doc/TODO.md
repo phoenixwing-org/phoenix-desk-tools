@@ -55,7 +55,11 @@ Owner：Desk Tools maintainers
 - [x] `FcstdMapPage.vue` 第三切口 A：其余三个 Desk 大页面均已建立首条边界；索引 pane 的搜索/筛选、12 列、行身份/动作、三类空状态、分页和 Page Host/session 真源已由 4 项 characterization 冻结。
 - [x] `FcstdMapPage.vue` 第三切口 B：单消费者 `FcstdMapIndexPane.vue` 已拥有索引列表 DOM、12 列 UI 定义、展示投影和 scoped style；三组筛选由受控 `v-model` 回到 Page，分页与打开动作只发语义事件。Controller、扫描/purge/export、Shell、localStorage、session 和导航安全复核继续留在 Page；Page 从 1,111 行降到 851 行，Pane 为 290 行；滚动、筛选、空状态和窄宽度按 [CAD 索引面板人工点检](cad/CAD索引面板-人工点检清单.md) 留证。
 - [x] `UnitTestsPage.vue` 第一切口：确认既有 Pinia store 继续作为 session 真源；运行范围勾选迁移、结果过滤/分组、通过率/摘要和 run options 组装已进入 UI-neutral `unitTestsViewModel.ts`，并由边界测试锁住 plan/stream/cancel API 仍归 Page Host 层。页面从 2,214 行降到 2,152 行。
-- [ ] `UnitTestsPage.vue` 后续切口：先提炼流式 run controller，再按 RunScope、Watchlist、Result pane 拆 page shell；不复制 store、watchlist utility 或 module-history utility。
+- [x] `UnitTestsPage.vue` 流式 Controller 拆分前基线：启动状态、stream/cancel 端口、start/case_done 副作用、成功结果同步、watchlist 分支、无结果/终止/异常与 finally 解锁已由 5 项 characterization 冻结；下一提交只迁移编排责任。
+- [x] `UnitTestsPage.vue` 流式 run controller：stream/cancel、AsyncProgress、Host 运行日志、唯一 `running/result` 与终止/异常收口进入可注入 `useUnitTestRunController`；Page 保留 Pinia/session、范围门禁、request 组装、watchlist/history 和结果筛选。Controller 同时拒绝重叠运行并把重复终止收敛为一次；页面从 2,152 行降到 2,101 行。
+- [x] `UnitTestsPage.vue` plan controller：计划 transport、`plan/loading/error` 与 request epoch 进入可注入 `useUnitTestPlanController`；只允许最新请求提交 success/error/finally，关闭范围会使在途响应失效。计划发现只发送 suite、关注排除和 case detail，不再携带旧计划的 `include_modules`；Page 保留模块勾选同步与 catalog。
+- [x] `UnitTestsPage.vue` RunScope page shell：单消费者 `UnitTestRunScopePane.vue` 已拥有运行范围 DOM、局部折叠、列定义、纵横滚动和 scoped style；行投影进入纯 ViewModel，所有持久状态、Controller、Host、Primary contribution 与 request 组装仍归 Page。Page 从 2,131 行降到 1,810 行，实测记录见 [Unit Tests 运行范围页面壳验收](platform/UnitTests-运行范围页面壳验收.md)。
+- [ ] `UnitTestsPage.vue` 后续切口：Watchlist 与 Result pane 仍在 Page；分别先建 characterization，再做单消费者拆分，不复制 store、watchlist utility 或 module-history utility。AsyncProgress 的终态 cancel 注销另列基础设施 TODO，不在页面壳拆分中顺手改写。
 - [x] `CaaDialogEditorPage.vue` 第一切口：IR/session 校验、NLS map 清洗、历史栈裁剪、source text 脱敏和草稿/dirty snapshot 组装已进入 UI-neutral `caaDialogSessionViewModel.ts`；`usePageSession`、解析、草稿 API 与写回继续由 Page Host 层负责。页面从 1,898 行降到 1,797 行。
 - [ ] `CaaDialogEditorPage.vue` 后续切口：提炼 editor history controller 与 NLS session ViewModel，再拆 canvas/page shell；写回、草稿持久化和 API 保持 Host adapter。
 - [x] `AssemblyTreeTable.vue` 第一切口：递归树行/多实例投影、角色与状态语义、展开视觉状态、标签编辑比较、规则预览和写盘 patch 投影已进入 UI-neutral `assemblyTreeViewModel.ts`；组件保留懒加载、弹窗与宿主动作，从 1,213 行降到 1,029 行。

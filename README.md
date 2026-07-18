@@ -15,10 +15,20 @@ pnpm install --frozen-lockfile
 
 ### 浏览器开发模式
 
+标准开发目录要求 `phoenix-desk-tools` 与 `phoenix-wing` 并列：
+
 ```bash
-pnpm dev                       # 同时启动 Vite (:5173) 和 Node (:5180)
+pnpm dev                       # 本地 Wing；同时启动 Vite (:5173) 和 Node (:5180)
 # 浏览器打开 http://localhost:5173
 ```
+
+`pnpm dev` 找不到 `../phoenix-wing` 会直接停止，不会静默回退 npm 包。需要验证当前 Registry 正式包时明确运行：
+
+```bash
+pnpm dev:registry              # package.json + pnpm-lock.yaml 锁定版本
+```
+
+非并列目录可用 `PHOENIX_WING_ROOT=/path/to/phoenix-wing pnpm dev`。完整的本地测试、构建命令和安全边界见 [Wing 并列仓库联调](doc/platform/Wing并列仓库联调.md)。
 
 ### Tauri 桌面开发模式
 
@@ -53,7 +63,7 @@ phoenix-desktop --workspace /path/to/workspace --catdlg /path/to/workspace/UI/Sa
 pnpm install --frozen-lockfile --force
 ```
 
-默认构建严格使用 `package.json` 锁定的 Wing Registry 0.4.2 包。Codegen Host/Apply、Workspace Schema、Ribbon、UUID/GUID 和 workspace path 契约直接消费包内 fixture；聚合根入口与 composable 子路径的 singleton 由自动测试保护。只有调试 Wing 源码时才显式设置 `PHOENIX_WING_SRC=/path/to/phoenix-wing/src`；不会自动探测相邻仓库。
+正式依赖始终使用 `package.json` 锁定的 Wing Registry 0.4.2 包。Codegen Host/Apply、Workspace Schema、Ribbon、UUID/GUID 和 workspace path 契约直接消费包内 fixture；聚合根入口与 composable 子路径的 singleton 由自动测试保护。本地联调由启动进程临时 alias/resolver 完成，不执行 `link:` / `file:` 安装，也不修改清单、锁文件或 `node_modules`。
 
 ### 构建 Rust 模块
 

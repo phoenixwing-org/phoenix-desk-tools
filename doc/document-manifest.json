@@ -17,6 +17,13 @@
       "lastVerified": "2026-07-17"
     },
     {
+      "path": "AGENTS.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.2.x",
+      "lastVerified": "2026-07-17"
+    },
+    {
       "path": "doc/路径与目录显示约定.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
@@ -574,6 +581,13 @@
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
+      "path": "doc/platform/UnitTests-运行范围页面壳验收.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.2.x",
+      "lastVerified": "2026-07-17"
+    },
+    {
       "path": "doc/platform/web界面.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
@@ -783,6 +797,13 @@
       "lastVerified": "2026-07-17",
       "sourceOfTruth": "doc/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
+    },
+    {
+      "path": "doc/platform/Wing并列仓库联调.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.2.x",
+      "lastVerified": "2026-07-17"
     },
     {
       "path": "doc/tauri-0.2.0-macOS发布态验收.md",
