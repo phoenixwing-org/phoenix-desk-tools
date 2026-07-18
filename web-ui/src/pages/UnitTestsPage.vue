@@ -50,6 +50,20 @@ import {
   sortPlanModules,
   type ModuleHistoryMap,
 } from "../utils/unitTestModuleHistory";
+import {
+  deriveUnitTestModuleFilter,
+  deriveUnitTestRunScopeSelection,
+  filterUnitTestCases,
+  filterUnitTestModuleSummaries,
+  formatUnitTestRunSummary as formatRunSummary,
+  groupUnitTestCasesByModule,
+  mergeUnitTestRunOptions,
+  syncUnitTestCheckedModules,
+  unitTestPassRate,
+  unitTestShortModule as shortModule,
+  unitTestStatusClass as statusClass,
+  unitTestStatusLabel as statusLabel,
+} from "../models/unitTestsViewModel";
 
 const props = defineProps<{
   workbenchTabId?: string;
@@ -161,14 +175,7 @@ const runScopeModuleCheckedCount = computed(() =>
 );
 
 const runScopeSelectedSummary = computed(() => {
-  if (!runPlan.value) return null;
-  const mods = runPlan.value.modules.filter((m) => runCheckedModules.value.has(m.module));
-  return {
-    modules: mods.length,
-    totalModules: runPlan.value.modules.length,
-    cases: mods.reduce((sum, m) => sum + m.case_count, 0),
-    totalCases: runPlan.value.total_cases,
-  };
+  return deriveUnitTestRunScopeSelection(runPlan.value, runCheckedModules.value);
 });
 
 const runScopeButtonModuleCount = computed(() => {
@@ -193,11 +200,7 @@ const canRunFull = computed(() => {
   return true;
 });
 
-const passRate = computed(() => {
-  const s = result.value?.summary;
-  if (!s || s.tests_run === 0) return 0;
-  return Math.round((s.passed / s.tests_run) * 100);
-});
+const passRate = computed(() => unitTestPassRate(result.value?.summary));
 
 const suiteLabelById = computed(() => {
   const map = new Map<string, string>();
@@ -205,57 +208,22 @@ const suiteLabelById = computed(() => {
   return map;
 });
 
-function caseMatchesStatus(c: UnitTestCaseResult) {
-  if (c.status === "failed" || c.status === "error") {
-    return resultStatusChecked.value.has("failed") || resultStatusChecked.value.has("error");
-  }
-  return resultStatusChecked.value.has(c.status);
-}
-
 const filteredCases = computed(() => {
-  let cases = result.value?.cases ?? [];
-  if (filterReTestedOnly.value && lastReTestedCaseIds.value.size) {
-    cases = cases.filter((c) => lastReTestedCaseIds.value.has(c.id));
-  } else if (filterWatchlistOnly.value) {
-    const ids = watchlistIdSet.value;
-    cases = cases.filter((c) => ids.has(c.id));
-  }
-  return cases.filter(
-    (c) => resultSuiteChecked.value.has(c.suite_id) && caseMatchesStatus(c),
-  );
+  return filterUnitTestCases(result.value?.cases ?? [], {
+    suiteIds: resultSuiteChecked.value,
+    statuses: resultStatusChecked.value,
+    watchlistOnly: filterWatchlistOnly.value,
+    reTestedOnly: filterReTestedOnly.value,
+    watchlistIds: watchlistIdSet.value,
+    reTestedIds: lastReTestedCaseIds.value,
+  });
 });
 
 const filteredModuleSummaries = computed(() => {
-  const mods = result.value?.modules ?? [];
-  const visibleModules = new Set(filteredCases.value.map((c) => c.module));
-  return mods.filter((m) => visibleModules.has(m.module));
+  return filterUnitTestModuleSummaries(result.value?.modules ?? [], filteredCases.value);
 });
 
-const groupedModules = computed(() => {
-  const map = new Map<string, UnitTestCaseResult[]>();
-  for (const c of filteredCases.value) {
-    const list = map.get(c.module) ?? [];
-    list.push(c);
-    map.set(c.module, list);
-  }
-  return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
-});
-
-function statusLabel(status: string) {
-  if (status === "passed") return "通过";
-  if (status === "failed") return "失败";
-  if (status === "error") return "错误";
-  if (status === "skipped") return "跳过";
-  return status;
-}
-
-function statusClass(status: string) {
-  return `status-${status}`;
-}
-
-function shortModule(module: string) {
-  return module.replace(/^tests\./, "");
-}
+const groupedModules = computed(() => groupUnitTestCasesByModule(filteredCases.value));
 
 function suiteShortLabel(suiteId: string): string {
   if (suiteId === "cad") return "CAD";
@@ -388,24 +356,6 @@ function syncWatchlistFromCase(c: UnitTestCaseResult) {
   }
 }
 
-function formatRunSummary(r: UnitTestRunResult): string {
-  const s = r.summary;
-  if (s.cancelled) {
-    const base = `${r.suite_label}：已终止 · 已完成 ${s.tests_run} 条（${r.duration_ms} ms）`;
-    if (s.failed + s.errors > 0) {
-      return `${base} · 失败 ${s.failed}、错误 ${s.errors}`;
-    }
-    return base;
-  }
-  const base = r.ok
-    ? `${r.suite_label}：${s.passed}/${s.tests_run} 通过（${r.duration_ms} ms）`
-    : `${r.suite_label}：失败 ${s.failed}、错误 ${s.errors}（${r.duration_ms} ms）`;
-  if (s.ignored && s.ignored > 0) {
-    return `${base} · 忽略 ${s.ignored} 条（关注·默认不跑）`;
-  }
-  return base;
-}
-
 function cancelRun() {
   if (!running.value) return;
   shell.appendLog("[单元测试] 请求终止…（当前用例结束后停止）", { source: "unit_tests" });
@@ -527,22 +477,13 @@ async function loadSuites() {
 
 function syncRunCheckedModulesFromPlan(plan: UnitTestPlan) {
   const names = plan.modules.map((m) => m.module);
-  const prevAvailable = new Set(lastPlanModuleNames.value);
-  const prevChecked = runCheckedModules.value;
-
-  if (!prevAvailable.size) {
-    runCheckedModules.value = new Set(names);
-    lastPlanModuleNames.value = names;
-    return;
-  }
-
-  const next = new Set<string>();
-  for (const name of names) {
-    if (!prevAvailable.has(name)) next.add(name);
-    else if (prevChecked.has(name)) next.add(name);
-  }
-  runCheckedModules.value = next;
-  lastPlanModuleNames.value = names;
+  const synced = syncUnitTestCheckedModules(
+    names,
+    lastPlanModuleNames.value,
+    runCheckedModules.value,
+  );
+  runCheckedModules.value = new Set(synced.checked);
+  lastPlanModuleNames.value = [...synced.available];
 }
 
 function toggleRunScopeModule(module: string, checked: boolean) {
@@ -561,22 +502,19 @@ function toggleAllRunScopeModules(checked: boolean) {
 }
 
 function runModuleFilterOptions(): Pick<UnitTestRunOptions, "include_modules"> | undefined {
-  if (!showRunScopeList.value || !runPlan.value?.modules.length) return undefined;
-  const allNames = runPlan.value.modules.map((m) => m.module);
-  const selected = allNames.filter((m) => runCheckedModules.value.has(m));
-  if (!selected.length || selected.length === allNames.length) return undefined;
-  return { include_modules: selected };
+  return deriveUnitTestModuleFilter(
+    showRunScopeList.value,
+    runPlan.value?.modules.map((module) => module.module) ?? [],
+    runCheckedModules.value,
+  );
 }
 
 function mergeRunOptions(base?: UnitTestRunOptions): UnitTestRunOptions | undefined {
-  const exclude = base?.exclude_cases ?? excludeCaseIdsForFullRun(watchlist.value);
-  const includeCases = base?.include_cases;
-  const mod = runModuleFilterOptions();
-  const opts: UnitTestRunOptions = {};
-  if (exclude.length) opts.exclude_cases = exclude;
-  if (includeCases?.length) opts.include_cases = includeCases;
-  if (mod?.include_modules?.length) opts.include_modules = mod.include_modules;
-  return Object.keys(opts).length ? opts : undefined;
+  return mergeUnitTestRunOptions(
+    base,
+    excludeCaseIdsForFullRun(watchlist.value),
+    runModuleFilterOptions(),
+  );
 }
 
 async function loadRunPlan() {

@@ -50,6 +50,19 @@ import { dialogNameFromCatDlgRel } from "../utils/caaDialogDisplay";
 import { addChildNode, findCaaNode, insertGridCol, insertGridRow, nlsFlatMapsEqual, removeChildNode, renumberGrid } from "../utils/caaDialogTree";
 import { buildBuilderRecord, type BuilderRecord } from "../utils/caaDropZone";
 import { createBlankCaaDialogIr } from "../utils/createBlankCaaDialogIr";
+import {
+  CAA_IR_HISTORY_LIMIT as HISTORY_LIMIT,
+  buildCaaDialogPageSnapshot,
+  caaHistoryStackFromSession as historyStackFromSession,
+  caaLocaleMapsFromSession as localeMapsFromSession,
+  caaStringMapFromSession as stringMapFromSession,
+  cloneCaaDialogPlain,
+  isCaaDialogIr,
+  normalizeCaaIrWriteMode as normalizeIrWriteMode,
+  type CaaDialogPageSnapshot,
+  type CaaIrHistoryEntry,
+  type CaaIrWriteMode as IrWriteMode,
+} from "../models/caaDialogSessionViewModel";
 
 const PAGE_ID = CAA_EDITOR_PAGE_ID;
 
@@ -109,21 +122,6 @@ const openIsDemo = ref(false);
 const isNewDraft = ref(false);
 const draftId = ref<string | null>(null);
 
-type CaaDialogPageSnapshot = {
-  nlsFlat?: Record<string, string>;
-  nlsSourceText?: string;
-  localeNlsFlats?: Record<string, Record<string, string>>;
-  isNewDraft?: boolean;
-  draftId?: string | null;
-  ir?: CaaDialogIr;
-  selectedId?: string | null;
-  irDirty?: boolean;
-  irWriteMode?: IrWriteMode;
-  editMode?: boolean;
-  undoStack?: CaaIrHistoryEntry[];
-  redoStack?: CaaIrHistoryEntry[];
-};
-
 type CaaNlsLocaleOption = {
   id: string;
   label: string;
@@ -131,19 +129,6 @@ type CaaNlsLocaleOption = {
 };
 
 type CaaNlsTreeLocaleMode = "en" | "cn" | "both";
-
-type IrWriteMode = "none" | "patch" | "full";
-
-type CaaIrHistoryEntry = {
-  ir: CaaDialogIr;
-  selectedId: string | null;
-  irWriteMode: IrWriteMode;
-  nlsFlat?: Record<string, string>;
-  localeNlsFlats?: Record<string, Record<string, string>>;
-};
-
-const HISTORY_LIMIT = 50;
-const SESSION_HISTORY_LIMIT = 12;
 
 /** 模块目录选择器 */
 const modulePickerOpen = ref(false);
@@ -169,86 +154,7 @@ const localeBaselineFlats = ref<Record<string, Record<string, string>>>({});
 const localeSourceTexts = ref<Record<string, string>>({});
 
 function clonePlain<T>(value: T): T {
-  return JSON.parse(JSON.stringify(toRaw(value))) as T;
-}
-
-function irForSession(ir: CaaDialogIr): CaaDialogIr {
-  const cloned = clonePlain(ir);
-  if (cloned.parseMeta) {
-    delete cloned.parseMeta.catNlsSourceText;
-    delete cloned.parseMeta.localeNlsSourceTexts;
-    cloned.parseMeta.locales = cloned.parseMeta.locales.map((locale) => {
-      const copy = { ...locale };
-      delete copy.sourceText;
-      return copy;
-    });
-  }
-  return cloned;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === "object" && !Array.isArray(value));
-}
-
-function isCaaDialogIr(value: unknown): value is CaaDialogIr {
-  if (!isRecord(value)) return false;
-  if (value.schemaVersion !== 1 || typeof value.dialogName !== "string") return false;
-  if (!isRecord(value.sources) || !isRecord(value.root)) return false;
-  return typeof value.root.id === "string" && Array.isArray(value.root.children);
-}
-
-function normalizeIrWriteMode(value: unknown, fallback: IrWriteMode): IrWriteMode {
-  return value === "patch" || value === "full" || value === "none" ? value : fallback;
-}
-
-function historyEntryFromSession(value: unknown): CaaIrHistoryEntry | null {
-  if (!isRecord(value) || !isCaaDialogIr(value.ir)) return null;
-  const nlsFlat = stringMapFromSession(value.nlsFlat);
-  const localeNlsFlats = localeMapsFromSession(value.localeNlsFlats);
-  return {
-    ir: clonePlain(value.ir),
-    selectedId: typeof value.selectedId === "string" ? value.selectedId : null,
-    irWriteMode: normalizeIrWriteMode(value.irWriteMode, "full"),
-    ...(nlsFlat ? { nlsFlat } : {}),
-    ...(localeNlsFlats ? { localeNlsFlats } : {}),
-  };
-}
-
-function historyStackFromSession(value: unknown): CaaIrHistoryEntry[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map(historyEntryFromSession)
-    .filter((entry): entry is CaaIrHistoryEntry => Boolean(entry))
-    .slice(-HISTORY_LIMIT);
-}
-
-function historyStackForSession(stack: CaaIrHistoryEntry[]): CaaIrHistoryEntry[] {
-  return stack.slice(-SESSION_HISTORY_LIMIT).map((entry) => ({
-    ir: irForSession(entry.ir),
-    selectedId: entry.selectedId ?? null,
-    irWriteMode: entry.irWriteMode,
-    ...(entry.nlsFlat ? { nlsFlat: { ...entry.nlsFlat } } : {}),
-    ...(entry.localeNlsFlats ? { localeNlsFlats: clonePlain(entry.localeNlsFlats) } : {}),
-  }));
-}
-
-function stringMapFromSession(value: unknown): Record<string, string> | null {
-  if (!isRecord(value)) return null;
-  const out: Record<string, string> = {};
-  for (const [key, entry] of Object.entries(value)) {
-    if (typeof entry === "string") out[key] = entry;
-  }
-  return out;
-}
-
-function localeMapsFromSession(value: unknown): Record<string, Record<string, string>> | null {
-  if (!isRecord(value)) return null;
-  const out: Record<string, Record<string, string>> = {};
-  for (const [locale, flat] of Object.entries(value)) {
-    const map = stringMapFromSession(flat);
-    if (map) out[locale] = map;
-  }
-  return out;
+  return cloneCaaDialogPlain(toRaw(value));
 }
 
 const catDlgRel = computed(() => {
@@ -1574,29 +1480,20 @@ async function saveDialogToDisk() {
 }
 
 usePageSession(props.workbenchTabId, {
-  serialize: () => {
-    const snapshot: CaaDialogPageSnapshot = {
-      nlsFlat: { ...currentNlsFlat.value },
-      nlsSourceText: nlsSourceText.value,
-      localeNlsFlats: clonePlain(localeNlsFlats.value),
-      selectedId: localSelectedId.value,
-      irDirty: irDirty.value,
-      irWriteMode: irWriteMode.value,
-      editMode: editMode.value,
-    };
-    const undoHistory = historyStackForSession(undoStack.value);
-    const redoHistory = historyStackForSession(redoStack.value);
-    if (undoHistory.length) snapshot.undoStack = undoHistory;
-    if (redoHistory.length) snapshot.redoStack = redoHistory;
-    if (isNewDraft.value && localIr.value) {
-      snapshot.isNewDraft = true;
-      snapshot.draftId = draftId.value;
-      snapshot.ir = irForSession(localIr.value);
-    } else if (irDirty.value && localIr.value) {
-      snapshot.ir = irForSession(localIr.value);
-    }
-    return snapshot as Record<string, unknown>;
-  },
+  serialize: () => buildCaaDialogPageSnapshot({
+    nlsFlat: currentNlsFlat.value,
+    nlsSourceText: nlsSourceText.value,
+    localeNlsFlats: toRaw(localeNlsFlats.value),
+    selectedId: localSelectedId.value,
+    irDirty: irDirty.value,
+    irWriteMode: irWriteMode.value,
+    editMode: editMode.value,
+    undoStack: toRaw(undoStack.value),
+    redoStack: toRaw(redoStack.value),
+    isNewDraft: isNewDraft.value,
+    draftId: draftId.value,
+    ir: localIr.value ? toRaw(localIr.value) : null,
+  }) as Record<string, unknown>,
   hydrate: async () => false,
   isDirty: anyDirty,
   flush: async () => {

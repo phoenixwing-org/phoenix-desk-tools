@@ -3,17 +3,39 @@ import { computed, ref, watch } from "vue";
 import {
   fetchAssemblyTreeByHost,
   type AssemblyTreeNode,
-  type AssemblyXrefInstance,
   type BomXrefEdge,
-  type LinkLabelPatch,
 } from "../api";
 import { useAppShell } from "../composables/useAppShell";
 import ExpandCaret from "phoenix-wing/components/PnwExpandCaret.vue";
 import XlinkReplaceDialog from "./XlinkReplaceDialog.vue";
+import { resolveRuleLabelForNode } from "../utils/fcstdRuleLabel";
 import {
-  linkLabelsEqual,
-  resolveRuleLabelForNode,
-} from "../utils/fcstdRuleLabel";
+  assemblyTreeApplyRuleLabels,
+  assemblyTreeCanEditLabel,
+  assemblyTreeDisplayLabel,
+  assemblyTreeEditKey as editKey,
+  assemblyTreeFlatten,
+  assemblyTreeInstanceRows,
+  assemblyTreeInstancesOf as instancesOf,
+  assemblyTreeIsAssembly as isAssemblyNode,
+  assemblyTreeIsLabelEdited,
+  assemblyTreeIsMissing as isMissingNode,
+  assemblyTreeIsResolved as isResolvedNode,
+  assemblyTreeIsUnresolved as isUnresolved,
+  assemblyTreeMissingRowTitle as missingRowTitle,
+  assemblyTreePendingChanges,
+  assemblyTreePendingPatches,
+  assemblyTreePrimaryXlinkAttr as primaryXlinkAttr,
+  assemblyTreeRole as resolveRole,
+  assemblyTreeRoleLabel as roleLabel,
+  assemblyTreeRowStatusClass as rowStatusClass,
+  assemblyTreeStatusLabel as statusLabel,
+  assemblyTreeToggleAriaLabel,
+  assemblyTreeToggleVisualState,
+  assemblyTreeWithLabelEdit,
+  walkAssemblyTree,
+  type AssemblyTreeInstanceViewInput,
+} from "../models/assemblyTreeViewModel";
 
 const props = withDefaults(
   defineProps<{
@@ -44,14 +66,6 @@ const replaceOpen = ref(false);
 const replaceHostRel = ref("");
 const replaceEdge = ref<BomXrefEdge | null>(null);
 
-type FlatRow = { node: AssemblyTreeNode; depth: number };
-type InstanceRow = {
-  node: AssemblyTreeNode;
-  depth: number;
-  instance: AssemblyXrefInstance;
-  instanceIndex: number;
-};
-
 const expanded = ref<Set<string>>(new Set());
 const expandedLabels = ref<Set<string>>(new Set());
 /** 装配子树懒加载（索引未嵌套或未切全部层级时） */
@@ -60,70 +74,24 @@ const loadingSubtree = ref<Set<string>>(new Set());
 /** key: host\\0xlink_attr → edited label */
 const edits = ref<Map<string, string>>(new Map());
 
-function editKey(host: string, attr: string) {
-  return `${host}\x00${attr}`;
+function displayLabel(host: string, instance: AssemblyTreeInstanceViewInput) {
+  return assemblyTreeDisplayLabel(edits.value, host, instance);
 }
 
-function instancesOf(node: AssemblyTreeNode): AssemblyXrefInstance[] {
-  if (node.xref_instances?.length) return node.xref_instances;
-  const attr = node.xlink_file_attr?.trim();
-  if (!attr) return [];
-  return [{ xlink_file_attr: attr, link_label: node.link_label ?? "" }];
-}
-
-function baselineLabel(_host: string, inst: AssemblyXrefInstance) {
-  return inst.link_label ?? "";
-}
-
-function displayLabel(host: string, inst: AssemblyXrefInstance) {
-  const key = editKey(host, inst.xlink_file_attr);
-  if (edits.value.has(key)) return edits.value.get(key)!;
-  return baselineLabel(host, inst);
-}
-
-function isLabelEdited(host: string, inst: AssemblyXrefInstance) {
-  const key = editKey(host, inst.xlink_file_attr);
-  if (!edits.value.has(key)) return false;
-  return !linkLabelsEqual(edits.value.get(key)!, baselineLabel(host, inst));
-}
-
-function isMissingNode(node: AssemblyTreeNode) {
-  return node.resolve_status === "missing";
-}
-
-function isResolvedNode(node: AssemblyTreeNode) {
-  const s = node.resolve_status;
-  return s === "resolved" || s === "ok" || s === "present" || s === "self";
-}
-
-function missingRowTitle(node: AssemblyTreeNode) {
-  const parts = ["链接缺失"];
-  const xlink = primaryXlinkAttr(node);
-  if (xlink) parts.push(xlink);
-  return parts.join(" · ");
+function isLabelEdited(host: string, instance: AssemblyTreeInstanceViewInput) {
+  return assemblyTreeIsLabelEdited(edits.value, host, instance);
 }
 
 function canEditLinkLabel(node: AssemblyTreeNode) {
-  return props.editable && !isMissingNode(node);
+  return assemblyTreeCanEditLabel(node, props.editable);
 }
 
-function setLabel(node: AssemblyTreeNode, inst: AssemblyXrefInstance, value: string) {
+function setLabel(node: AssemblyTreeNode, instance: AssemblyTreeInstanceViewInput, value: string) {
   if (!canEditLinkLabel(node)) return;
   const host = node.host_repo_rel?.trim();
   if (!host) return;
-  const key = editKey(host, inst.xlink_file_attr);
-  const base = baselineLabel(host, inst);
-  const next = new Map(edits.value);
-  if (linkLabelsEqual(value, base)) next.delete(key);
-  else next.set(key, value);
-  edits.value = next;
+  edits.value = assemblyTreeWithLabelEdit(edits.value, host, instance, value);
   emit("edits-change", hasPendingLabelEdits());
-}
-
-function isAssemblyNode(node: AssemblyTreeNode) {
-  if (node.file_role === "assembly") return true;
-  const name = node.basename || node.repo_rel_path || "";
-  return /\.assy\.fcstd$/i.test(name);
 }
 
 function childrenOf(node: AssemblyTreeNode): AssemblyTreeNode[] {
@@ -178,19 +146,21 @@ async function toggle(node: AssemblyTreeNode) {
 
 /** 展开钮视觉状态：loading | expanded | collapsed | lazy | leaf */
 function toggleVisualState(node: AssemblyTreeNode) {
-  if (loadingSubtree.value.has(node.id)) return "loading";
-  if (hasSubtree(node)) return expanded.value.has(node.id) ? "expanded" : "collapsed";
-  if (isAssemblyNode(node)) return "lazy";
-  return "leaf";
+  return assemblyTreeToggleVisualState(
+    node,
+    expanded.value,
+    loadingSubtree.value,
+    hasSubtree(node),
+  );
 }
 
 function toggleAriaLabel(node: AssemblyTreeNode) {
-  if (loadingSubtree.value.has(node.id)) return "加载子件";
-  if (hasSubtree(node)) {
-    return expanded.value.has(node.id) ? "折叠子件" : "展开子件";
-  }
-  if (isAssemblyNode(node)) return "加载并展开该装配的下级子件";
-  return "无子件";
+  return assemblyTreeToggleAriaLabel(
+    node,
+    expanded.value,
+    loadingSubtree.value,
+    hasSubtree(node),
+  );
 }
 
 function toggleLabelExpand(node: AssemblyTreeNode) {
@@ -200,35 +170,18 @@ function toggleLabelExpand(node: AssemblyTreeNode) {
   expandedLabels.value = next;
 }
 
-function flatten(nodes: AssemblyTreeNode[], depth = 0, out: FlatRow[] = []): FlatRow[] {
-  for (const node of nodes) {
-    out.push({ node, depth });
-    if (expanded.value.has(node.id) && hasSubtree(node)) {
-      flatten(childrenOf(node), depth + 1, out);
-    }
-  }
-  return out;
-}
-
 const flatRows = computed(() => {
   void lazyChildren.value;
-  return flatten(props.nodes);
+  return assemblyTreeFlatten(props.nodes, expanded.value, childrenOf);
 });
 
-function instanceExtraRows(node: AssemblyTreeNode, depth: number): InstanceRow[] {
-  const insts = instancesOf(node);
-  if (!expandedLabels.value.has(node.id) || insts.length <= 1) return [];
-  return insts.slice(1).map((instance, i) => ({
-    node,
-    depth,
-    instance,
-    instanceIndex: i + 1,
-  }));
+function instanceExtraRows(node: AssemblyTreeNode, depth: number) {
+  return assemblyTreeInstanceRows(node, depth, expandedLabels.value);
 }
 
 function expandAllLabels(nodes: AssemblyTreeNode[]) {
   const next = new Set(expandedLabels.value);
-  walkNodes(nodes, (node) => {
+  walkAssemblyTree(nodes, childrenOf, (node) => {
     if ((node.ref_count ?? 1) > 1) next.add(node.id);
   });
   expandedLabels.value = next;
@@ -265,20 +218,6 @@ function collapseAll() {
   expandedLabels.value = new Set();
 }
 
-function roleLabel(role: string) {
-  const map: Record<string, string> = {
-    part: "零件",
-    drawing: "工程图",
-    assembly: "装配",
-  };
-  return map[role] ?? role;
-}
-
-function resolveRole(node: AssemblyTreeNode) {
-  if (node.file_role?.trim()) return node.file_role.trim();
-  return isAssemblyNode(node) ? "assembly" : "part";
-}
-
 function roleIconClass(node: AssemblyTreeNode) {
   const role = resolveRole(node);
   return {
@@ -291,86 +230,14 @@ function roleIconClass(node: AssemblyTreeNode) {
 
 /** 将各行的规则名填入链接标签文本框（不写盘，需再点「应用」） */
 function applyRuleLabelsPreview(): { filled: number; unchanged: number; noRule: number } {
-  const next = new Map(edits.value);
-  let filled = 0;
-  let unchanged = 0;
-  let noRule = 0;
-
-  walkNodes(props.nodes, (node) => {
-    if (isMissingNode(node)) return;
-    const host = node.host_repo_rel?.trim();
-    if (!host) return;
-    const rule = resolveRuleLabelForNode(node);
-    if (!rule) {
-      noRule += 1;
-      return;
-    }
-    for (const inst of instancesOf(node)) {
-      const attr = inst.xlink_file_attr?.trim();
-      if (!attr) continue;
-      const key = editKey(host, attr);
-      const current = displayLabel(host, inst);
-      if (linkLabelsEqual(rule, current)) {
-        unchanged += 1;
-        next.delete(key);
-        continue;
-      }
-      if (linkLabelsEqual(rule, baselineLabel(host, inst))) {
-        unchanged += 1;
-        next.delete(key);
-        continue;
-      }
-      next.set(key, rule);
-      filled += 1;
-    }
-  });
-
-  edits.value = next;
+  const result = assemblyTreeApplyRuleLabels(props.nodes, edits.value, childrenOf);
+  edits.value = new Map(result.edits);
   emit("edits-change", hasPendingLabelEdits());
-  return { filled, unchanged, noRule };
+  return { filled: result.filled, unchanged: result.unchanged, noRule: result.noRule };
 }
 
 function hasPendingLabelEdits(): boolean {
-  for (const [key, value] of edits.value) {
-    const sep = key.indexOf("\x00");
-    if (sep < 0) continue;
-    const host = key.slice(0, sep);
-    const attr = key.slice(sep + 1);
-    let base = "";
-    walkNodes(props.nodes, (node) => {
-      if (base || node.host_repo_rel?.trim() !== host) return;
-      for (const inst of instancesOf(node)) {
-        if (inst.xlink_file_attr?.trim() === attr) {
-          base = baselineLabel(host, inst);
-        }
-      }
-    });
-    if (!linkLabelsEqual(value, base)) return true;
-  }
-  return false;
-}
-
-function statusLabel(s: string) {
-  if (s === "ok" || s === "present" || s === "resolved") return "已解析";
-  if (s === "missing") return "缺失";
-  if (s === "ambiguous") return "歧义";
-  if (s === "self") return "自身";
-  return s || "—";
-}
-
-function isUnresolved(node: AssemblyTreeNode) {
-  const s = node.resolve_status;
-  return s === "missing" || s === "ambiguous";
-}
-
-function rowStatusClass(node: AssemblyTreeNode) {
-  if (node.resolve_status === "missing") return "row-missing";
-  if (node.resolve_status === "ambiguous") return "row-ambiguous";
-  return "";
-}
-
-function primaryXlinkAttr(node: AssemblyTreeNode) {
-  return instancesOf(node)[0]?.xlink_file_attr?.trim() || node.xlink_file_attr?.trim() || "";
+  return assemblyTreePendingPatches(props.nodes, edits.value, childrenOf).length > 0;
 }
 
 function canReplaceXlink(node: AssemblyTreeNode) {
@@ -428,62 +295,12 @@ function openFileDetail(node: AssemblyTreeNode) {
   shell.openFileDetailForRel(rel);
 }
 
-function walkNodes(nodes: AssemblyTreeNode[], fn: (n: AssemblyTreeNode) => void) {
-  for (const n of nodes) {
-    fn(n);
-    const ch = childrenOf(n);
-    if (ch.length) walkNodes(ch, fn);
-  }
-}
-
-function getPendingPatches(): LinkLabelPatch[] {
-  const patches: LinkLabelPatch[] = [];
-  walkNodes(props.nodes, (node) => {
-    if (isMissingNode(node)) return;
-    const host = node.host_repo_rel?.trim();
-    if (!host) return;
-    for (const inst of instancesOf(node)) {
-      const attr = inst.xlink_file_attr?.trim();
-      if (!attr) continue;
-      const key = editKey(host, attr);
-      if (!edits.value.has(key)) continue;
-      const newLabel = edits.value.get(key)!.trim();
-      if (linkLabelsEqual(newLabel, baselineLabel(host, inst))) continue;
-      patches.push({
-        host_repo_rel: host,
-        xlink_file_attr: attr,
-        link_label: newLabel,
-      });
-    }
-  });
-  return patches;
+function getPendingPatches() {
+  return assemblyTreePendingPatches(props.nodes, edits.value, childrenOf);
 }
 
 function getPendingLabelChanges() {
-  const rows: Array<{
-    host_repo_rel: string;
-    xlink_file_attr: string;
-    old_label: string;
-    new_label: string;
-  }> = [];
-  walkNodes(props.nodes, (node) => {
-    if (isMissingNode(node)) return;
-    const host = node.host_repo_rel?.trim();
-    if (!host) return;
-    for (const inst of instancesOf(node)) {
-      const attr = inst.xlink_file_attr?.trim();
-      if (!attr) continue;
-      const key = editKey(host, attr);
-      if (!edits.value.has(key)) continue;
-      rows.push({
-        host_repo_rel: host,
-        xlink_file_attr: attr,
-        old_label: baselineLabel(host, inst),
-        new_label: edits.value.get(key)!.trim(),
-      });
-    }
-  });
-  return rows;
+  return assemblyTreePendingChanges(props.nodes, edits.value, childrenOf);
 }
 
 function hasEdits() {

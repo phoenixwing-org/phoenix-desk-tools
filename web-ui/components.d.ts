@@ -86,6 +86,7 @@ declare module 'vue' {
     ElTag: typeof import('element-plus/es')['ElTag']
     ElTooltip: typeof import('element-plus/es')['ElTooltip']
     ElTree: typeof import('element-plus/es')['ElTree']
+    FcstdMapIndexPane: typeof import('./src/components/fcstd-map/FcstdMapIndexPane.vue')['default']
     FileAssemblyPanel: typeof import('./src/components/file-detail/FileAssemblyPanel.vue')['default']
     FileAttributesPanel: typeof import('./src/components/file-detail/FileAttributesPanel.vue')['default']
     FileOverviewPanel: typeof import('./src/components/file-detail/FileOverviewPanel.vue')['default']

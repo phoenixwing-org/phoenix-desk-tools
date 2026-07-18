@@ -322,6 +322,13 @@
       "lastVerified": "2026-07-17"
     },
     {
+      "path": "doc/cad/CAD索引面板-人工点检清单.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.2.x",
+      "lastVerified": "2026-07-17"
+    },
+    {
       "path": "doc/cad/FCStd真实制品验收.md",
       "status": "current",
       "owner": "Desk Tools maintainers",

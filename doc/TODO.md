@@ -41,7 +41,7 @@ Owner：Desk Tools maintainers
 
 - [x] 用 release profile Wing Rust 二进制和真实 `Document.xml` 构造 FCStd archive，自动验收协议读、XLink 修改、修改后复读与精确字节回滚。
 - [x] 从当前 0.2.0 源码构建 macOS arm64 Tauri `.app`，自动验收真实启动、隔离用户数据、Codegen Apply、FCStd 读取和 sidecar 正常回收。
-- [ ] 为 `fcstd_map` 实现分页，避免全表加载。
+- [x] `fcstd_map` 已通过分页 API 与页码/页大小状态避免全表加载；大型 UI 目标进一步把查询、分页和 session 规则移入纯 ViewModel。
 - [ ] 统一长任务进度、取消与运行日志，不让页面各自维护第二套任务状态。
 - [ ] 将剩余 Python 兼容入口逐项判定为外部引擎 adapter 或退役路径；Node/Hono 是当前 HTTP 真源。
 - [ ] **用户手工验收**：在自有 Windows 机器执行已入库的 0.2.0 NSIS 构建/安装/Codegen/FCStd/退出/卸载门禁，回传脚本生成的 JSON 回执与最终成功日志；Codex 不连接远程 Windows、不创建 GitHub 镜像。FreeCAD/SolidWorks 外部进程 E/F 档仍需独立环境；历史 0.1.0 Windows 产物不计入当前版本。
@@ -49,3 +49,14 @@ Owner：Desk Tools maintainers
 ## 后期：大型 UI 拆分
 
 用户已于 2026-07-18 接受联合成熟度 **92.00** 作为本轮停止线，并决定另立大型 UI 拆分目标。优先 `UnitTestsPage.vue`、`CaaDialogEditorPage.vue`、`AssemblyTreeTable.vue`、`FcstdMapPage.vue`；拆分前继续禁止向这些文件加入新的领域算法或数据库真相。
+
+- [x] `FcstdMapPage.vue` 第一切口：资产行投影、查询/分页规则和 v2–v4 session 迁移进入 UI-neutral `fcstdMapViewModel.ts`，页面从 1,208 行降到 1,161 行；纯测试与页面边界测试已建立。
+- [x] `FcstdMapPage.vue` 第二切口：entries 加载、loading/error、filter/pager 与单一 debounce 已进入可注入 fetch port 的 `useFcstdMapEntries`；扫描任务、purge、export、Shell 和 localStorage 未进入列表 controller。页面现为 1,111 行。
+- [x] `FcstdMapPage.vue` 第三切口 A：其余三个 Desk 大页面均已建立首条边界；索引 pane 的搜索/筛选、12 列、行身份/动作、三类空状态、分页和 Page Host/session 真源已由 4 项 characterization 冻结。
+- [x] `FcstdMapPage.vue` 第三切口 B：单消费者 `FcstdMapIndexPane.vue` 已拥有索引列表 DOM、12 列 UI 定义、展示投影和 scoped style；三组筛选由受控 `v-model` 回到 Page，分页与打开动作只发语义事件。Controller、扫描/purge/export、Shell、localStorage、session 和导航安全复核继续留在 Page；Page 从 1,111 行降到 851 行，Pane 为 290 行；滚动、筛选、空状态和窄宽度按 [CAD 索引面板人工点检](cad/CAD索引面板-人工点检清单.md) 留证。
+- [x] `UnitTestsPage.vue` 第一切口：确认既有 Pinia store 继续作为 session 真源；运行范围勾选迁移、结果过滤/分组、通过率/摘要和 run options 组装已进入 UI-neutral `unitTestsViewModel.ts`，并由边界测试锁住 plan/stream/cancel API 仍归 Page Host 层。页面从 2,214 行降到 2,152 行。
+- [ ] `UnitTestsPage.vue` 后续切口：先提炼流式 run controller，再按 RunScope、Watchlist、Result pane 拆 page shell；不复制 store、watchlist utility 或 module-history utility。
+- [x] `CaaDialogEditorPage.vue` 第一切口：IR/session 校验、NLS map 清洗、历史栈裁剪、source text 脱敏和草稿/dirty snapshot 组装已进入 UI-neutral `caaDialogSessionViewModel.ts`；`usePageSession`、解析、草稿 API 与写回继续由 Page Host 层负责。页面从 1,898 行降到 1,797 行。
+- [ ] `CaaDialogEditorPage.vue` 后续切口：提炼 editor history controller 与 NLS session ViewModel，再拆 canvas/page shell；写回、草稿持久化和 API 保持 Host adapter。
+- [x] `AssemblyTreeTable.vue` 第一切口：递归树行/多实例投影、角色与状态语义、展开视觉状态、标签编辑比较、规则预览和写盘 patch 投影已进入 UI-neutral `assemblyTreeViewModel.ts`；组件保留懒加载、弹窗与宿主动作，从 1,213 行降到 1,029 行。
+- [ ] `AssemblyTreeTable.vue` 后续视觉切口：待 `UnitTestsPage.vue` 与 `CaaDialogEditorPage.vue` 建立首条边界后，再评估 row renderer 与 426 行 scoped style；保持当前 props、事件和 `defineExpose` 契约。

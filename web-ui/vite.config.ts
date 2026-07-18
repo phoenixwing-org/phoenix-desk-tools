@@ -8,6 +8,7 @@ import { resolvePhoenixWingPath } from "./config/resolvePhoenixWing";
 
 /** 开发：Vite 5173，Node Hono 5180。 */
 const caaPort = Number(process.env.CAA_SERVER_PORT || 5180);
+const elementPlusImportStyle = process.env.VITEST ? false : "sass";
 
 const webRoot = resolve(__dirname);
 const localWingSrc = resolvePhoenixWingPath(webRoot);
@@ -26,7 +27,7 @@ export default defineConfig({
       dts: "auto-imports.d.ts",
     }),
     Components({
-      resolvers: [ElementPlusResolver({ importStyle: "sass" })],
+      resolvers: [ElementPlusResolver({ importStyle: elementPlusImportStyle })],
       dts: "components.d.ts",
     }),
   ],
