@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const page = readFileSync(new URL("../pages/CaaDialogEditorPage.vue", import.meta.url), "utf8");
 const controller = readFileSync(new URL("./useCaaDialogHistoryController.ts", import.meta.url), "utf8");
+const canvasController = readFileSync(new URL("./useCaaDialogCanvasController.ts", import.meta.url), "utf8");
 
 describe("CAA dialog history page contract", () => {
   it("保留撤销/重做按钮、禁用态与既有快捷键", () => {
@@ -18,10 +19,12 @@ describe("CAA dialog history page contract", () => {
   });
 
   it("所有既有编辑入口继续复用同一条历史记录命令", () => {
-    // 基线中的 11 次包含原内联函数声明；迁出后 10 个实际调用点保持不变。
-    expect(page.match(/recordHistorySnapshot\(\)/g)).toHaveLength(10);
+    // 两个 NLS 编辑入口留在 Page；八个 Canvas 命令入口迁入 Controller。
+    expect(page.match(/recordHistorySnapshot\(\)/g)).toHaveLength(2);
+    expect(canvasController.match(/ports\.recordHistory\(\)/g)).toHaveLength(8);
     expect(page).toContain("recordHistory: recordHistorySnapshot");
-    expect(page).toContain("if (opts?.recordHistory !== false) recordHistorySnapshot();");
+    expect(canvasController).toContain("if (opts?.recordHistory !== false) ports.recordHistory();");
+    expect(canvasController).toContain("recordHistory: ports.recordHistory");
   });
 
   it("PageSession 继续负责历史栈的序列化与恢复", () => {
@@ -47,11 +50,13 @@ describe("CAA dialog history page contract", () => {
     expect(page).toContain("parseCaaDialog(");
     expect(page).toContain("writeCaaDialogFromIr(");
     expect(page).toContain("saveCaaDraft(");
+    expect(page).toContain("useCaaDialogCanvasController({");
 
     expect(controller).toContain("const undoStack = ref<CaaIrHistoryEntry[]>([])");
     expect(controller).toContain("function snapshotHistoryEntry(");
     expect(controller).toContain("function restoreHistoryEntry(");
     expect(controller).toContain("caaHistoryStackFromSession(");
     expect(controller).not.toMatch(/useAppShell|usePageSession|useCaaDialogPageStore|localStorage|sessionStorage|from ["']\.\.\/api/);
+    expect(canvasController).not.toMatch(/useAppShell|usePageSession|useCaaDialogPageStore|localStorage|sessionStorage|from ["']\.\.\/api/);
   });
 });

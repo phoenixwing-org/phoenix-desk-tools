@@ -37,8 +37,9 @@ import {
 import { CAA_EDITOR_PAGE_ID } from "../constants/caaPages";
 import { useCaaDialogPropertySheet } from "../composables/useCaaDialogPropertySheet";
 import { useCaaDialogHistoryController } from "../composables/useCaaDialogHistoryController";
+import { useCaaDialogCanvasController } from "../composables/useCaaDialogCanvasController";
 import { CAA_NLS_EDIT_KEY, CAA_NLS_SESSION_KEY, type CaaNlsEditTarget } from "../composables/caaNlsEdit";
-import { CAA_CONTROL_KEY, type CaaContextMenuItem } from "../composables/useCaaControlContext";
+import { CAA_CONTROL_KEY } from "../composables/useCaaControlContext";
 import { useAppShell } from "../composables/useAppShell";
 import { usePageSession } from "../composables/usePageSession";
 import { usePageSummary } from "../composables/usePageSummary";
@@ -47,8 +48,7 @@ import { useCaaDialogPageStore } from "../stores/caaDialogPage";
 import type { CaaDialogIr, CaaDialogNode } from "../types/caaDialogIr";
 import type { CaaDialogDraft } from "../types/caaDialogDraft";
 import { dialogNameFromCatDlgRel } from "../utils/caaDialogDisplay";
-import { addChildNode, findCaaNode, insertGridCol, insertGridRow, nlsFlatMapsEqual, removeChildNode, renumberGrid } from "../utils/caaDialogTree";
-import { buildBuilderRecord, type BuilderRecord } from "../utils/caaDropZone";
+import { findCaaNode, nlsFlatMapsEqual } from "../utils/caaDialogTree";
 import { createBlankCaaDialogIr } from "../utils/createBlankCaaDialogIr";
 import {
   buildCaaDialogPageSnapshot,
@@ -117,8 +117,6 @@ const workspacePath = computed(() => shell.workspacePath.value.trim());
 
 const localIr = ref<CaaDialogIr | null>(null);
 const localSelectedId = ref<string | null>(null);
-const lastBuilderRecord = ref<BuilderRecord | null>(null);
-const dragJustEnded = ref(false);
 const parsing = ref(false);
 const saving = ref(false);
 const localErrorText = ref("");
@@ -608,144 +606,9 @@ function commitNlsEdit(key: string, value: string, target: CaaNlsEditTarget) {
   syncToSidebar();
 }
 
-const dropIndicator = ref<{ rect: { left: number; top: number; width: number; height: number } | null; edge: "inside" | "right" | "bottom" | "left" | "top" }>({ rect: null, edge: "inside" });
-
-const contextMenuVisible = ref(false);
-const contextMenuItems = ref<CaaContextMenuItem[]>([]);
-const contextMenuPosition = ref({ x: 0, y: 0 });
-const contextMenuTargetId = ref<string | null>(null);
-
-function showContextMenu(nodeId: string, items: CaaContextMenuItem[], pos: { x: number; y: number }) {
-  contextMenuTargetId.value = nodeId;
-  contextMenuItems.value = items;
-  contextMenuPosition.value = pos;
-  contextMenuVisible.value = true;
-}
-
-function hideContextMenu() {
-  contextMenuVisible.value = false;
-  contextMenuTargetId.value = null;
-}
-
-function toggleGridRowResize(containerId: string, rowIndex: number) {
-  const root = localIr.value?.root;
-  if (!root) return;
-  const node = findCaaNode(root, containerId);
-  if (!node) return;
-  recordHistorySnapshot();
-  const gl = node.gridLayout ?? {};
-  const cur = [...(gl.rowResizable ?? [])];
-  const idx = cur.indexOf(rowIndex);
-  if (idx >= 0) cur.splice(idx, 1);
-  else cur.push(rowIndex);
-  cur.sort((a, b) => a - b);
-  node.gridLayout = { ...gl, rowResizable: cur };
-  markIrDirty("patch");
-  syncToSidebar();
-}
-
-function toggleGridColResize(containerId: string, colIndex: number) {
-  const root = localIr.value?.root;
-  if (!root) return;
-  const node = findCaaNode(root, containerId);
-  if (!node) return;
-  recordHistorySnapshot();
-  const gl = node.gridLayout ?? {};
-  const cur = [...(gl.colResizable ?? [])];
-  const idx = cur.indexOf(colIndex);
-  if (idx >= 0) cur.splice(idx, 1);
-  else cur.push(colIndex);
-  cur.sort((a, b) => a - b);
-  node.gridLayout = { ...gl, colResizable: cur };
-  markIrDirty("patch");
-  syncToSidebar();
-}
-
-function setGridRowResize(
-  containerId: string,
-  rowIndex: number,
-  enabled: boolean,
-  opts?: { recordHistory?: boolean },
-) {
-  const root = localIr.value?.root;
-  if (!root) return;
-  const node = findCaaNode(root, containerId);
-  if (!node) return;
-  const gl = node.gridLayout ?? {};
-  const cur = [...(gl.rowResizable ?? [])];
-  const idx = cur.indexOf(rowIndex);
-  const hasValue = idx >= 0;
-  if (hasValue === enabled) return;
-  if (opts?.recordHistory !== false) recordHistorySnapshot();
-  if (enabled) cur.push(rowIndex);
-  else cur.splice(idx, 1);
-  cur.sort((a, b) => a - b);
-  node.gridLayout = { ...gl, rowResizable: cur };
-  markIrDirty("patch");
-  syncToSidebar();
-}
-
-function setGridColResize(
-  containerId: string,
-  colIndex: number,
-  enabled: boolean,
-  opts?: { recordHistory?: boolean },
-) {
-  const root = localIr.value?.root;
-  if (!root) return;
-  const node = findCaaNode(root, containerId);
-  if (!node) return;
-  const gl = node.gridLayout ?? {};
-  const cur = [...(gl.colResizable ?? [])];
-  const idx = cur.indexOf(colIndex);
-  const hasValue = idx >= 0;
-  if (hasValue === enabled) return;
-  if (opts?.recordHistory !== false) recordHistorySnapshot();
-  if (enabled) cur.push(colIndex);
-  else cur.splice(idx, 1);
-  cur.sort((a, b) => a - b);
-  node.gridLayout = { ...gl, colResizable: cur };
-  markIrDirty("patch");
-  syncToSidebar();
-}
-
 const canEditNls = computed(
   () => hasParsed.value && !openIsDemo.value && Boolean(localIr.value?.sources.catNls),
 );
-
-function handleControlSelect(nodeId: string) {
-  localSelectedId.value = nodeId;
-  store.setSelectedId(nodeId, caaEditorStoreId.value);
-}
-
-function removeControlFromContainer(containerId: string, nodeId: string): boolean {
-  const root = localIr.value?.root;
-  if (!root || nodeId === root.id) return false;
-  const container = findCaaNode(root, containerId);
-  if (!container) return false;
-  const nextChildren = container.children.filter((c) => c.id !== nodeId);
-  if (nextChildren.length === container.children.length) return false;
-  recordHistorySnapshot();
-  container.children = nextChildren;
-  renumberGrid(container);
-  if (localSelectedId.value === nodeId) {
-    localSelectedId.value = containerId;
-    store.setSelectedId(containerId, caaEditorStoreId.value);
-  }
-  markIrDirty("full");
-  syncToSidebar();
-  return true;
-}
-
-function deleteSelectedControl(): boolean {
-  const root = localIr.value?.root;
-  const selectedId = localSelectedId.value;
-  if (!root || !selectedId || selectedId === root.id) return false;
-  const selectedNode = findCaaNode(root, selectedId);
-  const parentId = selectedNode?.father;
-  if (!parentId) return false;
-  return removeControlFromContainer(parentId, selectedId);
-}
 
 /** 从 model 树重新计算 NLS 扁平表，去除残留 + 按 model 顺序排列 */
 function syncNlsFromModel() {
@@ -760,131 +623,26 @@ function syncNlsFromModel() {
   currentNlsFlat.value = merged;
 }
 
-/** Builder 删除实现：从容器中移除控件，记录 BuilderRecord */
-function removeControlImpl(containerId: string, nodeId: string) {
-  const root = localIr.value?.root;
-  if (!root) return;
-  const container = findCaaNode(root, containerId);
-  if (!container) return;
-
-  // 快照（仅第一层，含容器子树引用）
-  const childrenBefore = container.children.map((c) => ({
-    ...c,
-    grid: c.grid ? { ...c.grid } : undefined,
-    children: c.children,
-  }));
-
-  // 使用纯函数移除
-  const { removed, newChildren } = removeChildNode(container.children, nodeId);
-  container.children = newChildren;
-  renumberGrid(container);
-  markIrDirty();
-  syncToSidebar();
-
-  // 记录 BuilderRecord
-  if (removed) {
-    lastBuilderRecord.value = buildBuilderRecord({
-      operation: "DELETE",
-      sourceContainerId: null,
-      targetContainerId: containerId,
-      sourceChildrenBefore: null,
-      targetChildrenBefore: childrenBefore,
-      targetChildrenAfter: container.children.map((c) => ({ ...c, grid: c.grid ? { ...c.grid } : undefined, children: c.children })),
-      sourceChildrenAfter: null,
-      affectedNodeId: nodeId,
-      affectedNodeType: removed.type,
-    });
-  }
-
-  // 同步 NLS：去除被删控件的残留 key
-  syncNlsFromModel();
-}
-
-provide(CAA_CONTROL_KEY, {
-  get dialogRoot() { return localIr.value?.root ?? null; },
-  selectedId: localSelectedId,
-  select: handleControlSelect,
-  canEdit: canEditNls,
-  activeLocale: nlsEditorLocale,
-  commitNls: commitNlsEdit,
-  showContextMenu,
-  hideContextMenu,
-  contextMenuVisible,
-  contextMenuItems,
-  contextMenuPosition,
-  contextMenuTargetId,
-  toggleGridRowResize,
-  toggleGridColResize,
-  setGridRowResize,
-  setGridColResize,
-  editMode,
-  // ── Builder drop indicator ──
-  dropIndicator,
-  // ── Builder ──
-  addControl(containerId: string, typeOrNodeId: string, row: number, col: number) {
-    const root = localIr.value?.root;
-    if (!root) return "";
-    const container = findCaaNode(root, containerId);
-    if (!container) return "";
-    recordHistorySnapshot();
-    // 如果是已存在的节点 ID（跨容器移动），直接复用
-    const existing = findCaaNode(root, typeOrNodeId);
-    if (existing) {
-      existing.grid = { ...existing.grid, row, col, rowSpan: 1, colSpan: 1 };
-      existing.father = containerId;
-      container.children.push(existing);
-    } else {
-      addChildNode(container, typeOrNodeId, { row, col });
-    }
-    renumberGrid(container);
-    markIrDirty("full");
-    syncToSidebar();
-    syncNlsFromModel();
-    return typeOrNodeId;
+const { controlContext, deleteSelectedControl } = useCaaDialogCanvasController({
+  state: {
+    ir: localIr,
+    selectedId: localSelectedId,
+    canEditNls,
+    activeLocale: nlsEditorLocale,
+    editMode,
   },
-  removeControl(containerId: string, nodeId: string) {
-    removeControlImpl(containerId, nodeId);
+  ports: {
+    recordHistory: recordHistorySnapshot,
+    markDirty: markIrDirty,
+    syncSidebar: syncToSidebar,
+    mirrorSelection(nodeId) {
+      store.setSelectedId(nodeId, caaEditorStoreId.value);
+    },
+    syncNls: syncNlsFromModel,
+    commitNls: commitNlsEdit,
   },
-  insertRow(containerId: string, beforeRow: number) {
-    const root = localIr.value?.root;
-    if (!root) return;
-    const container = findCaaNode(root, containerId);
-    if (!container) return;
-    recordHistorySnapshot();
-    insertGridRow(container, beforeRow);
-    renumberGrid(container);
-    markIrDirty("full");
-    syncToSidebar();
-  },
-  insertCol(containerId: string, beforeCol: number) {
-    const root = localIr.value?.root;
-    if (!root) return;
-    const container = findCaaNode(root, containerId);
-    if (!container) return;
-    recordHistorySnapshot();
-    insertGridCol(container, beforeCol);
-    renumberGrid(container);
-    markIrDirty("full");
-    syncToSidebar();
-  },
-  recordHistory: recordHistorySnapshot,
-  // ── 原子替换子节点（MVC：计算→apply 一次完成）──
-  setChildren(containerId: string, children: CaaDialogNode[], selectId?: string) {
-    const root = localIr.value?.root;
-    if (!root) return;
-    const container = findCaaNode(root, containerId);
-    if (!container) return;
-    container.children = children;
-    renumberGrid(container);
-    if (selectId) localSelectedId.value = selectId;
-    markIrDirty("full");
-    syncToSidebar();
-  },
-  // ── Builder 操作记录 ──
-  lastBuilderRecord,
-  // ── 拖拽后抑制 click ──
-  dragJustEnded,
 });
+provide(CAA_CONTROL_KEY, controlContext);
 
 const nlsEditCtx = {
   enabled: computed(

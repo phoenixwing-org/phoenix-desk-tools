@@ -36,11 +36,19 @@ VS Code / Tauri launch args
 - `CaaDialogEditorPage.vue` 继续拥有六个响应式真值、active locale 与 canvas 翻译，并调用 locale 创建/保存 API；写盘和 IR sources/parseMeta 更新没有下沉到 ViewModel。
 - 兼容行为与验收证据见 [NLS 会话 ViewModel 验收](CAA对话框-NLS会话ViewModel验收.md)。
 
+## Canvas 命令边界
+
+- `useCaaDialogCanvasController.ts` 拥有 Canvas 选择、右键/Drop 临时状态、ROWRES/COLRES、直接删除、Builder add/remove/insert/setChildren 和 `CAA_CONTROL_KEY` 组装。
+- Controller 只接收 Page-local `ir/selectedId/editMode/locale` refs，以及 history、dirty、sidebar、selection mirror、NLS cleanup 和 NLS commit ports；它不导入 Pinia、PageSession、Shell、消息组件或 API。
+- `CaaDialogEditorPage.vue` 继续拥有 Pinia 实例、active Tab、键盘监听、PageSession、parse/draft/save/write、Shell 日志和 locale UI；`CaaDialogGrid.vue` 继续拥有 DOM 手势与 window/pointer listener。
+- 直接 Delete/Backspace 当前不清理 NLS，而 Builder add/remove 会清理；本次提炼保持该 characterization，不把架构迁移混成产品修复。责任图和点检见 [Canvas 命令责任与提炼点检](CAA对话框-画布命令责任与提炼点检.md)。
+
 ## 当前验证入口
 
 - [多后端测试规则](CAA单元测试-多后端规则.md)
 - [VS Code 交接人工点检](CAA-VSCode交接-人工点检清单.md)
 - [NLS 会话 ViewModel 验收](CAA对话框-NLS会话ViewModel验收.md)
+- [Canvas 命令责任与提炼点检](CAA对话框-画布命令责任与提炼点检.md)
 - [总待办中的 CAA 汇总](../TODO.md#caa)
 
 旧 `CAA模块-概览.md`、P0 原型与完成态规划由文档清单标记为 superseded/archived。

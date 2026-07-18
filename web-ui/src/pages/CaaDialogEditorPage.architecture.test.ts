@@ -49,4 +49,25 @@ describe("CAA dialog editor session boundary", () => {
     expect(model).not.toMatch(/from ["']vue["']|useAppShell|localStorage|window\.|document\.|\.vue["']|from ["']\.\.\/api/);
   });
 
+  it("Canvas Controller 只消费 Page-local refs/ports，Page 保留 Pinia、键盘与 Host API", () => {
+    const page = source("./CaaDialogEditorPage.vue");
+    const controller = source("../composables/useCaaDialogCanvasController.ts");
+    expect(page).toContain('from "../composables/useCaaDialogCanvasController"');
+    expect(page).toContain("useCaaDialogCanvasController({");
+    expect(page).toContain("provide(CAA_CONTROL_KEY, controlContext)");
+    expect(page).toContain("store.setSelectedId(nodeId, caaEditorStoreId.value)");
+    expect(page).toContain("function onWindowKeydown(");
+    expect(page).toContain("usePageSession(");
+    expect(page).toContain("parseCaaDialog(");
+    expect(page).toContain("writeCaaDialogFromIr(");
+
+    expect(controller).toContain("export function useCaaDialogCanvasController(");
+    expect(controller).toContain("readonly mirrorSelection:");
+    expect(controller).toContain("readonly syncNls:");
+    expect(controller).toContain("const controlContext: CaaControlContext");
+    expect(controller).not.toMatch(
+      /useAppShell|usePageSession|useCaaDialogPageStore|ElMessage|\.vue["']|from ["']\.\.\/api/,
+    );
+  });
+
 });

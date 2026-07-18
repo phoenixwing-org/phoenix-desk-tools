@@ -10,7 +10,8 @@
 |---|---|---|
 | Session ViewModel | `web-ui/src/models/caaDialogSessionViewModel.ts` | 历史 entry/page snapshot 类型、会话校验、50 条运行时与 12 条持久化裁剪、source text 脱敏 |
 | History Controller | `web-ui/src/composables/useCaaDialogHistoryController.ts` | snapshot/record/restore、undo/redo/reset、从 page snapshot 恢复栈 |
-| Page/Host | `web-ui/src/pages/CaaDialogEditorPage.vue` | `localIr` 等状态真源、PageSession、快捷键、按钮、Pinia/sidebar 镜像、dirty/clean、解析/草稿/写回 API |
+| Canvas Controller | `web-ui/src/composables/useCaaDialogCanvasController.ts` | 八个 Canvas 编辑入口的命令编排，通过 port 调用统一 history 命令 |
+| Page/Host | `web-ui/src/pages/CaaDialogEditorPage.vue` | `localIr` 等状态真源、两个 NLS 编辑入口、PageSession、快捷键、按钮、Pinia/sidebar 镜像、dirty/clean、解析/草稿/写回 API |
 
 Controller 通过显式 `state` refs 消费 Page-local 状态，通过 `onRestored` 通知 Page 更新 Pinia/sidebar 与 tab dirty；它不访问 Shell、Pinia、PageSession、浏览器存储或 API。
 
@@ -50,7 +51,7 @@ Controller 通过显式 `state` refs 消费 Page-local 状态，通过 `onRestor
 
 快捷键仍由 Page 监听，只在当前 CAA Tab 激活且焦点不在 input/textarea/contenteditable 时生效。
 
-已纳管的编辑入口包括控件新增/移动/删除、插入行列、Grid 行列伸缩、画布原子替换，以及 property sheet、树编辑器中的 NLS 文案修改。编辑/预览模式和单纯的 locale 显示切换不产生历史。
+已纳管的编辑入口包括控件新增/移动/删除、插入行列、Grid 行列伸缩、画布原子替换，以及 property sheet、树编辑器中的 NLS 文案修改。八个 Canvas 调用点经 Canvas Controller 的 `recordHistory` port 接入，两个 NLS 调用点继续留在 Page；编辑/预览模式和单纯的 locale 显示切换不产生历史。
 
 ## 会话与 Host 边界
 
@@ -61,7 +62,7 @@ Controller 通过显式 `state` refs 消费 Page-local 状态，通过 `onRestor
 
 ## 验证
 
-- `useCaaDialogHistoryController.contract.test.ts` 冻结按钮、快捷键、10 个既有记录调用点、PageSession 与 Host/API 边界。
+- `useCaaDialogHistoryController.contract.test.ts` 冻结按钮、快捷键、Page 两个加 Canvas Controller 八个既有记录调用点、PageSession 与 Host/API 边界。
 - `useCaaDialogHistoryController.test.ts` 覆盖快照隔离、50 条裁剪、redo 清空、undo/redo 往返、根节点回退、clean/dirty、旧 NLS map 兼容、snapshot 校验和无 IR no-op。
 - `CaaDialogEditorPage.architecture.test.ts` 继续约束 session codec 与 Page Host 的既有边界。
 

@@ -26,7 +26,7 @@ describe("CAA dialog editor NLS page contract", () => {
 
   it("树编辑 setNlsFlatKey 继续 trim 且不记 history，画布 commit 保留原值且记 history", () => {
     const flatEdit = section("function setNlsFlatKey(", "function resolveLocaleIdForRel(");
-    const commitEdit = section("function commitNlsEdit(", "const dropIndicator");
+    const commitEdit = section("function commitNlsEdit(", "const canEditNls");
 
     expect(flatEdit).toContain("value.trim()");
     expect(flatEdit).not.toContain("recordHistorySnapshot");

@@ -95,6 +95,13 @@
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
+      "path": "doc/caa/CAA对话框-画布命令责任与提炼点检.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.2.x",
+      "lastVerified": "2026-07-17"
+    },
+    {
       "path": "doc/caa/CAA对话框-控件组件化设计.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
