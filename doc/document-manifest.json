@@ -350,6 +350,13 @@
       "lastVerified": "2026-07-17"
     },
     {
+      "path": "doc/cad/CAD索引设置页面壳验收.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.2.x",
+      "lastVerified": "2026-07-17"
+    },
+    {
       "path": "doc/cad/FCStd真实制品验收.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
@@ -593,6 +600,13 @@
       "lastVerified": "2026-07-17",
       "sourceOfTruth": "doc/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
+    },
+    {
+      "path": "doc/platform/UnitTests-失败关注页面壳验收.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.2.x",
+      "lastVerified": "2026-07-17"
     },
     {
       "path": "doc/platform/UnitTests-运行范围页面壳验收.md",

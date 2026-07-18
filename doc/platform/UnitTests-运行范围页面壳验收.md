@@ -12,7 +12,7 @@ Owner：Desk Tools web maintainers
 
 `UnitTestsPage.vue` 中央的“运行范围”已提炼为单消费者 `UnitTestRunScopePane.vue`。Pane 拥有运行范围 DOM、局部折叠、表格列与 scoped style；模块行展示投影由 UI-neutral `unitTestsViewModel.ts` 产生。Page 从 2,131 行降到 1,810 行。
 
-这是 Unit Tests page shell 的第一个视觉切口，不代表整页已拆完。Watchlist 和 Result pane 仍在 Page，后续必须分别建立 characterization 后再迁移。
+这是 Unit Tests page shell 的第一个视觉切口，不代表整页已拆完。Watchlist 已在后续切口提炼为单消费者 Pane，见 [失败关注页面壳验收](UnitTests-失败关注页面壳验收.md)；Result pane 仍在 Page。
 
 ## 责任边界
 
@@ -68,6 +68,6 @@ UnitTestRunScopePane（DOM / 局部折叠 / 样式）
 
 ## 剩余 TODO
 
-1. Watchlist 仍保留勾选、排序、移除、复测、localStorage utility 和整表 DOM；先建立拆分前 characterization，再提炼单消费者 pane。
-2. Result 仍保留摘要、筛选、模块聚合和 case 明细 DOM；不与 Watchlist 同步大搬迁。
+1. Watchlist DOM、列与 style 已提炼到单消费者 Pane；Pinia、localStorage utility、确认框和运行 payload 继续留在 Page。
+2. Result 仍保留摘要、筛选、模块聚合和 case 明细 DOM；必须单独建立 characterization 后迁移。
 3. `useAsyncProgress` 在流终态的 cancel 注销是共享基础设施 TODO，不在 Page shell 切口中顺手改写。

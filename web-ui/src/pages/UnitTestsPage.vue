@@ -14,6 +14,7 @@ import {
 } from "../api";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import UnitTestRunScopePane from "../components/unit-tests/UnitTestRunScopePane.vue";
+import UnitTestWatchlistPane from "../components/unit-tests/UnitTestWatchlistPane.vue";
 import { useUnitTestsPropertySheet } from "../composables/useUnitTestsPropertySheet";
 import {
   usePagePrimaryContribution,
@@ -61,6 +62,7 @@ import {
   groupUnitTestCasesByModule,
   mergeUnitTestRunOptions,
   projectUnitTestRunScopeRows,
+  projectUnitTestWatchlistRows,
   syncUnitTestCheckedModules,
   unitTestModuleDescription,
   unitTestModuleDescriptionBrief,
@@ -69,6 +71,7 @@ import {
   unitTestStatusClass as statusClass,
   unitTestStatusLabel as statusLabel,
   type UnitTestRunScopeRowView,
+  type UnitTestWatchlistRowView,
 } from "../models/unitTestsViewModel";
 
 const props = defineProps<{
@@ -165,11 +168,6 @@ const sortedWatchlist = computed(() =>
 );
 const watchlistChecked = computed(() => pageStore.watchlistCheckedSet);
 const watchlistCheckedCount = computed(() => pageStore.watchlistCheckedCount);
-const watchlistAllChecked = computed(
-  () =>
-    sortedWatchlist.value.length > 0 &&
-    sortedWatchlist.value.every((e) => watchlistChecked.value.has(e.id)),
-);
 
 const runScopeModuleNames = computed(() => runPlan.value?.modules.map((m) => m.module) ?? []);
 
@@ -229,6 +227,14 @@ const runScopeRows = computed(() => projectUnitTestRunScopeRows(
   suiteLabelById.value,
 ));
 
+const watchlistRows = computed(() => projectUnitTestWatchlistRows(
+  sortedWatchlist.value,
+  watchlistChecked.value,
+  caseCatalog.value,
+  moduleCatalog.value,
+  suiteLabelById.value,
+));
+
 const filteredCases = computed(() => {
   return filterUnitTestCases(result.value?.cases ?? [], {
     suiteIds: resultSuiteChecked.value,
@@ -252,31 +258,6 @@ function moduleDescription(module: string): string {
 
 function moduleDescriptionBrief(module: string, maxLen = 48): string {
   return unitTestModuleDescriptionBrief(moduleCatalog.value, module, maxLen);
-}
-
-function caseCatalogEntry(entry: UnitTestWatchlistEntry): TestCaseCatalogEntry | undefined {
-  return caseCatalog.value[entry.id];
-}
-
-function caseDescription(entry: UnitTestWatchlistEntry): string {
-  const cat = caseCatalogEntry(entry);
-  if (cat?.description_zh) return cat.description_zh.trim();
-  if (cat?.title && cat.title !== `${entry.class_name}.${entry.method}`) {
-    return cat.title.trim();
-  }
-  const doc = cat?.docstring?.trim();
-  if (doc) {
-    const first = doc.split(/\n+/).map((ln) => ln.trim()).find(Boolean);
-    if (first && !first.startsWith("case_id=")) return first;
-  }
-  return moduleDescription(entry.module);
-}
-
-function caseDescriptionBrief(entry: UnitTestWatchlistEntry, maxLen = 56): string {
-  const text = caseDescription(entry).replace(/\s+/g, " ").trim();
-  if (!text) return "—";
-  if (text.length <= maxLen) return text;
-  return `${text.slice(0, maxLen - 1)}…`;
 }
 
 function moduleSuiteId(module: string): string {
@@ -347,8 +328,8 @@ function cancelRun() {
   runController.cancel();
 }
 
-function onWatchlistRunOnFullChange(entry: UnitTestWatchlistEntry, checked: boolean) {
-  watchlist.value = setWatchlistRunOnFull(entry.id, checked);
+function onWatchlistRunOnFullChange(id: string, checked: boolean) {
+  watchlist.value = setWatchlistRunOnFull(id, checked);
 }
 
 function onWatchlistDefaultRunOnFullChange(checked: boolean) {
@@ -374,21 +355,10 @@ function syncWatchlistChecked() {
   pageStore.pruneWatchlistChecked(new Set(sortedWatchlist.value.map((e) => e.id)));
 }
 
-function formatWatchlistTime(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-async function removeFromWatchlist(entry: UnitTestWatchlistEntry) {
+async function removeFromWatchlist(row: UnitTestWatchlistRowView) {
   const result = await pnwPromptChoice({
     title: "移出关注列表",
-    message: `${entry.method}\n累计失败 ${entry.fail_count} 次`,
+    message: `${row.method}\n累计失败 ${row.failCount} 次`,
     choices: [
       { id: "remove", label: "移出", variant: "danger" },
       { id: "cancel", label: "取消" },
@@ -396,7 +366,7 @@ async function removeFromWatchlist(entry: UnitTestWatchlistEntry) {
     defaultChoiceId: "cancel",
   });
   if (result.choiceId !== "remove") return;
-  watchlist.value = removeWatchlistEntry(entry.id);
+  watchlist.value = removeWatchlistEntry(row.id);
 }
 
 async function clearAllWatchlist() {
@@ -642,14 +612,14 @@ async function onRunWatchlistSelected() {
   });
 }
 
-async function onRerunWatchlistEntry(entry: UnitTestWatchlistEntry) {
+async function onRerunWatchlistEntry(row: UnitTestWatchlistRowView) {
   if (running.value) return;
-  rerunningWatchlistId.value = entry.id;
+  rerunningWatchlistId.value = row.id;
   try {
     await executeRun({
       suiteIds: ["all"],
-      runOptions: { include_cases: [entry.id] },
-      logLabel: `复测 ${entry.method}`,
+      runOptions: { include_cases: [row.id] },
+      logLabel: `复测 ${row.method}`,
       runMode: "watchlist",
     });
   } finally {
@@ -905,146 +875,24 @@ onMounted(() => {
       </el-radio-button>
     </el-radio-group>
 
-    <section v-if="activeTab === 'watchlist'" class="card watchlist-card">
-      <div class="watchlist-head">
-        <p class="watchlist-desc muted">
-          失败/错误用例记入本机（localStorage），<strong>累计失败次数</strong>；通过不会自动移出，可逐条「移除」或「全部移除」。勾选后点「复测勾选」，或行内「复测」；需跑全部时点「全部复测」。
-        </p>
-        <div class="watchlist-actions">
-          <span v-if="watchlistCount" class="watchlist-stats muted small">
-            {{ watchlistCount }} 条 · 累计失败 {{ watchlistTotalFails }} 次
-            <template v-if="watchlistCheckedCount"> · 已勾选 {{ watchlistCheckedCount }}</template>
-          </span>
-          <el-radio-group
-            v-if="watchlistCount"
-            :model-value="watchlistPrefs.sort_by"
-            size="small"
-            @change="onWatchlistSortChange($event as 'fail_count' | 'last_seen_at')"
-          >
-            <el-radio-button value="last_seen_at">最近失败</el-radio-button>
-            <el-radio-button value="fail_count">失败次数</el-radio-button>
-          </el-radio-group>
-          <el-checkbox
-            :model-value="watchlistPrefs.default_run_on_full"
-            @change="onWatchlistDefaultRunOnFullChange(Boolean($event))"
-          >
-            新失败默认全量时运行
-          </el-checkbox>
-          <div class="watchlist-run-actions">
-            <el-button
-              type="primary"
-              size="small"
-              :disabled="running || !watchlistCheckedCount"
-              @click="onRunWatchlistSelected"
-            >
-              复测勾选（{{ watchlistCheckedCount }}）
-            </el-button>
-            <el-button link size="small" :disabled="running || !watchlistCount" @click="onRun('watchlist')">
-              全部复测
-            </el-button>
-            <el-button link size="small" :disabled="running || !watchlistCount" @click="clearAllWatchlist">
-              全部移除
-            </el-button>
-          </div>
-        </div>
-      </div>
-      <p v-if="!watchlistCount" class="muted empty-hint">暂无失败关注；运行测试后失败项会自动出现。</p>
-      <div v-else class="watchlist-table-wrap">
-        <table class="data-table compact watchlist-table">
-          <colgroup>
-            <col class="col-check" />
-            <col class="col-case" />
-            <col class="col-intro" />
-            <col class="col-suite" />
-            <col class="col-num" />
-            <col class="col-time" />
-            <col class="col-full" />
-            <col class="col-run" />
-            <col class="col-action" />
-          </colgroup>
-          <thead>
-            <tr>
-              <th class="col-check">
-                <el-checkbox
-                  :model-value="watchlistAllChecked"
-                  :disabled="running || !watchlistCount"
-                  @change="toggleAllWatchlistChecked(Boolean($event))"
-                />
-              </th>
-              <th class="col-case">用例</th>
-              <th class="col-intro">简介</th>
-              <th class="col-suite">套件</th>
-              <th class="col-num">累计</th>
-              <th class="col-time">最近失败</th>
-              <th class="col-full">全量</th>
-              <th class="col-run"></th>
-              <th class="col-action"></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="entry in sortedWatchlist"
-              :key="entry.id"
-              class="watchlist-row"
-              :class="[
-                statusClass(entry.status),
-                {
-                  'watchlist-row-running': rerunningWatchlistId === entry.id,
-                  'watchlist-row-disabled': running && rerunningWatchlistId !== entry.id,
-                },
-              ]"
-            >
-              <td class="col-check">
-                <el-checkbox
-                  :model-value="watchlistChecked.has(entry.id)"
-                  :disabled="running"
-                  @change="toggleWatchlistChecked(entry.id, Boolean($event))"
-                />
-              </td>
-              <td
-                class="mono watchlist-case"
-                :title="`${shortModule(entry.module)}\n${entry.message}`"
-              >
-                <span class="watchlist-method">{{ entry.method }}</span>
-                <span class="watchlist-msg">{{ entry.message }}</span>
-              </td>
-              <td class="watchlist-intro" :title="caseDescription(entry)">
-                {{ caseDescriptionBrief(entry) }}
-              </td>
-              <td class="col-suite" :title="suiteLabelById.get(entry.suite_id) ?? entry.suite_id">
-                {{ suiteLabelById.get(entry.suite_id) ?? entry.suite_id }}
-              </td>
-              <td class="col-num">{{ entry.fail_count }}</td>
-              <td class="col-time" :title="entry.last_seen_at">{{ formatWatchlistTime(entry.last_seen_at) }}</td>
-              <td class="col-full">
-                <el-checkbox
-                  :model-value="entry.run_on_full"
-                  :disabled="running"
-                  @change="onWatchlistRunOnFullChange(entry, Boolean($event))"
-                />
-              </td>
-              <td class="col-run">
-                <el-button
-                  type="primary"
-                  plain
-                  size="small"
-                  :loading="rerunningWatchlistId === entry.id"
-                  :disabled="running && rerunningWatchlistId !== entry.id"
-                  @click="onRerunWatchlistEntry(entry)"
-                >
-                  复测
-                </el-button>
-              </td>
-              <td class="col-action">
-                <el-button link size="small" :disabled="running" @click="removeFromWatchlist(entry)">
-                  移除
-                </el-button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
+    <UnitTestWatchlistPane
+      v-if="activeTab === 'watchlist'"
+      :rows="watchlistRows"
+      :running="running"
+      :sort-by="watchlistPrefs.sort_by"
+      :default-run-on-full="watchlistPrefs.default_run_on_full"
+      :rerunning-id="rerunningWatchlistId"
+      @sort="onWatchlistSortChange"
+      @default-run-on-full="onWatchlistDefaultRunOnFullChange"
+      @all-checked="toggleAllWatchlistChecked"
+      @checked="toggleWatchlistChecked"
+      @run-on-full="onWatchlistRunOnFullChange"
+      @run-selected="onRunWatchlistSelected"
+      @run-watchlist="onRun('watchlist')"
+      @rerun="onRerunWatchlistEntry"
+      @remove-request="removeFromWatchlist"
+      @clear-request="clearAllWatchlist"
+    />
 
     <section v-if="activeTab === 'results' && result" class="card results-card">
       <div class="stat-cards">
@@ -1282,56 +1130,6 @@ onMounted(() => {
   align-items: center;
 }
 
-.watchlist-card {
-  padding: 10px 12px;
-}
-
-.watchlist-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px 12px;
-  margin-bottom: 10px;
-}
-
-.watchlist-desc {
-  flex: 1;
-  min-width: 220px;
-  margin: 0;
-  font-size: 0.76rem;
-}
-
-.watchlist-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.watchlist-run-actions {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-}
-
-.watchlist-run-actions .link-btn {
-  font-size: 0.76rem;
-}
-
-.watchlist-stats {
-  font-variant-numeric: tabular-nums;
-}
-
-.watchlist-pref {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 0.74rem;
-  color: var(--muted);
-}
-
 .tab-badge {
   margin-left: 4px;
   min-width: 16px;
@@ -1344,177 +1142,6 @@ onMounted(() => {
   font-variant-numeric: tabular-nums;
   line-height: 1.45;
   vertical-align: middle;
-}
-
-.watchlist-table-wrap {
-  overflow-x: auto;
-  max-width: 100%;
-}
-
-.watchlist-table {
-  table-layout: fixed;
-  width: 100%;
-  min-width: 680px;
-}
-
-.watchlist-table col.col-check {
-  width: 36px;
-}
-
-.watchlist-table col.col-case {
-  width: 24%;
-}
-
-.watchlist-table col.col-intro {
-  width: 32%;
-}
-
-.watchlist-table col.col-suite {
-  width: 72px;
-}
-
-.watchlist-table col.col-num {
-  width: 40px;
-}
-
-.watchlist-table col.col-time {
-  width: 88px;
-}
-
-.watchlist-table col.col-full {
-  width: 44px;
-}
-
-.watchlist-table col.col-run {
-  width: 52px;
-}
-
-.watchlist-table col.col-action {
-  width: 44px;
-}
-
-.watchlist-table th,
-.watchlist-table td {
-  overflow: hidden;
-  vertical-align: middle;
-}
-
-.watchlist-table .col-num,
-.watchlist-table td.col-num {
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-
-.watchlist-table .col-time,
-.watchlist-table td.col-time {
-  white-space: nowrap;
-  font-size: 0.72rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.watchlist-table .col-check,
-.watchlist-table td.col-check {
-  text-align: center;
-}
-
-.watchlist-table .col-suite,
-.watchlist-table td.col-suite {
-  font-size: 0.72rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.watchlist-table .col-full,
-.watchlist-table td.col-full {
-  text-align: center;
-}
-
-.watchlist-table .col-run,
-.watchlist-table td.col-run {
-  text-align: center;
-}
-
-.watchlist-table .col-action,
-.watchlist-table td.col-action {
-  text-align: center;
-  white-space: nowrap;
-}
-
-.watchlist-table th.col-full,
-.watchlist-table th.col-time {
-  font-size: 0.72rem;
-  white-space: nowrap;
-}
-
-.watchlist-run-btn {
-  min-width: 44px;
-  padding: 2px 10px;
-  border: 1px solid #93c5fd;
-  border-radius: 999px;
-  background: #eff6ff;
-  color: #1d4ed8;
-  font-size: 0.72rem;
-  line-height: 1.4;
-  cursor: pointer;
-}
-
-.watchlist-run-btn:hover:not(:disabled) {
-  background: #dbeafe;
-}
-
-.watchlist-run-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.watchlist-row {
-  /* 行本身不再可点 */
-}
-
-.watchlist-row:hover {
-  background: transparent;
-}
-
-.watchlist-row-running {
-  background: #eff6ff;
-}
-
-.watchlist-row-disabled {
-  opacity: 0.65;
-}
-
-.watchlist-table .watchlist-case {
-  max-width: 0;
-}
-
-.watchlist-method {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.78rem;
-}
-
-.watchlist-table .watchlist-intro {
-  max-width: 0;
-  font-size: 0.72rem;
-  color: #475569;
-  line-height: 1.35;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.watchlist-msg {
-  display: block;
-  margin-top: 2px;
-  font-size: 0.68rem;
-  font-weight: 400;
-  color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .subsection-title {

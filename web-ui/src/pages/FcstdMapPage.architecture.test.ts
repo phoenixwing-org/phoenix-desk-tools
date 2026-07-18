@@ -44,4 +44,45 @@ describe("FCStd map page boundary", () => {
     expect(pane).toContain("pageChange: [page: number]");
     expect(pane).not.toMatch(/from ["'][^"']*api["']|useAppShell|useFcstdMapEntries|localStorage|sessionStorage|usePageSession/);
   });
+
+  it("设置 Pane 只展示受控状态并上抛导出意图，Page 继续独占副作用", () => {
+    const page = source("./FcstdMapPage.vue");
+    const pane = source("../components/fcstd-map/FcstdMapSettingsPane.vue");
+
+    expect(page).toContain('from "../components/fcstd-map/FcstdMapSettingsPane.vue"');
+    expect(page).toContain(':workspace-path="shell.workspacePath.value"');
+    expect(page).toContain(':has-index="Boolean(data?.exists)"');
+    expect(page).toContain(':exporting="exporting"');
+    expect(page).toContain(':debug-sql="debugSql"');
+    expect(page).toContain('@export-json="onExportJson"');
+    expect(page).toContain("async function onExportJson()");
+    expect(page).toContain("exportFcstdMapJson()");
+    expect(page).toContain("saveFcstdMapPrefs(forceUpdatePartName.value)");
+    expect(page).toContain("startFcstdMapScan(forceUpdatePartName.value");
+    expect(page).toContain("purgeMissingFcstdMap()");
+
+    expect(pane).toContain("exportJson: []");
+    expect(pane).not.toMatch(
+      /from ["'][^"']*api["']|useAppShell|useAsyncProgress|useFileWorksetsStore|useOnboardingStore|usePageSession|localStorage|sessionStorage|pnwPromptChoice/,
+    );
+  });
+
+  it("Page scoped CSS 只保留页面壳，不回流旧设置表单样式", () => {
+    const page = source("./FcstdMapPage.vue");
+    for (const staleSelector of [
+      ".sub-tab {",
+      ".field-label {",
+      ".row {",
+      ".path-input {",
+      ".force-opt {",
+      ".stats-grid {",
+      ".meta-block .meta-line {",
+      ".btn {",
+    ]) {
+      expect(page).not.toContain(staleSelector);
+    }
+    expect(page).toContain(".fcstd-map-page {");
+    expect(page).toContain(".sub-panel {");
+    expect(page).toContain(".settings-panel {");
+  });
 });

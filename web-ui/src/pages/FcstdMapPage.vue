@@ -25,6 +25,7 @@ import {
 } from "../composables/usePagePrimaryContribution";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import FcstdMapIndexPane from "../components/fcstd-map/FcstdMapIndexPane.vue";
+import FcstdMapSettingsPane from "../components/fcstd-map/FcstdMapSettingsPane.vue";
 import {
   FCSTD_MAP_KIND_OPTIONS as KIND_OPTIONS,
   fcstdMapCanOpenFileDetail as canOpenFileDetail,
@@ -598,33 +599,13 @@ onUnmounted(() => {
     </div>
 
     <div v-show="activeSubTab === 'settings'" class="sub-panel settings-panel">
-      <section class="settings-block">
-        <h2 class="block-title">扫描</h2>
-        <p class="block-desc">
-          从<strong>当前工作空间根</strong>递归扫描 FCStd、Markdown、PDF、图片、DXF/DWG 等，写入
-          <code>.phoenix/phoenix-workspace.sqlite</code>。请使用页顶「工程内搜索」；再次扫描时磁盘上已不存在的条目标记为缺失。
-        </p>
-        <p v-if="shell.workspacePath" class="meta-line mono">工作空间：{{ shell.workspacePath }}</p>
-        <p class="hint">
-          「强制更新零件名」变更后自动保存。重新扫描会覆盖索引中已有零件名（不写回 FCStd）。
-        </p>
-      </section>
-
-      <section class="settings-block">
-        <h2 class="block-title">导出</h2>
-        <p class="block-desc">
-          导出 <code>fcstd_map.json</code> 仅含 FCStd 条目，供 xlink 脚本等外部工具使用。
-        </p>
-        <el-button size="small" :loading="exporting" :disabled="!data?.exists" @click="onExportJson">
-          导出 fcstd_map.json
-        </el-button>
-      </section>
-
-      <section v-if="debugSql" class="settings-block">
-        <h2 class="block-title">调试 SQL</h2>
-        <p class="block-desc">最近一次列表查询（可复制到 SQLite 客户端执行）。</p>
-        <pre class="debug-sql mono">{{ debugSql }}</pre>
-      </section>
+      <FcstdMapSettingsPane
+        :workspace-path="shell.workspacePath.value"
+        :has-index="Boolean(data?.exists)"
+        :exporting="exporting"
+        :debug-sql="debugSql"
+        @export-json="onExportJson"
+      />
     </div>
   </div>
 </template>
@@ -648,23 +629,6 @@ onUnmounted(() => {
   border-bottom: 1px solid var(--border);
 }
 
-.sub-tab {
-  padding: 8px 14px;
-  border: none;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  font-size: 0.85rem;
-  cursor: pointer;
-  color: var(--muted);
-  margin-bottom: -1px;
-}
-
-.sub-tab.active {
-  color: var(--text);
-  border-bottom-color: var(--accent);
-  font-weight: 600;
-}
-
 .sub-panel {
   flex: 1;
   min-height: 0;
@@ -677,163 +641,9 @@ onUnmounted(() => {
   min-height: 0;
 }
 
-.debug-sql {
-  margin: 0;
-  padding: 10px 12px;
-  background: #f8fafc;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: 0.72rem;
-  line-height: 1.45;
-  white-space: pre-wrap;
-  word-break: break-all;
-  max-height: 200px;
-  overflow: auto;
-}
-
 .settings-panel {
   overflow: auto;
-  gap: 16px;
   padding-bottom: 8px;
-}
-
-.settings-block {
-  padding: 14px 16px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #fff;
-}
-
-.block-title {
-  margin: 0 0 8px;
-  font-size: 0.92rem;
-}
-
-.block-desc {
-  margin: 0 0 12px;
-  font-size: 0.82rem;
-  color: var(--muted);
-  line-height: 1.5;
-}
-
-.field-label {
-  display: block;
-  font-size: 0.78rem;
-  color: var(--muted);
-  margin-bottom: 6px;
-}
-
-.row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.path-input {
-  flex: 1;
-  min-width: 180px;
-  max-width: 420px;
-  padding: 8px 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-}
-
-.force-opt {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.82rem;
-  color: var(--text);
-}
-
-.hint {
-  margin: 8px 0 0;
-  font-size: 0.78rem;
-  color: var(--muted);
-  line-height: 1.45;
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: 100px 1fr 100px 1fr;
-  gap: 6px 12px;
-  margin: 0;
-  font-size: 0.85rem;
-}
-
-.stats-grid dt {
-  margin: 0;
-  color: var(--muted);
-}
-
-.stats-grid dd {
-  margin: 0;
-}
-
-.stats-grid .ok {
-  color: #15803d;
-}
-
-.stats-grid .warn {
-  color: #b45309;
-}
-
-.meta-block .meta-line {
-  margin: 0 0 6px;
-  font-size: 0.78rem;
-  color: var(--muted);
-  word-break: break-all;
-}
-
-.meta-block .meta-line:last-child {
-  margin-bottom: 0;
-}
-
-.btn {
-  padding: 7px 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  background: var(--btn-bg);
-  font-size: 0.82rem;
-  cursor: pointer;
-}
-
-.btn.mini {
-  padding: 6px 10px;
-  font-size: 0.78rem;
-}
-
-.btn.primary {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
-}
-
-.btn.danger {
-  color: #b91c1c;
-  border-color: #fecaca;
-  background: #fef2f2;
-}
-
-.btn.danger:hover:not(:disabled) {
-  background: #fee2e2;
-}
-
-.btn:disabled {
-  opacity: 0.55;
-}
-
-.mono {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1;
-  font-size: 0.76rem;
-}
-
-code {
-  font-size: 0.9em;
 }
 
 /* 扫描状态条（详细进度见浮层面板） */

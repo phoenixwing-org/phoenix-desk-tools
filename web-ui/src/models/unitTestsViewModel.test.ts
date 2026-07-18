@@ -10,6 +10,7 @@ import {
   groupUnitTestCasesByModule,
   mergeUnitTestRunOptions,
   projectUnitTestRunScopeRows,
+  projectUnitTestWatchlistRows,
   syncUnitTestCheckedModules,
   unitTestPassRate,
   unitTestModuleDescriptionBrief,
@@ -93,6 +94,56 @@ describe("unit tests view model", () => {
     expect(rows[0]?.lastRunLabel).not.toBe("—");
     expect(unitTestModuleDescriptionBrief({}, "tests.missing")).toBe("—");
     expect(formatUnitTestModuleLastRun("invalid")).toBe("—");
+  });
+
+  it("按用例说明优先级投影关注行，并冻结 56 字、suite、status 与日期展示", () => {
+    const base = {
+      module: "tests.test_watchlist",
+      suite_id: "custom",
+      class_name: "WatchTests",
+      status: "failed" as const,
+      message: "expected true",
+      fail_count: 3,
+      last_seen_at: "2026-07-18T06:00:00.000Z",
+      run_on_full: false,
+    };
+    const longDescription = "一".repeat(57);
+    const rows = projectUnitTestWatchlistRows(
+      [
+        { ...base, id: "description", method: "description" },
+        { ...base, id: "title", method: "title", status: "error" },
+        { ...base, id: "doc", method: "doc" },
+        { ...base, id: "module", method: "module", last_seen_at: "invalid" },
+      ],
+      new Set(["description"]),
+      {
+        description: { description_zh: `  ${longDescription}  `, title: "ignored" },
+        title: { title: "用例标题" },
+        doc: { title: "WatchTests.doc", docstring: "case_id=doc\n第二行不会越过首行" },
+      },
+      { "tests.test_watchlist": { description_zh: "模块说明" } },
+      new Map([["custom", "自定义"]]),
+    );
+
+    expect(rows[0]).toMatchObject({
+      moduleLabel: "test_watchlist",
+      description: longDescription,
+      descriptionBrief: `${"一".repeat(55)}…`,
+      suiteLabel: "自定义",
+      statusClass: "status-failed",
+      failCount: 3,
+      runOnFull: false,
+      selected: true,
+    });
+    expect(rows[0]?.lastSeenLabel).not.toBe(rows[0]?.lastSeenAt);
+    expect(rows[1]).toMatchObject({ description: "用例标题", statusClass: "status-error" });
+    expect(rows[2]?.description).toBe("模块说明");
+    expect(rows[3]).toMatchObject({
+      description: "模块说明",
+      lastSeenAt: "invalid",
+      lastSeenLabel: "invalid",
+      selected: false,
+    });
   });
 
   it("集中运行范围摘要与 include_modules 省略规则", () => {

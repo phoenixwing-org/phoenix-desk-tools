@@ -99,6 +99,44 @@ export interface UnitTestCaseCatalogTextInput {
   readonly summary?: string;
 }
 
+export interface UnitTestWatchlistCatalogTextInput {
+  readonly title?: string;
+  readonly description_zh?: string;
+  readonly docstring?: string;
+}
+
+export interface UnitTestWatchlistEntryViewInput {
+  readonly id: string;
+  readonly module: string;
+  readonly suite_id: string;
+  readonly class_name: string;
+  readonly method: string;
+  readonly status: "failed" | "error";
+  readonly message: string;
+  readonly fail_count: number;
+  readonly last_seen_at: string;
+  readonly run_on_full: boolean;
+}
+
+export interface UnitTestWatchlistRowView {
+  readonly id: string;
+  readonly module: string;
+  readonly moduleLabel: string;
+  readonly method: string;
+  readonly message: string;
+  readonly status: "failed" | "error";
+  readonly statusClass: string;
+  readonly description: string;
+  readonly descriptionBrief: string;
+  readonly suiteId: string;
+  readonly suiteLabel: string;
+  readonly failCount: number;
+  readonly lastSeenAt: string;
+  readonly lastSeenLabel: string;
+  readonly runOnFull: boolean;
+  readonly selected: boolean;
+}
+
 export interface UnitTestModuleHistoryTextInput {
   readonly run_count: number;
   readonly last_run_at: string;
@@ -181,6 +219,72 @@ export function formatUnitTestModuleLastRun(iso: string | null | undefined): str
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+  });
+}
+
+export function unitTestWatchlistDescription(
+  entry: UnitTestWatchlistEntryViewInput,
+  caseCatalog: Readonly<Record<string, UnitTestWatchlistCatalogTextInput>>,
+  moduleCatalog: Readonly<Record<string, UnitTestModuleCatalogTextInput>>,
+): string {
+  const catalog = caseCatalog[entry.id];
+  if (catalog?.description_zh) return catalog.description_zh.trim();
+  if (catalog?.title && catalog.title !== `${entry.class_name}.${entry.method}`) {
+    return catalog.title.trim();
+  }
+  const firstDocLine = catalog?.docstring
+    ?.split(/\n+/u)
+    .map((line) => line.trim())
+    .find(Boolean);
+  if (firstDocLine && !firstDocLine.startsWith("case_id=")) return firstDocLine;
+  return unitTestModuleDescription(moduleCatalog, entry.module);
+}
+
+export function formatUnitTestWatchlistTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export function projectUnitTestWatchlistRows(
+  entries: readonly UnitTestWatchlistEntryViewInput[],
+  checkedIds: ReadonlySet<string>,
+  caseCatalog: Readonly<Record<string, UnitTestWatchlistCatalogTextInput>>,
+  moduleCatalog: Readonly<Record<string, UnitTestModuleCatalogTextInput>>,
+  suiteLabels: ReadonlyMap<string, string>,
+): UnitTestWatchlistRowView[] {
+  return entries.map((entry) => {
+    const description = unitTestWatchlistDescription(entry, caseCatalog, moduleCatalog);
+    const descriptionBrief = description
+      .replace(/\s+/gu, " ")
+      .trim();
+    return {
+      id: entry.id,
+      module: entry.module,
+      moduleLabel: unitTestShortModule(entry.module),
+      method: entry.method,
+      message: entry.message,
+      status: entry.status,
+      statusClass: unitTestStatusClass(entry.status),
+      description,
+      descriptionBrief: descriptionBrief
+        ? descriptionBrief.length <= 56
+          ? descriptionBrief
+          : `${descriptionBrief.slice(0, 55)}…`
+        : "—",
+      suiteId: entry.suite_id,
+      suiteLabel: suiteLabels.get(entry.suite_id) ?? entry.suite_id,
+      failCount: entry.fail_count,
+      lastSeenAt: entry.last_seen_at,
+      lastSeenLabel: formatUnitTestWatchlistTime(entry.last_seen_at),
+      runOnFull: entry.run_on_full,
+      selected: checkedIds.has(entry.id),
+    };
   });
 }
 
