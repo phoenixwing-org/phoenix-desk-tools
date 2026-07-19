@@ -17,6 +17,13 @@
       "lastVerified": "2026-07-17"
     },
     {
+      "path": "AGENTS.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.2.x",
+      "lastVerified": "2026-07-17"
+    },
+    {
       "path": "doc/路径与目录显示约定.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
@@ -88,6 +95,13 @@
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
+      "path": "doc/caa/CAA对话框-画布命令责任与提炼点检.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.2.x",
+      "lastVerified": "2026-07-17"
+    },
+    {
       "path": "doc/caa/CAA对话框-控件组件化设计.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
@@ -102,6 +116,13 @@
       "lastVerified": "2026-07-17",
       "sourceOfTruth": "doc/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
+    },
+    {
+      "path": "doc/caa/CAA对话框-NLS会话ViewModel验收.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.2.x",
+      "lastVerified": "2026-07-17"
     },
     {
       "path": "doc/caa/CAA对话框-P0快速原型-归档.md",
@@ -251,6 +272,13 @@
       "lastVerified": "2026-07-17"
     },
     {
+      "path": "doc/cad/装配树行组件-页面壳验收.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.2.x",
+      "lastVerified": "2026-07-17"
+    },
+    {
       "path": "doc/cad/API接口规则-兼容对照表.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
@@ -316,6 +344,20 @@
     },
     {
       "path": "doc/cad/CAD索引-缺失条目.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.2.x",
+      "lastVerified": "2026-07-17"
+    },
+    {
+      "path": "doc/cad/CAD索引面板-人工点检清单.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.2.x",
+      "lastVerified": "2026-07-17"
+    },
+    {
+      "path": "doc/cad/CAD索引设置页面壳验收.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
@@ -567,6 +609,20 @@
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
+      "path": "doc/platform/UnitTests-失败关注页面壳验收.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.2.x",
+      "lastVerified": "2026-07-17"
+    },
+    {
+      "path": "doc/platform/UnitTests-运行范围页面壳验收.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.2.x",
+      "lastVerified": "2026-07-17"
+    },
+    {
       "path": "doc/platform/web界面.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
@@ -776,6 +832,13 @@
       "lastVerified": "2026-07-17",
       "sourceOfTruth": "doc/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
+    },
+    {
+      "path": "doc/platform/Wing并列仓库联调.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.2.x",
+      "lastVerified": "2026-07-17"
     },
     {
       "path": "doc/tauri-0.2.0-macOS发布态验收.md",

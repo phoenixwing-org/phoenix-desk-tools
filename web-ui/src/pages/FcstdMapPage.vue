@@ -4,18 +4,17 @@ import {
   cancelFcstdMapScan,
   exportFcstdMapJson,
   fetchFcstdMap,
-  fetchFcstdMapEntries,
   fetchFcstdMapScanProgress,
   purgeMissingFcstdMap,
   saveFcstdMapPrefs,
   startFcstdMapScan,
-  type FcstdMapEntry,
   type FcstdMapPayload,
 } from "../api";
 import { pnwPromptChoice } from "phoenix-wing";
 import { useAppShell } from "../composables/useAppShell";
 import { useAsyncProgress } from "../composables/useAsyncProgress";
 import { useFcstdMapPropertySheet } from "../composables/useFcstdMapPropertySheet";
+import { useFcstdMapEntries } from "../composables/useFcstdMapEntries";
 import { useFileWorksetsStore } from "../stores/fileWorksets";
 import { useOnboardingStore } from "../stores/onboarding";
 import { usePageSession } from "../composables/usePageSession";
@@ -25,9 +24,17 @@ import {
   type PagePrimarySection,
 } from "../composables/usePagePrimaryContribution";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
-import ResizableDataTable from "../components/ResizableDataTable.vue";
-import type { PnwTableColumnDef } from "phoenix-wing";
-import { BOM_FIELD_LABELS as L } from "../utils/bomFieldLabels";
+import FcstdMapIndexPane from "../components/fcstd-map/FcstdMapIndexPane.vue";
+import FcstdMapSettingsPane from "../components/fcstd-map/FcstdMapSettingsPane.vue";
+import {
+  FCSTD_MAP_KIND_OPTIONS as KIND_OPTIONS,
+  fcstdMapCanOpenFileDetail as canOpenFileDetail,
+  type FcstdMapEntryViewInput,
+  hydrateFcstdMapPageSession,
+  serializeFcstdMapPageSession,
+  type FcstdMapKindFilter as KindFilter,
+  type FcstdMapPageSubTab as PageSubTab,
+} from "../models/fcstdMapViewModel";
 
 const props = defineProps<{
   workbenchTabId?: string;
@@ -35,37 +42,6 @@ const props = defineProps<{
 
 const shell = useAppShell();
 const onboarding = useOnboardingStore();
-
-const SESSION_V = 4;
-const PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
-
-type PageSubTab = "index" | "settings";
-
-const cadColumns: PnwTableColumnDef[] = [
-  { key: "index", label: "#", width: 44, minWidth: 40, headerClass: "col-index" },
-  { key: "status", label: "状态", width: 52, minWidth: 44 },
-  { key: "kind", label: "类型", width: 72, minWidth: 56 },
-  { key: "file", label: "文件名", width: 200, minWidth: 100 },
-  { key: "partKey", label: L.partKey, width: 108, minWidth: 80 },
-  { key: "partVersion", label: L.partVersion, width: 88, minWidth: 72 },
-  { key: "typeCode", label: L.typeCode, width: 72, minWidth: 56 },
-  { key: "modelSeries", label: L.modelSeries, width: 96, minWidth: 72 },
-  { key: "partName", label: L.partName, width: 120, minWidth: 80 },
-  { key: "label", label: L.label, width: 120, minWidth: 80 },
-  { key: "dir", label: "相对目录", width: 140, minWidth: 80 },
-  { key: "meta", label: "属性摘要", width: 220, minWidth: 120 },
-];
-
-const KIND_OPTIONS = [
-  { value: "all", label: "全部类型" },
-  { value: "fcstd", label: "FCStd" },
-  { value: "markdown", label: "MD" },
-  { value: "pdf", label: "PDF" },
-  { value: "cad_exchange", label: "DXF/DWG" },
-  { value: "image", label: "图片" },
-] as const;
-
-type KindFilter = (typeof KIND_OPTIONS)[number]["value"];
 
 const activeSubTab = ref<PageSubTab>("index");
 const worksetStore = useFileWorksetsStore();
@@ -86,15 +62,6 @@ const saving = ref(false);
 const exporting = ref(false);
 const purging = ref(false);
 const data = ref<FcstdMapPayload | null>(null);
-const statusFilter = ref<"all" | "present" | "missing">("all");
-const kindFilter = ref<KindFilter>("all");
-const searchQuery = ref("");
-const entries = ref<FcstdMapEntry[]>([]);
-const entriesTotal = ref(0);
-const pageOffset = ref(0);
-const pageSize = ref(20);
-const entriesLoading = ref(false);
-const debugSql = ref("");
 
 const stats = computed(() => data.value?.stats);
 
@@ -114,24 +81,30 @@ useFcstdMapPropertySheet("fcstd_map", {
   onSaveScanOptions,
 });
 
-const pageEnd = computed(() => Math.min(pageOffset.value + entries.value.length, entriesTotal.value));
-const currentPage = computed(() => Math.floor(pageOffset.value / pageSize.value) + 1);
-
 function setStatus(msg: string) {
   shell.setStatus(msg);
 }
 
-function assetKindLabel(row: FcstdMapEntry) {
-  const map: Record<string, string> = {
-    fcstd: "FCStd",
-    markdown: "MD",
-    pdf: "PDF",
-    cad_exchange: "DXF/DWG",
-    image: "图片",
-    other: "其他",
-  };
-  return map[row.asset_kind] ?? row.asset_kind ?? "—";
-}
+const entriesController = useFcstdMapEntries({
+  exists: computed(() => Boolean(data.value?.exists)),
+  onError: (error) => setStatus(String(error)),
+});
+const {
+  statusFilter,
+  kindFilter,
+  searchQuery,
+  entries,
+  entriesTotal,
+  pageOffset,
+  pageSize,
+  entriesLoading,
+  debugSql,
+  pageEnd,
+  currentPage,
+  load: loadEntries,
+  onPagerCurrentChange,
+  onPagerSizeChange,
+} = entriesController;
 
 async function onPurgeMissing() {
   const n = stats.value?.missing ?? 0;
@@ -350,124 +323,35 @@ async function onExportJson() {
   }
 }
 
-function statusLabel(row: FcstdMapEntry) {
-  return row.file_status === "missing" ? "缺失" : "存在";
-}
-
-function partKeyLabel(row: FcstdMapEntry) {
-  if (!row.PartNumber || !row.PartVersion) return "";
-  return `${row.PartNumber}.${row.PartVersion}`;
-}
-
-function openPartKey(row: FcstdMapEntry) {
+function openPartKey(row: FcstdMapEntryViewInput) {
   if (!row.PartNumber || !row.PartVersion) return;
   shell.openPartKeyDetail(row.PartNumber, row.PartVersion);
 }
 
-function canOpenFileDetail(row: FcstdMapEntry) {
-  return (
-    row.file_status === "present" &&
-    (row.asset_kind === "fcstd" || /\.fcstd$/i.test(row.filename))
-  );
-}
-
-function openFileDetail(row: FcstdMapEntry) {
+function openFileDetail(row: FcstdMapEntryViewInput) {
   const rel = row.repo_rel_path?.trim();
   if (!rel || !canOpenFileDetail(row)) return;
   shell.openFileDetailForRel(rel);
 }
 
-function metaCell(row: FcstdMapEntry) {
-  if (row.asset_kind && row.asset_kind !== "fcstd") return "—";
-  return [row.PartNumber, row.PartVersion, row.TypeCode, row.ModelSeries, row.PartName, row.label]
-    .filter(Boolean)
-    .join(" · ");
-}
-
-function relDir(row: FcstdMapEntry): string {
-  const p = row.repo_rel_path.replace(/\\/g, "/").replace(/^\.\//, "");
-  const i = p.lastIndexOf("/");
-  if (i < 0) return ".";
-  const dir = p.slice(0, i);
-  return dir || ".";
-}
-
-let searchDebounce: ReturnType<typeof setTimeout> | undefined;
-
-async function loadEntries() {
-  if (!data.value?.exists) {
-    entries.value = [];
-    entriesTotal.value = 0;
-    debugSql.value = "";
-    return;
-  }
-  entriesLoading.value = true;
-  try {
-    const out = await fetchFcstdMapEntries({
-      offset: pageOffset.value,
-      limit: pageSize.value,
-      status: statusFilter.value,
-      kind: kindFilter.value,
-      search: searchQuery.value,
-    });
-    entries.value = out.entries;
-    entriesTotal.value = out.total;
-    debugSql.value = out.debug_sql;
-  } catch (e) {
-    entries.value = [];
-    entriesTotal.value = 0;
-    debugSql.value = "";
-    setStatus(String(e));
-  } finally {
-    entriesLoading.value = false;
-  }
-}
-
-function onPagerCurrentChange(page: number) {
-  pageOffset.value = (page - 1) * pageSize.value;
-  void loadEntries();
-}
-
-function onPagerSizeChange(size: number) {
-  if (!PAGE_SIZE_OPTIONS.includes(size as (typeof PAGE_SIZE_OPTIONS)[number])) return;
-  pageSize.value = size;
-  pageOffset.value = 0;
-  void loadEntries();
-}
-
-function scheduleEntriesReload(resetPage = true) {
-  if (resetPage) pageOffset.value = 0;
-  if (searchDebounce) clearTimeout(searchDebounce);
-  searchDebounce = setTimeout(() => {
-    void loadEntries();
-  }, 280);
-}
-
 async function hydratePageSession(snap: Record<string, unknown>): Promise<boolean> {
-  if (snap.v !== SESSION_V && snap.v !== 3 && snap.v !== 2) return false;
-  if (snap.subTab === "index" || snap.subTab === "settings") {
-    activeSubTab.value = snap.subTab;
-  }
-  if (typeof snap.forceUpdatePartName === "boolean") {
-    forceUpdatePartName.value = snap.forceUpdatePartName;
-  }
-  const sf = snap.statusFilter;
-  if (sf === "all" || sf === "present" || sf === "missing") {
-    statusFilter.value = sf;
-  }
-  const kf = snap.kindFilter;
-  if (KIND_OPTIONS.some((o) => o.value === kf)) {
-    kindFilter.value = kf as KindFilter;
-  }
-  if (snap.searchQuery != null) {
-    searchQuery.value = String(snap.searchQuery);
-  }
-  if (typeof snap.pageOffset === "number") {
-    pageOffset.value = Math.max(0, snap.pageOffset);
-  }
-  if (typeof snap.pageSize === "number" && PAGE_SIZE_OPTIONS.includes(snap.pageSize as 20 | 50 | 100)) {
-    pageSize.value = snap.pageSize;
-  }
+  const hydrated = hydrateFcstdMapPageSession(snap, {
+    subTab: activeSubTab.value,
+    forceUpdatePartName: forceUpdatePartName.value,
+    statusFilter: statusFilter.value,
+    kindFilter: kindFilter.value,
+    searchQuery: searchQuery.value,
+    pageOffset: pageOffset.value,
+    pageSize: pageSize.value,
+  });
+  if (!hydrated) return false;
+  activeSubTab.value = hydrated.subTab;
+  forceUpdatePartName.value = hydrated.forceUpdatePartName;
+  statusFilter.value = hydrated.statusFilter;
+  kindFilter.value = hydrated.kindFilter;
+  searchQuery.value = hydrated.searchQuery;
+  pageOffset.value = hydrated.pageOffset;
+  pageSize.value = hydrated.pageSize;
   await refresh(false);
   return true;
 }
@@ -486,8 +370,7 @@ function applyInitialTabState() {
 }
 
 usePageSession(props.workbenchTabId, {
-  serialize: () => ({
-    v: SESSION_V,
+  serialize: () => serializeFcstdMapPageSession({
     subTab: activeSubTab.value,
     forceUpdatePartName: forceUpdatePartName.value,
     statusFilter: statusFilter.value,
@@ -503,9 +386,6 @@ usePageSession(props.workbenchTabId, {
 watch([forceUpdatePartName, statusFilter, kindFilter, searchQuery, pageOffset, pageSize, activeSubTab], () =>
   shell.scheduleWorkbenchSave(),
 );
-
-watch([statusFilter, kindFilter], () => scheduleEntriesReload(true));
-watch(searchQuery, () => scheduleEntriesReload(true));
 
 usePagePrimaryContribution("fcstd_map", props.workbenchTabId, {
   summary: computed(() => pageSummary.value || "尚未建立 CAD 索引"),
@@ -647,6 +527,7 @@ onMounted(() => {
   });
 });
 onUnmounted(() => {
+  entriesController.dispose();
   shell.registerPageMessages("fcstd_map", null);
 });
 </script>
@@ -697,154 +578,34 @@ onUnmounted(() => {
     </el-radio-group>
 
     <div v-show="activeSubTab === 'index'" class="sub-panel index-panel">
-      <section class="index-toolbar">
-        <el-input
-          id="cad-index-search"
-          v-model="searchQuery"
-          size="small"
-          clearable
-          type="search"
-          spellcheck="false"
-          placeholder="搜索文件名、零件标识、路径…"
-          class="search-field"
-        />
-      </section>
-
-      <section class="filters">
-        <el-radio-group v-model="statusFilter" size="small">
-          <el-radio-button value="all">全部</el-radio-button>
-          <el-radio-button value="present">存在</el-radio-button>
-          <el-radio-button value="missing">缺失</el-radio-button>
-        </el-radio-group>
-        <el-radio-group v-model="kindFilter" size="small" class="kind-filter">
-          <el-radio-button v-for="opt in KIND_OPTIONS" :key="opt.value" :value="opt.value">
-            {{ opt.label }}
-          </el-radio-button>
-        </el-radio-group>
-        <span class="count">
-          显示 <strong>{{ entriesTotal ? `${pageOffset + 1}–${pageEnd}` : 0 }}</strong>
-          / {{ entriesTotal }} 条
-        </span>
-      </section>
-
-      <div class="table-area">
-      <ResizableDataTable
-        v-if="entries.length"
-        :columns="cadColumns"
-        wrap-class="table-grow"
-        data-tour-page-fcstd-table
-      >
-        <tbody>
-          <tr
-            v-for="(row, idx) in entries"
-            :key="row.repo_rel_path + row.file_status"
-            :class="row.file_status"
-          >
-            <td class="col-index">{{ pageOffset + idx + 1 }}</td>
-            <td>
-              <el-tag size="small" :type="row.file_status === 'present' ? 'success' : 'warning'" effect="plain">
-                {{ statusLabel(row) }}
-              </el-tag>
-            </td>
-            <td>
-              <el-tag size="small" effect="plain">{{ assetKindLabel(row) }}</el-tag>
-            </td>
-            <td class="mono">
-              <button
-                v-if="canOpenFileDetail(row)"
-                type="button"
-                class="link-key"
-                :title="row.repo_rel_path"
-                @click="openFileDetail(row)"
-              >
-                {{ row.filename }}
-              </button>
-              <span v-else>{{ row.filename }}</span>
-            </td>
-            <td class="mono">
-              <button
-                v-if="partKeyLabel(row)"
-                type="button"
-                class="link-key"
-                @click="openPartKey(row)"
-              >
-                {{ partKeyLabel(row) }}
-              </button>
-              <span v-else>{{ row.PartNumber }}</span>
-            </td>
-            <td class="mono">{{ row.PartVersion }}</td>
-            <td>{{ row.TypeCode }}</td>
-            <td>{{ row.ModelSeries }}</td>
-            <td>{{ row.PartName }}</td>
-            <td>{{ row.label }}</td>
-            <td class="mono">{{ relDir(row) }}</td>
-            <td class="meta">{{ metaCell(row) }}</td>
-          </tr>
-        </tbody>
-      </ResizableDataTable>
-      <el-empty
-        v-else-if="entriesLoading || loading"
-        class="empty-wrap table-grow"
-        description="加载索引列表…"
-        :image-size="72"
-      />
-      <el-empty
-        v-else
-        class="empty-wrap table-grow"
-        :description="
-          data?.exists
-            ? searchQuery.trim()
-              ? '无匹配条目，请调整搜索或筛选'
-              : '当前筛选无条目'
-            : '尚无索引，点击「工程内搜索」开始扫描'
-        "
-        :image-size="72"
-      />
-      </div>
-
-      <el-pagination
-        v-if="data?.exists && entriesTotal > 0"
-        class="pager"
-        size="small"
-        layout="total, sizes, prev, pager, next"
-        :total="entriesTotal"
+      <FcstdMapIndexPane
+        v-model:search-query="searchQuery"
+        v-model:status-filter="statusFilter"
+        v-model:kind-filter="kindFilter"
+        :exists="Boolean(data?.exists)"
+        :loading="loading"
+        :entries-loading="entriesLoading"
+        :entries="entries"
+        :entries-total="entriesTotal"
+        :page-offset="pageOffset"
+        :page-end="pageEnd"
         :page-size="pageSize"
         :current-page="currentPage"
-        :page-sizes="[...PAGE_SIZE_OPTIONS]"
-        :disabled="entriesLoading"
-        @current-change="onPagerCurrentChange"
-        @size-change="onPagerSizeChange"
+        @page-change="onPagerCurrentChange"
+        @page-size-change="onPagerSizeChange"
+        @open-file-detail="openFileDetail"
+        @open-part-key="openPartKey"
       />
     </div>
 
     <div v-show="activeSubTab === 'settings'" class="sub-panel settings-panel">
-      <section class="settings-block">
-        <h2 class="block-title">扫描</h2>
-        <p class="block-desc">
-          从<strong>当前工作空间根</strong>递归扫描 FCStd、Markdown、PDF、图片、DXF/DWG 等，写入
-          <code>.phoenix/phoenix-workspace.sqlite</code>。请使用页顶「工程内搜索」；再次扫描时磁盘上已不存在的条目标记为缺失。
-        </p>
-        <p v-if="shell.workspacePath" class="meta-line mono">工作空间：{{ shell.workspacePath }}</p>
-        <p class="hint">
-          「强制更新零件名」变更后自动保存。重新扫描会覆盖索引中已有零件名（不写回 FCStd）。
-        </p>
-      </section>
-
-      <section class="settings-block">
-        <h2 class="block-title">导出</h2>
-        <p class="block-desc">
-          导出 <code>fcstd_map.json</code> 仅含 FCStd 条目，供 xlink 脚本等外部工具使用。
-        </p>
-        <el-button size="small" :loading="exporting" :disabled="!data?.exists" @click="onExportJson">
-          导出 fcstd_map.json
-        </el-button>
-      </section>
-
-      <section v-if="debugSql" class="settings-block">
-        <h2 class="block-title">调试 SQL</h2>
-        <p class="block-desc">最近一次列表查询（可复制到 SQLite 客户端执行）。</p>
-        <pre class="debug-sql mono">{{ debugSql }}</pre>
-      </section>
+      <FcstdMapSettingsPane
+        :workspace-path="shell.workspacePath.value"
+        :has-index="Boolean(data?.exists)"
+        :exporting="exporting"
+        :debug-sql="debugSql"
+        @export-json="onExportJson"
+      />
     </div>
   </div>
 </template>
@@ -868,23 +629,6 @@ onUnmounted(() => {
   border-bottom: 1px solid var(--border);
 }
 
-.sub-tab {
-  padding: 8px 14px;
-  border: none;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  font-size: 0.85rem;
-  cursor: pointer;
-  color: var(--muted);
-  margin-bottom: -1px;
-}
-
-.sub-tab.active {
-  color: var(--text);
-  border-bottom-color: var(--accent);
-  font-weight: 600;
-}
-
 .sub-panel {
   flex: 1;
   min-height: 0;
@@ -897,300 +641,9 @@ onUnmounted(() => {
   min-height: 0;
 }
 
-.table-area {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.pager {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-  margin-top: 8px;
-  flex-shrink: 0;
-  font-size: 0.82rem;
-}
-
-.pager-info {
-  color: var(--muted);
-}
-
-.pager-size {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
-  color: var(--muted);
-}
-
-.pager-size select {
-  padding: 4px 6px;
-  border: 1px solid var(--border-strong);
-  border-radius: 4px;
-  font-size: 0.82rem;
-}
-
-.debug-sql {
-  margin: 0;
-  padding: 10px 12px;
-  background: #f8fafc;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: 0.72rem;
-  line-height: 1.45;
-  white-space: pre-wrap;
-  word-break: break-all;
-  max-height: 200px;
-  overflow: auto;
-}
-
-.index-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 10px;
-  flex-shrink: 0;
-}
-
-.index-toolbar .search-input {
-  flex: 1;
-  min-width: 200px;
-  padding: 7px 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  font-size: 0.85rem;
-}
-
-.filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-  margin-bottom: 8px;
-  font-size: 0.82rem;
-  flex-shrink: 0;
-}
-
-.filter {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.filter-sep {
-  color: var(--muted);
-}
-
-.count {
-  color: var(--muted);
-  margin-left: auto;
-}
-
 .settings-panel {
   overflow: auto;
-  gap: 16px;
   padding-bottom: 8px;
-}
-
-.settings-block {
-  padding: 14px 16px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #fff;
-}
-
-.block-title {
-  margin: 0 0 8px;
-  font-size: 0.92rem;
-}
-
-.block-desc {
-  margin: 0 0 12px;
-  font-size: 0.82rem;
-  color: var(--muted);
-  line-height: 1.5;
-}
-
-.field-label {
-  display: block;
-  font-size: 0.78rem;
-  color: var(--muted);
-  margin-bottom: 6px;
-}
-
-.row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.path-input {
-  flex: 1;
-  min-width: 180px;
-  max-width: 420px;
-  padding: 8px 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-}
-
-.force-opt {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.82rem;
-  color: var(--text);
-}
-
-.hint {
-  margin: 8px 0 0;
-  font-size: 0.78rem;
-  color: var(--muted);
-  line-height: 1.45;
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: 100px 1fr 100px 1fr;
-  gap: 6px 12px;
-  margin: 0;
-  font-size: 0.85rem;
-}
-
-.stats-grid dt {
-  margin: 0;
-  color: var(--muted);
-}
-
-.stats-grid dd {
-  margin: 0;
-}
-
-.stats-grid .ok {
-  color: #15803d;
-}
-
-.stats-grid .warn {
-  color: #b45309;
-}
-
-.meta-block .meta-line {
-  margin: 0 0 6px;
-  font-size: 0.78rem;
-  color: var(--muted);
-  word-break: break-all;
-}
-
-.meta-block .meta-line:last-child {
-  margin-bottom: 0;
-}
-
-.btn {
-  padding: 7px 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  background: var(--btn-bg);
-  font-size: 0.82rem;
-  cursor: pointer;
-}
-
-.btn.mini {
-  padding: 6px 10px;
-  font-size: 0.78rem;
-}
-
-.btn.primary {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
-}
-
-.btn.danger {
-  color: #b91c1c;
-  border-color: #fecaca;
-  background: #fef2f2;
-}
-
-.btn.danger:hover:not(:disabled) {
-  background: #fee2e2;
-}
-
-.btn:disabled {
-  opacity: 0.55;
-}
-
-.table-grow {
-  flex: 1;
-  min-height: 0;
-}
-
-.empty-wrap {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: auto;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #fff;
-}
-
-:deep(.resizable-data-table tr.missing) {
-  background: #fff7ed;
-}
-
-:deep(.resizable-data-table tr.missing td:nth-child(2)) {
-  color: #c2410c;
-  font-weight: 600;
-}
-
-:deep(.resizable-data-table .col-index),
-:deep(.resizable-data-table td.col-index) {
-  text-align: right;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.mono {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1;
-  font-size: 0.76rem;
-}
-
-.meta {
-  color: #64748b;
-}
-
-.link-key {
-  border: none;
-  background: none;
-  padding: 0;
-  color: var(--accent);
-  cursor: pointer;
-  font: inherit;
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1;
-  text-decoration: underline;
-}
-
-.link-key:hover {
-  color: #1d4ed8;
-}
-
-.empty {
-  padding: 28px;
-  color: var(--muted);
-  text-align: center;
-}
-
-code {
-  font-size: 0.9em;
 }
 
 /* 扫描状态条（详细进度见浮层面板） */

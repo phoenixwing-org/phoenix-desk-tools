@@ -4,13 +4,27 @@ import AutoImport from "unplugin-auto-import/vite";
 import Components from "unplugin-vue-components/vite";
 import { ElementPlusResolver } from "unplugin-vue-components/resolvers";
 import { resolve } from "path";
-import { resolvePhoenixWingPath } from "./config/resolvePhoenixWing";
+import {
+  createPhoenixWingSourceAliases,
+  resolvePhoenixWingContext,
+} from "./config/resolvePhoenixWing";
 
 /** 开发：Vite 5173，Node Hono 5180。 */
+const webPort = Number(process.env.WEB_UI_PORT || 5173);
 const caaPort = Number(process.env.CAA_SERVER_PORT || 5180);
+const elementPlusImportStyle = process.env.VITEST ? false : "sass";
 
 const webRoot = resolve(__dirname);
-const localWingSrc = resolvePhoenixWingPath(webRoot);
+const deskRoot = resolve(webRoot, "..");
+const wingContext = resolvePhoenixWingContext(deskRoot);
+const localWingRoot = wingContext.mode === "local" ? wingContext.root : null;
+const localWingAliases = localWingRoot ? createPhoenixWingSourceAliases(localWingRoot) : [];
+
+console.log(
+  localWingRoot
+    ? `[Wing][LOCAL][web] ${localWingRoot}`
+    : "[Wing][REGISTRY][web] package.json + pnpm-lock.yaml",
+);
 
 export default defineConfig({
   plugins: [
@@ -26,15 +40,21 @@ export default defineConfig({
       dts: "auto-imports.d.ts",
     }),
     Components({
-      resolvers: [ElementPlusResolver({ importStyle: "sass" })],
+      resolvers: [ElementPlusResolver({ importStyle: elementPlusImportStyle })],
       dts: "components.d.ts",
     }),
   ],
   resolve: {
-    alias: {
-      ...(localWingSrc ? { "phoenix-wing": localWingSrc } : {}),
-    },
-    dedupe: ["vue", "pinia", "phoenix-wing"],
+    alias: localWingAliases,
+    dedupe: [
+      "vue",
+      "pinia",
+      "element-plus",
+      "phoenix-wing",
+      "@phoenix-wing/code-core",
+      "@phoenix-wing/db-node",
+      "@phoenix-wing/kt-codegen",
+    ],
   },
   test: {
     server: {
@@ -44,8 +64,9 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    port: webPort,
     strictPort: true,
+    ...(localWingRoot ? { fs: { allow: [deskRoot, localWingRoot] } } : {}),
     proxy: {
       "/api/caa/index": {
         target: `http://127.0.0.1:${caaPort}`,

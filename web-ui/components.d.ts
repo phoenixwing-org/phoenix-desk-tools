@@ -11,6 +11,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AssemblyTreeRowGroup: typeof import('./src/components/assembly-tree/AssemblyTreeRowGroup.vue')['default']
     AssemblyTreeTable: typeof import('./src/components/AssemblyTreeTable.vue')['default']
     CaaCatNlsEditDialog: typeof import('./src/components/caa/CaaCatNlsEditDialog.vue')['default']
     CaaControlCatalogBox: typeof import('./src/components/caa/controls/CaaControlCatalogBox.vue')['default']
@@ -86,6 +87,8 @@ declare module 'vue' {
     ElTag: typeof import('element-plus/es')['ElTag']
     ElTooltip: typeof import('element-plus/es')['ElTooltip']
     ElTree: typeof import('element-plus/es')['ElTree']
+    FcstdMapIndexPane: typeof import('./src/components/fcstd-map/FcstdMapIndexPane.vue')['default']
+    FcstdMapSettingsPane: typeof import('./src/components/fcstd-map/FcstdMapSettingsPane.vue')['default']
     FileAssemblyPanel: typeof import('./src/components/file-detail/FileAssemblyPanel.vue')['default']
     FileAttributesPanel: typeof import('./src/components/file-detail/FileAttributesPanel.vue')['default']
     FileOverviewPanel: typeof import('./src/components/file-detail/FileOverviewPanel.vue')['default']
@@ -121,6 +124,8 @@ declare module 'vue' {
     ShellPanelToggleBar: typeof import('./src/components/ShellPanelToggleBar.vue')['default']
     SideDockPrefsPanel: typeof import('./src/components/SideDockPrefsPanel.vue')['default']
     TreeBranch: typeof import('./src/components/TreeBranch.vue')['default']
+    UnitTestRunScopePane: typeof import('./src/components/unit-tests/UnitTestRunScopePane.vue')['default']
+    UnitTestWatchlistPane: typeof import('./src/components/unit-tests/UnitTestWatchlistPane.vue')['default']
     WorkbenchBottomPanel: typeof import('./src/components/workbench/WorkbenchBottomPanel.vue')['default']
     WorkbenchPanelToggleIcon: typeof import('./src/components/workbench/WorkbenchPanelToggleIcon.vue')['default']
     WorksetScopePicker: typeof import('./src/components/WorksetScopePicker.vue')['default']

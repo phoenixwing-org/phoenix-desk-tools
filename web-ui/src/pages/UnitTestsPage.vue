@@ -3,26 +3,32 @@ import { computed, onMounted, ref, watch } from "vue";
 import {
   fetchTestModuleCatalog,
   fetchTestCaseCatalog,
-  fetchUnitTestPlan,
   fetchUnitTestSuites,
-  cancelUnitTestRun,
-  runUnitTestsStream,
   type TestModuleCatalogEntry,
   type TestCaseCatalogEntry,
   type UnitTestPlan,
-  type UnitTestPlanModule,
   type UnitTestCaseResult,
   type UnitTestRunOptions,
   type UnitTestRunResult,
   type UnitTestSuiteInfo,
 } from "../api";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
+import UnitTestRunScopePane from "../components/unit-tests/UnitTestRunScopePane.vue";
+import UnitTestWatchlistPane from "../components/unit-tests/UnitTestWatchlistPane.vue";
 import { useUnitTestsPropertySheet } from "../composables/useUnitTestsPropertySheet";
 import {
   usePagePrimaryContribution,
   type PagePrimarySection,
 } from "../composables/usePagePrimaryContribution";
-import { useAsyncProgress } from "../composables/useAsyncProgress";
+import {
+  useUnitTestRunController,
+  type UnitTestRunMode as RunMode,
+  type UnitTestRunRequest,
+} from "../composables/useUnitTestRunController";
+import {
+  useUnitTestPlanController,
+  type UnitTestPlanRequest,
+} from "../composables/useUnitTestPlanController";
 import { pnwPromptChoice } from "phoenix-wing";
 import { useAppShell } from "../composables/useAppShell";
 import {
@@ -42,14 +48,31 @@ import {
   type UnitTestWatchlistEntry,
 } from "../utils/unitTestWatchlist";
 import {
-  hasModuleHistory,
   loadModuleHistory,
-  moduleLastRunAt,
-  moduleRunCount,
   recordModuleRuns,
   sortPlanModules,
   type ModuleHistoryMap,
 } from "../utils/unitTestModuleHistory";
+import {
+  canRunUnitTestFull,
+  deriveUnitTestModuleFilter,
+  deriveUnitTestRunScopeSelection,
+  filterUnitTestCases,
+  filterUnitTestModuleSummaries,
+  groupUnitTestCasesByModule,
+  mergeUnitTestRunOptions,
+  projectUnitTestRunScopeRows,
+  projectUnitTestWatchlistRows,
+  syncUnitTestCheckedModules,
+  unitTestModuleDescription,
+  unitTestModuleDescriptionBrief,
+  unitTestPassRate,
+  unitTestShortModule as shortModule,
+  unitTestStatusClass as statusClass,
+  unitTestStatusLabel as statusLabel,
+  type UnitTestRunScopeRowView,
+  type UnitTestWatchlistRowView,
+} from "../models/unitTestsViewModel";
 
 const props = defineProps<{
   workbenchTabId?: string;
@@ -59,7 +82,6 @@ const shell = useAppShell();
 const pageStore = useUnitTestsPageStore();
 
 type PageTab = UnitTestsPageTab;
-type RunMode = "full" | "watchlist";
 
 const RUNNABLE_SUITE_IDS = UNIT_TEST_RUNNABLE_SUITE_IDS;
 
@@ -71,10 +93,7 @@ const STATUS_FILTER_OPTIONS = [
 ] as const;
 
 const suites = ref<UnitTestSuiteInfo[]>([]);
-const running = ref(false);
-const testProgressUI = useAsyncProgress("unit-test");
 const loadError = ref("");
-const result = ref<UnitTestRunResult | null>(null);
 const lastRunSuites = ref<string[]>([]);
 const resultSuiteChecked = ref<Set<string>>(new Set());
 const resultStatusChecked = ref<Set<string>>(new Set(["passed", "failed", "error", "skipped"]));
@@ -86,7 +105,6 @@ const filterWatchlistOnly = ref(false);
 const filterReTestedOnly = ref(false);
 const lastReTestedCaseIds = ref<Set<string>>(new Set());
 const lastIgnoredCount = ref(0);
-const runScopeCollapsed = ref(false);
 const rerunningWatchlistId = ref<string | null>(null);
 const rerunningModule = ref<string | null>(null);
 const moduleHistory = ref<ModuleHistoryMap>(loadModuleHistory());
@@ -108,6 +126,21 @@ const showRunScopeCases = computed({
 });
 const moduleSortBy = computed(() => pageStore.moduleSortBy);
 
+const runController = useUnitTestRunController({
+  onCaseDone: syncWatchlistFromCase,
+  onCompleted: syncCompletedRun,
+});
+const { running, result } = runController;
+
+const planController = useUnitTestPlanController({
+  onAccepted: syncAcceptedPlan,
+});
+const {
+  plan: runPlan,
+  loading: runPlanLoading,
+  error: runPlanError,
+} = planController;
+
 useUnitTestsPropertySheet("unit_tests", {
   runCheckedCount,
   runnableSuiteCount: computed(() => RUNNABLE_SUITE_IDS.length),
@@ -116,9 +149,6 @@ useUnitTestsPropertySheet("unit_tests", {
   result,
 });
 
-const runPlan = ref<UnitTestPlan | null>(null);
-const runPlanLoading = ref(false);
-const runPlanError = ref("");
 const runCheckedModules = ref<Set<string>>(new Set());
 const lastPlanModuleNames = ref<string[]>([]);
 
@@ -129,17 +159,15 @@ const runnableSuites = computed(() =>
 const watchlistCount = computed(() => watchlist.value.length);
 const watchlistTotalFails = computed(() => watchlistTotalFailCount(watchlist.value));
 const watchlistSkipCount = computed(() => watchlist.value.filter((e) => !e.run_on_full).length);
+const fullRunExcludedCaseSignature = computed(() =>
+  excludeCaseIdsForFullRun(watchlist.value).slice().sort().join("\u0000"),
+);
 const watchlistIdSet = computed(() => new Set(watchlist.value.map((e) => e.id)));
 const sortedWatchlist = computed(() =>
   sortWatchlistEntries(watchlist.value, watchlistPrefs.value.sort_by),
 );
 const watchlistChecked = computed(() => pageStore.watchlistCheckedSet);
 const watchlistCheckedCount = computed(() => pageStore.watchlistCheckedCount);
-const watchlistAllChecked = computed(
-  () =>
-    sortedWatchlist.value.length > 0 &&
-    sortedWatchlist.value.every((e) => watchlistChecked.value.has(e.id)),
-);
 
 const runScopeModuleNames = computed(() => runPlan.value?.modules.map((m) => m.module) ?? []);
 
@@ -148,27 +176,12 @@ const sortedRunPlanModules = computed(() => {
   return sortPlanModules(mods, moduleSortBy.value, moduleHistory.value);
 });
 
-const showModuleHistoryColumns = computed(() => hasModuleHistory(moduleHistory.value));
-
-const runScopeModulesAllChecked = computed(
-  () =>
-    runScopeModuleNames.value.length > 0 &&
-    runScopeModuleNames.value.every((m) => runCheckedModules.value.has(m)),
-);
-
 const runScopeModuleCheckedCount = computed(() =>
   runScopeModuleNames.value.filter((m) => runCheckedModules.value.has(m)).length,
 );
 
 const runScopeSelectedSummary = computed(() => {
-  if (!runPlan.value) return null;
-  const mods = runPlan.value.modules.filter((m) => runCheckedModules.value.has(m.module));
-  return {
-    modules: mods.length,
-    totalModules: runPlan.value.modules.length,
-    cases: mods.reduce((sum, m) => sum + m.case_count, 0),
-    totalCases: runPlan.value.total_cases,
-  };
+  return deriveUnitTestRunScopeSelection(runPlan.value, runCheckedModules.value);
 });
 
 const runScopeButtonModuleCount = computed(() => {
@@ -186,18 +199,18 @@ const runScopeButtonModuleCount = computed(() => {
 });
 
 const canRunFull = computed(() => {
-  if (!runCheckedCount.value) return false;
-  if (showRunScopeList.value && runPlan.value?.modules.length) {
-    return runScopeModuleCheckedCount.value > 0;
-  }
-  return true;
+  return canRunUnitTestFull({
+    checkedSuiteCount: runCheckedCount.value,
+    showRunScopeList: showRunScopeList.value,
+    planLoading: runPlanLoading.value,
+    planError: runPlanError.value,
+    planReady: !!runPlan.value,
+    planModuleCount: runPlan.value?.modules.length ?? 0,
+    checkedModuleCount: runScopeModuleCheckedCount.value,
+  });
 });
 
-const passRate = computed(() => {
-  const s = result.value?.summary;
-  if (!s || s.tests_run === 0) return 0;
-  return Math.round((s.passed / s.tests_run) * 100);
-});
+const passRate = computed(() => unitTestPassRate(result.value?.summary));
 
 const suiteLabelById = computed(() => {
   const map = new Map<string, string>();
@@ -205,107 +218,46 @@ const suiteLabelById = computed(() => {
   return map;
 });
 
-function caseMatchesStatus(c: UnitTestCaseResult) {
-  if (c.status === "failed" || c.status === "error") {
-    return resultStatusChecked.value.has("failed") || resultStatusChecked.value.has("error");
-  }
-  return resultStatusChecked.value.has(c.status);
-}
+const runScopeRows = computed(() => projectUnitTestRunScopeRows(
+  sortedRunPlanModules.value,
+  runCheckedModules.value,
+  moduleCatalog.value,
+  caseCatalog.value,
+  moduleHistory.value,
+  suiteLabelById.value,
+));
+
+const watchlistRows = computed(() => projectUnitTestWatchlistRows(
+  sortedWatchlist.value,
+  watchlistChecked.value,
+  caseCatalog.value,
+  moduleCatalog.value,
+  suiteLabelById.value,
+));
 
 const filteredCases = computed(() => {
-  let cases = result.value?.cases ?? [];
-  if (filterReTestedOnly.value && lastReTestedCaseIds.value.size) {
-    cases = cases.filter((c) => lastReTestedCaseIds.value.has(c.id));
-  } else if (filterWatchlistOnly.value) {
-    const ids = watchlistIdSet.value;
-    cases = cases.filter((c) => ids.has(c.id));
-  }
-  return cases.filter(
-    (c) => resultSuiteChecked.value.has(c.suite_id) && caseMatchesStatus(c),
-  );
+  return filterUnitTestCases(result.value?.cases ?? [], {
+    suiteIds: resultSuiteChecked.value,
+    statuses: resultStatusChecked.value,
+    watchlistOnly: filterWatchlistOnly.value,
+    reTestedOnly: filterReTestedOnly.value,
+    watchlistIds: watchlistIdSet.value,
+    reTestedIds: lastReTestedCaseIds.value,
+  });
 });
 
 const filteredModuleSummaries = computed(() => {
-  const mods = result.value?.modules ?? [];
-  const visibleModules = new Set(filteredCases.value.map((c) => c.module));
-  return mods.filter((m) => visibleModules.has(m.module));
+  return filterUnitTestModuleSummaries(result.value?.modules ?? [], filteredCases.value);
 });
 
-const groupedModules = computed(() => {
-  const map = new Map<string, UnitTestCaseResult[]>();
-  for (const c of filteredCases.value) {
-    const list = map.get(c.module) ?? [];
-    list.push(c);
-    map.set(c.module, list);
-  }
-  return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
-});
-
-function statusLabel(status: string) {
-  if (status === "passed") return "通过";
-  if (status === "failed") return "失败";
-  if (status === "error") return "错误";
-  if (status === "skipped") return "跳过";
-  return status;
-}
-
-function statusClass(status: string) {
-  return `status-${status}`;
-}
-
-function shortModule(module: string) {
-  return module.replace(/^tests\./, "");
-}
-
-function suiteShortLabel(suiteId: string): string {
-  if (suiteId === "cad") return "CAD";
-  if (suiteId === "code") return "Code";
-  if (suiteId === "platform") return "平台";
-  if (suiteId === "caa") return "CAA";
-  if (suiteId === "all") return "全部";
-  return suiteLabelById.value.get(suiteId) ?? suiteId;
-}
-
-function moduleCatalogEntry(module: string): TestModuleCatalogEntry | undefined {
-  return moduleCatalog.value[module] ?? moduleCatalog.value[`tests.${shortModule(module)}`];
-}
+const groupedModules = computed(() => groupUnitTestCasesByModule(filteredCases.value));
 
 function moduleDescription(module: string): string {
-  const entry = moduleCatalogEntry(module);
-  if (!entry) return "";
-  return entry.description_zh || entry.title || "";
+  return unitTestModuleDescription(moduleCatalog.value, module);
 }
 
 function moduleDescriptionBrief(module: string, maxLen = 48): string {
-  const text = moduleDescription(module).replace(/\s+/g, " ").trim();
-  if (!text) return "—";
-  if (text.length <= maxLen) return text;
-  return `${text.slice(0, maxLen - 1)}…`;
-}
-
-function caseCatalogEntry(entry: UnitTestWatchlistEntry): TestCaseCatalogEntry | undefined {
-  return caseCatalog.value[entry.id];
-}
-
-function caseDescription(entry: UnitTestWatchlistEntry): string {
-  const cat = caseCatalogEntry(entry);
-  if (cat?.description_zh) return cat.description_zh.trim();
-  if (cat?.title && cat.title !== `${entry.class_name}.${entry.method}`) {
-    return cat.title.trim();
-  }
-  const doc = cat?.docstring?.trim();
-  if (doc) {
-    const first = doc.split(/\n+/).map((ln) => ln.trim()).find(Boolean);
-    if (first && !first.startsWith("case_id=")) return first;
-  }
-  return moduleDescription(entry.module);
-}
-
-function caseDescriptionBrief(entry: UnitTestWatchlistEntry, maxLen = 56): string {
-  const text = caseDescription(entry).replace(/\s+/g, " ").trim();
-  if (!text) return "—";
-  if (text.length <= maxLen) return text;
-  return `${text.slice(0, maxLen - 1)}…`;
+  return unitTestModuleDescriptionBrief(moduleCatalog.value, module, maxLen);
 }
 
 function moduleSuiteId(module: string): string {
@@ -316,22 +268,6 @@ function moduleSuiteId(module: string): string {
 
 function onModuleSortChange(sortBy: "plan" | "last_run_at" | "run_count") {
   pageStore.setModuleSortBy(sortBy);
-}
-
-function formatModuleLastRun(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function runScopeRowClass({ row }: { row: UnitTestPlanModule }) {
-  return runCheckedModules.value.has(row.module) ? "" : "run-scope-row-off";
 }
 
 function recordRunHistoryFromResult(r: UnitTestRunResult | null) {
@@ -388,33 +324,12 @@ function syncWatchlistFromCase(c: UnitTestCaseResult) {
   }
 }
 
-function formatRunSummary(r: UnitTestRunResult): string {
-  const s = r.summary;
-  if (s.cancelled) {
-    const base = `${r.suite_label}：已终止 · 已完成 ${s.tests_run} 条（${r.duration_ms} ms）`;
-    if (s.failed + s.errors > 0) {
-      return `${base} · 失败 ${s.failed}、错误 ${s.errors}`;
-    }
-    return base;
-  }
-  const base = r.ok
-    ? `${r.suite_label}：${s.passed}/${s.tests_run} 通过（${r.duration_ms} ms）`
-    : `${r.suite_label}：失败 ${s.failed}、错误 ${s.errors}（${r.duration_ms} ms）`;
-  if (s.ignored && s.ignored > 0) {
-    return `${base} · 忽略 ${s.ignored} 条（关注·默认不跑）`;
-  }
-  return base;
-}
-
 function cancelRun() {
-  if (!running.value) return;
-  shell.appendLog("[单元测试] 请求终止…（当前用例结束后停止）", { source: "unit_tests" });
-  shell.setStatus("正在终止…");
-  void testProgressUI.cancel();
+  runController.cancel();
 }
 
-function onWatchlistRunOnFullChange(entry: UnitTestWatchlistEntry, checked: boolean) {
-  watchlist.value = setWatchlistRunOnFull(entry.id, checked);
+function onWatchlistRunOnFullChange(id: string, checked: boolean) {
+  watchlist.value = setWatchlistRunOnFull(id, checked);
 }
 
 function onWatchlistDefaultRunOnFullChange(checked: boolean) {
@@ -440,21 +355,10 @@ function syncWatchlistChecked() {
   pageStore.pruneWatchlistChecked(new Set(sortedWatchlist.value.map((e) => e.id)));
 }
 
-function formatWatchlistTime(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-async function removeFromWatchlist(entry: UnitTestWatchlistEntry) {
+async function removeFromWatchlist(row: UnitTestWatchlistRowView) {
   const result = await pnwPromptChoice({
     title: "移出关注列表",
-    message: `${entry.method}\n累计失败 ${entry.fail_count} 次`,
+    message: `${row.method}\n累计失败 ${row.failCount} 次`,
     choices: [
       { id: "remove", label: "移出", variant: "danger" },
       { id: "cancel", label: "取消" },
@@ -462,7 +366,7 @@ async function removeFromWatchlist(entry: UnitTestWatchlistEntry) {
     defaultChoiceId: "cancel",
   });
   if (result.choiceId !== "remove") return;
-  watchlist.value = removeWatchlistEntry(entry.id);
+  watchlist.value = removeWatchlistEntry(row.id);
 }
 
 async function clearAllWatchlist() {
@@ -527,22 +431,13 @@ async function loadSuites() {
 
 function syncRunCheckedModulesFromPlan(plan: UnitTestPlan) {
   const names = plan.modules.map((m) => m.module);
-  const prevAvailable = new Set(lastPlanModuleNames.value);
-  const prevChecked = runCheckedModules.value;
-
-  if (!prevAvailable.size) {
-    runCheckedModules.value = new Set(names);
-    lastPlanModuleNames.value = names;
-    return;
-  }
-
-  const next = new Set<string>();
-  for (const name of names) {
-    if (!prevAvailable.has(name)) next.add(name);
-    else if (prevChecked.has(name)) next.add(name);
-  }
-  runCheckedModules.value = next;
-  lastPlanModuleNames.value = names;
+  const synced = syncUnitTestCheckedModules(
+    names,
+    lastPlanModuleNames.value,
+    runCheckedModules.value,
+  );
+  runCheckedModules.value = new Set(synced.checked);
+  lastPlanModuleNames.value = [...synced.available];
 }
 
 function toggleRunScopeModule(module: string, checked: boolean) {
@@ -561,137 +456,78 @@ function toggleAllRunScopeModules(checked: boolean) {
 }
 
 function runModuleFilterOptions(): Pick<UnitTestRunOptions, "include_modules"> | undefined {
-  if (!showRunScopeList.value || !runPlan.value?.modules.length) return undefined;
-  const allNames = runPlan.value.modules.map((m) => m.module);
-  const selected = allNames.filter((m) => runCheckedModules.value.has(m));
-  if (!selected.length || selected.length === allNames.length) return undefined;
-  return { include_modules: selected };
+  return deriveUnitTestModuleFilter(
+    showRunScopeList.value,
+    runPlan.value?.modules.map((module) => module.module) ?? [],
+    runCheckedModules.value,
+  );
 }
 
 function mergeRunOptions(base?: UnitTestRunOptions): UnitTestRunOptions | undefined {
-  const exclude = base?.exclude_cases ?? excludeCaseIdsForFullRun(watchlist.value);
-  const includeCases = base?.include_cases;
-  const mod = runModuleFilterOptions();
-  const opts: UnitTestRunOptions = {};
-  if (exclude.length) opts.exclude_cases = exclude;
-  if (includeCases?.length) opts.include_cases = includeCases;
-  if (mod?.include_modules?.length) opts.include_modules = mod.include_modules;
-  return Object.keys(opts).length ? opts : undefined;
+  return mergeUnitTestRunOptions(
+    base,
+    excludeCaseIdsForFullRun(watchlist.value),
+    runModuleFilterOptions(),
+  );
 }
 
 async function loadRunPlan() {
   if (!showRunScopeList.value) {
-    runPlan.value = null;
-    runPlanError.value = "";
+    planController.clear();
     return;
   }
   const ids = [...runChecked.value];
   if (!ids.length) {
-    runPlan.value = null;
-    runPlanError.value = "";
+    planController.clear();
     return;
   }
-  runPlanLoading.value = true;
-  runPlanError.value = "";
-  try {
-    runPlan.value = await fetchUnitTestPlan(ids, {
-      ...mergeRunOptions(),
-      include_case_details: showRunScopeCases.value,
-    });
-    syncRunCheckedModulesFromPlan(runPlan.value);
-    void loadModuleCatalog(runPlan.value.modules.map((m) => m.module));
-    if (showRunScopeCases.value) {
-      const caseIds = runPlan.value.modules.flatMap((m) => (m.cases ?? []).map((c) => c.id));
-      void loadCaseCatalog(caseIds.slice(0, 200));
-    }
-  } catch (e) {
-    runPlanError.value = String(e);
-    runPlan.value = null;
-  } finally {
-    runPlanLoading.value = false;
+
+  await planController.load({
+    suiteIds: ids,
+    excludeCaseIds: excludeCaseIdsForFullRun(watchlist.value),
+    includeCaseDetails: showRunScopeCases.value,
+  });
+}
+
+function syncAcceptedPlan(accepted: UnitTestPlan, request: UnitTestPlanRequest) {
+  syncRunCheckedModulesFromPlan(accepted);
+  void loadModuleCatalog(accepted.modules.map((module) => module.module));
+  if (request.includeCaseDetails) {
+    const caseIds = accepted.modules.flatMap((module) =>
+      (module.cases ?? []).map((testCase) => testCase.id));
+    void loadCaseCatalog(caseIds.slice(0, 200));
   }
 }
 
-async function executeRun(args: {
-  suiteIds: string[];
-  runOptions?: UnitTestRunOptions;
-  logLabel: string;
-  lastRunSuiteIds?: string[];
-  runMode?: RunMode;
-}) {
-  running.value = true;
-  result.value = null;
+function syncCompletedRun(completed: UnitTestRunResult, request: UnitTestRunRequest) {
+  const cancelled = !!completed.summary.cancelled;
+  recordRunHistoryFromResult(completed);
+  lastRunSuites.value = request.lastRunSuiteIds ?? [...runChecked.value];
+  lastIgnoredCount.value = completed.summary.ignored ?? 0;
+  void loadModuleCatalog(completed.modules.map((module) => module.module));
+  resultSuiteChecked.value = new Set(
+    lastRunSuites.value.length ? lastRunSuites.value : RUNNABLE_SUITE_IDS,
+  );
+  resultStatusChecked.value = new Set(["passed", "failed", "error", "skipped"]);
+  filterWatchlistOnly.value = false;
+  filterReTestedOnly.value = false;
+  if (request.runMode === "watchlist") {
+    const ids = request.runOptions?.include_cases;
+    if (ids?.length) {
+      lastReTestedCaseIds.value = new Set(ids);
+      filterReTestedOnly.value = true;
+    } else {
+      filterWatchlistOnly.value = true;
+    }
+  } else if (completed.failures.length && !cancelled) {
+    activeTab.value = "watchlist";
+  }
+}
+
+async function executeRun(request: UnitTestRunRequest) {
   expandedCase.value = null;
   activeTab.value = "results";
-  shell.appendLog(`[单元测试] 运行 ${args.logLabel}…`, { source: "unit_tests", open: true });
-  let cancelled = false;
-  try {
-    // 进度统一走 AsyncProgressOverlay（新架构），仅保留 watchlist/结果同步
-    result.value = (await testProgressUI.startStreaming(
-      (onEvent) =>
-        runUnitTestsStream(args.suiteIds, (event) => {
-          if (event.type === "start") {
-            if (event.load_errors.length) {
-              for (const err of event.load_errors) {
-                shell.appendLog(`  ✗ 加载 ${err}`, { source: "unit_tests" });
-              }
-            }
-          }
-          if (event.type === "case_done") {
-            syncWatchlistFromCase(event.case);
-          }
-          onEvent(event); // → overlay 处理全部进度展示
-        }, {
-          ...args.runOptions,
-        }),
-      (runId) => cancelUnitTestRun(runId),
-      { taskName: "单元测试" },
-    )) ?? null as unknown as UnitTestRunResult;
-    if (!result.value) {
-      shell.appendLog("测试运行未返回结果", { source: "unit_tests" });
-      shell.setStatus("测试运行未返回结果");
-      return;
-    }
-    cancelled = !!result.value.summary.cancelled;
-    recordRunHistoryFromResult(result.value);
-    lastRunSuites.value = args.lastRunSuiteIds ?? [...runChecked.value];
-    lastIgnoredCount.value = result.value.summary.ignored ?? 0;
-    void loadModuleCatalog(result.value.modules.map((m) => m.module));
-    resultSuiteChecked.value = new Set(lastRunSuites.value.length ? lastRunSuites.value : RUNNABLE_SUITE_IDS);
-    resultStatusChecked.value = new Set(["passed", "failed", "error", "skipped"]);
-    filterWatchlistOnly.value = false;
-    filterReTestedOnly.value = false;
-    const msg = formatRunSummary(result.value);
-    shell.appendLog(msg, { source: "unit_tests" });
-    shell.setStatus(msg);
-    if (!result.value.ok && result.value.failures.length) {
-      for (const f of result.value.failures.slice(0, 5)) {
-        shell.appendLog(`  ✗ ${f.id}: ${f.message}`, { source: "unit_tests" });
-      }
-    }
-    if (args.runMode === "watchlist") {
-      const ids = args.runOptions?.include_cases;
-      if (ids?.length) {
-        lastReTestedCaseIds.value = new Set(ids);
-        filterReTestedOnly.value = true;
-      } else {
-        filterWatchlistOnly.value = true;
-      }
-    } else if (result.value.failures.length && !cancelled) {
-      activeTab.value = "watchlist";
-    }
-  } catch (e) {
-    const msg = String(e);
-    if (msg.includes("终止") || msg.includes("aborted")) {
-      shell.appendLog("[单元测试] 运行已终止", { source: "unit_tests" });
-      shell.setStatus("运行已终止");
-    } else {
-      shell.appendLog(msg, { source: "unit_tests" });
-      shell.setStatus(msg);
-    }
-  } finally {
-    running.value = false;
-  }
+  await runController.execute(request);
 }
 
 async function onRun(mode: RunMode = "full") {
@@ -700,9 +536,28 @@ async function onRun(mode: RunMode = "full") {
     shell.setStatus("请至少勾选一个要运行的套件");
     return;
   }
-  if (mode === "full" && showRunScopeList.value && runPlan.value?.modules.length && !runScopeModuleCheckedCount.value) {
-    shell.setStatus("请至少勾选一个要运行的模块");
-    return;
+  if (mode === "full" && showRunScopeList.value) {
+    if (runPlanLoading.value) {
+      shell.setStatus("运行计划仍在加载，请稍候");
+      return;
+    }
+    if (runPlanError.value) {
+      shell.setStatus("运行计划加载失败，请切换范围重试或关闭模块范围");
+      return;
+    }
+    const scopePlan = runPlan.value;
+    if (!scopePlan) {
+      shell.setStatus("运行计划尚未就绪，请稍候或关闭模块范围");
+      return;
+    }
+    if (!scopePlan.modules.length) {
+      shell.setStatus("当前运行计划没有可执行模块");
+      return;
+    }
+    if (!runScopeModuleCheckedCount.value) {
+      shell.setStatus("请至少勾选一个要运行的模块");
+      return;
+    }
   }
   if (mode === "watchlist" && !watchlist.value.length) {
     shell.setStatus("失败关注列表为空");
@@ -757,14 +612,14 @@ async function onRunWatchlistSelected() {
   });
 }
 
-async function onRerunWatchlistEntry(entry: UnitTestWatchlistEntry) {
+async function onRerunWatchlistEntry(row: UnitTestWatchlistRowView) {
   if (running.value) return;
-  rerunningWatchlistId.value = entry.id;
+  rerunningWatchlistId.value = row.id;
   try {
     await executeRun({
       suiteIds: ["all"],
-      runOptions: { include_cases: [entry.id] },
-      logLabel: `复测 ${entry.method}`,
+      runOptions: { include_cases: [row.id] },
+      logLabel: `复测 ${row.method}`,
       runMode: "watchlist",
     });
   } finally {
@@ -772,12 +627,12 @@ async function onRerunWatchlistEntry(entry: UnitTestWatchlistEntry) {
   }
 }
 
-async function onRunSingleModule(mod: UnitTestPlanModule) {
-  if (running.value) return;
+async function onRunSingleModule(mod: UnitTestRunScopeRowView) {
+  if (running.value || runPlanLoading.value) return;
   rerunningModule.value = mod.module;
   try {
     await executeRun({
-      suiteIds: [mod.suite_id],
+      suiteIds: [mod.suiteId],
       runOptions: { include_modules: [mod.module] },
       logLabel: shortModule(mod.module),
       lastRunSuiteIds: [...runChecked.value],
@@ -812,8 +667,7 @@ watch(
     [...runChecked.value].sort().join(","),
     showRunScopeList.value,
     showRunScopeCases.value,
-    watchlist.value.length,
-    watchlistSkipCount.value,
+    fullRunExcludedCaseSignature.value,
   ],
   () => {
     void loadRunPlan();
@@ -976,178 +830,37 @@ onMounted(() => {
 
     <p v-if="loadError" class="error-text">{{ loadError }}</p>
 
-    <section class="card run-card" data-tour-page-unit-tests-suites>
-      <div
-        class="run-toolbar"
-        :class="{ 'run-toolbar-collapsed': runScopeCollapsed }"
-        role="button"
-        :aria-expanded="!runScopeCollapsed"
-        @click="runScopeCollapsed = !runScopeCollapsed"
-      >
-        <h2 class="section-label">
-          <span class="collapse-arrow">{{ runScopeCollapsed ? '▸' : '▾' }}</span>
-          运行范围
-        </h2>
-        <div class="run-chips" @click.stop>
-          <el-checkbox
-            v-for="suite in runnableSuites"
-            :key="suite.id"
-            :model-value="runChecked.has(suite.id)"
-            :disabled="running"
-            border
-            size="small"
-            class="suite-chip"
-            @change="toggleRunSuite(suite.id, Boolean($event))"
-          >
-            {{ suite.label }}
-            <span class="suite-count">{{ suite.module_count }}</span>
-          </el-checkbox>
-        </div>
-      </div>
-      <template v-if="!runScopeCollapsed">
-      <div class="run-scope-controls">
-        <el-checkbox
-          :model-value="showRunScopeList"
-          :disabled="running"
-          size="small"
-          @change="showRunScopeList = Boolean($event)"
-        >
-          列出运行范围
-          <span v-if="runScopeButtonModuleCount" class="suite-count">{{ runScopeButtonModuleCount }}</span>
-        </el-checkbox>
-        <template v-if="showRunScopeList">
-          <el-checkbox v-model="showRunScopeCases" :disabled="running || runPlanLoading">
-            展开用例
-          </el-checkbox>
-        <el-radio-group
-          v-if="runPlan?.modules.length"
-          :model-value="moduleSortBy"
-          size="small"
-          :disabled="running"
-          @change="onModuleSortChange($event as 'plan' | 'last_run_at' | 'run_count')"
-        >
-          <el-radio-button value="plan">默认</el-radio-button>
-          <el-radio-button value="last_run_at">最近运行</el-radio-button>
-          <el-radio-button value="run_count">运行次数</el-radio-button>
-        </el-radio-group>
-        <span v-if="showRunScopeList && runPlan && !runPlanLoading" class="run-scope-summary muted small">
-          {{ runPlan.suite_label }}
-          <template v-if="runScopeSelectedSummary && runScopeSelectedSummary.modules < runScopeSelectedSummary.totalModules">
-            · 已选 {{ runScopeSelectedSummary.modules }}/{{ runScopeSelectedSummary.totalModules }} 模块
-            · {{ runScopeSelectedSummary.cases }} 用例
-          </template>
-          <template v-else>
-            · {{ runPlan.total_modules }} 模块 · {{ runPlan.total_cases }} 用例
-          </template>
-          <template v-if="runPlan.ignored_cases"> · 将忽略 {{ runPlan.ignored_cases }}</template>
-        </span>
-        <span v-if="runPlanLoading" class="muted small">加载计划…</span>
-        <span v-if="runPlanError" class="error-text small">{{ runPlanError }}</span>
-        </template>
-      </div>
-      <div v-if="showRunScopeList && runPlan?.modules.length" class="run-scope-list">
-        <el-table
-          :data="sortedRunPlanModules"
-          row-key="module"
-          size="small"
-          stripe
-          class="run-scope-table"
-          :row-class-name="runScopeRowClass"
-        >
-          <el-table-column v-if="showRunScopeCases" type="expand" width="36">
-            <template #default="{ row }">
-              <ul v-if="row.cases?.length" class="run-scope-cases">
-                <li v-for="c in row.cases" :key="c.id" class="mono">
-                  {{ c.class_name }}.{{ c.method }}
-                  <span v-if="caseCatalog[c.id]?.summary" class="case-brief muted">
-                    — {{ caseCatalog[c.id]?.summary }}
-                  </span>
-                </li>
-              </ul>
-              <span v-else class="muted small">无用例明细</span>
-            </template>
-          </el-table-column>
-          <el-table-column width="44" align="center">
-            <template #header>
-              <el-checkbox
-                :model-value="runScopeModulesAllChecked"
-                :disabled="running || !runPlan.modules.length"
-                @change="toggleAllRunScopeModules(Boolean($event))"
-              />
-            </template>
-            <template #default="{ row }">
-              <el-checkbox
-                :model-value="runCheckedModules.has(row.module)"
-                :disabled="running"
-                @change="toggleRunScopeModule(row.module, Boolean($event))"
-              />
-            </template>
-          </el-table-column>
-          <el-table-column label="模块" min-width="168" class-name="mono">
-            <template #default="{ row }">{{ shortModule(row.module) }}</template>
-          </el-table-column>
-          <el-table-column label="简介" min-width="200" show-overflow-tooltip>
-            <template #default="{ row }">
-              <span class="module-desc-cell">{{ moduleDescriptionBrief(row.module) }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="套件" width="72" align="center">
-            <template #default="{ row }">
-              <el-tag size="small" effect="plain">{{ suiteShortLabel(row.suite_id) }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="后端" width="66" align="center">
-            <template #default="{ row }">
-              <el-tag v-if="row.backend === 'vitest'" size="small" type="warning" effect="plain">vitest</el-tag>
-              <el-tag v-else size="small" type="success" effect="plain">runtime</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="用例" width="56" align="center">
-            <template #default="{ row }">{{ row.case_count }}</template>
-          </el-table-column>
-          <el-table-column v-if="showModuleHistoryColumns" label="次数" width="52" align="center">
-            <template #default="{ row }">
-              <span class="run-count-cell">{{ moduleRunCount(row.module, moduleHistory) || "—" }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column v-if="showModuleHistoryColumns" label="最近" width="88" align="center">
-            <template #default="{ row }">
-              <span
-                class="run-time-cell"
-                :title="moduleLastRunAt(row.module, moduleHistory) ?? undefined"
-              >
-                {{ formatModuleLastRun(moduleLastRunAt(row.module, moduleHistory)) }}
-              </span>
-            </template>
-          </el-table-column>
-          <el-table-column label="" width="68" align="center" class-name="col-run">
-            <template #default="{ row }">
-              <el-button
-                size="small"
-                type="primary"
-                plain
-                class="module-run-btn"
-                :loading="rerunningModule === row.module"
-                :disabled="running && rerunningModule !== row.module"
-                @click="onRunSingleModule(row)"
-              >
-                运行
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </div>
-      <p v-if="watchlistSkipCount || result" class="run-foot">
-        <span v-if="watchlistSkipCount && !running" class="run-foot-hint">
-          全量时将忽略 {{ watchlistSkipCount }} 条关注项
-        </span>
-        <span v-if="result" class="run-meta">
-          {{ result.suite_label }} · {{ result.duration_ms }} ms
-          <template v-if="lastIgnoredCount"> · 忽略 {{ lastIgnoredCount }}</template>
-        </span>
-      </p>
+    <UnitTestRunScopePane
+      v-model:show-module-list="showRunScopeList"
+      v-model:show-case-details="showRunScopeCases"
+      :module-sort-by="moduleSortBy"
+      :runnable-suites="runnableSuites"
+      :checked-suite-ids="runChecked"
+      :running="running"
+      :module-count-label="runScopeButtonModuleCount"
+      :plan="runPlan"
+      :plan-loading="runPlanLoading"
+      :plan-error="runPlanError"
+      :rows="runScopeRows"
+      :rerunning-module="rerunningModule"
+      @update:module-sort-by="onModuleSortChange"
+      @suite-change="toggleRunSuite"
+      @all-modules-change="toggleAllRunScopeModules"
+      @module-change="toggleRunScopeModule"
+      @run-module="onRunSingleModule"
+    >
+      <template #footer>
+        <p v-if="watchlistSkipCount || result" class="run-foot">
+          <span v-if="watchlistSkipCount && !running" class="run-foot-hint">
+            全量时将忽略 {{ watchlistSkipCount }} 条关注项
+          </span>
+          <span v-if="result" class="run-meta">
+            {{ result.suite_label }} · {{ result.duration_ms }} ms
+            <template v-if="lastIgnoredCount"> · 忽略 {{ lastIgnoredCount }}</template>
+          </span>
+        </p>
       </template>
-    </section>
+    </UnitTestRunScopePane>
 
     <el-radio-group
       v-if="watchlistCount || result"
@@ -1162,146 +875,24 @@ onMounted(() => {
       </el-radio-button>
     </el-radio-group>
 
-    <section v-if="activeTab === 'watchlist'" class="card watchlist-card">
-      <div class="watchlist-head">
-        <p class="watchlist-desc muted">
-          失败/错误用例记入本机（localStorage），<strong>累计失败次数</strong>；通过不会自动移出，可逐条「移除」或「全部移除」。勾选后点「复测勾选」，或行内「复测」；需跑全部时点「全部复测」。
-        </p>
-        <div class="watchlist-actions">
-          <span v-if="watchlistCount" class="watchlist-stats muted small">
-            {{ watchlistCount }} 条 · 累计失败 {{ watchlistTotalFails }} 次
-            <template v-if="watchlistCheckedCount"> · 已勾选 {{ watchlistCheckedCount }}</template>
-          </span>
-          <el-radio-group
-            v-if="watchlistCount"
-            :model-value="watchlistPrefs.sort_by"
-            size="small"
-            @change="onWatchlistSortChange($event as 'fail_count' | 'last_seen_at')"
-          >
-            <el-radio-button value="last_seen_at">最近失败</el-radio-button>
-            <el-radio-button value="fail_count">失败次数</el-radio-button>
-          </el-radio-group>
-          <el-checkbox
-            :model-value="watchlistPrefs.default_run_on_full"
-            @change="onWatchlistDefaultRunOnFullChange(Boolean($event))"
-          >
-            新失败默认全量时运行
-          </el-checkbox>
-          <div class="watchlist-run-actions">
-            <el-button
-              type="primary"
-              size="small"
-              :disabled="running || !watchlistCheckedCount"
-              @click="onRunWatchlistSelected"
-            >
-              复测勾选（{{ watchlistCheckedCount }}）
-            </el-button>
-            <el-button link size="small" :disabled="running || !watchlistCount" @click="onRun('watchlist')">
-              全部复测
-            </el-button>
-            <el-button link size="small" :disabled="running || !watchlistCount" @click="clearAllWatchlist">
-              全部移除
-            </el-button>
-          </div>
-        </div>
-      </div>
-      <p v-if="!watchlistCount" class="muted empty-hint">暂无失败关注；运行测试后失败项会自动出现。</p>
-      <div v-else class="watchlist-table-wrap">
-        <table class="data-table compact watchlist-table">
-          <colgroup>
-            <col class="col-check" />
-            <col class="col-case" />
-            <col class="col-intro" />
-            <col class="col-suite" />
-            <col class="col-num" />
-            <col class="col-time" />
-            <col class="col-full" />
-            <col class="col-run" />
-            <col class="col-action" />
-          </colgroup>
-          <thead>
-            <tr>
-              <th class="col-check">
-                <el-checkbox
-                  :model-value="watchlistAllChecked"
-                  :disabled="running || !watchlistCount"
-                  @change="toggleAllWatchlistChecked(Boolean($event))"
-                />
-              </th>
-              <th class="col-case">用例</th>
-              <th class="col-intro">简介</th>
-              <th class="col-suite">套件</th>
-              <th class="col-num">累计</th>
-              <th class="col-time">最近失败</th>
-              <th class="col-full">全量</th>
-              <th class="col-run"></th>
-              <th class="col-action"></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="entry in sortedWatchlist"
-              :key="entry.id"
-              class="watchlist-row"
-              :class="[
-                statusClass(entry.status),
-                {
-                  'watchlist-row-running': rerunningWatchlistId === entry.id,
-                  'watchlist-row-disabled': running && rerunningWatchlistId !== entry.id,
-                },
-              ]"
-            >
-              <td class="col-check">
-                <el-checkbox
-                  :model-value="watchlistChecked.has(entry.id)"
-                  :disabled="running"
-                  @change="toggleWatchlistChecked(entry.id, Boolean($event))"
-                />
-              </td>
-              <td
-                class="mono watchlist-case"
-                :title="`${shortModule(entry.module)}\n${entry.message}`"
-              >
-                <span class="watchlist-method">{{ entry.method }}</span>
-                <span class="watchlist-msg">{{ entry.message }}</span>
-              </td>
-              <td class="watchlist-intro" :title="caseDescription(entry)">
-                {{ caseDescriptionBrief(entry) }}
-              </td>
-              <td class="col-suite" :title="suiteLabelById.get(entry.suite_id) ?? entry.suite_id">
-                {{ suiteLabelById.get(entry.suite_id) ?? entry.suite_id }}
-              </td>
-              <td class="col-num">{{ entry.fail_count }}</td>
-              <td class="col-time" :title="entry.last_seen_at">{{ formatWatchlistTime(entry.last_seen_at) }}</td>
-              <td class="col-full">
-                <el-checkbox
-                  :model-value="entry.run_on_full"
-                  :disabled="running"
-                  @change="onWatchlistRunOnFullChange(entry, Boolean($event))"
-                />
-              </td>
-              <td class="col-run">
-                <el-button
-                  type="primary"
-                  plain
-                  size="small"
-                  :loading="rerunningWatchlistId === entry.id"
-                  :disabled="running && rerunningWatchlistId !== entry.id"
-                  @click="onRerunWatchlistEntry(entry)"
-                >
-                  复测
-                </el-button>
-              </td>
-              <td class="col-action">
-                <el-button link size="small" :disabled="running" @click="removeFromWatchlist(entry)">
-                  移除
-                </el-button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
+    <UnitTestWatchlistPane
+      v-if="activeTab === 'watchlist'"
+      :rows="watchlistRows"
+      :running="running"
+      :sort-by="watchlistPrefs.sort_by"
+      :default-run-on-full="watchlistPrefs.default_run_on_full"
+      :rerunning-id="rerunningWatchlistId"
+      @sort="onWatchlistSortChange"
+      @default-run-on-full="onWatchlistDefaultRunOnFullChange"
+      @all-checked="toggleAllWatchlistChecked"
+      @checked="toggleWatchlistChecked"
+      @run-on-full="onWatchlistRunOnFullChange"
+      @run-selected="onRunWatchlistSelected"
+      @run-watchlist="onRun('watchlist')"
+      @rerun="onRerunWatchlistEntry"
+      @remove-request="removeFromWatchlist"
+      @clear-request="clearAllWatchlist"
+    />
 
     <section v-if="activeTab === 'results' && result" class="card results-card">
       <div class="stat-cards">
@@ -1477,142 +1068,6 @@ onMounted(() => {
   margin-bottom: 10px;
 }
 
-.run-card {
-  padding: 8px 12px;
-}
-
-.run-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 10px;
-}
-
-.run-chips {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-}
-
-.suite-chip :deep(.el-checkbox__label) {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.scope-list-btn :deep(.el-checkbox__label) {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.suite-chip-inline {
-  gap: 4px;
-}
-
-.suite-count {
-  font-size: 0.7rem;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.suite-chip-inline:has(input:checked) .suite-count,
-.suite-chip-inline.checked .suite-count {
-  color: #64748b;
-}
-
-.run-scope-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
-}
-
-.scope-toggle {
-  cursor: pointer;
-}
-
-.scope-list-btn {
-  cursor: pointer;
-}
-
-.run-scope-sort {
-  gap: 4px;
-}
-
-.run-scope-sort-label {
-  margin-right: 2px;
-}
-
-.run-scope-list {
-  margin-top: 8px;
-  max-height: min(40vh, 320px);
-  overflow: auto;
-  border: 1px solid var(--el-border-color-lighter, var(--border));
-  border-radius: 6px;
-}
-
-.run-scope-table {
-  width: 100%;
-}
-
-.run-scope-table :deep(.el-table__header th) {
-  font-size: 0.76rem;
-}
-
-.run-scope-table :deep(.mono) {
-  font-family: ui-monospace, monospace;
-  font-size: 0.78rem;
-}
-
-.run-scope-table :deep(.run-scope-row-off) {
-  opacity: 0.55;
-}
-
-.run-scope-table :deep(.run-scope-row-off td) {
-  background: transparent;
-}
-
-.module-desc-cell {
-  font-size: 0.76rem;
-  color: var(--muted);
-}
-
-.run-count-cell,
-.run-time-cell {
-  font-size: 0.72rem;
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
-}
-
-.run-scope-table :deep(.col-run .cell) {
-  padding-left: 4px;
-  padding-right: 4px;
-}
-
-.module-run-btn {
-  min-width: 44px;
-  padding-left: 10px;
-  padding-right: 10px;
-}
-
-.run-scope-cases {
-  margin: 0;
-  padding: 4px 12px 8px 28px;
-  font-size: 0.78rem;
-  line-height: 1.45;
-}
-
-.run-scope-cases .case-brief {
-  font-family: inherit;
-}
-
 .run-foot {
   display: flex;
   align-items: center;
@@ -1675,56 +1130,6 @@ onMounted(() => {
   align-items: center;
 }
 
-.watchlist-card {
-  padding: 10px 12px;
-}
-
-.watchlist-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px 12px;
-  margin-bottom: 10px;
-}
-
-.watchlist-desc {
-  flex: 1;
-  min-width: 220px;
-  margin: 0;
-  font-size: 0.76rem;
-}
-
-.watchlist-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.watchlist-run-actions {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-}
-
-.watchlist-run-actions .link-btn {
-  font-size: 0.76rem;
-}
-
-.watchlist-stats {
-  font-variant-numeric: tabular-nums;
-}
-
-.watchlist-pref {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 0.74rem;
-  color: var(--muted);
-}
-
 .tab-badge {
   margin-left: 4px;
   min-width: 16px;
@@ -1737,188 +1142,6 @@ onMounted(() => {
   font-variant-numeric: tabular-nums;
   line-height: 1.45;
   vertical-align: middle;
-}
-
-.watchlist-table-wrap {
-  overflow-x: auto;
-  max-width: 100%;
-}
-
-.watchlist-table {
-  table-layout: fixed;
-  width: 100%;
-  min-width: 680px;
-}
-
-.watchlist-table col.col-check {
-  width: 36px;
-}
-
-.watchlist-table col.col-case {
-  width: 24%;
-}
-
-.watchlist-table col.col-intro {
-  width: 32%;
-}
-
-.watchlist-table col.col-suite {
-  width: 72px;
-}
-
-.watchlist-table col.col-num {
-  width: 40px;
-}
-
-.watchlist-table col.col-time {
-  width: 88px;
-}
-
-.watchlist-table col.col-full {
-  width: 44px;
-}
-
-.watchlist-table col.col-run {
-  width: 52px;
-}
-
-.watchlist-table col.col-action {
-  width: 44px;
-}
-
-.watchlist-table th,
-.watchlist-table td {
-  overflow: hidden;
-  vertical-align: middle;
-}
-
-.watchlist-table .col-num,
-.watchlist-table td.col-num {
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-
-.watchlist-table .col-time,
-.watchlist-table td.col-time {
-  white-space: nowrap;
-  font-size: 0.72rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.watchlist-table .col-check,
-.watchlist-table td.col-check {
-  text-align: center;
-}
-
-.watchlist-table .col-suite,
-.watchlist-table td.col-suite {
-  font-size: 0.72rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.watchlist-table .col-full,
-.watchlist-table td.col-full {
-  text-align: center;
-}
-
-.watchlist-table .col-run,
-.watchlist-table td.col-run {
-  text-align: center;
-}
-
-.watchlist-table .col-action,
-.watchlist-table td.col-action {
-  text-align: center;
-  white-space: nowrap;
-}
-
-.watchlist-table th.col-full,
-.watchlist-table th.col-time {
-  font-size: 0.72rem;
-  white-space: nowrap;
-}
-
-.watchlist-run-btn {
-  min-width: 44px;
-  padding: 2px 10px;
-  border: 1px solid #93c5fd;
-  border-radius: 999px;
-  background: #eff6ff;
-  color: #1d4ed8;
-  font-size: 0.72rem;
-  line-height: 1.4;
-  cursor: pointer;
-}
-
-.watchlist-run-btn:hover:not(:disabled) {
-  background: #dbeafe;
-}
-
-.watchlist-run-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.watchlist-row {
-  /* 行本身不再可点 */
-}
-
-.watchlist-row:hover {
-  background: transparent;
-}
-
-.watchlist-row-running {
-  background: #eff6ff;
-}
-
-.watchlist-row-disabled {
-  opacity: 0.65;
-}
-
-.watchlist-table .watchlist-case {
-  max-width: 0;
-}
-
-.watchlist-method {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.78rem;
-}
-
-.watchlist-table .watchlist-intro {
-  max-width: 0;
-  font-size: 0.72rem;
-  color: #475569;
-  line-height: 1.35;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.watchlist-msg {
-  display: block;
-  margin-top: 2px;
-  font-size: 0.68rem;
-  font-weight: 400;
-  color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.section-label {
-  margin: 0;
-  padding-right: 10px;
-  border-right: 2px solid var(--accent);
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  color: var(--muted);
-  white-space: nowrap;
 }
 
 .subsection-title {

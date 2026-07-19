@@ -5,6 +5,12 @@ import { createPhoenixServerApp } from "./serverApp.js";
 import { migrateLegacyRuntimeUserData } from "./lib/appRuntimePaths.js";
 
 const port = Number(process.env.CAA_SERVER_PORT || 5180);
+const wingMode = process.env.PHOENIX_WING_MODE === "local" ? "LOCAL" : "REGISTRY";
+const wingSource = wingMode === "LOCAL"
+  ? process.env.PHOENIX_WING_ROOT
+  : "package.json + pnpm-lock.yaml";
+
+console.log(`[Wing][${wingMode}][server] ${wingSource}`);
 
 const userDataMigration = migrateLegacyRuntimeUserData();
 if (userDataMigration.imported.length) {

@@ -1,111 +1,72 @@
-# CAA 对话框 Builder — 撤销/重做（Undo/Redo）规划
+# CAA 对话框 Builder — 撤销/重做实现与边界
 
-> 背景：拖放添加/移动控件是高危操作，需要可撤销。  
-> 范围：CAA 对话框编辑器的 IR 树变更。  
-> 不包括：NLS 文案编辑、Grid 伸缩开关（这些可后续纳管）。
+> 状态：已实现；2026-07-18 完成 history controller 分层治理。
+> 范围：CAA 对话框 IR、选择、写回模式及默认/多语言 NLS map 的快照历史。
+> 原则：Page-local session 是状态真源；Controller 只管理历史快照与栈迁移。
 
-## 方案：快照式历史栈
+## 当前结构
 
-每次 IR 树变更操作（add/move/remove/insertRowCol）前保存完整 IR 快照。
+| 层 | 文件 | 责任 |
+|---|---|---|
+| Session ViewModel | `web-ui/src/models/caaDialogSessionViewModel.ts` | 历史 entry/page snapshot 类型、会话校验、50 条运行时与 12 条持久化裁剪、source text 脱敏 |
+| History Controller | `web-ui/src/composables/useCaaDialogHistoryController.ts` | snapshot/record/restore、undo/redo/reset、从 page snapshot 恢复栈 |
+| Canvas Controller | `web-ui/src/composables/useCaaDialogCanvasController.ts` | 八个 Canvas 编辑入口的命令编排，通过 port 调用统一 history 命令 |
+| Page/Host | `web-ui/src/pages/CaaDialogEditorPage.vue` | `localIr` 等状态真源、两个 NLS 编辑入口、PageSession、快捷键、按钮、Pinia/sidebar 镜像、dirty/clean、解析/草稿/写回 API |
 
-### 数据结构
+Controller 通过显式 `state` refs 消费 Page-local 状态，通过 `onRestored` 通知 Page 更新 Pinia/sidebar 与 tab dirty；它不访问 Shell、Pinia、PageSession、浏览器存储或 API。
 
-```typescript
-// web-ui/src/composables/useCaaHistory.ts
-interface HistoryEntry {
-  ir: string;          // JSON.stringify(localIr) — 深拷贝快照
-  selectedId: string | null;
-  timestamp: number;
-}
+## 快照模型
 
-// 状态
-const undoStack = ref<HistoryEntry[]>([]);  // 过去
-const redoStack = ref<HistoryEntry[]>([]);  // 未来
-const MAX_HISTORY = 50;
-```
+每次受管编辑发生前调用 `recordHistorySnapshot()`。单条 `CaaIrHistoryEntry` 包含：
 
-### 核心 API
+- 深克隆后的 IR；
+- 当前选中控件；
+- `none | patch | full` 写回模式；
+- 默认语言 NLS flat map；
+- 各 locale NLS flat maps。
 
-| 方法 | 说明 |
+运行时 undo/redo 栈各最多 50 条。PageSession 序列化时只保留最近 12 条，并删除 IR `parseMeta` 中重复的大段 NLS source text。旧会话条目缺少 NLS maps 时，恢复 IR/选择/写回模式，但保留 Page 当前 maps。
+
+## 核心命令
+
+| 命令 | 行为 |
 |---|---|
-| `pushSnapshot(ir, selectedId)` | 操作前调用，压入 undo 栈，清空 redo 栈 |
-| `undo()` | 弹出 undo 栈顶 → 恢复 IR → 压入 redo 栈 |
-| `redo()` | 弹出 redo 栈顶 → 恢复 IR → 压入 undo 栈 |
-| `canUndo` / `canRedo` | computed，控制按钮/快捷键启用 |
-| `clearHistory()` | 切换对话框时清空 |
+| `recordHistorySnapshot()` | 保存编辑前状态并清空 redo |
+| `undoIrChange()` | 当前状态进入 redo，恢复 undo 栈顶 |
+| `redoIrChange()` | 当前状态进入 undo，恢复 redo 栈顶 |
+| `resetHistory()` | 清空两个运行时栈 |
+| `restoreHistoryFromSnapshot()` | 复用 session codec 校验并恢复两个栈 |
+| `canUndo` / `canRedo` | 驱动既有按钮禁用态 |
 
-### 触发时机
+恢复时若 entry 没有 `selectedId`，回退到 IR 根节点；`irWriteMode=none` 对应 clean，其他模式对应 dirty。没有当前 IR 时 record/undo/redo 都是无副作用操作。
 
-在 `CaaDialogEditorPage.vue` 的 Builder 操作方法内部，**变更 IR 前**调用 `pushSnapshot`：
+## 用户交互契约
 
-```typescript
-addControl(...) {
-  pushSnapshot(localIr.value, localSelectedId.value);  // ← 变更前
-  // ... 执行变更 ...
-}
-insertRow / insertCol / removeControl — 同上
-```
-
-同容器拖移（直接改 grid 位置）也需要 snapshot。
-
-### 快捷键
-
-| 快捷键 | 操作 |
+| 入口 | 操作 |
 |---|---|
-| `Ctrl+Z` | undo |
-| `Ctrl+Shift+Z` / `Ctrl+Y` | redo |
+| 页头「撤销」 | `undoIrChange()` |
+| 页头「重做」 | `redoIrChange()` |
+| `Ctrl/Cmd+Z` | 撤销 |
+| `Ctrl/Cmd+Shift+Z`、`Ctrl/Cmd+Y` | 重做 |
 
-全局 `@keydown` 监听，仅在 CAA 编辑器页面激活时生效。
+快捷键仍由 Page 监听，只在当前 CAA Tab 激活且焦点不在 input/textarea/contenteditable 时生效。
 
-### 界面
+已纳管的编辑入口包括控件新增/移动/删除、插入行列、Grid 行列伸缩、画布原子替换，以及 property sheet、树编辑器中的 NLS 文案修改。八个 Canvas 调用点经 Canvas Controller 的 `recordHistory` port 接入，两个 NLS 调用点继续留在 Page；编辑/预览模式和单纯的 locale 显示切换不产生历史。
 
-- 工具栏新增两个小按钮：`↩ 撤销` / `↪ 重做`
-- 无历史时 disabled
-- 可显示最近操作描述（可选，后续迭代）
+## 会话与 Host 边界
 
-### 纳入管理的操作
+- Page 使用 `buildCaaDialogPageSnapshot()` 序列化 controller 暴露的两个栈。
+- 草稿恢复、磁盘会话恢复均由 Page 调用 `restoreHistoryFromSnapshot()`。
+- 解析、草稿保存、正式写回和 active-tab 路由不进入 controller。
+- undo/redo 只恢复本地状态；既有 PageSession flush/保存路径继续负责持久化。
 
-| 操作 | 快照时机 |
-|---|---|
-| 从面板新建控件（COPY） | 添加前 |
-| 拖移已有控件（MOVE） | 移动前 |
-| 插入行/列 | 插入前 |
-| 删除控件（后续右键菜单） | 删除前 |
+## 验证
 
-### 暂不纳入
+- `useCaaDialogHistoryController.contract.test.ts` 冻结按钮、快捷键、Page 两个加 Canvas Controller 八个既有记录调用点、PageSession 与 Host/API 边界。
+- `useCaaDialogHistoryController.test.ts` 覆盖快照隔离、50 条裁剪、redo 清空、undo/redo 往返、根节点回退、clean/dirty、旧 NLS map 兼容、snapshot 校验和无 IR no-op。
+- `CaaDialogEditorPage.architecture.test.ts` 继续约束 session codec 与 Page Host 的既有边界。
 
-- NLS 双语编辑（Key/Value 修改）→ 复杂度高，后续
-- Grid 伸缩开关 → 影响小，后续
-- 编辑/预览模式切换 → 不需要
+## 后续
 
-### 草稿联动
-
-undo/redo 后 IR 变更，触发草稿自动保存（debounced），保证退出后回来仍是最新状态。
-
-### 性能
-
-- 单次快照 ≈ `JSON.stringify(ir)`，典型 IR <50KB，耗时 <1ms
-- 50 个快照 ≈ 2.5MB 内存，可接受
-- 切换对话框时 `clearHistory()` 释放
-
-### 需修改的文件
-
-| 文件 | 操作 |
-|---|---|
-| `web-ui/src/composables/useCaaHistory.ts` | **新建** — 历史栈 composable |
-| `web-ui/src/pages/CaaDialogEditorPage.vue` | **修改** — 引入 history，变更前 push，工具栏加按钮，键盘监听 |
-| `web-ui/src/components/caa/CaaDialogGrid.vue` | 不变 — 同容器拖移通过 ctx 方法间接触发 snapshot |
-
-### 测试策略
-
-`useCaaHistory.ts` 是纯逻辑 composable，可单元测试：
-- push → undo → redo 往返一致
-- 新操作后 redo 栈清空
-- 达到 MAX_HISTORY 时旧快照被裁剪
-- canUndo/canRedo 正确反映栈状态
-
-### 后续扩展
-
-- 命令模式替代快照 → 更低内存，但实现复杂
-- 操作描述文字显示（"添加 Label"、"移动 Editor"）
-- NLS 文案编辑的 undo 纳管
+- NLS session ViewModel 与 history controller 分开治理，禁止把 NLS API 或 locale UI 状态塞入 history controller。
+- 操作描述和命令模式可另立需求；不得在 Page shell 拆分时顺手改变快照语义。
