@@ -6,7 +6,7 @@ Owner：Desk Tools CAD maintainers
 
 适用版本：0.2.x
 
-最后核验：2026-07-17
+最后核验：2026-07-20
 
 ## 入口
 
@@ -14,7 +14,7 @@ Owner：Desk Tools CAD maintainers
 pnpm verify:real-fcstd
 ```
 
-该命令先从 Registry 消费的 `@phoenix-wing/cad-rust-source` 以 locked release profile 构建 `fcstd-read`、`fcstd-xlink` 与 `fcstd-query`，再执行真实 FCStd archive 的读、改、回滚 smoke。`build:tauri-runtime` 已包含同一 smoke，因此完整 `pnpm verify:ci` 会阻止回归。
+该命令直接运行 TypeScript FCStd ZIP/Document.xml 读取、BOM 补丁、XLink/Label 与原子替换回归，不构建 CAD Rust 工具。完整 Tauri runtime 另由 `pnpm build:tauri-runtime` 验证 Node sidecar 和 packaged runtime。
 
 ## Fixture 与流程
 
@@ -22,12 +22,12 @@ pnpm verify:real-fcstd
 
 自动门禁依次验证：
 
-1. `fcstd-read --protocol 1 read` 能从 archive 返回 `phoenix-cad-native` v1 成功 envelope 和非空对象。
-2. `fcstd-xlink --protocol 1 scan` 精确命中真实中文路径 XLink。
-3. legacy patch 在 archive 内只替换一个 XLink attr；修改后 archive 哈希变化，`Document.xml` 含新路径，`fcstd-read` 仍能复读。
-4. 注入宿主后续失败后，以写前字节恢复 archive；回滚 SHA-256 与初始值完全一致，原 XLink 语义恢复，并再次通过 native read。
+1. fflate 只提取并解码 archive 的 `Document.xml`，Wing cad-core 从新旧 schema 选择根 BOM 对象并投影字段。
+2. BOM 补丁更新既有/缺失字符串属性，XML 特殊字符正确转义，随后 TypeScript 复读值一致。
+3. XLink 补丁只替换目标 `<XLink file>`；Label 补丁只改变对应宿主对象。
+4. ZIP 重建保留 `GuiDocument.xml` 等非目标条目；原子替换失败可恢复原件。
 5. 临时/backup 文件不得遗留。
 
 ## 边界
 
-此门禁证明的是 Desk 打包使用的 Wing Rust 原生工具能处理有效 FCStd archive，不等于已经启动 FreeCAD 或 SolidWorks。本机缺少这两个外部宿主，相关 E/F 档继续明确记录为环境缺失；Windows NSIS release 也仍需 Windows runner，不由 macOS 开发服务或历史 0.1.0 EXE 代替。
+此门禁证明的是 Wing 纯 XML 规则和 Desk Node ZIP/I/O adapter 能处理有效 FCStd archive，不等于已经用 FreeCAD 打开并重新保存复杂文档。真实 FreeCAD 往返、FreeCAD/SolidWorks 外部引擎和 Windows NSIS release 仍按手动点检表独立验收。

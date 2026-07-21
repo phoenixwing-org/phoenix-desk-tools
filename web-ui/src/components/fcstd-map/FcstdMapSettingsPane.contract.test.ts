@@ -6,6 +6,10 @@ const page = readFileSync(
   "utf8",
 );
 const pane = readFileSync(new URL("./FcstdMapSettingsPane.vue", import.meta.url), "utf8");
+const scanController = readFileSync(
+  new URL("../../composables/useFcstdMapScanController.ts", import.meta.url),
+  "utf8",
+);
 
 describe("FCStd map settings pane characterization", () => {
   it("冻结扫描说明、工作空间路径和强制更新提示", () => {
@@ -32,10 +36,12 @@ describe("FCStd map settings pane characterization", () => {
     expect(pane).toContain("{{ debugSql }}");
   });
 
-  it("冻结 Page 作为 API、Host、session 与扫描 Controller 唯一所有者", () => {
+  it("冻结 Page/扫描 Controller 作为 API、Host、session 唯一所有者", () => {
     expect(page).toContain("async function onExportJson()");
     expect(page).toContain("exportFcstdMapJson()");
-    expect(page).toContain("startFcstdMapScan(forceUpdatePartName.value");
+    expect(page).toContain("useFcstdMapScanController({");
+    expect(scanController).toContain("start: startFcstdMapScan");
+    expect(scanController).toContain("transport.start(options.forceUpdatePartName.value");
     expect(page).toContain("purgeMissingFcstdMap()");
     expect(page).toContain("saveFcstdMapPrefs(forceUpdatePartName.value)");
     expect(page).toContain("usePageSession(props.workbenchTabId");

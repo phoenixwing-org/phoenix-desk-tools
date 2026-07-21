@@ -35,16 +35,16 @@
       "reason": "完成态会话、迁移或发布证据"
     },
     {
-      "match": "^doc/(tauri-migration-correction|cad/CAD数据库表结构|cad/CAD数据库表结构-重命名规划|cad/cad-rust迁移点检表|cad/Python后端迁移Node-Rust计划|cad/架构迁移-统一Node后端计划|cad/Wing共享CAD核心迁移计划|phoenix-wing升级计划|user/桌面工具-安装说明|user/桌面工具-使用说明|user/新手指引-实现备忘|user/用户测试指南-tauri分支)\\.md$",
+      "match": "^doc/(tauri-migration-correction|cad/CAD数据库表结构|cad/CAD数据库表结构-重命名规划|cad/cad-rust迁移点检表|cad/Python后端迁移Node-Rust计划|cad/架构迁移-统一Node后端计划|cad/Wing共享CAD核心迁移计划|cad/改名分析-迁移分析|cad/API接口规则-兼容对照表|cad/pnwCadDb-数据库封装计划|phoenix-wing升级计划|user/桌面工具-安装说明|user/桌面工具-使用说明|user/新手指引-实现备忘|user/用户测试指南-tauri分支)\\.md$",
       "status": "archived",
       "sourceOfTruth": "doc/文档索引.md",
       "reason": "旧迁移、旧 schema、旧桌面或完成态实现记录"
     },
     {
-      "match": "^doc/tauri-(当前迁移状态基线|分支迁移审计与接手指南)\\.md$",
+      "match": "^doc/tauri-(0\\.2\\.0-macOS发布态验收|当前迁移状态基线|分支迁移审计与接手指南)\\.md$",
       "status": "archived",
-      "sourceOfTruth": "doc/tauri-0.2.0-macOS发布态验收.md",
-      "reason": "冻结的 0.1.0/迁移分支证据，不代表当前 0.2.0 发布状态"
+      "sourceOfTruth": "doc/tauri-构建启动与验收指南.md",
+      "reason": "冻结的 0.1.0/早期 0.2.0 发布证据，不代表当前已去除 CAD Rust sidecar 的运行时"
     },
     {
       "match": "^doc/platform/Web壳层-页面参数与属性-MVC研讨\\.md$",

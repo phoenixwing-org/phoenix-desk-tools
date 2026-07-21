@@ -13,7 +13,6 @@ import {
   patchReferenceLabelsInDocumentXml,
   patchXlinkAttributesInDocumentXml,
 } from "./fcstdReferenceLabelService.js";
-import { nativeToolStatus, type NativeToolName } from "./nativeToolService.js";
 import { runReorderMembersSelfTest } from "./reorderMembersService.js";
 import { decodeSourceBuffer, encodeSourceText } from "./sourceTextCodec.js";
 
@@ -69,6 +68,10 @@ function verifyRuntimeManifest(): string {
   expectRuntime(fs.existsSync(manifestPath), `Runtime manifest is missing: ${manifestPath}`);
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
   expectRuntime(manifest?.schema_version === 1, "Unsupported runtime manifest schema");
+  expectRuntime(!("native_tools" in manifest), "Runtime manifest must not declare CAD native tools");
+  expectRuntime(!("native_provider" in manifest), "Runtime manifest must not declare a CAD native provider");
+  expectRuntime(!fs.existsSync(path.join(resources, "bin")), "Packaged runtime must not contain a CAD native bin directory");
+  expectRuntime(!fs.existsSync(path.join(resources, "native-provider.json")), "Packaged runtime must not contain native-provider.json");
   expectRuntime(manifest?.platform === process.platform, `Runtime platform mismatch: ${manifest?.platform || "missing"} != ${process.platform}`);
   expectRuntime(manifest?.arch === process.arch, `Runtime architecture mismatch: ${manifest?.arch || "missing"} != ${process.arch}`);
   expectRuntime(manifest?.node?.version === process.version, `Bundled Node version mismatch: ${manifest?.node?.version || "missing"} != ${process.version}`);
@@ -76,31 +79,14 @@ function verifyRuntimeManifest(): string {
   const files = [
     { record: manifest.node, base: "node" },
     { record: manifest.server, base: "server" },
-    ...((Array.isArray(manifest.native_tools) ? manifest.native_tools : [])
-      .map((record: any) => ({ record, base: "bin" }))),
   ];
-  expectRuntime(files.length >= 5, "Runtime manifest does not list Node, server, and all native tools");
+  expectRuntime(files.length === 2, "Runtime manifest must list the bundled Node and server sidecar");
   for (const item of files) {
     const filename = path.join(resources, item.base, String(item.record?.filename || ""));
     expectRuntime(item.record?.filename && fs.existsSync(filename), `Runtime file is missing: ${filename}`);
     expectRuntime(item.record?.sha256 === sha256(filename), `Runtime file hash mismatch: ${filename}`);
   }
   return `${files.length} packaged files match the runtime manifest`;
-}
-
-function verifyNativeTool(name: NativeToolName): string {
-  const status = nativeToolStatus();
-  const tool = status.tools.find((item) => item.name === name);
-  expectRuntime(tool?.available && tool.path, `${name} is not available in the packaged runtime`);
-  const launched = spawnSync(tool.path, [], {
-    encoding: "utf8",
-    timeout: 5_000,
-    windowsHide: true,
-  });
-  expectRuntime(!launched.error, `${name} could not start: ${launched.error?.message || "unknown error"}`);
-  expectRuntime(!launched.signal, `${name} terminated unexpectedly`);
-  expectRuntime(launched.status !== null, `${name} did not return an exit status`);
-  return `${name} started successfully (probe exit ${launched.status})`;
 }
 
 function verifyGbkCodec(): string {
@@ -194,9 +180,6 @@ export function packagedRuntimeChecks(): PackagedRuntimeCheck[] {
   return [
     check("runtime/code/source-codec", "code", "Packaged source services", "round-trips GBK source", verifyGbkCodec),
     check("runtime/code/reorder-members", "code", "Packaged source services", "reorders C++ and header members", verifyReorderMembers),
-    check("runtime/cad/native-tools", "cad", "Packaged native tools", "starts fcstd-read", () => verifyNativeTool("fcstd-read")),
-    check("runtime/cad/native-tools", "cad", "Packaged native tools", "starts fcstd-xlink", () => verifyNativeTool("fcstd-xlink")),
-    check("runtime/cad/native-tools", "cad", "Packaged native tools", "starts fcstd-query", () => verifyNativeTool("fcstd-query")),
     check("runtime/cad/fcstd-xml", "cad", "Packaged FCStd services", "patches reference labels", verifyReferenceLabels),
     check("runtime/cad/fcstd-xml", "cad", "Packaged FCStd services", "patches XLink attributes", verifyXlinkAttributes),
     check("runtime/cad/external-adapters", "cad", "Packaged external adapters", "bundles FreeCAD STEP adapter", () => verifyScript("freecad_batch_step_runner.py")),

@@ -40,7 +40,7 @@ Owner：Desk Tools / KT Codegen maintainers
 | Desk Node | 工作空间、Ignore、编码、快照、指纹、缓存、原子写入和回滚、HTTP | 保留为薄宿主 Port |
 | Desk Web | Workbench contribution、会话状态、命令、导航和用户确认 | 采用 VS Code 四区模型 |
 | Auto Code | 已验证的 VS Code 消费行为和交互参考 | 借用契约与测试思路，不复制宿主 UI |
-| Rust CAD 工具 | FCStd 深层对象/BOM 读写及暂未有 TS 对等实现的能力 | 不进入本轮 Codegen 改动 |
+| CAD TypeScript 服务 | FCStd ZIP/XML、SQLite 与外部引擎适配 | 与 Codegen 分层独立，共享 Wing pure core 原则 |
 
 `kt-auto-code` 在整个目标期间是只读参考库：可以核对已验证行为、契约和测试思路，但不得修改、格式化、暂存或提交其中任何文件。Phoenix Wing 允许修改；执行顺序仍是先消费 0.4.3 已有接口，只有确认问题属于跨宿主共享规则或公共组件缺口时，才在 Wing 上游修复并补测试。此类修改必须独立提交、按新精确版本发布，再由 Desk 消费；不得靠 Desk 私有复制、本地源码特例或修改 `node_modules` 交付。
 
@@ -145,18 +145,18 @@ Owner：Desk Tools / KT Codegen maintainers
 - 不修改 `kt-auto-code`；必要改进只写入本计划、交接建议或 Wing 公共实现；
 - 不重构 AppShell、端口、runtime bridge、Tauri 启动或服务发现；
 - 不改变 Codegen Renderer 输出、Marker 语法或旧 JSON/CSV 格式；
-- 不在本轮删除 Rust native tools；
+- Codegen 阶段不夹带 CAD runtime 改动；CAD Rust 收缩已在后续独立节点完成；
 - 不以手工改锁文件、临时 override 或源码 link 代替 Registry 0.4.3 验证。
 
-## 6. 后续 CAD / Rust 收缩路线
+## 6. CAD / Rust 收缩完成记录
 
-Codegen 收敛完成后另开目标，顺序固定为：
+Codegen 收敛完成后按独立节点执行，2026-07-20 已完成：
 
-1. **清理 `fcstd-query`**：先再次证明没有业务 route 消费，再处理 provider、自检、构建和文档引用；数据库查询改为 Wing query core + Node `node:sqlite`。
-2. **轻量 FCStd 默认 TS**：ZIP 只取 `Document.xml`，XML/XLink、文件名和快速元数据走 Auto Code 已验证的 TS 路径；批量任务避免逐文件启动进程。
-3. **文件查询与索引默认 TS**：工作空间扫描、缓存、SQLite 只读与汇总消费 Wing schema/query core。
-4. **保留深层 native 边界**：`fcstd-read` 的完整对象/BOM 属性读写、真实 FreeCAD 往返在 TS 对等 fixture 和性能/兼容性门禁通过前保留。
-5. **删除局部 DDL 副本**：服务只调用 Wing `workspace-schema`，产品表扩展另行组合，不再重复声明 `phoenix_cad_*`。
+1. `fcstd-query` 无业务 route 消费，native provider、状态 API、构建和打包链已删除；数据库继续走 Wing schema/db-node + Node TypeScript。
+2. ZIP 只提取 `Document.xml`；BOM 读取/写回和 XLink/Label 修改使用 Wing pure XML core + Desk Node adapter。
+3. 工作空间文件发现、索引、缓存、SQLite 分页与汇总保持 TypeScript，不逐文件启动进程。
+4. Tauri 不再携带三个 CAD Rust sidecar；保留的 Rust 只有 Tauri 窗口和 Node 生命周期薄壳。
+5. 真实 FreeCAD 打开/保存复杂样本继续作为人工兼容性门禁，不用“保留 Rust”代替验证。
 
 每次 Rust 删除必须同时减少构建、provider、Tauri resources、自检和文档中的能力声明；不能只让业务代码“不调用”。
 
@@ -192,4 +192,4 @@ Codegen 收敛完成后另开目标，顺序固定为：
 - Registry 0.4.3 全量回归通过：Server 65 个测试文件 / 250 项，CAA Core 11 / 67，Web 62 / 373。
 - `pnpm build:local-wing`、`pnpm build:registry`、Server/Web 类型检查、`pnpm verify:wing-dependencies` 与文档门禁均通过。
 - Wing 0.4.3 已具备本轮需要的公共能力，因此未新增 Wing 源码改动；`kt-auto-code` 仅作只读参考，本轮没有修改其文件。
-- CAD 的 ZIP/XML 深解析、文件查询、SQLite 读取和 Rust 收缩保留为下一独立目标；共享 Web Components 继续遵守“双真实消费者”触发条件。
+- CAD ZIP/XML、文件查询和 SQLite 已统一 TypeScript，三个 CAD Rust sidecar 已从运行、构建和打包链删除；共享 Web Components 继续遵守“双真实消费者”触发条件。

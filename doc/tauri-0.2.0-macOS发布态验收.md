@@ -1,12 +1,14 @@
 # Tauri 0.2.0 macOS 发布态验收
 
-状态：current
+状态：archived
 
 Owner：Desk Tools release maintainers
 
 适用版本：0.2.0 / macOS arm64
 
-最后核验：2026-07-17
+最后核验：2026-07-20
+
+> 历史回执：本文记录 2026-07-17 的早期 0.2.0 制品，保留当时三个 Rust sidecar 的原始证据，不代表当前运行时。当前源码已改为 TypeScript FCStd ZIP/XML 与 SQLite 路径，操作入口见 [Tauri 构建、启动与验收](tauri-构建启动与验收指南.md)，本轮人工点检见 [Web / Tauri / CAD 手动点检表](platform/2026-07-20-Desk-Web-Tauri-CAD手动点检表.md)。
 
 ## 结论
 

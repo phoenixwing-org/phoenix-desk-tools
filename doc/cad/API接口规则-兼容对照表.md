@@ -1,5 +1,7 @@
 # API 接口兼容规则
 
+> 状态：archived。本文冻结旧 Rust CLI/迁移期端点对照；当前 Schema、TypeScript/Wing 责任和 API 规则以 [CAD 数据与 API 真源](CAD数据与API真源.md) 为准。
+
 > **规则**: 前端接口格式不能动。所有 Node.js 端点返回格式必须与 Python 原版 100% 一致。
 > **转换**: Rust snake_case → Python PascalCase，统一由 `pnwApiAdapter.ts` 处理。
 

@@ -1,24 +1,18 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import {
-  fetchAssemblyTreeByHost,
-  type AssemblyTreeNode,
-  type BomXrefEdge,
-} from "../api";
+import { type AssemblyTreeNode, type BomXrefEdge } from "../api";
 import { useAppShell } from "../composables/useAppShell";
+import { useAssemblyTreeController } from "../composables/useAssemblyTreeController";
 import AssemblyTreeRowGroup from "./assembly-tree/AssemblyTreeRowGroup.vue";
 import XlinkReplaceDialog from "./XlinkReplaceDialog.vue";
 import {
   assemblyTreeApplyRuleLabels,
   assemblyTreeCanEditLabel,
-  assemblyTreeFlatten,
-  assemblyTreeIsAssembly as isAssemblyNode,
   assemblyTreeIsUnresolved as isUnresolved,
   assemblyTreePendingChanges,
   assemblyTreePendingPatches,
   assemblyTreePrimaryXlinkAttr as primaryXlinkAttr,
   assemblyTreeWithLabelEdit,
-  walkAssemblyTree,
   type AssemblyTreeInstanceViewInput,
 } from "../models/assemblyTreeViewModel";
 
@@ -51,13 +45,21 @@ const replaceOpen = ref(false);
 const replaceHostRel = ref("");
 const replaceEdge = ref<BomXrefEdge | null>(null);
 
-const expanded = ref<Set<string>>(new Set());
-const expandedLabels = ref<Set<string>>(new Set());
-/** 装配子树懒加载（索引未嵌套或未切全部层级时） */
-const lazyChildren = ref<Map<string, AssemblyTreeNode[]>>(new Map());
-const loadingSubtree = ref<Set<string>>(new Set());
 /** key: host\\0xlink_attr → edited label */
 const edits = ref<Map<string, string>>(new Map());
+
+const treeController = useAssemblyTreeController({ onStatus: (message) => shell.setStatus(message) });
+const {
+  expanded,
+  expandedLabels,
+  loadingSubtree,
+  childrenOf,
+  hasSubtree,
+  toggle,
+  toggleLabelExpand,
+  expandAllTree,
+  collapseAll,
+} = treeController;
 
 function canEditLinkLabel(node: AssemblyTreeNode) {
   return assemblyTreeCanEditLabel(node, props.editable);
@@ -71,93 +73,7 @@ function setLabel(node: AssemblyTreeNode, instance: AssemblyTreeInstanceViewInpu
   emit("edits-change", hasPendingLabelEdits());
 }
 
-function childrenOf(node: AssemblyTreeNode): AssemblyTreeNode[] {
-  if (node.children?.length) return node.children;
-  return lazyChildren.value.get(node.id) ?? [];
-}
-
-function hasSubtree(node: AssemblyTreeNode) {
-  return childrenOf(node).length > 0;
-}
-
-function canExpand(node: AssemblyTreeNode) {
-  return hasSubtree(node) || isAssemblyNode(node);
-}
-
-async function ensureSubtree(node: AssemblyTreeNode): Promise<AssemblyTreeNode[]> {
-  if (hasSubtree(node)) return childrenOf(node);
-  if (!isAssemblyNode(node)) return [];
-  const rel = node.repo_rel_path?.trim();
-  if (!rel) return [];
-  if (loadingSubtree.value.has(node.id)) return [];
-  loadingSubtree.value = new Set(loadingSubtree.value).add(node.id);
-  try {
-    const data = await fetchAssemblyTreeByHost(rel, true);
-    const kids = data.nodes ?? [];
-    lazyChildren.value = new Map(lazyChildren.value).set(node.id, kids);
-    return kids;
-  } catch (e) {
-    shell.setStatus(String(e));
-    return [];
-  } finally {
-    const next = new Set(loadingSubtree.value);
-    next.delete(node.id);
-    loadingSubtree.value = next;
-  }
-}
-
-async function toggle(node: AssemblyTreeNode) {
-  if (!canExpand(node)) return;
-  if (!hasSubtree(node) && isAssemblyNode(node)) {
-    await ensureSubtree(node);
-    if (!hasSubtree(node)) {
-      shell.setStatus("该装配无已索引的下级引用，请先在「引用」Tab 重建索引");
-      return;
-    }
-  }
-  const next = new Set(expanded.value);
-  if (next.has(node.id)) next.delete(node.id);
-  else next.add(node.id);
-  expanded.value = next;
-}
-
-function toggleLabelExpand(node: AssemblyTreeNode) {
-  const next = new Set(expandedLabels.value);
-  if (next.has(node.id)) next.delete(node.id);
-  else next.add(node.id);
-  expandedLabels.value = next;
-}
-
-const flatRows = computed(() => {
-  void lazyChildren.value;
-  return assemblyTreeFlatten(props.nodes, expanded.value, childrenOf);
-});
-
-function expandAllLabels(nodes: AssemblyTreeNode[]) {
-  const next = new Set(expandedLabels.value);
-  walkAssemblyTree(nodes, childrenOf, (node) => {
-    if ((node.ref_count ?? 1) > 1) next.add(node.id);
-  });
-  expandedLabels.value = next;
-}
-
-async function expandAllTree(nodes: AssemblyTreeNode[]) {
-  const next = new Set<string>();
-
-  async function walk(ns: AssemblyTreeNode[]) {
-    for (const node of ns) {
-      if (isAssemblyNode(node)) await ensureSubtree(node);
-      if (hasSubtree(node)) {
-        next.add(node.id);
-        await walk(childrenOf(node));
-      }
-    }
-  }
-
-  await walk(nodes);
-  expanded.value = next;
-  expandAllLabels(nodes);
-}
+const flatRows = computed(() => treeController.flatRows(props.nodes));
 
 async function onExpandAllClick() {
   if (props.treeDepth !== "full") {
@@ -165,11 +81,6 @@ async function onExpandAllClick() {
     return;
   }
   await expandAllTree(props.nodes);
-}
-
-function collapseAll() {
-  expanded.value = new Set();
-  expandedLabels.value = new Set();
 }
 
 /** 将各行的规则名填入链接标签文本框（不写盘，需再点「应用」） */
@@ -265,14 +176,8 @@ watch(
   () => props.nodes,
   (nodes) => {
     edits.value = new Map();
-    expandedLabels.value = new Set();
-    lazyChildren.value = new Map();
-    loadingSubtree.value = new Set();
+    treeController.reset(nodes);
     emit("edits-change", false);
-    expanded.value = new Set();
-    for (const node of nodes) {
-      if (hasSubtree(node)) expanded.value.add(node.id);
-    }
   },
   { immediate: true, deep: true },
 );

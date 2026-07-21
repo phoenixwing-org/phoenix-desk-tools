@@ -15,6 +15,7 @@ import {
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import UnitTestRunScopePane from "../components/unit-tests/UnitTestRunScopePane.vue";
 import UnitTestWatchlistPane from "../components/unit-tests/UnitTestWatchlistPane.vue";
+import UnitTestResultPane from "../components/unit-tests/UnitTestResultPane.vue";
 import { useUnitTestsPropertySheet } from "../composables/useUnitTestsPropertySheet";
 import {
   usePagePrimaryContribution,
@@ -59,17 +60,12 @@ import {
   deriveUnitTestRunScopeSelection,
   filterUnitTestCases,
   filterUnitTestModuleSummaries,
-  groupUnitTestCasesByModule,
   mergeUnitTestRunOptions,
   projectUnitTestRunScopeRows,
   projectUnitTestWatchlistRows,
   syncUnitTestCheckedModules,
-  unitTestModuleDescription,
-  unitTestModuleDescriptionBrief,
   unitTestPassRate,
   unitTestShortModule as shortModule,
-  unitTestStatusClass as statusClass,
-  unitTestStatusLabel as statusLabel,
   type UnitTestRunScopeRowView,
   type UnitTestWatchlistRowView,
 } from "../models/unitTestsViewModel";
@@ -85,19 +81,11 @@ type PageTab = UnitTestsPageTab;
 
 const RUNNABLE_SUITE_IDS = UNIT_TEST_RUNNABLE_SUITE_IDS;
 
-const STATUS_FILTER_OPTIONS = [
-  { id: "passed", label: "通过" },
-  { id: "failed", label: "失败" },
-  { id: "error", label: "错误" },
-  { id: "skipped", label: "跳过" },
-] as const;
-
 const suites = ref<UnitTestSuiteInfo[]>([]);
 const loadError = ref("");
 const lastRunSuites = ref<string[]>([]);
 const resultSuiteChecked = ref<Set<string>>(new Set());
 const resultStatusChecked = ref<Set<string>>(new Set(["passed", "failed", "error", "skipped"]));
-const expandedCase = ref<string | null>(null);
 const moduleCatalog = ref<Record<string, TestModuleCatalogEntry>>({});
 const caseCatalog = ref<Record<string, TestCaseCatalogEntry>>({});
 const watchlist = ref<UnitTestWatchlistEntry[]>(loadWatchlist());
@@ -250,21 +238,6 @@ const filteredModuleSummaries = computed(() => {
   return filterUnitTestModuleSummaries(result.value?.modules ?? [], filteredCases.value);
 });
 
-const groupedModules = computed(() => groupUnitTestCasesByModule(filteredCases.value));
-
-function moduleDescription(module: string): string {
-  return unitTestModuleDescription(moduleCatalog.value, module);
-}
-
-function moduleDescriptionBrief(module: string, maxLen = 48): string {
-  return unitTestModuleDescriptionBrief(moduleCatalog.value, module, maxLen);
-}
-
-function moduleSuiteId(module: string): string {
-  return result.value?.cases.find((testCase) => testCase.module === module)?.suite_id
-    ?? runPlan.value?.modules.find((item) => item.module === module)?.suite_id
-    ?? "";
-}
 
 function onModuleSortChange(sortBy: "plan" | "last_run_at" | "run_count") {
   pageStore.setModuleSortBy(sortBy);
@@ -276,10 +249,6 @@ function recordRunHistoryFromResult(r: UnitTestRunResult | null) {
     r.modules.map((m) => m.module),
     moduleHistory.value,
   );
-}
-
-function toggleCase(id: string) {
-  expandedCase.value = expandedCase.value === id ? null : id;
 }
 
 function toggleRunSuite(id: string, checked: boolean) {
@@ -525,7 +494,6 @@ function syncCompletedRun(completed: UnitTestRunResult, request: UnitTestRunRequ
 }
 
 async function executeRun(request: UnitTestRunRequest) {
-  expandedCase.value = null;
   activeTab.value = "results";
   await runController.execute(request);
 }
@@ -894,158 +862,29 @@ onMounted(() => {
       @clear-request="clearAllWatchlist"
     />
 
-    <section v-if="activeTab === 'results' && result" class="card results-card">
-      <div class="stat-cards">
-        <div class="stat-card" :class="result.ok ? 'tone-pass' : 'tone-fail'">
-          <span class="stat-value">{{ result.ok ? "通过" : "未通过" }}</span>
-          <span class="stat-label">结论</span>
-        </div>
-        <div class="stat-card tone-pass">
-          <span class="stat-value">{{ result.summary.passed }}</span>
-          <span class="stat-label">通过</span>
-        </div>
-        <div class="stat-card" :class="result.summary.failed + result.summary.errors > 0 ? 'tone-fail' : ''">
-          <span class="stat-value">{{ result.summary.failed + result.summary.errors }}</span>
-          <span class="stat-label">失败/错误</span>
-        </div>
-        <div class="stat-card">
-          <span class="stat-value">{{ result.summary.skipped }}</span>
-          <span class="stat-label">跳过</span>
-        </div>
-        <div class="stat-card">
-          <span class="stat-value">{{ result.summary.tests_run }}</span>
-          <span class="stat-label">合计</span>
-        </div>
-        <div v-if="result.summary.ignored" class="stat-card">
-          <span class="stat-value">{{ result.summary.ignored }}</span>
-          <span class="stat-label">忽略</span>
-        </div>
-        <div class="stat-card tone-rate">
-          <span class="stat-value">{{ passRate }}%</span>
-          <span class="stat-label">通过率</span>
-        </div>
-      </div>
-
-      <div class="progress-wrap">
-        <div class="progress-bar">
-          <div class="progress-pass" :style="{ width: `${passRate}%` }" />
-          <div
-            class="progress-fail"
-            :style="{
-              width: `${result.summary.tests_run ? ((result.summary.failed + result.summary.errors) / result.summary.tests_run) * 100 : 0}%`,
-            }"
-          />
-        </div>
-      </div>
-
-      <div class="filter-bar">
-        <div class="filter-group">
-          <span class="filter-label">结果 · 套件</span>
-          <div class="filter-chips">
-            <el-checkbox
-              v-for="id in lastRunSuites"
-              :key="id"
-              :model-value="resultSuiteChecked.has(id)"
-              border
-              size="small"
-              @change="toggleResultSuite(id, Boolean($event))"
-            >
-              {{ suiteLabelById.get(id) ?? id }}
-            </el-checkbox>
-            <el-button link size="small" @click="selectAllResultSuites">全选</el-button>
-          </div>
-        </div>
-        <div class="filter-group">
-          <span class="filter-label">结果 · 状态</span>
-          <div class="filter-chips">
-            <el-checkbox
-              v-for="opt in STATUS_FILTER_OPTIONS"
-              :key="opt.id"
-              :model-value="resultStatusChecked.has(opt.id)"
-              border
-              size="small"
-              @change="toggleResultStatus(opt.id, Boolean($event))"
-            >
-              {{ opt.label }}
-            </el-checkbox>
-            <el-button link size="small" @click="selectOnlyFailedResults">仅失败</el-button>
-            <el-button v-if="watchlistCount" link size="small" @click="filterResultsToWatchlist">
-              仅关注项
-            </el-button>
-            <el-button v-if="lastReTestedCaseIds.size" link size="small" @click="filterResultsToReTested">
-              仅复测项
-            </el-button>
-          </div>
-        </div>
-        <span class="count">
-          显示 <strong>{{ filteredCases.length }}</strong> / {{ result.cases.length }} 条用例
-          <template v-if="filterReTestedOnly">（已筛复测项）</template>
-          <template v-if="filterWatchlistOnly && !filterReTestedOnly">（已筛关注）</template>
-          <template v-if="lastIgnoredCount"> · 本次忽略 {{ lastIgnoredCount }} 条</template>
-        </span>
-      </div>
-
-      <div v-if="filteredModuleSummaries.length" class="module-summary">
-        <h3 class="subsection-title">按模块</h3>
-        <table class="data-table compact">
-          <thead>
-            <tr>
-              <th>模块</th>
-              <th>简介</th>
-              <th>套件</th>
-              <th>通过</th>
-              <th>失败</th>
-              <th>错误</th>
-              <th>跳过</th>
-              <th>合计</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="m in filteredModuleSummaries" :key="m.module">
-              <td class="mono">{{ shortModule(m.module) }}</td>
-              <td class="module-desc" :title="moduleDescription(m.module)">
-                {{ moduleDescriptionBrief(m.module) }}
-              </td>
-              <td>{{ suiteLabelById.get(moduleSuiteId(m.module)) ?? "—" }}</td>
-              <td>{{ m.passed }}</td>
-              <td>{{ m.failed }}</td>
-              <td>{{ m.errors }}</td>
-              <td>{{ m.skipped }}</td>
-              <td>{{ m.tests_run }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="cases-panel">
-        <h3 class="subsection-title">用例明细</h3>
-        <p v-if="!filteredCases.length" class="muted empty-hint">当前筛选无匹配用例，请调整上方勾选。</p>
-        <div v-for="[mod, cases] in groupedModules" :key="mod" class="module-group">
-          <div class="module-group-head">
-            <div class="module-group-title">
-              <span class="mono">{{ shortModule(mod) }}</span>
-              <span v-if="moduleDescription(mod)" class="module-group-desc">
-                {{ moduleDescriptionBrief(mod, 64) }}
-              </span>
-            </div>
-            <span class="module-suite-tag">{{ suiteLabelById.get(cases[0]?.suite_id ?? "") }}</span>
-          </div>
-          <ul class="case-list">
-            <li v-for="c in cases" :key="c.id" class="case-item" :class="statusClass(c.status)">
-              <button type="button" class="case-head" @click="toggleCase(c.id)">
-                <span class="case-status">{{ statusLabel(c.status) }}</span>
-                <span class="case-name">{{ c.class_name }}.{{ c.method }}</span>
-                <span class="case-ms">{{ c.duration_ms }} ms</span>
-              </button>
-              <pre
-                v-if="expandedCase === c.id && (c.message || c.traceback)"
-                class="case-detail"
-              >{{ c.message }}{{ c.traceback ? "\n" + c.traceback : "" }}</pre>
-            </li>
-          </ul>
-        </div>
-      </div>
-    </section>
+    <UnitTestResultPane
+      v-if="activeTab === 'results' && result"
+      :result="result"
+      :pass-rate="passRate"
+      :last-run-suites="lastRunSuites"
+      :suite-label-by-id="suiteLabelById"
+      :result-suite-checked="resultSuiteChecked"
+      :result-status-checked="resultStatusChecked"
+      :filtered-cases="filteredCases"
+      :filtered-module-summaries="filteredModuleSummaries"
+      :module-catalog="moduleCatalog"
+      :watchlist-count="watchlistCount"
+      :re-tested-count="lastReTestedCaseIds.size"
+      :filter-watchlist-only="filterWatchlistOnly"
+      :filter-re-tested-only="filterReTestedOnly"
+      :last-ignored-count="lastIgnoredCount"
+      @suite-change="toggleResultSuite"
+      @status-change="toggleResultStatus"
+      @select-all-suites="selectAllResultSuites"
+      @select-only-failed="selectOnlyFailedResults"
+      @filter-watchlist="filterResultsToWatchlist"
+      @filter-re-tested="filterResultsToReTested"
+    />
 
     <p v-else-if="!running && activeTab === 'results'" class="muted hint compact-hint">
       勾选套件后点「运行」；失败项会进入「失败关注」Tab。
@@ -1092,21 +931,6 @@ onMounted(() => {
   color: var(--muted);
 }
 
-.btn-sm {
-  padding: 4px 12px;
-  font-size: 0.78rem;
-}
-
-.btn-cancel {
-  border: 1px solid #fca5a5;
-  background: #fef2f2;
-  color: #b91c1c;
-}
-
-.btn-cancel:hover {
-  background: #fee2e2;
-}
-
 .compact-hint {
   margin: 0;
   font-size: 0.78rem;
@@ -1123,13 +947,6 @@ onMounted(() => {
   border-top-right-radius: 0;
 }
 
-.filter-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-}
-
 .tab-badge {
   margin-left: 4px;
   min-width: 16px;
@@ -1142,287 +959,6 @@ onMounted(() => {
   font-variant-numeric: tabular-nums;
   line-height: 1.45;
   vertical-align: middle;
-}
-
-.subsection-title {
-  margin: 0 0 8px;
-  font-size: 0.88rem;
-  font-weight: 600;
-}
-
-.option-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-}
-
-.opt-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: #f8fafc;
-  font-size: 0.76rem;
-  cursor: pointer;
-  user-select: none;
-}
-
-.opt-chip:has(input:checked),
-.opt-chip.checked {
-  background: #eff6ff;
-  border-color: #93c5fd;
-  color: #1d4ed8;
-}
-
-.filter-bar {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 14px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #f8fafc;
-}
-
-.filter-group {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.filter-label {
-  flex-shrink: 0;
-  min-width: 72px;
-  font-size: 0.76rem;
-  font-weight: 600;
-  color: var(--muted);
-}
-
-.link-btn.mini {
-  font-size: 0.72rem;
-  padding: 2px 6px;
-}
-
-.count {
-  font-size: 0.78rem;
-  color: var(--muted);
-}
-
-.stat-cards {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.stat-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  min-width: 72px;
-  padding: 8px 14px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #fff;
-}
-
-.stat-value {
-  font-size: 1.1rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.stat-label {
-  margin-top: 2px;
-  font-size: 0.72rem;
-  color: var(--muted);
-}
-
-.stat-card.tone-pass .stat-value {
-  color: #15803d;
-}
-
-.stat-card.tone-fail .stat-value {
-  color: #b91c1c;
-}
-
-.stat-card.tone-rate .stat-value {
-  color: #1d4ed8;
-}
-
-.progress-wrap {
-  margin-bottom: 14px;
-}
-
-.progress-bar {
-  display: flex;
-  height: 8px;
-  border-radius: 4px;
-  overflow: hidden;
-  background: #e5e7eb;
-}
-
-.progress-pass {
-  background: #22c55e;
-  transition: width 0.3s ease;
-}
-
-.progress-fail {
-  background: #ef4444;
-  transition: width 0.3s ease;
-}
-
-.module-summary {
-  margin-bottom: 16px;
-}
-
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.82rem;
-}
-
-.data-table th,
-.data-table td {
-  border: 1px solid var(--border);
-  padding: 6px 8px;
-  text-align: left;
-}
-
-.data-table th {
-  background: #f9fafb;
-  font-weight: 600;
-}
-
-.mono {
-  font-family: ui-monospace, monospace;
-  font-size: 0.78rem;
-}
-
-.module-group {
-  margin-bottom: 12px;
-}
-
-.module-group-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 6px 10px;
-  background: #f3f4f6;
-  border: 1px solid var(--border);
-  border-bottom: none;
-  border-radius: 6px 6px 0 0;
-  font-size: 0.78rem;
-  font-weight: 600;
-}
-
-.module-group-title {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.module-group-desc {
-  font-size: 0.72rem;
-  font-weight: 400;
-  color: var(--muted);
-}
-
-.module-desc {
-  max-width: 280px;
-  font-size: 0.76rem;
-  color: var(--muted);
-  line-height: 1.35;
-}
-
-.module-suite-tag {
-  font-size: 0.72rem;
-  font-weight: 500;
-  color: var(--muted);
-}
-
-.case-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 0 0 6px 6px;
-}
-
-.case-item {
-  border-top: 1px solid var(--border);
-}
-
-.case-item:first-child {
-  border-top: none;
-}
-
-.case-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 10px;
-  border: none;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-  font-size: 0.82rem;
-}
-
-.case-head:hover {
-  background: #f9fafb;
-}
-
-.case-status {
-  flex-shrink: 0;
-  min-width: 36px;
-  font-size: 0.72rem;
-  font-weight: 600;
-}
-
-.status-passed .case-status {
-  color: #15803d;
-}
-
-.status-failed .case-status,
-.status-error .case-status {
-  color: #b91c1c;
-}
-
-.status-skipped .case-status {
-  color: #a16207;
-}
-
-.case-name {
-  flex: 1;
-  font-family: ui-monospace, monospace;
-  font-size: 0.78rem;
-}
-
-.case-ms {
-  flex-shrink: 0;
-  color: var(--muted);
-  font-size: 0.72rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.case-detail {
-  margin: 0;
-  padding: 8px 10px 10px;
-  background: #fef2f2;
-  border-top: 1px solid #fecaca;
-  font-size: 0.72rem;
-  overflow-x: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 
 .hint,

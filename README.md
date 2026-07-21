@@ -63,15 +63,9 @@ phoenix-desktop --workspace /path/to/workspace --catdlg /path/to/workspace/UI/Sa
 pnpm install --frozen-lockfile --force
 ```
 
-正式依赖始终使用 `package.json` 锁定的 Wing Registry 0.4.2 包。Codegen Host/Apply、Workspace Schema、Ribbon、UUID/GUID 和 workspace path 契约直接消费包内 fixture；聚合根入口与 composable 子路径的 singleton 由自动测试保护。本地联调由启动进程临时 alias/resolver 完成，不执行 `link:` / `file:` 安装，也不修改清单、锁文件或 `node_modules`。
+正式依赖始终使用 `package.json` 锁定的 Wing Registry 0.4.3 包。Codegen Host/Apply、Workspace Schema、Ribbon、UUID/GUID 和 workspace path 契约直接消费包内 fixture；聚合根入口与 composable 子路径的 singleton 由自动测试保护。本地联调由启动进程临时 alias/resolver 完成，不执行 `link:` / `file:` 安装，也不修改清单、锁文件或 `node_modules`。
 
-### 构建 Rust 模块
-
-```bash
-pnpm build:native
-```
-
-`fcstd-read`、`fcstd-xlink` 与 `fcstd-query` 均从已安装的 `@phoenix-wing/cad-rust-source` 统一 Cargo workspace 编译；Desk Tools 不再保留 Rust 源码副本。查询工具通过 `phoenix-cad-query` v1 绑定 workspace Schema v13，继续供 Desk 构建/诊断使用；KT Auto CAD 的只读 BOM/引用查询已改接 Wing 无驱动查询核心与 VS Code 内置 SQLite，不再消费 Desk provider 中的 `fcstd-query`。
+FCStd 文件发现、SQLite 查询、ZIP/Document.xml 读取与 BOM/XLink 写回均由 TypeScript 完成。Desk 不再构建或随 Tauri 打包 `fcstd-read`、`fcstd-xlink`、`fcstd-query` Rust sidecar；Tauri 自身只保留桌面窗口和 Node sidecar 生命周期所需的薄 Rust 壳。
 
 ## 架构
 
@@ -80,7 +74,7 @@ pnpm build:native
      │
      ▼ proxy /api/*
 Node.js Hono :48375（占用时向上寻找）
-     ├── /api/cad/*  cad-rust (Rust SQLite + 代理)
+     ├── /api/cad/*  TypeScript（SQLite + ZIP/XML）
      ├── /api/caa/*  CAA 对话
      └── /api/*      待迁移（Python 可选）
 ```
@@ -95,7 +89,7 @@ pnpm test:ts                    # TypeScript 测试（server/src/lib/）
 pnpm test:caa                   # CAA 测试（catdlg-core + web-ui vitest）
 ```
 
-Rust workspace 测试由 `phoenix-wing` 的 `test:workspace` 和 npm tarball 三平台门禁统一负责；Desk 的 `build:native` 负责消费端构建、协议握手和真实 fixture parity。
+真实 FCStd 的 TypeScript 读写回归可单独运行 `pnpm verify:real-fcstd`；Tauri runtime 构建由 `pnpm build:tauri-runtime` 完成。
 
 ### 测试报告
 
@@ -111,7 +105,7 @@ python3 -m http.server 4173 --directory test-report
 
 | 路径 | 说明 |
 |------|------|
-| `server/` | Node.js + Rust 后端 |
+| `server/` | Node.js/TypeScript 后端 |
 | `web-ui/` | Vue 3 前端 |
 | `phoenix/` | Python 包（逐步退役） |
 | `scripts/` | 命令行工具 |

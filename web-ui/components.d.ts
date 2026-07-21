@@ -124,6 +124,7 @@ declare module 'vue' {
     ShellPanelToggleBar: typeof import('./src/components/ShellPanelToggleBar.vue')['default']
     SideDockPrefsPanel: typeof import('./src/components/SideDockPrefsPanel.vue')['default']
     TreeBranch: typeof import('./src/components/TreeBranch.vue')['default']
+    UnitTestResultPane: typeof import('./src/components/unit-tests/UnitTestResultPane.vue')['default']
     UnitTestRunScopePane: typeof import('./src/components/unit-tests/UnitTestRunScopePane.vue')['default']
     UnitTestWatchlistPane: typeof import('./src/components/unit-tests/UnitTestWatchlistPane.vue')['default']
     WorkbenchBottomPanel: typeof import('./src/components/workbench/WorkbenchBottomPanel.vue')['default']

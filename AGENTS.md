@@ -12,7 +12,7 @@
 - 禁止为联调执行 `pnpm link`，也禁止把 Wing 改成 `link:`、`file:`、`workspace:` 或写入 `pnpm.overrides`。
 - `package.json` 与 `pnpm-lock.yaml` 必须继续锁定 Registry 精确版本；本地切换只能发生在启动进程的 Vite alias、Node loader 和构建 resolver 中。
 - 禁止为了切换 Wing 修改或覆盖 Desk 的 `node_modules`。运行 `pnpm verify:wing-dependencies` 检查该边界。
-- 普通本地联调覆盖 aggregate、`@phoenix-wing/kt-codegen` 及 Server 使用的六个 TypeScript 包；`cad-rust-source` / native 发布链仍走独立门禁。
+- 普通本地联调覆盖 aggregate、`@phoenix-wing/kt-codegen` 及 Server 使用的六个 TypeScript 包。Desk 已不再消费 `cad-rust-source`；Tauri 薄壳和原生发行制品仍走独立门禁。
 
 ## AI 点检命令
 

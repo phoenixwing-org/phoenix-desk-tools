@@ -4,12 +4,10 @@ import { ElMessage } from "element-plus";
 
 import { pnwPromptChoice } from "phoenix-wing";
 import {
-  fetchNativeToolStatus,
   pruneRecentWorkspaces,
   removeRecentWorkspace,
   saveLauncherFreecad,
   shutdownWebServer,
-  type NativeToolStatusPayload,
 } from "../api";
 import { useAppShell } from "../composables/useAppShell";
 import { useWorkspaceDirectoryPicker } from "../composables/useWorkspaceDirectoryPicker";
@@ -57,8 +55,6 @@ const recentEntries = computed(
 const webRunning = ref(false);
 const desktopRuntime = isTauriRuntime();
 const webUrl = ref(apiOrigin() || "http://127.0.0.1:48375");
-const nativeTools = ref<NativeToolStatusPayload | null>(null);
-const nativeToolsLoading = ref(false);
 const defaultFreecadDir = computed(() => launcher.value?.default_freecad_dir ?? "");
 
 const nonHomeTabCount = computed(
@@ -95,7 +91,7 @@ function fillDefaultFreecad() {
 onMounted(async () => {
   repoInput.value = workspacePath.value;
   fcInput.value = launcher.value?.freecad_dir ?? "";
-  await Promise.all([refreshWebStatus(), refreshNativeTools(), onboarding.refreshStatus()]);
+  await Promise.all([refreshWebStatus(), onboarding.refreshStatus()]);
 });
 
 function openCadIndex() {
@@ -186,17 +182,6 @@ async function refreshWebStatus() {
     webRunning.value = true;
   } catch {
     webRunning.value = false;
-  }
-}
-
-async function refreshNativeTools() {
-  nativeToolsLoading.value = true;
-  try {
-    nativeTools.value = await fetchNativeToolStatus();
-  } catch {
-    nativeTools.value = null;
-  } finally {
-    nativeToolsLoading.value = false;
   }
 }
 
@@ -406,7 +391,7 @@ usePagePrimaryContribution("config", props.workbenchTabId, {
           disabled: computed(() => !defaultFreecadDir.value.trim()),
           run: fillDefaultFreecad,
         },
-        { id: "refresh-tools", label: "刷新工具状态", loading: nativeToolsLoading, run: refreshNativeTools },
+        { id: "refresh-server", label: "刷新服务状态", run: refreshWebStatus },
         { id: "cad-index", label: "打开 CAD 索引", run: openCadIndex },
         { id: "tour", label: "界面指引", run: startShellTour },
       ],
@@ -502,23 +487,6 @@ const navItems = () =>
       <div class="btn-row compact">
         <el-button :disabled="!onboarding.workspaceOk" @click="startShellTour(true)">重新观看界面巡游</el-button>
       </div>
-    </section>
-
-    <section class="section">
-      <div class="section-title-row">
-        <h2 class="section-title">原生工具</h2>
-        <el-button size="small" :loading="nativeToolsLoading" @click="refreshNativeTools">刷新</el-button>
-      </div>
-      <div v-if="nativeTools" class="native-tool-list">
-        <div v-for="tool in nativeTools.tools" :key="tool.name" class="native-tool-row">
-          <code>{{ tool.name }}</code>
-          <el-tag :type="tool.available ? 'success' : 'warning'" effect="plain" size="small">
-            {{ tool.available ? "可用" : "未构建" }}
-          </el-tag>
-          <span class="native-tool-path">{{ tool.path || tool.manifest }}</span>
-        </div>
-      </div>
-      <p v-else class="hint">无法读取原生工具状态。</p>
     </section>
 
     <section class="section">
@@ -626,40 +594,6 @@ const navItems = () =>
 .section-title {
   margin: 0 0 8px;
   font-size: 1rem;
-}
-
-.section-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 8px;
-}
-
-.section-title-row .section-title {
-  margin: 0;
-}
-
-.native-tool-list {
-  border-top: 1px solid var(--border);
-}
-
-.native-tool-row {
-  display: grid;
-  grid-template-columns: minmax(100px, 140px) auto minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-  min-height: 38px;
-  border-bottom: 1px solid var(--border);
-}
-
-.native-tool-path {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 0.82rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .field-label {

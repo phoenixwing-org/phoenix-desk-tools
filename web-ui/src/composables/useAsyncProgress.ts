@@ -72,6 +72,78 @@ export function useAsyncProgress(kind: PnwTaskKind) {
     }
   }
 
+  /** 首次启动和刷新恢复共用同一轮询、日志、终态与取消清理语义。 */
+  function _schedulePolling(
+    id: string,
+    pollFn: (scanId: string) => Promise<ScanProgressPayload>,
+    interval: number,
+  ) {
+    _stopPolling();
+    let lastFile = "";
+    let lastFileTime = performance.now();
+
+    _pollTimer = setInterval(async () => {
+      try {
+        const payload = await pollFn(id);
+        let current = store.tasks[id];
+        if (!current) return;
+
+        const activeStep = current.steps[current.currentStep];
+        const currentFile =
+          (payload.bom as { current_file?: string } | undefined)?.current_file ||
+          (payload.xref as { current_file?: string } | undefined)?.current_file ||
+          (payload.walk as { current_file?: string } | undefined)?.current_file ||
+          "";
+        if (currentFile && currentFile !== lastFile) {
+          const now = performance.now();
+          if (lastFile) {
+            current = {
+              ...current,
+              fileTimings: [
+                ...(current.fileTimings || []),
+                {
+                  file: lastFile,
+                  phase: activeStep?.label || "",
+                  duration: Math.round(now - lastFileTime),
+                  success: true,
+                },
+              ].slice(-500),
+            };
+          }
+          lastFile = currentFile;
+          lastFileTime = now;
+        }
+
+        const previousErrors = current.steps.reduce((sum, step) => sum + step.errors.length, 0);
+        const updated = pnwUpdateTaskFromPoll(current, payload);
+        store.upsertTask(updated);
+        current = updated;
+
+        const newErrors = updated.steps.reduce((sum, step) => sum + step.errors.length, 0) - previousErrors;
+        if (newErrors > 0) {
+          current = pnwAppendTaskLog(current, `⚠ ${newErrors} 个文件读取失败`);
+          store.upsertTask(current);
+        }
+
+        if (pnwIsTerminal(updated.status)) {
+          store.upsertTask(pnwAppendTaskLog(
+            current,
+            updated.status === "done"
+              ? `✓ 扫描完成 · CAD ${payload.total_cad_files} · FCStd ${payload.total_fcstd_files}`
+              : updated.status === "error"
+                ? `✗ 扫描出错: ${updated.error || "未知错误"}`
+                : "⊗ 扫描已取消",
+          ));
+          store.unregisterCancel(id);
+          _stopPolling();
+          isRunning.value = false;
+        }
+      } catch {
+        // 短暂网络错误不终止服务端长任务。
+      }
+    }, interval);
+  }
+
   // ── 扫描（轮询模式） ──
 
   async function startPolling(
@@ -104,8 +176,6 @@ export function useAsyncProgress(kind: PnwTaskKind) {
       }
     }
 
-    _stopPolling();
-
     const id = (await startFn()).scan_id;
     taskId.value = id;
     isRunning.value = true;
@@ -118,73 +188,7 @@ export function useAsyncProgress(kind: PnwTaskKind) {
     store.upsertTask(current);
     store.setFullscreen(true); // 自动全屏让用户看到
 
-    // 开始轮询
-    const interval = opts?.interval ?? 500;
-    let _lastFile = "";
-    let _lastFileTime = performance.now();
-
-    _pollTimer = setInterval(async () => {
-      try {
-        const payload = await pollFn(id);
-        current = store.tasks[id];
-        if (!current) return;
-
-        // -- 文件耗时追踪：current_file 变化时记录 --
-        const activeStep = current.steps[current.currentStep];
-        const curFile =
-          (payload.bom as { current_file?: string } | undefined)?.current_file ||
-          (payload.xref as { current_file?: string } | undefined)?.current_file ||
-          (payload.walk as { current_file?: string } | undefined)?.current_file ||
-          "";
-        if (curFile && curFile !== _lastFile) {
-          const now = performance.now();
-          if (_lastFile) {
-            const duration = Math.round(now - _lastFileTime);
-            const phaseLabel = activeStep?.label || "";
-            current = {
-              ...current,
-              fileTimings: [
-                ...(current.fileTimings || []),
-                { file: _lastFile, phase: phaseLabel, duration, success: true },
-              ].slice(-500),
-            };
-          }
-          _lastFile = curFile;
-          _lastFileTime = now;
-        }
-
-        const prevErrors = current.steps.reduce((s, step) => s + step.errors.length, 0);
-
-        const updated = pnwUpdateTaskFromPoll(current, payload);
-        store.upsertTask(updated);
-        current = updated;
-
-        // 新增错误日志
-        const newErrors = updated.steps.reduce((s, step) => s + step.errors.length, 0) - prevErrors;
-        if (newErrors > 0) {
-          const withLog = pnwAppendTaskLog(current, `⚠ ${newErrors} 个文件读取失败`);
-          store.upsertTask(withLog);
-          current = withLog;
-        }
-
-        if (pnwIsTerminal(updated.status)) {
-          const finalLog = pnwAppendTaskLog(
-            current,
-            updated.status === "done"
-              ? `✓ 扫描完成 · CAD ${payload.total_cad_files} · FCStd ${payload.total_fcstd_files}`
-              : updated.status === "error"
-                ? `✗ 扫描出错: ${updated.error || "未知错误"}`
-                : `⊗ 扫描已取消`,
-          );
-          store.upsertTask(finalLog);
-          store.unregisterCancel(id);
-          _stopPolling();
-          isRunning.value = false;
-        }
-      } catch (_err) {
-        // 轮询失败不停止
-      }
-    }, interval);
+    _schedulePolling(id, pollFn, opts?.interval ?? 500);
   }
 
   // ── 测试（流模式） ──
@@ -310,6 +314,8 @@ export function useAsyncProgress(kind: PnwTaskKind) {
 
         if (pnwIsTerminal(enriched.status)) {
           isRunning.value = false;
+          store.unregisterCancel(realId);
+          _cancelFn = null;
         }
       });
     } catch (err) {
@@ -323,6 +329,8 @@ export function useAsyncProgress(kind: PnwTaskKind) {
           finishedAt: new Date().toISOString(),
         });
       }
+      store.unregisterCancel(effectiveId);
+      _cancelFn = null;
       isRunning.value = false;
       throw err;
     }
@@ -362,6 +370,7 @@ export function useAsyncProgress(kind: PnwTaskKind) {
           taskId.value = result.scan_id;
           isRunning.value = true;
           _cancelFn = cancelFcstdMapScan;
+          store.registerCancel(result.scan_id, () => cancelFcstdMapScan(result.scan_id!));
 
           // 如果有 progress 快照，直接恢复
           if (result.progress) {
@@ -377,26 +386,12 @@ export function useAsyncProgress(kind: PnwTaskKind) {
             if (current) {
               store.upsertTask({ ...current, status: "orphaned" });
             }
+            store.unregisterCancel(result.scan_id);
             isRunning.value = false;
             return true;
           }
 
-          // 恢复轮询
-          _pollTimer = setInterval(async () => {
-            try {
-              const payload = await fetchFcstdMapScanProgress(result.scan_id!);
-              const c = store.tasks[result.scan_id!];
-              if (!c) return;
-              const updated = pnwUpdateTaskFromPoll(c, payload);
-              store.upsertTask(updated);
-              if (pnwIsTerminal(updated.status)) {
-                _stopPolling();
-                isRunning.value = false;
-              }
-            } catch {
-              /* tolerate network blips */
-            }
-          }, 1000);
+          _schedulePolling(result.scan_id, fetchFcstdMapScanProgress, 1000);
 
           return true;
         }

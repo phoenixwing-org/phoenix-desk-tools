@@ -160,23 +160,6 @@ export function fetchOnboardingStatus() {
   return jsonFetch<OnboardingStatus>("/api/onboarding/status");
 }
 
-export type NativeToolStatusPayload = {
-  ok: boolean;
-  platform: string;
-  tools: Array<{
-    name: "fcstd-read" | "fcstd-xlink";
-    available: boolean;
-    path: string;
-    env_key: string;
-    manifest: string;
-    candidates: string[];
-  }>;
-};
-
-export function fetchNativeToolStatus() {
-  return jsonFetch<NativeToolStatusPayload>("/api/native-tools/status");
-}
-
 export type PhoenixDatabaseStatus = {
   legacy_detected: boolean;
   needs_recreate: boolean;
@@ -1292,7 +1275,7 @@ export type PartKeysPayload = {
   database_path_display: string;
   exists: boolean;
   entries: PartKeyEntry[];
-  _native?: "node" | "rust";
+  _native?: "node";
   stats: {
     total_keys: number;
     total_files: number;

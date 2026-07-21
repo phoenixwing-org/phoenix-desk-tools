@@ -94,19 +94,16 @@ try {
   });
   assert(activeWorkspace.path === workspace, "release app did not activate the isolated workspace");
 
-  const nativeTools = await api("/api/native-tools/status");
-  assert(nativeTools.ok === true && nativeTools.tools?.length === 3, "packaged native tools are incomplete");
-  const runtimeRoots = new Set();
-  for (const tool of nativeTools.tools) {
-    assert(tool.available === true, `${tool.name} is unavailable in the release app`);
-    const toolPath = path.resolve(tool.path);
-    assertUnder(installRoot, toolPath, `${tool.name} runtime path`);
-    runtimeRoots.add(path.dirname(path.dirname(toolPath)));
-  }
-  assert(runtimeRoots.size === 1, "packaged native tools did not resolve from one runtime root");
-  const runtimeRoot = [...runtimeRoots][0];
-  const runtimeManifest = path.join(runtimeRoot, "runtime-manifest.json");
+  const runtimeManifest = [
+    path.join(installRoot, "Contents", "Resources", "runtime", "runtime-manifest.json"),
+    path.join(installRoot, "runtime", "runtime-manifest.json"),
+  ].find((candidate) => fs.existsSync(candidate));
+  assert(runtimeManifest, "packaged TypeScript runtime manifest is missing");
+  assertUnder(installRoot, runtimeManifest, "runtime manifest");
   assertFile(runtimeManifest);
+  const runtimeDirectory = path.dirname(runtimeManifest);
+  assert(!fs.existsSync(path.join(runtimeDirectory, "bin")), "release runtime still contains a CAD native bin directory");
+  assert(!fs.existsSync(path.join(runtimeDirectory, "native-provider.json")), "release runtime still contains native-provider.json");
 
   const documents = await api("/api/code/codegen/documents");
   assert(documents.documents?.length === 1, "release app did not discover the Codegen fixture");
@@ -142,8 +139,8 @@ try {
   const bom = await api(`/api/cad/bom/file?rel=${encodeURIComponent("8003.001-H-PHOENIX-滑轨.FCStd")}`);
   assert(bom.is_fcstd === true && bom.file_size_bytes > 0, "release CAD route did not read the real FCStd archive");
   assert(
-    String(bom.source_note || "").includes("embedded FCStd properties"),
-    "release CAD route did not use the packaged fcstd-read tool",
+    String(bom.source_note || "").includes("TypeScript FCStd reader"),
+    "release CAD route did not use the packaged TypeScript FCStd reader",
   );
 
   const version = process.platform === "darwin"
@@ -167,7 +164,7 @@ try {
     runtimeManifestSha256: manifestSha256,
     health,
     userDataIsolated: true,
-    nativeTools: nativeTools.tools.map((tool) => tool.name),
+    cadRuntime: "typescript",
     flows: {
       launch: true,
       codegenPreflight: true,

@@ -70,4 +70,4 @@ UnitTestRunScopePane（DOM / 局部折叠 / 样式）
 
 1. Watchlist DOM、列与 style 已提炼到单消费者 Pane；Pinia、localStorage utility、确认框和运行 payload 继续留在 Page。
 2. Result 仍保留摘要、筛选、模块聚合和 case 明细 DOM；必须单独建立 characterization 后迁移。
-3. `useAsyncProgress` 在流终态的 cancel 注销是共享基础设施 TODO，不在 Page shell 切口中顺手改写。
+3. `useAsyncProgress` 的流终态/error cancel 注销已在共享基础设施完成，不再由 Page shell 维护。

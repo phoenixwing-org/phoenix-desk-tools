@@ -1,9 +1,6 @@
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
-import { resolveNativeTool } from "./nativeToolService.js";
+import { replaceFileAtomically } from "./fcstdDocumentXmlService.js";
 
 export type ReferenceLabelChange = {
   xlink_file_attr: string;
@@ -14,12 +11,12 @@ export type ReferenceLabelChange = {
 export type ReferenceLabelPatchResult = {
   count: number;
   changes: ReferenceLabelChange[];
-  engine: "rust" | "node-fallback";
+  engine: "typescript";
 };
 
 export type XlinkAttributePatchResult = {
   count: number;
-  engine: "rust" | "node-fallback";
+  engine: "typescript";
 };
 
 function objectBlockSpan(xml: string, position: number): [number, number] | null {
@@ -108,27 +105,6 @@ export function patchReferenceLabelsInDocumentXml(
   return { xml: patched, changes };
 }
 
-function replaceFileAtomically(filename: string, bytes: Uint8Array): void {
-  const token = `${process.pid}-${Date.now()}`;
-  const dir = path.dirname(filename);
-  const base = path.basename(filename);
-  const temp = path.join(dir, `.${base}.phoenix-${token}.tmp`);
-  const backup = path.join(dir, `.${base}.phoenix-${token}.backup`);
-  fs.writeFileSync(temp, bytes);
-  try {
-    fs.renameSync(filename, backup);
-    try {
-      fs.renameSync(temp, filename);
-    } catch (error) {
-      fs.renameSync(backup, filename);
-      throw error;
-    }
-    fs.rmSync(backup, { force: true });
-  } finally {
-    fs.rmSync(temp, { force: true });
-  }
-}
-
 function patchWithNode(filename: string, attrLabels: Record<string, string>): ReferenceLabelPatchResult {
   let files: Record<string, Uint8Array>;
   try {
@@ -143,7 +119,7 @@ function patchWithNode(filename: string, attrLabels: Record<string, string>): Re
     files["Document.xml"] = strToU8(result.xml);
     replaceFileAtomically(filename, zipSync(files, { level: 6 }));
   }
-  return { count: result.changes.length, changes: result.changes, engine: "node-fallback" };
+  return { count: result.changes.length, changes: result.changes, engine: "typescript" };
 }
 
 export function patchXlinkAttributesInDocumentXml(
@@ -176,69 +152,21 @@ function patchXlinksWithNode(filename: string, replacements: Record<string, stri
     files["Document.xml"] = strToU8(result.xml);
     replaceFileAtomically(filename, zipSync(files, { level: 6 }));
   }
-  return { count: result.count, engine: "node-fallback" };
-}
-
-function patchXlinksWithRust(
-  executable: string,
-  filename: string,
-  replacements: Record<string, string>,
-): XlinkAttributePatchResult {
-  const args = Object.entries(replacements).map(([oldAttr, newAttr]) => `${oldAttr}=${newAttr}`);
-  const raw = execFileSync(executable, ["patch", filename, ...args], {
-    encoding: "utf8",
-    timeout: 30_000,
-    windowsHide: true,
-  });
-  const parsed = JSON.parse(raw);
-  return { count: Number(parsed?.count || 0), engine: "rust" };
-}
-
-function patchWithRust(
-  executable: string,
-  filename: string,
-  attrLabels: Record<string, string>,
-): ReferenceLabelPatchResult {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-label-patch-"));
-  const jobFile = path.join(tempDir, "labels.json");
-  try {
-    fs.writeFileSync(jobFile, `${JSON.stringify(attrLabels)}\n`, "utf8");
-    const raw = execFileSync(executable, ["patch-labels", filename, jobFile], {
-      encoding: "utf8",
-      timeout: 30_000,
-      windowsHide: true,
-    });
-    const parsed = JSON.parse(raw);
-    const changes = Array.isArray(parsed?.changes) ? parsed.changes.map((change: any) => ({
-      xlink_file_attr: String(change?.xlink_file_attr || ""),
-      old_label: String(change?.old_label || ""),
-      new_label: String(change?.new_label || ""),
-    })) : [];
-    return { count: Number(parsed?.count || changes.length), changes, engine: "rust" };
-  } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  }
+  return { count: result.count, engine: "typescript" };
 }
 
 export function patchFcstdReferenceLabels(
   filename: string,
   attrLabels: Record<string, string>,
-  options: { forceNodeFallback?: boolean } = {},
 ): ReferenceLabelPatchResult {
-  if (!Object.keys(attrLabels).length) return { count: 0, changes: [], engine: "node-fallback" };
-  const executable = options.forceNodeFallback ? null : resolveNativeTool("fcstd-xlink");
-  if (executable) return patchWithRust(executable, filename, attrLabels);
+  if (!Object.keys(attrLabels).length) return { count: 0, changes: [], engine: "typescript" };
   return patchWithNode(filename, attrLabels);
 }
 
 export function patchFcstdXlinkAttributes(
   filename: string,
   replacements: Record<string, string>,
-  options: { forceNodeFallback?: boolean } = {},
 ): XlinkAttributePatchResult {
-  if (!Object.keys(replacements).length) return { count: 0, engine: "node-fallback" };
-  const canUseCli = !Object.keys(replacements).some((oldAttr) => oldAttr.includes("="));
-  const executable = options.forceNodeFallback || !canUseCli ? null : resolveNativeTool("fcstd-xlink");
-  if (executable) return patchXlinksWithRust(executable, filename, replacements);
+  if (!Object.keys(replacements).length) return { count: 0, engine: "typescript" };
   return patchXlinksWithNode(filename, replacements);
 }

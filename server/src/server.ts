@@ -67,7 +67,7 @@ const { server, port } = await startServer();
 const registration = registerDeskToolsRuntime(port);
 console.log(`Phoenix server http://127.0.0.1:${port}`);
 console.log(`  /api/caa/*  CAA 对话`);
-console.log(`  /api/cad/*  CAD 工具 (Node/Rust)`);
+console.log(`  /api/cad/*  CAD 工具 (TypeScript/SQLite)`);
 console.log(`  service registration ${registration.servicePath}`);
 
 const disposeRegistration = (): void => registration.dispose();

@@ -45,8 +45,8 @@ describe("FCStd reference label patching", () => {
       "GuiDocument.xml": strToU8("keep me"),
     }));
 
-    expect(patchFcstdReferenceLabels(filename, { "part.FCStd": "New" }, { forceNodeFallback: true }))
-      .toMatchObject({ count: 1, engine: "node-fallback" });
+    expect(patchFcstdReferenceLabels(filename, { "part.FCStd": "New" }))
+      .toMatchObject({ count: 1, engine: "typescript" });
     const files = unzipSync(new Uint8Array(fs.readFileSync(filename)));
     expect(strFromU8(files["Document.xml"])).toContain('value="New"');
     expect(strFromU8(files["GuiDocument.xml"])).toBe("keep me");
@@ -63,8 +63,8 @@ describe("FCStd reference label patching", () => {
     roots.push(root);
     const filename = path.join(root, "host.FCStd");
     fs.writeFileSync(filename, zipSync({ "Document.xml": strToU8(xml) }));
-    expect(patchFcstdXlinkAttributes(filename, { "old.FCStd": "new.FCStd" }, { forceNodeFallback: true }))
-      .toEqual({ count: 1, engine: "node-fallback" });
+    expect(patchFcstdXlinkAttributes(filename, { "old.FCStd": "new.FCStd" }))
+      .toEqual({ count: 1, engine: "typescript" });
     const files = unzipSync(new Uint8Array(fs.readFileSync(filename)));
     expect(strFromU8(files["Document.xml"])).toContain('<XLink file="new.FCStd"/>');
   });

@@ -21,18 +21,9 @@ export type DeskToolsServiceRegistration = {
   readonly caa_open_path: "/api/caa/dialog/open";
 };
 
-export type DeskToolsInstallationRegistration = {
-  readonly schema_version: 1;
-  readonly product: "phoenix-desk-tools";
-  readonly product_version: string;
-  readonly native_provider_manifest: string;
-  readonly updated_at: string;
-};
-
 export type DeskToolsRegistrationHandle = {
   readonly directory: string;
   readonly servicePath: string;
-  readonly installationPath?: string;
   readonly service: DeskToolsServiceRegistration;
   dispose(): void;
 };
@@ -99,21 +90,6 @@ function atomicWriteJson(filePath: string, value: unknown): void {
   }
 }
 
-function nativeProviderManifest(env: NodeJS.ProcessEnv): string {
-  const explicit = String(env.PHOENIX_NATIVE_PROVIDER_MANIFEST || "").trim();
-  const resources = String(env.PHOENIX_RESOURCES_DIR || "").trim();
-  const repo = String(env.PHOENIX_REPO_ROOT || "").trim();
-  const candidates = [
-    explicit,
-    resources ? path.join(resources, "native-provider.json") : "",
-    resources ? path.join(resources, "runtime", "native-provider.json") : "",
-    repo ? path.join(repo, "src-tauri", "resources", "runtime", "native-provider.json") : "",
-  ].filter(Boolean);
-  return candidates.find((candidate) => {
-    try { return fs.statSync(candidate).isFile(); } catch { return false; }
-  }) ?? "";
-}
-
 function removeOwnedServiceRegistration(filePath: string, instanceId: string): void {
   try {
     const current = JSON.parse(fs.readFileSync(filePath, "utf8")) as { instance_id?: unknown };
@@ -145,24 +121,10 @@ export function registerDeskToolsRuntime(
   };
   atomicWriteJson(servicePath, service);
 
-  const providerManifest = nativeProviderManifest(env);
-  const installationPath = providerManifest ? path.join(directory, "installation.v1.json") : undefined;
-  if (installationPath) {
-    const installation: DeskToolsInstallationRegistration = {
-      schema_version: DESK_TOOLS_SERVICE_SCHEMA_VERSION,
-      product: "phoenix-desk-tools",
-      product_version: String(env.PHOENIX_DESK_TOOLS_VERSION || "0.2.0"),
-      native_provider_manifest: providerManifest,
-      updated_at: now.toISOString(),
-    };
-    atomicWriteJson(installationPath, installation);
-  }
-
   let disposed = false;
   return {
     directory,
     servicePath,
-    installationPath,
     service,
     dispose(): void {
       if (disposed) return;

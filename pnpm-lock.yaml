@@ -32,9 +32,6 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.8
         version: 1.19.14(hono@4.12.27)
-      '@phoenix-wing/cad-contracts':
-        specifier: 0.4.3
-        version: 0.4.3
       '@phoenix-wing/cad-core':
         specifier: 0.4.3
         version: 0.4.3
@@ -63,9 +60,6 @@ importers:
         specifier: ^0.8.59
         version: 0.8.59
     devDependencies:
-      '@phoenix-wing/cad-rust-source':
-        specifier: 0.4.3
-        version: 0.4.3
       '@types/node':
         specifier: ^26.0.1
         version: 26.0.1
@@ -599,14 +593,8 @@ packages:
     resolution: {integrity: sha512-tmmZ3lQxAe/k/+rNnXQRawJ4NjxO2hqiOLTHvWchtGZULp4RyFeh6aU4XdOYBFe2KE1oShQTv4AblOs2iOrNnQ==}
     engines: {node: '>= 10.0.0'}
 
-  '@phoenix-wing/cad-contracts@0.4.3':
-    resolution: {integrity: sha512-JwP94oLqcGQGf+MVZamgceELGtOih9T/6DjH9Svmw2ikJLT2bKh1mskrold0peL9iHOaZSxt2mFkd2zgI1Y0fQ==}
-
   '@phoenix-wing/cad-core@0.4.3':
     resolution: {integrity: sha512-ZUI9irrqcx1ETXvGhiVqddzTO+s+9A+bZXUUOMQHlal0NNFdmy1i8Dwx/4zrWZBE326UgP1x8C5inL3JhnGdig==}
-
-  '@phoenix-wing/cad-rust-source@0.4.3':
-    resolution: {integrity: sha512-tzda55FqEGtBfCNc/reI+p5O8JfbVaCJ7t4OivjBv7u7Ri/p2IRV8U0miq/3HWoTqNYTU8aHnslZfHH1GvlHiQ==}
 
   '@phoenix-wing/code-core@0.4.3':
     resolution: {integrity: sha512-JyzyWlSBQ/lw5f90cyx3cFGxmx62eXwHJHkmmBR24G9ErCrsFZId+188f9rKuy/bc5Lcu11VI2hTB6DDxmtMhQ==}
@@ -1895,11 +1883,7 @@ snapshots:
       '@parcel/watcher-win32-x64': 2.5.6
     optional: true
 
-  '@phoenix-wing/cad-contracts@0.4.3': {}
-
   '@phoenix-wing/cad-core@0.4.3': {}
-
-  '@phoenix-wing/cad-rust-source@0.4.3': {}
 
   '@phoenix-wing/code-core@0.4.3': {}
 

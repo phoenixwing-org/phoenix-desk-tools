@@ -53,7 +53,7 @@ PHOENIX_WING_ROOT=/absolute/path/to/phoenix-wing pnpm dev
 4. Server Vitest 和 esbuild sidecar 使用同一 exports resolver，避免开发、测试、bundle 三套解析规则漂移。
 5. Registry 模式不安装、不 alias，严格使用现有清单与锁文件；日志以 `[Wing][LOCAL]` 或 `[Wing][REGISTRY]` 醒目标明真源。
 
-覆盖范围为 `phoenix-wing` aggregate、`@phoenix-wing/kt-codegen`，以及 Server 的 `code-core`、`cad-contracts`、`cad-core`、`db-node`、`kt-codegen`、`workspace-schema`。`cad-rust-source`、native/Tauri 发布制品仍属于独立消费和发布门禁，不由普通 `pnpm dev` 改写。
+覆盖范围为 `phoenix-wing` aggregate、`@phoenix-wing/kt-codegen`，以及 Server 的 `code-core`、`cad-contracts`、`cad-core`、`db-node`、`kt-codegen`、`workspace-schema`。Desk 当前不再消费 `cad-rust-source`；Tauri 壳与发布制品仍属于独立构建/发布门禁，不由普通 `pnpm dev` 改写。
 
 ## 禁止事项与点检
 

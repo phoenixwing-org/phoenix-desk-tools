@@ -1,4 +1,3 @@
-import { execFile, execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -18,7 +17,10 @@ import {
   loadWorkspaceSection,
   replaceWorkspaceSection,
 } from "./workspacePrefsService.js";
-import { requireNativeTool, resolveNativeTool } from "./nativeToolService.js";
+import {
+  readFcstdEmbeddedBomFields,
+  writeFcstdEmbeddedBomFields,
+} from "./fcstdDocumentXmlService.js";
 
 const DEFAULT_PART_VERSION = "001";
 const DEFAULT_TYPE_CODE = "H";
@@ -212,34 +214,7 @@ function readAssetFromDb(workspaceRoot: string, rel: string): BomAssetRow | null
 }
 
 function readFcstdEmbeddedBom(absPath: string): Partial<BomFields> {
-  const cliRead = resolveNativeTool("fcstd-read");
-  if (!cliRead) return {};
-  try {
-    const out = fs.existsSync(absPath)
-      ? JSON.parse(requireExecFile(cliRead, [absPath]))
-      : null;
-    const mount = out?.objects?.find((o: any) => o?.isValidBomItem);
-    const props = mount?.properties || {};
-    const value = (key: string) => {
-      const raw = props[key];
-      if (typeof raw === "string") return raw;
-      return clean(raw?.String ?? raw?.value ?? "");
-    };
-    return {
-      PartNumber: value("PartNumber"),
-      PartVersion: value("PartVersion"),
-      TypeCode: value("TypeCode"),
-      ModelSeries: value("ModelSeries"),
-      PartName: value("PartName"),
-      label: value("Label") || clean(mount?.label),
-    };
-  } catch {
-    return {};
-  }
-}
-
-function requireExecFile(file: string, args: string[]): string {
-  return execFileSync(file, args, { encoding: "utf8", timeout: 15_000 });
+  return fs.existsSync(absPath) ? readFcstdEmbeddedBomFields(absPath) ?? {} : {};
 }
 
 export const inferBomDocumentKinds = pnwInferBomDocumentKinds;
@@ -306,9 +281,7 @@ export function loadBomPreview(workspaceRoot: string, rel: string): BomPreview {
     rel_path: safeRel,
     fields,
     source_note: isFcstd
-      ? resolveNativeTool("fcstd-read")
-        ? "Loaded from the Node BOM service with embedded FCStd properties."
-        : "fcstd-read is unavailable; loaded from database and filename hints only."
+      ? "Loaded from the TypeScript FCStd reader, database, and filename hints."
       : "Loaded from filename/database hints.",
     abs_path_display: pathDisplay(abs, workspaceRoot),
     is_fcstd: isFcstd,
@@ -435,31 +408,23 @@ export function recommendBomFilename(workspaceRoot: string, rel: string, values:
   };
 }
 
-export function writeBomToFcstd(workspaceRoot: string, rel: string, values: any = {}): Promise<any> {
+export async function writeBomToFcstd(workspaceRoot: string, rel: string, values: any = {}): Promise<any> {
   const { rel: safeRel, abs } = resolveUnderWorkspace(workspaceRoot, rel);
   if (!isFcstdFilename(safeRel)) throw new Error("Only .FCStd files can be written");
   const fields = bodyToFields(safeRel, values);
   const writeValues: Record<string, string> = {};
   for (const key of EDITABLE_KEYS) {
-    const outKey = key === "label" ? "Label" : key;
-    writeValues[outKey] = fields[key] || "";
+    writeValues[key] = fields[key] || "";
   }
-  const args = ["write-bom", abs, ...Object.entries(writeValues).map(([k, v]) => `${k}=${v}`)];
-  const cliRead = requireNativeTool("fcstd-read");
-  return new Promise((resolve, reject) => {
-    execFile(cliRead, args, { timeout: 30_000 }, (err, stdout, stderr) => {
-      if (err) {
-        reject(new Error(stderr || err.message));
-        return;
-      }
-      rememberBomApplyPrefs(workspaceRoot, fields);
-      try {
-        resolve({ ...JSON.parse(stdout || "{}"), status: "ok", rel: safeRel });
-      } catch {
-        resolve({ status: "ok", rel: safeRel, raw: stdout });
-      }
-    });
-  });
+  const result = writeFcstdEmbeddedBomFields(abs, writeValues);
+  rememberBomApplyPrefs(workspaceRoot, fields);
+  return {
+    status: "ok",
+    rel: safeRel,
+    changed: result.changed,
+    object_name: result.objectName,
+    engine: "typescript",
+  };
 }
 
 export function hasUnsavedBomDocumentAttrs(baseline: any = {}, current: any = {}): boolean {
