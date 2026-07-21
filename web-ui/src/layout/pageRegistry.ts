@@ -1,7 +1,13 @@
 import { defineAsyncComponent, type Component } from "vue";
+import { createRetryableSharedLoader } from "./asyncViewSwitch";
+
+const componentPreloads = new Map<Component, () => Promise<unknown>>();
 
 function lazyPage(loader: () => Promise<{ default: Component }>): Component {
-  return defineAsyncComponent({ loader, timeout: 30_000 });
+  const sharedLoader = createRetryableSharedLoader(loader);
+  const component = defineAsyncComponent({ loader: sharedLoader, timeout: 30_000 });
+  componentPreloads.set(component, sharedLoader);
+  return component;
 }
 
 const genericPrimaryBlock = lazyPage(() => import("../components/primary/GenericPagePrimaryBlock.vue"));
@@ -72,3 +78,9 @@ export const PAGE_COMPONENTS: Readonly<Record<string, Component>> = Object.freez
 );
 
 export const PAGE_COMPONENT_IDS: ReadonlySet<string> = new Set(Object.keys(PAGE_CONTRIBUTIONS));
+
+/** 与 Vue 异步组件共享同一个 import Promise；未知页面由同步 Placeholder 处理。 */
+export function preloadPageComponent(pageId: string): Promise<unknown> {
+  const component = PAGE_COMPONENTS[pageId];
+  return component ? componentPreloads.get(component)?.() ?? Promise.resolve() : Promise.resolve();
+}

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch, type Component } from "vue";
+import { computed, onMounted, onUnmounted, ref, shallowRef, watch, type Component } from "vue";
 import AppToolbar from "./AppToolbar.vue";
 import PnwRibbonShell from "phoenix-wing/layout/PnwRibbonShell.vue";
 import RibbonPanel from "./ribbon/RibbonPanel.vue";
@@ -9,8 +9,10 @@ import StatusBar from "./StatusBar.vue";
 import WorkspaceTreeSidebar from "./WorkspaceTreeSidebar.vue";
 import WelcomePage from "../pages/WelcomePage.vue";
 import WorkbenchIdlePage from "../pages/WorkbenchIdlePage.vue";
+import WorkbenchViewLoadingPage from "./WorkbenchViewLoadingPage.vue";
 import PlaceholderPage from "../pages/PlaceholderPage.vue";
-import { PAGE_COMPONENTS } from "./pageRegistry";
+import { PAGE_COMPONENTS, preloadPageComponent } from "./pageRegistry";
+import { createAsyncViewSwitchController } from "./asyncViewSwitch";
 import { isPageSideBlockOpen } from "../composables/usePageSideBlockVisibility";
 import { pnwBindPointerDrag } from "phoenix-wing";
 import { fetchPhoenixDatabaseStatus, recreatePhoenixDatabase } from "../api";
@@ -23,6 +25,7 @@ import GitDiffPreviewHost from "../components/git/GitDiffPreviewHost.vue";
 import CaaRelatedFilePreviewHost from "../components/caa/CaaRelatedFilePreviewHost.vue";
 import AsyncProgressOverlay from "phoenix-wing/components/PnwAsyncProgressOverlay.vue";
 import GlobalWorkbenchBottomPanel from "../components/workbench/GlobalWorkbenchBottomPanel.vue";
+import type { WorkbenchTab } from "../types/workbench";
 
 const shell = provideAppShell();
 const { workspacePath, workspaceShort } = useWorkspaceSwitcher(shell);
@@ -36,6 +39,25 @@ const legacyDbExpectedSchema = ref(13);
 
 const uiPrefs = useUiPrefsStore();
 const activeTab = computed(() => shell.activeTab());
+const displayedTab = shallowRef<WorkbenchTab>();
+const pendingViewLabel = ref("");
+const viewLoadError = ref("");
+
+const viewSwitch = createAsyncViewSwitchController<WorkbenchTab>({
+  load: preloadPageComponent,
+  onState(state) {
+    displayedTab.value = state.displayed;
+    pendingViewLabel.value = state.pending?.title ?? state.pending?.pageId ?? "";
+    viewLoadError.value = state.error;
+  },
+  onError(target, message) {
+    shell.appendLog(`[Workbench][View] ${target.pageId} 加载失败：${message}`, { source: "workbench" });
+  },
+});
+
+watch(activeTab, (tab) => {
+  void viewSwitch.select(tab);
+}, { immediate: true });
 
 const isWelcomeFullscreen = computed(() => shell.currentPage.value === "welcome");
 
@@ -121,6 +143,10 @@ function onRibbonOpen(pageId: string) {
   shell.goToPage(pageId);
 }
 
+function retryActiveView(): void {
+  void viewSwitch.select(activeTab.value);
+}
+
 function onResizeStart(e: PointerEvent, side: "left" | "right") {
   const widthKey = side === "left" ? "left_panel_width_px" : "right_panel_width_px";
   const startX = e.clientX;
@@ -185,6 +211,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  viewSwitch.cancel();
   for (const tab of shell.tabs.value) {
     shell.registerPageMessages(tab.id, null);
   }
@@ -243,13 +270,27 @@ onUnmounted(() => {
           <WelcomePage v-if="isWelcomeFullscreen" />
           <KeepAlive v-else :max="24">
             <component
-              v-if="activeTab"
-              :key="activeTab.id"
-              :is="pageComponent(activeTab.pageId)"
-              :workbench-tab-id="activeTab.id"
+              v-if="displayedTab"
+              :key="displayedTab.id"
+              :is="pageComponent(displayedTab.pageId)"
+              :workbench-tab-id="displayedTab.id"
+            />
+            <WorkbenchViewLoadingPage
+              v-else-if="activeTab"
+              key="workbench-view-loading"
+              :label="pendingViewLabel || activeTab.title"
+              :error="viewLoadError"
+              @retry="retryActiveView"
             />
             <WorkbenchIdlePage v-else key="workbench-idle" />
           </KeepAlive>
+          <div v-if="pendingViewLabel && displayedTab" class="view-switch-indicator" role="status">
+            正在准备 {{ pendingViewLabel }}…
+          </div>
+          <div v-if="viewLoadError && displayedTab" class="view-switch-error" role="alert">
+            <span>View 加载失败：{{ viewLoadError }}</span>
+            <button type="button" @click="retryActiveView">重试</button>
+          </div>
         </div>
         <GlobalWorkbenchBottomPanel v-if="!isWelcomeFullscreen" />
       </main>
@@ -388,6 +429,39 @@ onUnmounted(() => {
   min-height: 0;
   overflow: hidden;
   position: relative;
+  background: var(--page-bg);
+}
+
+.view-switch-indicator,
+.view-switch-error {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(520px, calc(100% - 24px));
+  padding: 6px 10px;
+  border: 1px solid var(--phoenix-border);
+  border-radius: var(--phoenix-radius-sm);
+  background: var(--phoenix-bg-elevated);
+  box-shadow: var(--phoenix-shadow-sm);
+  color: var(--phoenix-text-muted);
+  font-size: 12px;
+}
+
+.view-switch-error {
+  border-color: var(--phoenix-warning-border);
+  color: var(--phoenix-warning-text);
+}
+
+.view-switch-error button {
+  padding: 2px 8px;
+  border: 1px solid currentColor;
+  border-radius: var(--phoenix-radius-sm);
+  background: transparent;
+  color: inherit;
 }
 
 .shell-pages :deep(> .page),

@@ -18,12 +18,17 @@ export function runtimeResourcesDir(env: NodeJS.ProcessEnv = process.env): strin
   return envPath(env.PHOENIX_RESOURCES_DIR);
 }
 
+/** Centralized host home lookup for platform-standard paths outside Phoenix's writable runtime data. */
+export function runtimeHomeDirectory(): string {
+  return os.homedir();
+}
+
 export function runtimeUserDataDir(env: NodeJS.ProcessEnv = process.env): string {
-  return envPath(env.PHOENIX_USER_DATA_DIR) || path.join(os.homedir(), ".phoenix");
+  return envPath(env.PHOENIX_USER_DATA_DIR) || path.join(runtimeHomeDirectory(), ".phoenix");
 }
 
 export function legacyRuntimeUserDataDir(env: NodeJS.ProcessEnv = process.env): string {
-  return envPath(env.PHOENIX_LEGACY_USER_DATA_DIR) || path.join(os.homedir(), ".phoenix");
+  return envPath(env.PHOENIX_LEGACY_USER_DATA_DIR) || path.join(runtimeHomeDirectory(), ".phoenix");
 }
 
 export function runtimeIsPackaged(env: NodeJS.ProcessEnv = process.env): boolean {

@@ -56,7 +56,7 @@ const recentEntries = computed(
 );
 const webRunning = ref(false);
 const desktopRuntime = isTauriRuntime();
-const webUrl = ref(apiOrigin() || "http://127.0.0.1:5180");
+const webUrl = ref(apiOrigin() || "http://127.0.0.1:48375");
 const nativeTools = ref<NativeToolStatusPayload | null>(null);
 const nativeToolsLoading = ref(false);
 const defaultFreecadDir = computed(() => launcher.value?.default_freecad_dir ?? "");
@@ -532,7 +532,7 @@ const navItems = () =>
         </el-button>
         <el-button @click="refreshWebStatus">刷新状态</el-button>
       </div>
-      <p class="hint">{{ desktopRuntime ? "退出时会同步回收桌面壳启动的后端进程。" : "关闭后释放 5180 端口；Vite 开发页面仍会保留。" }}</p>
+      <p class="hint">{{ desktopRuntime ? "退出时会同步回收桌面壳启动的后端进程。" : "关闭后释放当前本地 API 端口；Vite 开发页面仍会保留。" }}</p>
     </section>
 
     <section class="section">

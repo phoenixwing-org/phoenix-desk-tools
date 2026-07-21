@@ -1,7 +1,7 @@
 use serde::Serialize;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
-use std::net::{SocketAddr, TcpStream};
+use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 #[cfg(any(debug_assertions, test))]
 use std::path::Path;
 use std::path::PathBuf;
@@ -12,13 +12,26 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager, RunEvent};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
-const SERVER_ADDR: &str = "127.0.0.1:5180";
+const SERVER_PREFERRED_PORT: u16 = 48_375;
+const SERVER_PORT_ATTEMPTS: u16 = 32;
 const SERVER_PROTOCOL_VERSION: u64 = 1;
 const SERVER_START_TIMEOUT: Duration = Duration::from_secs(20);
 
-#[derive(Default)]
 struct ManagedServer {
     child: Mutex<Option<Child>>,
+    address: Mutex<SocketAddr>,
+}
+
+impl Default for ManagedServer {
+    fn default() -> Self {
+        Self {
+            child: Mutex::new(None),
+            address: Mutex::new(SocketAddr::from((
+                Ipv4Addr::LOCALHOST,
+                SERVER_PREFERRED_PORT,
+            ))),
+        }
+    }
 }
 
 impl Drop for ManagedServer {
@@ -41,6 +54,11 @@ struct DirectoryPickResponse {
 #[derive(Serialize)]
 struct ShutdownResponse {
     status: &'static str,
+}
+
+#[derive(Serialize)]
+struct RuntimeInfoResponse {
+    api_origin: String,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -95,8 +113,7 @@ fn parse_caa_dialog_launch_args(args: &[String], cwd: &str) -> Option<CaaDialogL
     })
 }
 
-fn http_request(request: &[u8]) -> std::io::Result<String> {
-    let address: SocketAddr = SERVER_ADDR.parse().expect("valid Phoenix server address");
+fn http_request(address: SocketAddr, request: &[u8]) -> std::io::Result<String> {
     let mut stream = TcpStream::connect_timeout(&address, Duration::from_millis(300))?;
     stream.set_read_timeout(Some(Duration::from_millis(500)))?;
     stream.set_write_timeout(Some(Duration::from_millis(500)))?;
@@ -106,7 +123,11 @@ fn http_request(request: &[u8]) -> std::io::Result<String> {
     Ok(response)
 }
 
-fn dispatch_caa_dialog_launch_args(args: &[String], cwd: &str) -> Result<bool, String> {
+fn dispatch_caa_dialog_launch_args(
+    address: SocketAddr,
+    args: &[String],
+    cwd: &str,
+) -> Result<bool, String> {
     let Some(request) = parse_caa_dialog_launch_args(args, cwd) else {
         return Ok(false);
     };
@@ -116,12 +137,12 @@ fn dispatch_caa_dialog_launch_args(args: &[String], cwd: &str) -> Result<bool, S
     }))
     .map_err(|error| error.to_string())?;
     let header = format!(
-        "POST /api/caa/dialog/open HTTP/1.1\r\nHost: 127.0.0.1:5180\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        body.len()
+        "POST /api/caa/dialog/open HTTP/1.1\r\nHost: {address}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len(),
     );
     let mut wire = header.into_bytes();
     wire.extend_from_slice(&body);
-    let response = http_request(&wire).map_err(|error| error.to_string())?;
+    let response = http_request(address, &wire).map_err(|error| error.to_string())?;
     if response.starts_with("HTTP/1.1 202") || response.starts_with("HTTP/1.0 202") {
         Ok(true)
     } else {
@@ -133,10 +154,10 @@ fn dispatch_caa_dialog_launch_args(args: &[String], cwd: &str) -> Result<bool, S
     }
 }
 
-fn phoenix_server_healthy() -> bool {
-    let response = match http_request(
-        b"GET /api/health HTTP/1.1\r\nHost: 127.0.0.1:5180\r\nConnection: close\r\n\r\n",
-    ) {
+fn phoenix_server_healthy(address: SocketAddr) -> bool {
+    let request =
+        format!("GET /api/health HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n\r\n");
+    let response = match http_request(address, request.as_bytes()) {
         Ok(response) => response,
         Err(_) => return false,
     };
@@ -156,6 +177,37 @@ fn phoenix_server_healthy() -> bool {
             .get("protocol_version")
             .and_then(|value| value.as_u64())
             == Some(SERVER_PROTOCOL_VERSION)
+}
+
+fn select_available_server_address() -> Result<SocketAddr, String> {
+    for offset in 0..SERVER_PORT_ATTEMPTS {
+        let address = SocketAddr::from((Ipv4Addr::LOCALHOST, SERVER_PREFERRED_PORT + offset));
+        if let Ok(listener) = TcpListener::bind(address) {
+            drop(listener);
+            return Ok(address);
+        }
+    }
+    Err(format!(
+        "No local API port is available in {}..{}",
+        SERVER_PREFERRED_PORT,
+        SERVER_PREFERRED_PORT + SERVER_PORT_ATTEMPTS - 1,
+    ))
+}
+
+fn managed_server_address(app: &AppHandle) -> Result<SocketAddr, String> {
+    app.state::<ManagedServer>()
+        .address
+        .lock()
+        .map(|address| *address)
+        .map_err(|_| "Phoenix server address lock is poisoned".to_string())
+}
+
+fn set_managed_server_address(app: &AppHandle, address: SocketAddr) -> Result<(), String> {
+    *app.state::<ManagedServer>()
+        .address
+        .lock()
+        .map_err(|_| "Phoenix server address lock is poisoned".to_string())? = address;
+    Ok(())
 }
 
 #[cfg(any(debug_assertions, test))]
@@ -194,7 +246,7 @@ fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 #[cfg(debug_assertions)]
-fn backend_command(_app: &AppHandle) -> Result<Command, String> {
+fn backend_command(_app: &AppHandle, port: u16) -> Result<Command, String> {
     let root = repo_root();
     let node = std::env::var_os("PHOENIX_NODE_BINARY").unwrap_or_else(|| "node".into());
     let tsx = root.join("server/node_modules/tsx/dist/cli.mjs");
@@ -207,13 +259,13 @@ fn backend_command(_app: &AppHandle) -> Result<Command, String> {
         .arg(tsx)
         .arg(entry)
         .current_dir(&root)
-        .env("CAA_SERVER_PORT", "5180")
+        .env("CAA_SERVER_PORT", port.to_string())
         .env("PHOENIX_REPO_ROOT", &root);
     Ok(command)
 }
 
 #[cfg(not(debug_assertions))]
-fn backend_command(app: &AppHandle) -> Result<Command, String> {
+fn backend_command(app: &AppHandle, port: u16) -> Result<Command, String> {
     let resources = app
         .path()
         .resource_dir()
@@ -236,7 +288,7 @@ fn backend_command(app: &AppHandle) -> Result<Command, String> {
     command
         .arg(entry)
         .current_dir(&resources)
-        .env("CAA_SERVER_PORT", "5180")
+        .env("CAA_SERVER_PORT", port.to_string())
         .env("PHOENIX_PACKAGED", "1")
         .env("PHOENIX_REPO_ROOT", &resources)
         .env("PHOENIX_RESOURCES_DIR", &resources)
@@ -251,21 +303,25 @@ fn backend_command(app: &AppHandle) -> Result<Command, String> {
 }
 
 fn start_managed_server(app: &AppHandle) -> Result<(), String> {
-    if phoenix_server_healthy() {
+    let preferred = SocketAddr::from((Ipv4Addr::LOCALHOST, SERVER_PREFERRED_PORT));
+    if phoenix_server_healthy(preferred) {
         #[cfg(debug_assertions)]
         {
-            eprintln!("[tauri] using existing Phoenix server at http://{SERVER_ADDR}");
+            set_managed_server_address(app, preferred)?;
+            eprintln!("[tauri] using existing Phoenix server at http://{preferred}");
             return Ok(());
         }
         #[cfg(not(debug_assertions))]
         {
             return Err(format!(
-                "Phoenix server port {SERVER_ADDR} is already in use. Stop pnpm dev or another Phoenix instance, then start the desktop app again."
+                "Phoenix server at {preferred} is already running. Stop pnpm dev or another Phoenix instance, then start the desktop app again."
             ));
         }
     }
 
-    let mut command = backend_command(app)?;
+    let address = select_available_server_address()?;
+    set_managed_server_address(app, address)?;
+    let mut command = backend_command(app, address.port())?;
     command.stdin(Stdio::null());
     if cfg!(debug_assertions) {
         command.stdout(Stdio::inherit()).stderr(Stdio::inherit());
@@ -297,8 +353,8 @@ fn start_managed_server(app: &AppHandle) -> Result<(), String> {
 
     let deadline = Instant::now() + SERVER_START_TIMEOUT;
     while Instant::now() < deadline {
-        if phoenix_server_healthy() {
-            eprintln!("[tauri] Phoenix server ready at http://{SERVER_ADDR}");
+        if phoenix_server_healthy(address) {
+            eprintln!("[tauri] Phoenix server ready at http://{address}");
             return Ok(());
         }
         {
@@ -321,7 +377,7 @@ fn start_managed_server(app: &AppHandle) -> Result<(), String> {
 
     stop_managed_server(app);
     Err(format!(
-        "Phoenix Node service did not become healthy at http://{SERVER_ADDR} within {} seconds",
+        "Phoenix Node service did not become healthy at http://{address} within {} seconds",
         SERVER_START_TIMEOUT.as_secs()
     ))
 }
@@ -336,9 +392,12 @@ fn stop_managed_server(app: &AppHandle) {
         return;
     };
 
-    let _ = http_request(
-        b"POST /api/shutdown HTTP/1.1\r\nHost: 127.0.0.1:5180\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
+    let address = managed_server_address(app)
+        .unwrap_or_else(|_| SocketAddr::from((Ipv4Addr::LOCALHOST, SERVER_PREFERRED_PORT)));
+    let request = format!(
+        "POST /api/shutdown HTTP/1.1\r\nHost: {address}\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{{}}"
     );
+    let _ = http_request(address, request.as_bytes());
     let deadline = Instant::now() + Duration::from_secs(2);
     while Instant::now() < deadline {
         match child.try_wait() {
@@ -395,6 +454,14 @@ fn shutdown_desktop(app: AppHandle) -> ShutdownResponse {
     ShutdownResponse { status: "stopping" }
 }
 
+#[tauri::command]
+fn get_runtime_info(app: AppHandle) -> Result<RuntimeInfoResponse, String> {
+    let address = managed_server_address(&app)?;
+    Ok(RuntimeInfoResponse {
+        api_origin: format!("http://{address}"),
+    })
+}
+
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
@@ -403,7 +470,9 @@ pub fn run() {
                 let _ = window.show();
                 let _ = window.set_focus();
             }
-            if let Err(error) = dispatch_caa_dialog_launch_args(&args, &cwd) {
+            let address = managed_server_address(app)
+                .unwrap_or_else(|_| SocketAddr::from((Ipv4Addr::LOCALHOST, SERVER_PREFERRED_PORT)));
+            if let Err(error) = dispatch_caa_dialog_launch_args(address, &args, &cwd) {
                 eprintln!("[tauri] cannot dispatch CATDlg open request: {error}");
             }
         }))
@@ -412,7 +481,8 @@ pub fn run() {
         .manage(ManagedServer::default())
         .invoke_handler(tauri::generate_handler![
             pick_workspace_directory,
-            shutdown_desktop
+            shutdown_desktop,
+            get_runtime_info
         ])
         .setup(|app| {
             if let Err(error) = start_managed_server(app.handle()) {
@@ -433,7 +503,8 @@ pub fn run() {
                 .unwrap_or_default()
                 .to_string_lossy()
                 .into_owned();
-            if let Err(error) = dispatch_caa_dialog_launch_args(&args, &cwd) {
+            let address = managed_server_address(app.handle())?;
+            if let Err(error) = dispatch_caa_dialog_launch_args(address, &args, &cwd) {
                 eprintln!("[tauri] cannot dispatch startup CATDlg open request: {error}");
             }
             Ok(())

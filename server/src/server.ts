@@ -1,10 +1,13 @@
-import { serve } from "@hono/node-server";
+import { createAdaptorServer, type ServerType } from "@hono/node-server";
 import { refreshRuntimeCatalog } from "./routes/unit-tests.js";
 import { setShellShutdownHandler } from "./routes/shell.js";
 import { createPhoenixServerApp } from "./serverApp.js";
 import { migrateLegacyRuntimeUserData } from "./lib/appRuntimePaths.js";
+import {
+  deskToolsPortCandidates,
+  registerDeskToolsRuntime,
+} from "./lib/deskToolsRegistration.js";
 
-const port = Number(process.env.CAA_SERVER_PORT || 5180);
 const wingMode = process.env.PHOENIX_WING_MODE === "local" ? "LOCAL" : "REGISTRY";
 const wingSource = wingMode === "LOCAL"
   ? process.env.PHOENIX_WING_ROOT
@@ -25,12 +28,60 @@ const app = createPhoenixServerApp();
 // 启动检查
 refreshRuntimeCatalog();
 
-const server = serve({ fetch: app.fetch, port, hostname: "127.0.0.1" }, (info) => {
-  console.log(`Phoenix server http://127.0.0.1:${info.port}`);
-  console.log(`  /api/caa/*  CAA 对话`);
-  console.log(`  /api/cad/*  CAD 工具 (Node/Rust)`);
+async function listen(server: ServerType, port: number): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const onError = (error: Error): void => {
+      server.off("listening", onListening);
+      reject(error);
+    };
+    const onListening = (): void => {
+      server.off("error", onError);
+      const address = server.address();
+      if (!address || typeof address === "string") reject(new Error("Phoenix server 未返回 TCP 监听地址"));
+      else resolve(address.port);
+    };
+    server.once("error", onError);
+    server.once("listening", onListening);
+    server.listen(port, "127.0.0.1");
+  });
+}
+
+async function startServer(): Promise<{ readonly server: ServerType; readonly port: number }> {
+  const candidates = deskToolsPortCandidates();
+  let lastError: unknown;
+  for (const port of candidates.ports) {
+    const server = createAdaptorServer({ fetch: app.fetch, hostname: "127.0.0.1" });
+    try {
+      return { server, port: await listen(server, port) };
+    } catch (error) {
+      lastError = error;
+      const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+      try { server.close(); } catch { /* it never reached the listening state */ }
+      if (code !== "EADDRINUSE" || candidates.strict) throw error;
+    }
+  }
+  throw new Error(`Desk Tools 本地 API 在候选端口范围内均无法启动：${lastError instanceof Error ? lastError.message : String(lastError)}`);
+}
+
+const { server, port } = await startServer();
+const registration = registerDeskToolsRuntime(port);
+console.log(`Phoenix server http://127.0.0.1:${port}`);
+console.log(`  /api/caa/*  CAA 对话`);
+console.log(`  /api/cad/*  CAD 工具 (Node/Rust)`);
+console.log(`  service registration ${registration.servicePath}`);
+
+const disposeRegistration = (): void => registration.dispose();
+process.once("exit", disposeRegistration);
+process.once("SIGINT", () => {
+  disposeRegistration();
+  server.close(() => process.exit(0));
+});
+process.once("SIGTERM", () => {
+  disposeRegistration();
+  server.close(() => process.exit(0));
 });
 
 setShellShutdownHandler(() => {
+  disposeRegistration();
   server.close();
 });

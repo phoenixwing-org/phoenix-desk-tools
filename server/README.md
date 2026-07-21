@@ -1,14 +1,14 @@
 # Desk Tools Node/Hono 服务
 
-当前本地 API 真源，默认监听 `http://127.0.0.1:5180`。服务承载 shell、Code、CAD、CAA route；FreeCADCmd、SolidWorks COM 和 Wing Rust CLI 是受控外部引擎 adapter，不是第二个 HTTP 后端。
+当前本地 API 真源首选监听 `http://127.0.0.1:48375`；端口占用时依次尝试后续 31 个端口。实际端口原子写入当前用户平台标准配置目录中的 `phoenix-wing/phoenix/services/desk-tools/service.v1.json`，供 Auto Code 等本机客户端发现。服务承载 shell、Code、CAD、CAA route；FreeCADCmd、SolidWorks COM 和 Wing Rust CLI 是受控外部引擎 adapter，不是第二个 HTTP 后端。
 
 ## 开发
 
 ```bash
 # 仓库根目录
 pnpm install --frozen-lockfile
-pnpm dev:server              # 仅 Node/Hono :5180
-pnpm dev                     # Node/Hono :5180 + Vite :5173
+pnpm dev:server              # 仅 Node/Hono，首选 :48375
+pnpm dev                     # Node/Hono 动态端口 + Vite :5173
 ```
 
 Tauri 开发使用根目录 `pnpm tauri:dev`；Tauri 会准备自己的前端和 packaged runtime，不要同时运行 `pnpm dev`。

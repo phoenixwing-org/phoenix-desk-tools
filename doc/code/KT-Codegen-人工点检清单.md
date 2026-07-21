@@ -93,6 +93,7 @@ git rev-parse HEAD
 - [ ] Prefix、Middle、Namespace、Append 显示当前配置真实值
 - [ ] 修改任一活动文档属性后立即出现 dirty 标记，Header 类名摘要同步变化
 - [ ] Wing 参数表显示正确列、行数和已有内容，横向或纵向内容可滚动查看
+- [ ] 参数表采用中央 View 自然高度；点击 Table Header 折叠/展开不会丢失表格数据或 dirty 状态
 - [ ] 修改任一表格单元格后立即出现 dirty 标记，旧预检同时失效
 - [ ] 连续修改多个单元格时，每次修改都进入当前草稿，不只记录第一次变化
 - [ ] 控制符标题显示 `已选数量 / 32`，列表内部有垂直滚动条
@@ -112,7 +113,9 @@ git rev-parse HEAD
 - [ ] `START KEVIN CAA WIZARD SECTION` / `END KEVIN CAA WIZARD SECTION` 本身不会被误当成 Block 名
 - [ ] 32 项之外但正确成对的旧辅助 Marker 保持原样，不产生伪 `marker.unknown-block` 诊断
 - [ ] 只有目标生成 Block 进入 Plan；不同 Block 的区分词不会互相串配
-- [ ] 删除一个 END 或改错类标识后，“问题”出现明确 error/warning，Apply 安全门禁关闭
+- [ ] 只有损坏 Marker、没有任何完整 Region/Artifact 时，Apply 安全门禁关闭
+- [ ] 在同一文件前部删除一个 END、后部保留完整区域时，状态显示“可安全局部 Apply”
+- [ ] 执行安全局部 Apply 后，损坏区字节保持原样，只有后部完整区域被写回
 - [ ] 恢复正确 END 后重新预检，旧错误消失且区域重新可 Apply
 - [ ] Reader 兼容诊断同时能在配置行和“问题”页签中看到
 
@@ -127,8 +130,9 @@ git rev-parse HEAD
 - [ ] Artifact 列表、当前源码、Wing 生成候选三个小区域均有自己的滚动能力
 - [ ] 当前源码显示正确文件、行号、编码和 LF/CRLF
 - [ ] “可 Apply”时区域数、产物数和计划指纹可见
-- [ ] 有诊断或扫描不完整时显示“安全门禁未通过”，不伪装成可 Apply
+- [ ] 扫描不完整或不可恢复错误显示“安全门禁未通过”；已隔离 Marker 错误显示“可安全局部 Apply”
 - [ ] “问题”按 error/warning/info 显示级别、代码、消息、来源和路径位置
+- [ ] Marker 问题额外显示 Wing 结构化 Block 标题、START/END、类身份和可用的截断边界，不依赖 message 文案
 - [ ] 点击带源码行位置的问题后自动切到“预检”，定位到正确文件和行
 - [ ] 定位行使用黄色背景和左侧黄色标识；不是普通蓝色选中态
 - [ ] 没有可定位源码位置的问题不可点击，不会打开错误文件
@@ -172,6 +176,7 @@ git diff -- path/to/target.cpp
 - [ ] 没有手工预检时直接点击“Apply 源码”，会先自动预检再决定是否写盘
 - [ ] 有旧预检时点击 Apply 仍强制重跑当前 Param、Table、Block 和源码的预检
 - [ ] Apply 只写入与 Artifact 唯一匹配的 Marker 区域
+- [ ] 安全局部 Apply 只写入 Wing 已隔离出的完整 Region，缺失/孤立 Marker 对应源码保持不变
 - [ ] 同文件多个区域均写入正确位置，后一个区域没有因前一个替换发生偏移
 - [ ] UTF-8/LF 文件写回后仍为 UTF-8/LF
 - [ ] UTF-8 BOM 文件写回后仍保留 BOM

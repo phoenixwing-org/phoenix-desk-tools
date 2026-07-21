@@ -12,7 +12,7 @@
     "dev": "node scripts/run-with-phoenix-wing.mjs local -- pnpm run dev:services",
     "dev:local-wing": "node scripts/run-with-phoenix-wing.mjs local -- pnpm run dev:services",
     "dev:registry": "node scripts/run-with-phoenix-wing.mjs registry -- pnpm run dev:services",
-    "dev:services": "concurrently -n server,ui -c green,blue \"pnpm dev:server\" \"pnpm dev:ui\"",
+    "dev:services": "node scripts/run-dev-services.mjs",
     "dev:ui": "pnpm -C web-ui dev",
     "dev:server": "pnpm -C server dev",
     "build": "pnpm -C web-ui build",

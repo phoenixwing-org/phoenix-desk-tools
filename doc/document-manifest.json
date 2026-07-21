@@ -521,6 +521,13 @@
       "lastVerified": "2026-07-17"
     },
     {
+      "path": "doc/code/KT-Codegen-Wing0.4.3-VSCode收敛执行计划.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.2.x",
+      "lastVerified": "2026-07-17"
+    },
+    {
       "path": "doc/phoenix-wing升级计划.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
@@ -740,6 +747,13 @@
     },
     {
       "path": "doc/platform/Web壳层-页面属性面板.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.2.x",
+      "lastVerified": "2026-07-17"
+    },
+    {
+      "path": "doc/platform/Web壳层-异步View首开闪烁整改计划.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",

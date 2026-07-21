@@ -9,6 +9,7 @@ import {
 } from "@phoenix-wing/kt-codegen";
 import { useAppShell } from "../../composables/useAppShell";
 import { useKtCodegenStore } from "../../stores/ktCodegen";
+import { deriveKtCodegenPlanPresentation } from "../../models/ktCodegenPlanPresentation";
 import type { PageSideBlockHostProps } from "../../layout/pageRegistry";
 import {
   enterKtCodegenSingleMode,
@@ -84,6 +85,7 @@ const filteredSourceCandidates = computed(() => {
   if (!query) return candidates;
   return candidates.filter((candidate) => candidate.path.toLocaleLowerCase().includes(query));
 });
+const planPresentation = computed(() => deriveKtCodegenPlanPresentation(preflight.value));
 
 function isSelected(key: KtCodegenBlockKey): boolean {
   return selectedSet.value.has(key);
@@ -338,13 +340,16 @@ onUnmounted(() => {
           <span v-if="preflight.source_cache_hits"> · 源文件缓存 {{ preflight.source_cache_hits }}</span>
           <span v-if="preflight.source_scan_byte_limit_reached"> · 快照达 64 MiB</span>
           <span v-else-if="preflight.source_scan_truncated"> · 扫描达 5000 文件</span>
-          <span v-if="!preflight.safe_to_apply"> · 安全门禁未通过</span>
+          <span> · {{ planPresentation.label }}</span>
         </div>
         <p v-if="preflight.source_scan_truncated" class="apply-gate-warning" role="alert">
           源码扫描不完整，Apply 已关闭。请在 Code Ignore 中排除无关目录后重新预检。
         </p>
-        <p v-else-if="!preflight.plan.canApply" class="apply-gate-warning" role="alert">
-          Wing 计划未通过 Apply 校验；请先处理预检诊断。
+        <p v-else-if="planPresentation.partial" class="partial-apply-note" role="status">
+          损坏 Marker 已由 Wing 隔离；Apply 只写回下列完整区域，问题仍保留供定位。
+        </p>
+        <p v-else-if="!preflight.safe_to_apply" class="apply-gate-warning" role="alert">
+          安全 Apply 门禁未通过；请先处理预检诊断。
         </p>
         <div class="section-item-list region-list" aria-label="预检命中列表">
           <button
@@ -566,6 +571,15 @@ button:disabled { opacity: 0.5; cursor: default; }
   color: #b45309;
   background: color-mix(in srgb, #f59e0b 9%, transparent);
   border-top: 1px solid color-mix(in srgb, #f59e0b 30%, var(--border));
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+.partial-apply-note {
+  margin: 0;
+  padding: 7px 9px;
+  color: #166534;
+  background: color-mix(in srgb, #22c55e 9%, transparent);
+  border-top: 1px solid color-mix(in srgb, #22c55e 30%, var(--border));
   font-size: 0.68rem;
   line-height: 1.4;
 }

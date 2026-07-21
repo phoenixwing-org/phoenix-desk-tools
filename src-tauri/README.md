@@ -12,4 +12,4 @@ pnpm tauri:build
 
 `pnpm tauri:build` is intentionally strict: `pnpm build:native`, the server bundle smoke test, and runtime resource staging must all succeed before packaging starts.
 
-Release gates use `pnpm verify:tauri-release:macos` on macOS and `pnpm verify:tauri-release:windows` on Windows. Both launch the real packaged application with an absolute, temporary `PHOENIX_TAURI_USER_DATA_DIR`, exercise Codegen and FCStd through the packaged sidecar, close the application normally, and verify that port 5180 is released. The Windows gate additionally installs and uninstalls the current NSIS and validates its registration.
+Release gates use `pnpm verify:tauri-release:macos` on macOS and `pnpm verify:tauri-release:windows` on Windows. Both launch the real packaged application with an absolute, temporary `PHOENIX_TAURI_USER_DATA_DIR`, discover the actual local API port from `service.v1.json`, exercise Codegen and FCStd through the packaged sidecar, close the application normally, and verify that the selected port is released. The Windows gate additionally installs and uninstalls the current NSIS and validates its registration.

@@ -20,7 +20,7 @@ function input(patch: Partial<KtCodegenPageParamInput> = {}): KtCodegenPageParam
     selectedBlockCount: 2,
     totalBlockCount: 32,
     preflighting: false,
-    preflight: { safeToApply: true, regionCount: 2, artifactCount: 2, diagnosticCount: 0 },
+    preflight: { safeToApply: true, planCanApply: true, regionCount: 2, artifactCount: 2, diagnosticCount: 0 },
     applying: false,
     lastApply: { fileCount: 1, regionCount: 2 },
     ...patch,
@@ -63,6 +63,15 @@ describe("KtCodegen Page Param / PropertySchema", () => {
     expect(deriveKtCodegenPageView(createKtCodegenPageParam(input({
       hasExternalChange: true,
     }))).documentState).toBe("磁盘已变化");
+    expect(deriveKtCodegenPageView(createKtCodegenPageParam(input({
+      preflight: {
+        safeToApply: true,
+        planCanApply: false,
+        regionCount: 1,
+        artifactCount: 1,
+        diagnosticCount: 1,
+      },
+    }))).preflightState).toBe("可安全局部 Apply");
   });
 
   it("represents an unopened page and normalizes invalid counters", () => {

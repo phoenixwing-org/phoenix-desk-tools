@@ -578,6 +578,88 @@ describe("ktCodegenService", () => {
     });
   });
 
+  it.each([
+    {
+      name: "缺失 END",
+      diagnosticCode: "marker.missing-end",
+      markerKind: "start" as const,
+      boundary: { kind: "start", line: 3 } as const,
+      preservedText: "double keepBrokenStartBody;",
+      damaged: [
+        "// START KEVIN CAA WIZARD SECTION KtWidgetBase PARAM DECLARATION",
+        "double keepBrokenStartBody;",
+      ],
+    },
+    {
+      name: "孤立 END",
+      diagnosticCode: "marker.orphan-end",
+      markerKind: "end" as const,
+      boundary: null,
+      preservedText: "double keepOrphanEndBody;",
+      damaged: [
+        "double keepOrphanEndBody;",
+        "// END KEVIN CAA WIZARD SECTION KtWidgetBase PARAM DECLARATION",
+      ],
+    },
+  ])("$name 只隔离损坏区并安全 Apply 后续完整区域", async ({
+    diagnosticCode,
+    markerKind,
+    boundary,
+    preservedText,
+    damaged,
+  }) => {
+    const workspace = makeTempRoot("kt-codegen-service-partial-");
+    const prefsDir = makeTempRoot("kt-codegen-prefs-");
+    const filename = path.join(workspace, "Widget.h");
+    const source = [
+      ...damaged,
+      "// START KEVIN CAA WIZARD SECTION KtWidgetBase PARAM DECLARATION",
+      "double replaceValidRegion;",
+      "// END KEVIN CAA WIZARD SECTION KtWidgetBase PARAM DECLARATION",
+      "",
+    ].join("\n");
+    fs.writeFileSync(filename, source, "utf8");
+
+    const preflight = preflightKtCodegen(workspace, {
+      param: sampleParam(),
+      block_keys: ["PARAM DECLARATION"],
+    }, prefsDir);
+
+    expect(preflight.plan.canApply).toBe(false);
+    const diagnostic = preflight.plan.diagnostics.find((item) => item.code === diagnosticCode);
+    expect(diagnostic).toMatchObject({
+      code: diagnosticCode,
+      severity: "error",
+      marker: {
+        kind: markerKind,
+        classId: "KtWidgetBase",
+        blockKey: "PARAM DECLARATION",
+      },
+    });
+    if (boundary) expect(diagnostic?.marker?.boundary).toEqual(boundary);
+    expect(preflight.plan.markerRegions).toHaveLength(1);
+    expect(preflight.plan.artifacts).toHaveLength(1);
+    expect(preflight.safe_to_apply).toBe(true);
+
+    const applied = await applyKtCodegen(workspace, {
+      param: sampleParam(),
+      block_keys: ["PARAM DECLARATION"],
+      expected_plan_fingerprint: preflight.plan_fingerprint,
+    }, prefsDir);
+    const changed = fs.readFileSync(filename, "utf8");
+
+    expect(applied).toMatchObject({ region_count: 1, verified: true });
+    expect(applied.diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: diagnosticCode,
+        marker: expect.objectContaining({ kind: markerKind }),
+      }),
+    ]));
+    expect(changed).toContain(preservedText);
+    expect(changed).not.toContain("double replaceValidRegion;");
+    expect(changed).toContain(preflight.plan.artifacts[0]!.content.trim());
+  });
+
   it("does not overwrite a source that changes at the final Apply checkpoint", async () => {
     const workspace = makeTempRoot("kt-codegen-service-");
     const prefsDir = makeTempRoot("kt-codegen-prefs-");

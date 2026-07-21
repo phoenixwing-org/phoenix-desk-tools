@@ -4,7 +4,7 @@
 
 Owner：Desk Tools CAD maintainers
 
-适用版本：Workspace Schema v13 / Wing 0.4.2
+适用版本：Workspace Schema v13 / Wing 0.4.3
 
 最后核验：2026-07-17
 

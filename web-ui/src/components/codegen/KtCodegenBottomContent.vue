@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { storeToRefs } from "pinia";
-import type { KtCodegenDiagnostic } from "@phoenix-wing/kt-codegen";
 import { useAppShell } from "../../composables/useAppShell";
 import { useWorkbenchBottomPanelState } from "../../composables/useWorkbenchBottomContribution";
 import { useKtCodegenStore, type KtCodegenProblem } from "../../stores/ktCodegen";
+import { deriveKtCodegenPlanPresentation } from "../../models/ktCodegenPlanPresentation";
+import {
+  ktCodegenDiagnosticLocation,
+  ktCodegenDiagnosticMarkerContext,
+} from "../../utils/ktCodegenDiagnosticPresentation";
 
 const props = withDefaults(defineProps<{
   workbenchTabId?: string;
@@ -28,17 +32,14 @@ const {
   sourcePreviewLoading,
 } = storeToRefs(store);
 
-const planTone = computed(() => {
-  const plan = preflight.value?.plan;
-  if (!plan) return "idle";
-  if (plan.diagnostics.some((item) => item.severity === "error")) return "error";
-  return preflight.value?.safe_to_apply ? "ready" : "warning";
-});
+const planPresentation = computed(() => deriveKtCodegenPlanPresentation(preflight.value));
 
-function diagnosticLocation(diagnostic: KtCodegenDiagnostic): string {
-  const location = diagnostic.path;
-  if (!location?.file) return location?.field ?? "";
-  return `${location.file}${typeof location.row === "number" ? `:${location.row + 1}` : ""}${typeof location.column === "number" ? `:${location.column + 1}` : ""}`;
+function diagnosticDetails(problem: KtCodegenProblem): string {
+  return [
+    problem.origin,
+    ktCodegenDiagnosticMarkerContext(problem.diagnostic),
+    ktCodegenDiagnosticLocation(problem.diagnostic),
+  ].filter(Boolean).join(" · ");
 }
 
 function canOpenProblem(problem: KtCodegenProblem): boolean {
@@ -65,7 +66,7 @@ async function openProblem(problem: KtCodegenProblem): Promise<void> {
 <template>
   <div class="kt-codegen-bottom-content">
     <template v-if="panelTab === 'preflight'">
-      <div v-if="preflight" class="plan-body" :class="`tone-${planTone}`">
+      <div v-if="preflight" class="plan-body" :class="`tone-${planPresentation.tone}`">
         <nav class="artifact-list" aria-label="生成产物">
           <button
             v-for="artifact in preflight.plan.artifacts"
@@ -111,8 +112,9 @@ async function openProblem(problem: KtCodegenProblem): Promise<void> {
             <pre>{{ selectedArtifact?.content || "从左侧 Primary 选择预检命中，或从“问题”定位源码行。" }}</pre>
           </section>
         </div>
-        <aside class="plan-state" :class="`tone-${planTone}`">
-          <strong>{{ preflight.safe_to_apply ? "可 Apply" : "安全门禁未通过" }}</strong>
+        <aside class="plan-state" :class="`tone-${planPresentation.tone}`">
+          <strong>{{ planPresentation.label }}</strong>
+          <span>{{ planPresentation.detail }}</span>
           <span>{{ preflight.plan.markerRegions.length }} 区域 · {{ preflight.plan.artifacts.length }} 产物</span>
           <span v-if="preflight.source_scan_truncated">源码扫描不完整</span>
           <span v-else>计划 {{ preflight.plan_fingerprint.slice(0, 18) }}…</span>
@@ -135,7 +137,7 @@ async function openProblem(problem: KtCodegenProblem): Promise<void> {
           <span class="problem-severity">{{ problem.diagnostic.severity }}</span>
           <strong>{{ problem.diagnostic.code }}</strong>
           <span class="problem-message">{{ problem.diagnostic.message }}</span>
-          <small>{{ problem.origin }}<template v-if="diagnosticLocation(problem.diagnostic)"> · {{ diagnosticLocation(problem.diagnostic) }}</template></small>
+          <small>{{ diagnosticDetails(problem) }}</small>
         </button>
       </div>
       <p v-else class="bottom-empty">当前配置与预检没有 warning/error/info。</p>

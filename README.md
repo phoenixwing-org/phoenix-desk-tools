@@ -18,7 +18,7 @@ pnpm install --frozen-lockfile
 标准开发目录要求 `phoenix-desk-tools` 与 `phoenix-wing` 并列：
 
 ```bash
-pnpm dev                       # 本地 Wing；同时启动 Vite (:5173) 和 Node (:5180)
+pnpm dev                       # 本地 Wing；Vite :5173，Node 首选 :48375、占用时向上寻找
 # 浏览器打开 http://localhost:5173
 ```
 
@@ -39,12 +39,12 @@ cargo install tauri-cli --version "^2.6" --locked  # 仅首次安装
 pnpm tauri:dev
 ```
 
-### 从 VS Code / EXE 打开 CAA 对话框
+### 从 VS Code / EXE 打开 CAA UI
 
 运行中的 Desk Tools 接受本地 HTTP 请求，并在界面中切换到对应工作空间、打开 `.CATDlg` 编辑 Tab：
 
 ```bash
-curl -X POST http://127.0.0.1:5180/api/caa/dialog/open \
+curl -X POST http://127.0.0.1:48375/api/caa/dialog/open \
   -H 'Content-Type: application/json' \
   -d '{"workspaceRoot":"/path/to/workspace","file":"/path/to/workspace/UI/Sample.CATDlg"}'
 ```
@@ -79,7 +79,7 @@ pnpm build:native
 前端 Vue 3 → Vite :5173
      │
      ▼ proxy /api/*
-Node.js Hono :5180
+Node.js Hono :48375（占用时向上寻找）
      ├── /api/cad/*  cad-rust (Rust SQLite + 代理)
      ├── /api/caa/*  CAA 对话
      └── /api/*      待迁移（Python 可选）
