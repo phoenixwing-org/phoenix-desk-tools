@@ -4,9 +4,9 @@
 
 Owner：Desk Tools maintainers
 
-适用版本：Desk Tools 0.2.x / Wing 0.4.x
+适用版本：Desk Tools 0.3.x / Wing 0.5.x
 
-最后核验：2026-07-18
+最后核验：2026-07-22
 
 ## 目标
 
@@ -53,7 +53,7 @@ PHOENIX_WING_ROOT=/absolute/path/to/phoenix-wing pnpm dev
 4. Server Vitest 和 esbuild sidecar 使用同一 exports resolver，避免开发、测试、bundle 三套解析规则漂移。
 5. Registry 模式不安装、不 alias，严格使用现有清单与锁文件；日志以 `[Wing][LOCAL]` 或 `[Wing][REGISTRY]` 醒目标明真源。
 
-覆盖范围为 `phoenix-wing` aggregate、`@phoenix-wing/kt-codegen`，以及 Server 的 `code-core`、`cad-contracts`、`cad-core`、`db-node`、`kt-codegen`、`workspace-schema`。`cad-rust-source`、native/Tauri 发布制品仍属于独立消费和发布门禁，不由普通 `pnpm dev` 改写。
+覆盖范围为 `phoenix-wing` aggregate、`@phoenix-wing/kt-codegen`，以及 Server 的 `code-core`、`cad-contracts`、`cad-core`、`db-node`、`kt-codegen`、`workspace-schema`。Desk 当前不再消费 `cad-rust-source`；Tauri 壳与发布制品仍属于独立构建/发布门禁，不由普通 `pnpm dev` 改写。
 
 ## 禁止事项与点检
 
@@ -73,3 +73,10 @@ PHOENIX_WING_ROOT=/absolute/path/to/phoenix-wing pnpm dev
 - `pnpm -C server typecheck`、`pnpm docs:check`、`pnpm verify:wing-dependencies` 通过；后者确认 9 个清单引用仍为 Registry 0.4.2 且无本地 override。
 
 本轮未执行 Windows 验证，也未把本地联调结果当作 npm tarball 发布验收。
+
+## 2026-07-22 Registry 0.5.0 消费升级
+
+- Server 的 `code-core`、`cad-core`、`db-node`、`kt-codegen`、`workspace-schema` 与 Web 的 `kt-codegen`、aggregate 共 7 处 manifest 引用统一精确升级到 Registry 0.5.0。
+- `verify:wing-dependencies` 同时冻结期望版本与 lockfile Registry 解析，继续拒绝 `link:`、`file:`、`workspace:` 和本地 override。
+- 本地并列 Wing 仍只通过现有 alias、loader 和 bundle resolver 消费；正式 Registry 构建不写入兄弟仓库路径。
+- Node 22.14.0 验收通过：Registry 与本地 Wing 两套 Server 65 文件/251 项、CAA Core 11/67、Web 70/399 测试；两套 Web/Server bundle、双端 typecheck、345 源文件架构门禁，以及 Registry Tauri runtime health/shutdown smoke 均通过。

@@ -1,10 +1,10 @@
 # Tauri 构建启动与验收指南
 
-> 更新于 2026-07-17。当前 macOS 验收对象和产物哈希以 [Tauri 0.2.0 macOS 发布态验收](tauri-0.2.0-macOS发布态验收.md) 为准。本文只记录当前 Tauri 2、Node sidecar 和 Rust FCStd 产品链；旧 Python 桌面启动器和 Python HTTP 服务不是生产启动方式。下文 Windows 0.1.0 产物只保留历史迁移证据，不能计作当前 0.2.0 NSIS。
+> 更新于 2026-07-22。macOS 0.2.0 验收对象和产物哈希以 [Tauri 0.2.0 macOS 发布态验收](tauri-0.2.0-macOS发布态验收.md) 为历史发布证据。当前 0.3.0 产品链为 Tauri 2 薄壳 + Node/TypeScript sidecar；FCStd ZIP/XML 与 SQLite 不再使用 Rust sidecar。旧 Python 桌面启动器和 Python HTTP 服务不是生产启动方式。
 
 ## 1. 构建环境
 
-已验证环境包括 macOS arm64 当前 0.2.0 release，以及 Windows x64 历史 0.1.0 迁移产物。官方 Windows 安装包使用 Tauri NSIS；当前 0.2.0 仍需 Windows runner/VM 重建验证。
+已验证环境包括 macOS arm64 历史 0.2.0 release，以及 Windows x64 历史 0.1.0 迁移产物。官方 Windows 安装包使用 Tauri NSIS；当前 0.3.0 仍需在 macOS 与 Windows runner/VM 重新构建验证。
 
 FreeCAD、SolidWorks 和系统 Git 不是构建 Tauri 壳的前置条件。Git 只影响 Git 页面和相应发行版自检；FreeCAD/SolidWorks 只影响各自外部引擎页面的成功执行。
 
@@ -18,7 +18,7 @@ pnpm dev
 ```
 
 - UI：`http://localhost:5173/`
-- Node/Hono：`http://127.0.0.1:5180/api/health`
+- Node/Hono：首选 `http://127.0.0.1:48375/api/health`，占用时在登记范围内顺延
 - Windows 根脚本不再使用 Unix `sleep`。
 
 Tauri 开发态：
@@ -27,11 +27,11 @@ Tauri 开发态：
 pnpm tauri:dev
 ```
 
-debug Tauri 可以复用健康的 5180 开发服务。release 不允许复用，以免将打包 UI 与仓库服务、仓库资源和错误的用户数据目录混在一起。
+Tauri 会自行启动 Vite 和本地 Node 服务；不要同时运行 `pnpm dev`。release 只使用打包 runtime，不能借用仓库服务。
 
 ## 3. Release 与安装包
 
-macOS 0.2.0 当前门禁：
+macOS 0.3.0 当前门禁：
 
 ```bash
 pnpm verify:tauri-release:macos
@@ -39,7 +39,18 @@ pnpm verify:tauri-release:macos
 
 该命令重建未签名 `.app`，再用隔离用户目录启动真实 Tauri 进程，完成健康、Codegen、真实 FCStd 和退出回收验收。已有产物可用 `pnpm -C server smoke:tauri-release-app` 复验。
 
-Windows 0.2.0 当前目标：
+2026-07-20 的 0.2.0 TypeScript runtime 历史回执：
+
+| 项目 | 值 |
+| --- | --- |
+| 主程序 SHA-256 | `8e707ac592e1f1ac9d22656facdb9519f52eeba6c0853d4f714f80443f0d69a5` |
+| runtime manifest SHA-256 | `4c1c6d307cc8faa913835e6c0d5b33a712c5aa0885acdbc2938a318eb26f1c2e` |
+| CAD runtime | `typescript`；无 CAD Rust `bin/` / provider |
+| 自动流程 | launch、Codegen preflight/Apply、真实 FCStd read、graceful exit、sidecar released 全部通过 |
+
+该哈希只对应本次未签名 macOS arm64 `.app`；源码、资源或工具链变化后必须重新生成，不能当作长期固定值。
+
+Windows 0.3.0 当前目标：
 
 ```powershell
 pnpm verify:tauri-release:windows
@@ -60,19 +71,19 @@ cargo tauri build --no-bundle
 pnpm tauri:installer
 ```
 
-下表 Windows 产物是 2026-07-11 的 0.1.0 历史基线，不是当前 0.2.0：
+下表 Windows 产物是 2026-07-11 的 0.1.0 历史基线，不是当前 0.3.0：
 
 | 产物 | 路径 |
 | --- | --- |
 | release EXE | `src-tauri/target/release/phoenix-desktop.exe` |
 | Node runtime | `src-tauri/target/release/runtime/node/node.exe` |
 | Node bundle | `src-tauri/target/release/runtime/server/server.mjs` |
-| Rust FCStd 工具 | `src-tauri/target/release/runtime/bin/fcstd-read.exe`、`fcstd-xlink.exe` |
+| 历史 Rust FCStd 工具 | 0.1.0 曾包含；当前 0.3.x TypeScript runtime 不再打包 |
 | NSIS setup | `src-tauri/target/release/bundle/nsis/Phoenix Desktop Tools_0.1.0_x64-setup.exe` |
 
 2026-07-11 的 NSIS 产物为 26,037,429 字节，SHA256 为 `E3239C4C5737C4AD31F00AFDECD1A91CC7765D191164AE1D917F03D5CD24DA64`。重新构建后必须重新记录哈希。
 
-当前 0.2.0 Windows 验收必须重新构建同版本产物并记录新哈希，不得复用上述 0.1.0 结果。
+当前 0.3.0 Windows 验收必须重新构建同版本产物并记录新哈希，不得复用上述 0.1.0 结果。
 
 ## 4. 已完成的历史 Windows 产物验收
 
@@ -80,12 +91,12 @@ pnpm tauri:installer
 
 1. Tauri 启动 release 自带的 `runtime/node/node.exe`，不是 PATH Node，也不是仓库 `tsx`。
 2. `GET /api/health` 返回 `status=ok`、`service=phoenix-node`、`protocol_version=1`。
-3. 配置页显示两个 Rust 原生工具均可用，路径位于 release `runtime/bin`。
+3. 历史配置页曾显示两个 Rust 原生工具；当前版本已删除该状态区和 runtime `bin` 依赖。
 4. 发行版“单元测试”运行 Code/CAD/Platform/CAA 共 14 项，14 通过、0 失败、0 跳过。
 5. 配置页“退出 Phoenix”确认后，Tauri 和 Node 子进程均退出，5180 释放。
 6. 5180 被开发服务占用时，release 明确报错并写 `phoenix-startup-error.log`，不会静默借用开发服务。
 
-0.1.0 NSIS 曾在 Codex 隔离账户上下文完成安装、从安装目录启动、安装态 14/14 自检、确认退出和卸载目录清理。它只证明迁移方案曾走通，不证明当前 0.2.0。0.2.0 仍需在 Windows 普通用户上下文运行 setup，检查开始菜单、“已安装的应用”和代表性工作流后再卸载。
+0.1.0 NSIS 曾在 Codex 隔离账户上下文完成安装、从安装目录启动、安装态 14/14 自检、确认退出和卸载目录清理。它只证明迁移方案曾走通，不证明当前 0.3.0。0.3.0 仍需在 Windows 普通用户上下文运行 setup，检查开始菜单、“已安装的应用”和代表性工作流后再卸载。
 
 ## 5. 每次发布必须检查
 

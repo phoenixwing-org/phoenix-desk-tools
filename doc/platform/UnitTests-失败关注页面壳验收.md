@@ -64,4 +64,4 @@ UnitTestWatchlistPane（DOM / 列 / scoped style / 横滚）
 
 1. Result pane 仍在 Page；先冻结摘要、过滤、模块聚合、case 展开和空态，再单独拆分。
 2. “全部复测”按钮的真实语义需要产品决策：改名为“复测勾选”，或允许无勾选时发送全部关注 ID；必须作为独立行为提交。
-3. `useAsyncProgress` 的终态 cancel 注销仍是共享基础设施 TODO，不在视觉拆分中处理。
+3. `useAsyncProgress` 的流终态/error cancel 注销已在共享基础设施完成，不再由本页面补第二套状态。

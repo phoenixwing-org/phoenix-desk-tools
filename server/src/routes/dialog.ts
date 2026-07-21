@@ -782,15 +782,14 @@ dialogRoutes.post("/create", async (c) => {
 });
 
 export function createCaaApp() {
-  const port = Number(process.env.CAA_SERVER_PORT || 5180);
   const app = new Hono();
   app.get("/api/caa/health", (c) =>
     c.json({
       ok: true,
       service: "caa",
       protocol_version: 1,
-      port,
-      url: `http://127.0.0.1:${port}`,
+      port: Number(new URL(c.req.url).port),
+      url: new URL(c.req.url).origin,
       proxyPath: "/api/caa",
     }),
   );

@@ -244,7 +244,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
   unit_tests: {
     title: "单元测试",
     bullets: [
-      "开发态运行 server、web-ui 与 catdlg-core 的 Vitest；桌面发行版运行打包资源、原生工具和核心算法自检，无需工作空间。",
+      "开发态运行 server、web-ui 与 catdlg-core 的 Vitest；桌面发行版运行打包资源、TypeScript CAD 服务和核心算法自检，无需工作空间。",
       "运行范围：勾选 Code / CAD / 平台 / CAA 套件；展开「列出运行范围」可再按模块勾选（默认全选）。",
       "有结果后，用「结果 · 套件 / 状态」勾选筛选明细，与运行范围分开。",
     ],

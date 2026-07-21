@@ -7,7 +7,6 @@
 
 import { toFcstdMapEntry } from "./pnwApiAdapter.js";
 
-import { execFile, execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -18,7 +17,10 @@ import {
   loadWorkspacePrefs,
   replaceWorkspaceSection,
 } from "./workspacePrefsService.js";
-import { resolveNativeTool } from "./nativeToolService.js";
+import {
+  readFcstdEmbeddedBomFields,
+  readFcstdEmbeddedBomFieldsAsync,
+} from "./fcstdDocumentXmlService.js";
 
 // ── 对应 Python: 常量 ──────────────────────────────────
 const FILE_STATUS_PRESENT = "present";
@@ -351,60 +353,13 @@ function hintsFromFilename(filename: string): Record<string, string | null> {
 
 // ── 对应 Python: _read_fcstd_bom ──────────────────────
 function readFcstdBom(absPath: string): Record<string, string> {
-  const cliRead = resolveNativeTool("fcstd-read");
-  if (!cliRead) return {};
-  try {
-    const stdout = execFileSync(cliRead, [absPath], { timeout: 15000, encoding: "utf8" });
-    const doc = JSON.parse(stdout);
-    const mount = doc.objects?.find((o: any) => o.isValidBomItem);
-    if (!mount?.properties) return {};
-    const p = mount.properties;
-    const get = (k: string) => typeof p[k] === "string" ? p[k] : (p[k]?.String || p[k]?.value || "");
-    return { PartNumber: get("PartNumber"), PartVersion: get("PartVersion"), TypeCode: get("TypeCode").toUpperCase(), ModelSeries: get("ModelSeries").toUpperCase(), PartName: get("PartName"), label: get("Label") || mount.label || "" };
-  } catch { return {}; }
+  return readFcstdEmbeddedBomFields(absPath) ?? {};
 }
 
-function readFcstdBomAsync(absPath: string, isCancelled: () => boolean): Promise<Record<string, string>> {
-  return new Promise((resolve) => {
-    const cliRead = resolveNativeTool("fcstd-read");
-    if (!cliRead) {
-      resolve({});
-      return;
-    }
-    const controller = new AbortController();
-    const timer = setInterval(() => {
-      if (isCancelled()) controller.abort();
-    }, 25);
-    timer.unref?.();
-    execFile(
-      cliRead,
-      [absPath],
-      { timeout: 15_000, encoding: "utf8", windowsHide: true, signal: controller.signal },
-      (error, stdout) => {
-        clearInterval(timer);
-        if (error) return resolve({});
-        try {
-          const doc = JSON.parse(stdout);
-          const mount = doc.objects?.find((item: any) => item.isValidBomItem);
-          if (!mount?.properties) return resolve({});
-          const properties = mount.properties;
-          const get = (key: string) => typeof properties[key] === "string"
-            ? properties[key]
-            : (properties[key]?.String || properties[key]?.value || "");
-          resolve({
-            PartNumber: get("PartNumber"),
-            PartVersion: get("PartVersion"),
-            TypeCode: get("TypeCode").toUpperCase(),
-            ModelSeries: get("ModelSeries").toUpperCase(),
-            PartName: get("PartName"),
-            label: get("Label") || mount.label || "",
-          });
-        } catch {
-          resolve({});
-        }
-      },
-    );
-  });
+async function readFcstdBomAsync(absPath: string, isCancelled: () => boolean): Promise<Record<string, string>> {
+  if (isCancelled()) return {};
+  const fields = await readFcstdEmbeddedBomFieldsAsync(absPath);
+  return isCancelled() ? {} : fields ?? {};
 }
 
 function mergeProps(entry: any, embedded: Record<string, string>): any {

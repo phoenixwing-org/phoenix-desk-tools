@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { strToU8, zipSync } from "fflate";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   applyBomLabelFormula,
@@ -17,6 +18,7 @@ import {
   recommendBomFilename,
   rememberBomApplyPrefs,
   renameBomFcstdFile,
+  writeBomToFcstd,
 } from "./bomAttributeService.js";
 import {
   runFcstdMapScan,
@@ -163,6 +165,42 @@ describe("bomAttributeService", () => {
 
     expect(readBomDocumentKinds(workspace, "asm/custom.ASSY.FCStd").document_kinds)
       .toMatchObject({ assembly: true, recommended_suffix: ".ASSY.FCStd" });
+  });
+
+  it("writes embedded BOM fields with the TypeScript FCStd adapter", async () => {
+    const workspace = makeTempRoot();
+    const rel = "parts/Part.FCStd";
+    const abs = path.join(workspace, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, zipSync({
+      "Document.xml": strToU8(`<Document><Objects><Object type="PartDesign::Body" name="Body"/></Objects>
+        <ObjectData><Object name="Body"><Properties>
+          <Property name="Label" type="App::PropertyString"><String value="Old"/></Property>
+        </Properties></Object></ObjectData></Document>`),
+    }));
+
+    await expect(writeBomToFcstd(workspace, rel, {
+      PartNumber: "100001",
+      PartVersion: "002",
+      TypeCode: "h",
+      ModelSeries: "px",
+      PartName: "支架",
+      label: "100001.002-支架",
+    })).resolves.toMatchObject({
+      status: "ok",
+      rel,
+      changed: true,
+      object_name: "Body",
+      engine: "typescript",
+    });
+    expect(loadBomPreview(workspace, rel).fields).toMatchObject({
+      PartNumber: "100001",
+      PartVersion: "002",
+      TypeCode: "H",
+      ModelSeries: "PX",
+      PartName: "支架",
+      label: "100001.002-支架",
+    });
   });
 
   it("renames FCStd files, records the rename, and updates the fcstd map when present", async () => {

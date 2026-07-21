@@ -86,7 +86,6 @@ import {
 } from "../lib/phoenixDatabaseService.js";
 import { loadFcstdMapPayload } from "../lib/pnwFcstdMapService.js";
 import { syncTestFixtureCheckouts } from "../lib/testFixtureService.js";
-import { nativeToolStatus } from "../lib/nativeToolService.js";
 import {
   runtimeAppConfigPath,
   runtimeRepoRoot,
@@ -873,7 +872,6 @@ shellRoutes.get("/api/health", (c) => c.json({
   service: "phoenix-node",
   protocol_version: 1,
 }));
-shellRoutes.get("/api/native-tools/status", (c) => c.json(nativeToolStatus()));
 shellRoutes.get("/api/onboarding/status", (c) => c.json(onboardingStatusPayload()));
 shellRoutes.get("/api/phoenix/database/status", (c) => {
   const workspace = currentWorkspace();

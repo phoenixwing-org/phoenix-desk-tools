@@ -1,4 +1,5 @@
 import type { KtCodegenPageParam } from "./ktCodegenPageParam";
+import { ktCodegenApplyStateLabel } from "./ktCodegenPlanPresentation";
 
 export type KtCodegenPropertyValueKey =
   | "file"
@@ -76,7 +77,9 @@ export function deriveKtCodegenPageView(param: KtCodegenPageParam): KtCodegenPag
     blocks: `${param.selectedBlockCount} / ${param.totalBlockCount}`,
     preflightState: param.preflighting
       ? "正在预检"
-      : !param.preflight ? "尚未预检" : param.preflight.safeToApply ? "可 Apply" : "门禁未通过",
+      : !param.preflight
+        ? "尚未预检"
+        : ktCodegenApplyStateLabel(param.preflight.safeToApply, param.preflight.planCanApply),
     plan: param.preflight
       ? `${param.preflight.regionCount} 区域 · ${param.preflight.artifactCount} 产物 · ${param.preflight.diagnosticCount} 诊断`
       : "—",

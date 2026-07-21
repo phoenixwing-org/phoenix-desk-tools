@@ -8,8 +8,10 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const serverRoot = path.resolve(scriptDir, "..");
 const repoRoot = path.resolve(serverRoot, "..");
 const entry = path.join(serverRoot, "dist-sidecar", "server.mjs");
-const port = 5198;
+const port = 48_598;
 const userData = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-sidecar-smoke-"));
+const registrationDirectory = path.join(userData, "service-registration");
+const serviceRegistrationPath = path.join(registrationDirectory, "service.v1.json");
 
 if (!fs.existsSync(entry)) throw new Error(`Missing ${entry}; run build:bundle first`);
 
@@ -20,6 +22,7 @@ const child = spawn(process.execPath, [entry], {
     CAA_SERVER_PORT: String(port),
     PHOENIX_REPO_ROOT: repoRoot,
     PHOENIX_USER_DATA_DIR: userData,
+    PHOENIX_DESK_TOOLS_REGISTRY_DIR: registrationDirectory,
   },
   stdio: ["ignore", "pipe", "pipe"],
   windowsHide: true,
@@ -46,6 +49,10 @@ async function waitForHealth() {
 
 try {
   await waitForHealth();
+  const registration = JSON.parse(fs.readFileSync(serviceRegistrationPath, "utf8"));
+  if (registration.service !== "phoenix-desk-tools" || registration.port !== port) {
+    throw new Error(`Unexpected service registration: ${JSON.stringify(registration)}`);
+  }
   const response = await fetch(`http://127.0.0.1:${port}/api/shutdown`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -59,6 +66,9 @@ try {
       code === 0 ? resolve() : reject(new Error(`Bundled server exited ${code}\n${output}`));
     });
   });
+  if (fs.existsSync(serviceRegistrationPath)) {
+    throw new Error("Bundled server left a stale service registration after shutdown");
+  }
   process.stdout.write("[sidecar] bundle health/shutdown smoke passed\n");
 } finally {
   if (child.exitCode == null) child.kill();

@@ -6,12 +6,19 @@ function source(relative: string): string {
 }
 
 describe("AssemblyTreeTable boundary", () => {
-  it("组件消费纯树投影，不再内联标签补丁和递归行算法", () => {
+  it("组件消费纯树投影和可注入展开 Controller，不再内联递归/懒加载算法", () => {
     const component = source("./AssemblyTreeTable.vue");
+    const controller = source("../composables/useAssemblyTreeController.ts");
     expect(component).toContain('from "../models/assemblyTreeViewModel"');
     expect(component).toContain('from "./assembly-tree/AssemblyTreeRowGroup.vue"');
-    expect(component).toContain("assemblyTreeFlatten");
+    expect(component).toContain("useAssemblyTreeController");
+    expect(controller).toContain("assemblyTreeFlatten");
+    expect(controller).toContain("fetchSubtree?: (");
+    expect(controller).toContain("const pending = inFlight.get(node.id)");
+    expect(controller).toContain("requestGeneration === generation");
     expect(component).toContain("assemblyTreePendingPatches");
+    expect(component).not.toContain("fetchAssemblyTreeByHost");
+    expect(component).not.toContain("async function ensureSubtree");
     expect(component).not.toContain("function flatten(");
     expect(component).not.toContain("function walkNodes(");
     expect(component).not.toContain("function editKey(");

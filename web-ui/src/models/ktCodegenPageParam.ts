@@ -10,6 +10,7 @@ export type KtCodegenPageDocumentParam = {
 
 export type KtCodegenPagePreflightParam = {
   safeToApply: boolean;
+  planCanApply: boolean;
   regionCount: number;
   artifactCount: number;
   diagnosticCount: number;

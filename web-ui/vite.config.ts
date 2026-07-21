@@ -9,9 +9,9 @@ import {
   resolvePhoenixWingContext,
 } from "./config/resolvePhoenixWing";
 
-/** 开发：Vite 5173，Node Hono 5180。 */
+/** 开发：Vite 5173，Node Hono 首选 48375。 */
 const webPort = Number(process.env.WEB_UI_PORT || 5173);
-const caaPort = Number(process.env.CAA_SERVER_PORT || 5180);
+const caaPort = Number(process.env.CAA_SERVER_PORT || 48375);
 const elementPlusImportStyle = process.env.VITEST ? false : "sass";
 
 const webRoot = resolve(__dirname);

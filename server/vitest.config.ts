@@ -2,6 +2,7 @@ import { defineConfig } from "vitest/config";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  LOCAL_WING_PACKAGE_NAMES,
   resolveLocalWingExport,
   resolvePhoenixWingContext,
 } from "../scripts/phoenix-wing-mode.mjs";
@@ -18,6 +19,12 @@ const localWingPlugin = wingContext.mode === "local" && wingContext.root
       },
     }
   : null;
+const localWingAliases = wingContext.mode === "local" && wingContext.root
+  ? LOCAL_WING_PACKAGE_NAMES.map((packageName) => ({
+      find: new RegExp(`^${packageName.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}$`, "u"),
+      replacement: resolveLocalWingExport(wingContext.root!, packageName)!,
+    }))
+  : [];
 
 console.log(
   wingContext.mode === "local"
@@ -27,10 +34,18 @@ console.log(
 
 export default defineConfig({
   plugins: localWingPlugin ? [localWingPlugin] : [],
+  resolve: {
+    alias: localWingAliases,
+  },
   test: {
     maxWorkers: 4,
     testTimeout: 20_000,
     hookTimeout: 20_000,
+    server: {
+      deps: {
+        inline: [...LOCAL_WING_PACKAGE_NAMES],
+      },
+    },
     reporters: ["default", "html"],
     outputFile: {
       html: "../test-report/index.html",

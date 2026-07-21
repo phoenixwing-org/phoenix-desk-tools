@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { pnwCreateDb, type PnwDbAdapter } from "@phoenix-wing/db-node";
@@ -7,7 +6,7 @@ import {
   loadWorkspaceSection,
   replaceWorkspaceSection,
 } from "./workspacePrefsService.js";
-import { requireNativeTool } from "./nativeToolService.js";
+import { patchFcstdXlinkAttributes } from "./fcstdReferenceLabelService.js";
 
 export type XlinkFixPrefs = {
   batch_dir: string;
@@ -829,16 +828,11 @@ export function analyzeXlinkFix(workspaceRoot: string, opts: any = {}): XlinkFix
   }
 }
 
-function runRustPatch(hostPath: string, replacements: Map<string, string>): number {
-  const kvArgs = [...replacements.entries()].map(([oldAttr, newAttr]) => {
-    if (oldAttr.includes("=")) throw new Error(`XLink path contains '=' and cannot be passed to fcstd-xlink CLI: ${oldAttr}`);
-    return `${oldAttr}=${newAttr}`;
-  });
-  if (!kvArgs.length) return 0;
-  const binary = requireNativeTool("fcstd-xlink");
-  const raw = execFileSync(binary, ["patch", hostPath, ...kvArgs], { encoding: "utf8", timeout: 30000 });
-  const parsed = JSON.parse(raw);
-  return Number(parsed.count || 0);
+function patchFcstdDocument(hostPath: string, replacements: Map<string, string>): number {
+  return patchFcstdXlinkAttributes(
+    hostPath,
+    Object.fromEntries(replacements),
+  ).count;
 }
 
 function patchStandaloneDocumentXml(documentPath: string, replacements: Map<string, string>): number {
@@ -883,7 +877,7 @@ function isStandaloneDocumentXml(hostPath: string): boolean {
 function patchXlinkHost(hostPath: string, replacements: Map<string, string>): number {
   return isStandaloneDocumentXml(hostPath)
     ? patchStandaloneDocumentXml(hostPath, replacements)
-    : runRustPatch(hostPath, replacements);
+    : patchFcstdDocument(hostPath, replacements);
 }
 
 function targetAssetForRel(db: PnwDbAdapter, repoRel: string): any | null {

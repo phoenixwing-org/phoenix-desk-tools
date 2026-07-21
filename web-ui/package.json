@@ -1,7 +1,7 @@
 {
   "name": "phoenix-phoenix-web-ui",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,11 +13,11 @@
   "dependencies": {
     "@desk-tools/catdlg-core": "workspace:*",
     "@element-plus/icons-vue": "^2.3.2",
-    "@phoenix-wing/kt-codegen": "0.4.2",
+    "@phoenix-wing/kt-codegen": "0.5.0",
     "diff2html": "^3.4.56",
     "driver.js": "^1.4.0",
     "element-plus": "^2.14.2",
-    "phoenix-wing": "0.4.2",
+    "phoenix-wing": "0.5.0",
     "pinia": "^3.0.4",
     "vue": "^3.5.13"
   },

@@ -17,6 +17,7 @@ describe("UnitTestsPage boundary", () => {
     expect(page).toContain('from "../models/unitTestsViewModel"');
     expect(page).toContain('from "../composables/useUnitTestRunController"');
     expect(page).toContain('from "../composables/useUnitTestPlanController"');
+    expect(page).toContain('from "../components/unit-tests/UnitTestResultPane.vue"');
     expect(page).toContain("filterUnitTestCases");
     expect(page).toContain("mergeUnitTestRunOptions");
     expect(page).not.toContain("fetchUnitTestPlan");
@@ -25,6 +26,18 @@ describe("UnitTestsPage boundary", () => {
     expect(page).not.toContain("useAsyncProgress");
     expect(page).not.toContain("function caseMatchesStatus(");
     expect(page).not.toContain("function formatRunSummary(");
+  });
+
+  it("Result pane 独占摘要、筛选 UI、模块表和 case 展开，Page 保留过滤真相", () => {
+    const page = source("./UnitTestsPage.vue");
+    const pane = source("../components/unit-tests/UnitTestResultPane.vue");
+    expect(page).toContain("<UnitTestResultPane");
+    expect(page).toContain("const filteredCases = computed(");
+    expect(page).toContain("const filteredModuleSummaries = computed(");
+    expect(page).not.toContain('class="results-card"');
+    expect(page).not.toContain('class="case-detail"');
+    expect(pane).toContain("const expandedCase = ref<string | null>(null)");
+    expect(pane).not.toMatch(/useUnitTestsPageStore|useAppShell|useUnitTestRunController|localStorage/);
   });
 
   it("流式 Controller 可注入 Host/Progress/Transport，且不吸收 Pinia、范围或持久状态", () => {

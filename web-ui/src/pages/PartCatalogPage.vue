@@ -70,7 +70,7 @@ async function refreshList() {
     const data = await fetchPartKeys();
     const items: PartKeyEntry[] = data.entries || [];
     listData.value = data;
-    const engine = data._native === "rust" ? "Rust" : data._native === "node" ? "Node" : "本地服务";
+    const engine = data._native === "node" ? "Node / SQLite" : "本地服务";
     const msg = `零件目录 ${items.length} 键 (${engine})`;
     shell.appendLog(msg, { source: "part_catalog" });
     setStatus(msg);

@@ -1,8 +1,6 @@
 /** CAD 模块
  *
- * Node/SQLite 服务负责 API 编排，并在适用处调用 Rust 工具。
- *
- * SQLite queries are owned by the feature services; Rust CLIs are reserved for FCStd file I/O.
+ * Node/TypeScript 服务负责 API 编排；SQLite 与 FCStd ZIP/XML 均由 feature service 拥有。
  */
 
 import { Hono } from "hono";
@@ -184,13 +182,14 @@ function finishBomXrefProgress(scanId: string, result: any): void {
 
 /** GET /api/cad/health */
 cadRoutes.get("/health", async (c) => {
-  let rustOk = false;
+  let sqliteOk = false;
   try {
     const ws = getWorkspace(c);
-    if (ws) { loadPartKeysPayload(ws); rustOk = true; }
+    if (ws) { loadPartKeysPayload(ws); sqliteOk = true; }
   } catch {}
+  // module/native 字段是既有前端兼容 envelope，不再代表 Rust provider。
   return c.json({ ok: true, module: "cad-native",
-    native: { available: rustOk, engine: "node-sqlite" },
+    native: { available: sqliteOk, engine: "node-sqlite" },
   });
 });
 
@@ -207,7 +206,7 @@ cadRoutes.get("/bom/file", async (c) => {
   }
 });
 
-// ── 零件号（Rust 原生）─────────────────────────────────
+// ── 零件号（TypeScript / SQLite）────────────────────────
 
 cadRoutes.get("/parts", (c) => {
   const ws = getWorkspace(c);
@@ -274,7 +273,7 @@ cadRoutes.patch("/parts/:pn/:pv/files/:fileId", async (c) => {
   }
 });
 
-// ── BOM XRef（Rust 原生）───────────────────────────────
+// ── BOM XRef（TypeScript / SQLite）─────────────────────
 
 cadRoutes.get("/bom/xref/meta", (c) => {
   const ws = getWorkspace(c);
@@ -282,7 +281,7 @@ cadRoutes.get("/bom/xref/meta", (c) => {
   return c.json(loadBomXrefPayload(ws));
 });
 
-// ── BOM XRef 详情（Rust 原生）─────────────────────────
+// ── BOM XRef 详情（TypeScript / SQLite）───────────────
 
 cadRoutes.get("/bom/xref/incoming", (c) => {
   const ws = getWorkspace(c);
@@ -536,7 +535,7 @@ cadRoutes.post("/bom/rename", async (c) => {
   }
 });
 
-// ── BOM 展开树（Rust 原生）────────────────────────────
+// ── BOM 展开树（TypeScript / SQLite）──────────────────
 
 cadRoutes.get("/bom/tree", (c) => {
   const ws = getWorkspace(c);

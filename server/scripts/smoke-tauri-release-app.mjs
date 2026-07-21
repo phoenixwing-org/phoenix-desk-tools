@@ -45,17 +45,18 @@ const fixtureXml = path.join(
   "document-xml",
   "图纸-通过link来创建-Document.xml",
 );
-const port = 5180;
-const origin = `http://127.0.0.1:${port}`;
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-tauri-app-smoke-"));
 const home = path.join(tempRoot, "home");
 const workspace = path.join(tempRoot, "workspace");
+const registrationDirectory = path.join(home, "desk-tools-registration");
+const serviceRegistrationPath = path.join(registrationDirectory, "service.v1.json");
 const output = [];
 let child;
+let port = 0;
+let origin = "";
 
 try {
   for (const required of [executable, fixtureXml, ...(infoPlist ? [infoPlist] : [])]) assertFile(required);
-  await assertPortAvailable();
   fs.mkdirSync(home, { recursive: true });
   fs.mkdirSync(workspace, { recursive: true });
   writeCodegenFixture();
@@ -69,6 +70,7 @@ try {
       USERPROFILE: home,
       CFFIXED_USER_HOME: home,
       PHOENIX_TAURI_USER_DATA_DIR: path.join(home, "user-data"),
+      PHOENIX_DESK_TOOLS_REGISTRY_DIR: registrationDirectory,
       APPDATA: path.join(home, "AppData", "Roaming"),
       LOCALAPPDATA: path.join(home, "AppData", "Local"),
       TMPDIR: tempRoot,
@@ -80,6 +82,7 @@ try {
   child.stdout?.on("data", (chunk) => output.push(chunk.toString()));
   child.stderr?.on("data", (chunk) => output.push(chunk.toString()));
 
+  await waitForServiceRegistration();
   const health = await waitForHealth();
   const launcher = await api("/api/config/launcher");
   const launcherConfigPath = path.resolve(String(launcher.launcher_config_path || ""));
@@ -91,19 +94,16 @@ try {
   });
   assert(activeWorkspace.path === workspace, "release app did not activate the isolated workspace");
 
-  const nativeTools = await api("/api/native-tools/status");
-  assert(nativeTools.ok === true && nativeTools.tools?.length === 3, "packaged native tools are incomplete");
-  const runtimeRoots = new Set();
-  for (const tool of nativeTools.tools) {
-    assert(tool.available === true, `${tool.name} is unavailable in the release app`);
-    const toolPath = path.resolve(tool.path);
-    assertUnder(installRoot, toolPath, `${tool.name} runtime path`);
-    runtimeRoots.add(path.dirname(path.dirname(toolPath)));
-  }
-  assert(runtimeRoots.size === 1, "packaged native tools did not resolve from one runtime root");
-  const runtimeRoot = [...runtimeRoots][0];
-  const runtimeManifest = path.join(runtimeRoot, "runtime-manifest.json");
+  const runtimeManifest = [
+    path.join(installRoot, "Contents", "Resources", "runtime", "runtime-manifest.json"),
+    path.join(installRoot, "runtime", "runtime-manifest.json"),
+  ].find((candidate) => fs.existsSync(candidate));
+  assert(runtimeManifest, "packaged TypeScript runtime manifest is missing");
+  assertUnder(installRoot, runtimeManifest, "runtime manifest");
   assertFile(runtimeManifest);
+  const runtimeDirectory = path.dirname(runtimeManifest);
+  assert(!fs.existsSync(path.join(runtimeDirectory, "bin")), "release runtime still contains a CAD native bin directory");
+  assert(!fs.existsSync(path.join(runtimeDirectory, "native-provider.json")), "release runtime still contains native-provider.json");
 
   const documents = await api("/api/code/codegen/documents");
   assert(documents.documents?.length === 1, "release app did not discover the Codegen fixture");
@@ -139,8 +139,8 @@ try {
   const bom = await api(`/api/cad/bom/file?rel=${encodeURIComponent("8003.001-H-PHOENIX-滑轨.FCStd")}`);
   assert(bom.is_fcstd === true && bom.file_size_bytes > 0, "release CAD route did not read the real FCStd archive");
   assert(
-    String(bom.source_note || "").includes("embedded FCStd properties"),
-    "release CAD route did not use the packaged fcstd-read tool",
+    String(bom.source_note || "").includes("TypeScript FCStd reader"),
+    "release CAD route did not use the packaged TypeScript FCStd reader",
   );
 
   const version = process.platform === "darwin"
@@ -164,7 +164,7 @@ try {
     runtimeManifestSha256: manifestSha256,
     health,
     userDataIsolated: true,
-    nativeTools: nativeTools.tools.map((tool) => tool.name),
+    cadRuntime: "typescript",
     flows: {
       launch: true,
       codegenPreflight: true,
@@ -282,8 +282,26 @@ async function waitForExit(processToWait, timeoutMs) {
   });
 }
 
-async function assertPortAvailable() {
-  if (await canConnect()) throw new Error(`${origin} is already in use; stop the other Phoenix instance first`);
+async function waitForServiceRegistration() {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    if (child.exitCode != null) throw new Error(`Tauri release app exited before service registration\n${output.join("")}`);
+    try {
+      const registration = JSON.parse(fs.readFileSync(serviceRegistrationPath, "utf8"));
+      if (registration.service === "phoenix-desk-tools"
+          && registration.protocol_version === 1
+          && registration.host === "127.0.0.1"
+          && Number.isInteger(registration.port)) {
+        port = registration.port;
+        origin = `http://127.0.0.1:${port}`;
+        return;
+      }
+    } catch {
+      // The managed service has not published its atomic registration yet.
+    }
+    await delay(100);
+  }
+  throw new Error(`Tauri release app did not publish ${serviceRegistrationPath}\n${output.join("")}`);
 }
 
 async function waitForPortRelease() {
@@ -292,7 +310,7 @@ async function waitForPortRelease() {
     if (!(await canConnect())) return;
     await delay(100);
   }
-  throw new Error("the packaged Node service still owns port 5180 after the app exited");
+  throw new Error(`the packaged Node service still owns port ${port} after the app exited`);
 }
 
 function canConnect() {

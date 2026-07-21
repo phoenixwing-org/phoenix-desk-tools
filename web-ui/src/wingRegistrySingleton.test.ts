@@ -14,7 +14,7 @@ afterEach(() => {
   if (rootOpen.value) pnwResolveChoice(null);
 });
 
-describe("Wing 0.4.2 Registry aggregate singleton", () => {
+describe("Wing Registry aggregate singleton", () => {
   it("根入口与 composable 子路径共享同一对响应式引用", () => {
     expect(rootOpen).toBe(subpathOpen);
     expect(rootRequest).toBe(subpathRequest);

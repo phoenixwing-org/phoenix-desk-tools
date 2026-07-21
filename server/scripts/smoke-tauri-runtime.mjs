@@ -27,7 +27,6 @@ const child = spawn(node, [entry], {
     PHOENIX_REPO_ROOT: runtimeRoot,
     PHOENIX_RESOURCES_DIR: runtimeRoot,
     PHOENIX_USER_DATA_DIR: userData,
-    PHOENIX_NATIVE_BIN_DIR: path.join(runtimeRoot, "bin"),
   },
   stdio: ["ignore", "pipe", "pipe"],
   windowsHide: true,

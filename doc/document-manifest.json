@@ -180,10 +180,12 @@
     },
     {
       "path": "doc/cad/改名分析-迁移分析.md",
-      "status": "current",
+      "status": "archived",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.2.x",
-      "lastVerified": "2026-07-17"
+      "appliesTo": "historical",
+      "lastVerified": "2026-07-17",
+      "sourceOfTruth": "doc/文档索引.md",
+      "reason": "旧迁移、旧 schema、旧桌面或完成态实现记录"
     },
     {
       "path": "doc/cad/改名引用写回-装配Label同步-需求.md",
@@ -280,10 +282,12 @@
     },
     {
       "path": "doc/cad/API接口规则-兼容对照表.md",
-      "status": "current",
+      "status": "archived",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.2.x",
-      "lastVerified": "2026-07-17"
+      "appliesTo": "historical",
+      "lastVerified": "2026-07-17",
+      "sourceOfTruth": "doc/文档索引.md",
+      "reason": "旧迁移、旧 schema、旧桌面或完成态实现记录"
     },
     {
       "path": "doc/cad/BOM工具说明.md",
@@ -402,10 +406,12 @@
     },
     {
       "path": "doc/cad/pnwCadDb-数据库封装计划.md",
-      "status": "current",
+      "status": "archived",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.2.x",
-      "lastVerified": "2026-07-17"
+      "appliesTo": "historical",
+      "lastVerified": "2026-07-17",
+      "sourceOfTruth": "doc/文档索引.md",
+      "reason": "旧迁移、旧 schema、旧桌面或完成态实现记录"
     },
     {
       "path": "doc/cad/Python后端迁移Node-Rust计划.md",
@@ -507,6 +513,13 @@
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
+      "path": "doc/code/Code三端共用算法与UI内核-执行计划.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.2.x",
+      "lastVerified": "2026-07-17"
+    },
+    {
       "path": "doc/code/KT-Codegen-人工点检清单.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
@@ -521,6 +534,13 @@
       "lastVerified": "2026-07-17"
     },
     {
+      "path": "doc/code/KT-Codegen-Wing0.4.3-VSCode收敛执行计划.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.2.x",
+      "lastVerified": "2026-07-17"
+    },
+    {
       "path": "doc/phoenix-wing升级计划.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
@@ -528,6 +548,13 @@
       "lastVerified": "2026-07-17",
       "sourceOfTruth": "doc/文档索引.md",
       "reason": "旧迁移、旧 schema、旧桌面或完成态实现记录"
+    },
+    {
+      "path": "doc/platform/2026-07-20-Desk-Web-Tauri-CAD手动点检表.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.2.x",
+      "lastVerified": "2026-07-17"
     },
     {
       "path": "doc/platform/成员排序-变更Diff预览-待研究.md",
@@ -746,6 +773,13 @@
       "lastVerified": "2026-07-17"
     },
     {
+      "path": "doc/platform/Web壳层-异步View首开闪烁整改计划.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.2.x",
+      "lastVerified": "2026-07-17"
+    },
+    {
       "path": "doc/platform/Web壳层-Git变更分区批量预览-规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
@@ -842,10 +876,12 @@
     },
     {
       "path": "doc/tauri-0.2.0-macOS发布态验收.md",
-      "status": "current",
+      "status": "archived",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.2.x",
-      "lastVerified": "2026-07-17"
+      "appliesTo": "historical",
+      "lastVerified": "2026-07-17",
+      "sourceOfTruth": "doc/tauri-构建启动与验收指南.md",
+      "reason": "冻结的 0.1.0/早期 0.2.0 发布证据，不代表当前已去除 CAD Rust sidecar 的运行时"
     },
     {
       "path": "doc/tauri-当前迁移状态基线.md",
@@ -853,8 +889,8 @@
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/tauri-0.2.0-macOS发布态验收.md",
-      "reason": "冻结的 0.1.0/迁移分支证据，不代表当前 0.2.0 发布状态"
+      "sourceOfTruth": "doc/tauri-构建启动与验收指南.md",
+      "reason": "冻结的 0.1.0/早期 0.2.0 发布证据，不代表当前已去除 CAD Rust sidecar 的运行时"
     },
     {
       "path": "doc/tauri-分支迁移审计与接手指南.md",
@@ -862,8 +898,8 @@
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/tauri-0.2.0-macOS发布态验收.md",
-      "reason": "冻结的 0.1.0/迁移分支证据，不代表当前 0.2.0 发布状态"
+      "sourceOfTruth": "doc/tauri-构建启动与验收指南.md",
+      "reason": "冻结的 0.1.0/早期 0.2.0 发布证据，不代表当前已去除 CAD Rust sidecar 的运行时"
     },
     {
       "path": "doc/tauri-构建启动与验收指南.md",

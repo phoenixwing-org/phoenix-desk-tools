@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, toValue } from "vue";
+import { computed, reactive, toValue } from "vue";
 import SidebarBlock from "phoenix-wing/layout/PnwSidebarBlock.vue";
+import SidebarBlockHead from "phoenix-wing/layout/PnwSidebarBlockHead.vue";
 import { useAppShell } from "../../composables/useAppShell";
 import {
   useRegisteredPagePrimaryContribution,
@@ -8,6 +9,11 @@ import {
   type PagePrimaryOption,
   type PagePrimaryResolvable,
 } from "../../composables/usePagePrimaryContribution";
+import {
+  primarySectionCountLabel,
+  primarySectionLayout,
+  primarySectionStateKey,
+} from "./primaryPanelViewModel";
 
 const props = withDefaults(defineProps<{
   pageId?: string;
@@ -56,6 +62,21 @@ const workspaceLabel = computed(() => {
 });
 const pageDescription = computed(() => navItem.value?.description
   || "此页面尚未提供独立说明。中央 View 保留主要内容与操作结果。");
+const collapsedSections = reactive(new Set<string>());
+
+function sectionStateKey(sectionId: string): string {
+  return primarySectionStateKey(props.pageId, props.workbenchTabId, sectionId);
+}
+
+function isSectionExpanded(sectionId: string): boolean {
+  return !collapsedSections.has(sectionStateKey(sectionId));
+}
+
+function toggleSection(sectionId: string): void {
+  const key = sectionStateKey(sectionId);
+  if (collapsedSections.has(key)) collapsedSections.delete(key);
+  else collapsedSections.add(key);
+}
 
 function textValue(value: PagePrimaryResolvable<string>): string {
   return toValue(value);
@@ -102,49 +123,66 @@ function actionType(action: PagePrimaryAction): "primary" | "danger" | undefined
   >
     <template #suffix><span class="primary-badge">Primary</span></template>
 
-    <section class="primary-section current-view">
-      <span class="section-kicker">当前 View</span>
-      <strong :title="viewTitle">{{ viewTitle }}</strong>
-      <p :title="viewContext">{{ viewContext }}</p>
-      <dl class="context-grid">
-        <dt>模块</dt><dd>{{ moduleLabel }}</dd>
-        <dt>工作空间</dt><dd :title="shell.workspacePath.value">{{ workspaceLabel }}</dd>
-      </dl>
+    <section class="primary-context">
+      <div class="context-title-row">
+        <strong :title="viewTitle">{{ viewTitle }}</strong>
+        <span class="module-chip">{{ moduleLabel }}</span>
+      </div>
+      <p class="context-path" :title="viewContext">{{ viewContext }}</p>
+      <p class="context-description">{{ pageDescription }}</p>
+      <div class="workspace-row" :title="shell.workspacePath.value">
+        <span>工作空间</span>
+        <strong>{{ workspaceLabel }}</strong>
+      </div>
     </section>
 
-    <section class="primary-section">
-      <h3>页面用途</h3>
-      <p>{{ pageDescription }}</p>
+    <section v-if="primarySummary || shell.pageSummary.value" class="primary-status" aria-live="polite">
+      <span class="status-dot" aria-hidden="true" />
+      <p>{{ primarySummary || shell.pageSummary.value }}</p>
     </section>
 
     <section
       v-for="section in primarySections"
       :key="section.id"
-      class="primary-section contributed-section"
+      class="contributed-section"
+      :class="{ 'is-collapsed': !isSectionExpanded(section.id) }"
     >
-      <h3>{{ section.title }}</h3>
-      <p v-if="section.description" class="section-description">
-        {{ textValue(section.description) }}
-      </p>
+      <SidebarBlockHead
+        class="contributed-section-head"
+        :expanded="isSectionExpanded(section.id)"
+        @toggle="toggleSection(section.id)"
+      >
+        <template #title>{{ section.title }}</template>
+        <template #suffix>{{ primarySectionCountLabel(section) }}</template>
+      </SidebarBlockHead>
 
-      <div v-if="section.controls?.length" class="primary-controls">
-        <template v-for="control in section.controls" :key="control.id">
-          <label
-            v-if="control.kind === 'text'"
-            class="primary-control"
-            :class="{ 'is-disabled': booleanValue(control.disabled) }"
-          >
-            <span class="control-label">{{ control.label }}</span>
-            <el-input
-              :model-value="textValue(control.modelValue)"
-              size="small"
-              :placeholder="control.placeholder"
-              :disabled="booleanValue(control.disabled)"
-              :class="{ mono: control.mono }"
-              @update:model-value="control.onUpdate(String($event ?? ''))"
-            />
-            <small v-if="control.description">{{ control.description }}</small>
-          </label>
+      <div v-show="isSectionExpanded(section.id)" class="contributed-section-body">
+        <p v-if="section.description" class="section-description">
+          {{ textValue(section.description) }}
+        </p>
+
+        <div
+          v-if="section.controls?.length"
+          class="primary-controls"
+          :class="`is-${primarySectionLayout(section)}`"
+        >
+          <template v-for="control in section.controls" :key="control.id">
+            <label
+              v-if="control.kind === 'text'"
+              class="primary-control"
+              :class="{ 'is-disabled': booleanValue(control.disabled) }"
+            >
+              <span class="control-label">{{ control.label }}</span>
+              <el-input
+                :model-value="textValue(control.modelValue)"
+                size="small"
+                :placeholder="control.placeholder"
+                :disabled="booleanValue(control.disabled)"
+                :class="{ mono: control.mono }"
+                @update:model-value="control.onUpdate(String($event ?? ''))"
+              />
+              <small v-if="control.description">{{ control.description }}</small>
+            </label>
 
           <label
             v-else-if="control.kind === 'select'"
@@ -247,43 +285,37 @@ function actionType(action: PagePrimaryAction): "primary" | "danger" | undefined
             <dt>{{ control.label }}</dt>
             <dd :class="{ mono: control.mono }">{{ displayValue(control.value) }}</dd>
           </dl>
-        </template>
-      </div>
+          </template>
+        </div>
 
-      <div v-if="section.actions?.length" class="primary-actions">
-        <el-button
-          v-for="action in section.actions"
-          :key="action.id"
-          size="small"
-          :type="actionType(action)"
-          :plain="action.plain"
-          :title="action.title"
-          :disabled="booleanValue(action.disabled)"
-          :loading="booleanValue(action.loading)"
-          @click="action.run"
-        >
-          {{ textValue(action.label) }}
-        </el-button>
+        <div v-if="section.actions?.length" class="primary-actions">
+          <el-button
+            v-for="action in section.actions"
+            :key="action.id"
+            size="small"
+            :type="actionType(action)"
+            :plain="action.plain"
+            :title="action.title"
+            :disabled="booleanValue(action.disabled)"
+            :loading="booleanValue(action.loading)"
+            @click="action.run"
+          >
+            {{ textValue(action.label) }}
+          </el-button>
+        </div>
       </div>
     </section>
 
-    <section v-if="!primarySections.length" class="primary-section empty-primary-note">
-      <h3>Primary 面板</h3>
-      <p>
-        此页面暂时没有独立的 Primary 控件。后续会把范围、过滤、选择和运行上下文逐步迁入这里；
-        中央 View 只保留主要编辑内容与结果。
-      </p>
-    </section>
-
-    <section v-if="primarySummary || shell.pageSummary.value" class="primary-section live-summary" aria-live="polite">
-      <h3>当前摘要</h3>
-      <p>{{ primarySummary || shell.pageSummary.value }}</p>
+    <section v-if="!primarySections.length" class="empty-primary-note">
+      <strong>此 View 暂无可调参数</strong>
+      <p>主要操作和结果位于中央编辑区。</p>
     </section>
   </SidebarBlock>
 </template>
 
 <style scoped>
 .generic-primary-block { width: 100%; height: 100%; }
+.generic-primary-block :deep(.pnw-sidebar-block-body) { padding: 0 !important; }
 .primary-custom-content { width: 100%; height: 100%; min-height: 0; }
 .primary-badge {
   padding: 1px 6px;
@@ -295,32 +327,101 @@ function actionType(action: PagePrimaryAction): "primary" | "danger" | undefined
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
-.primary-section { padding: 10px 2px; border-bottom: 1px solid var(--border); }
-.primary-section:last-child { border-bottom: 0; }
-.primary-section h3,
-.primary-section p { margin: 0; }
-.primary-section h3 { margin-bottom: 5px; color: var(--text); font-size: 0.7rem; }
-.primary-section p { color: var(--muted); font-size: 0.68rem; line-height: 1.55; }
-.current-view { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
-.current-view strong,
-.current-view > p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.current-view strong { color: var(--text); font-size: 0.77rem; }
-.section-kicker { color: var(--muted); font-size: 0.59rem; letter-spacing: 0.04em; text-transform: uppercase; }
-.context-grid {
+.primary-context {
   display: grid;
-  margin: 7px 0 0;
-  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 4px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel-head-bg) 38%, transparent);
+}
+.context-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+.context-title-row > strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.module-chip {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.56rem;
+  line-height: 16px;
+}
+.primary-context p { margin: 0; }
+.context-path {
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.61rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.context-description {
+  display: -webkit-box;
+  overflow: hidden;
   color: var(--muted);
   font-size: 0.64rem;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
-.context-grid dt,
-.context-grid dd { min-width: 0; margin: 0; padding: 3px 0; border-top: 1px solid var(--border); }
-.context-grid dd { overflow: hidden; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }
-.empty-primary-note { background: color-mix(in srgb, var(--panel-head-bg) 58%, transparent); }
-.live-summary p { color: var(--text); }
-.section-description { margin-bottom: 8px !important; }
-.primary-controls { display: flex; flex-direction: column; gap: 9px; }
-.primary-control { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.workspace-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.6rem;
+}
+.workspace-row > strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.primary-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  background: color-mix(in srgb, var(--el-color-primary) 5%, transparent);
+}
+.primary-status p { margin: 0; font-size: 0.64rem; line-height: 1.4; }
+.status-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--el-color-primary);
+}
+.contributed-section { border-bottom: 1px solid var(--border); }
+.contributed-section.is-collapsed { background: color-mix(in srgb, var(--panel-head-bg) 34%, transparent); }
+.contributed-section-head { min-height: 27px; background: var(--panel-head-bg); }
+.contributed-section-head :deep(.pnw-sidebar-block-head-toggle) { padding: 4px 8px; }
+.contributed-section-head :deep(.pnw-sidebar-block-title) { font-size: 0.68rem; }
+.contributed-section-head :deep(.pnw-sidebar-block-suffix) { font-size: 0.57rem; }
+.contributed-section-body { padding: 7px 10px 9px; }
+.section-description { margin: 0 0 7px; color: var(--muted); font-size: 0.62rem; line-height: 1.4; }
+.primary-controls { display: flex; flex-direction: column; gap: 7px; }
+.primary-controls.is-readonly-grid,
+.primary-controls.is-boolean-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 8px; }
+.primary-control { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
 .control-label { color: var(--text); font-size: 0.66rem; font-weight: 600; }
 .primary-control small { color: var(--muted); font-size: 0.61rem; line-height: 1.4; }
 .primary-control.is-disabled { opacity: 0.65; }
@@ -346,10 +447,18 @@ function actionType(action: PagePrimaryAction): "primary" | "danger" | undefined
   grid-template-columns: 72px minmax(0, 1fr);
   font-size: 0.64rem;
 }
+.is-readonly-grid .readonly-control { display: flex; min-width: 0; flex-direction: column; padding: 3px 0; }
 .readonly-control dt,
 .readonly-control dd { min-width: 0; margin: 0; padding: 3px 0; border-top: 1px solid var(--border); }
+.is-readonly-grid .readonly-control dt,
+.is-readonly-grid .readonly-control dd { padding: 0; border: 0; }
 .readonly-control dt { color: var(--muted); }
+.is-readonly-grid .readonly-control dt { font-size: 0.58rem; }
+.is-readonly-grid .readonly-control dd { font-size: 0.69rem; font-weight: 600; }
 .readonly-control dd { overflow: hidden; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }
-.primary-actions { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
-.primary-actions :deep(.el-button) { min-height: 26px; margin-left: 0; font-size: 0.66rem; }
+.primary-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+.primary-actions :deep(.el-button) { min-height: 25px; margin-left: 0; padding-inline: 8px; font-size: 0.64rem; }
+.empty-primary-note { display: grid; gap: 2px; padding: 12px 10px; color: var(--muted); }
+.empty-primary-note strong { color: var(--text); font-size: 0.68rem; }
+.empty-primary-note p { margin: 0; font-size: 0.62rem; line-height: 1.4; }
 </style>

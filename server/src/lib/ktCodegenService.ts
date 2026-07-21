@@ -7,6 +7,7 @@ import {
   KT_CODEGEN_TABLE_DATA_SCHEMA_VERSION,
   KtCodegenController,
   KtCodegenParam,
+  ktCodegenCanApplyValidRegions,
   ktCodegenCommitApplyWrites,
   ktCodegenIsBlockKey,
   ktCodegenProjectApply,
@@ -918,7 +919,7 @@ export function preflightKtCodegen(
   return {
     plan,
     plan_fingerprint: cacheKey,
-    safe_to_apply: plan.canApply && !source.truncated,
+    safe_to_apply: ktCodegenCanApplyValidRegions(plan) && !source.truncated,
     reused: Boolean(cached),
     created_at: createdAt,
     indexed_file_count: source.indexedFileCount,

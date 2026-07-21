@@ -71,7 +71,7 @@ function Wait-Until([scriptblock]$Predicate, [int]$TimeoutSeconds, [string]$Fail
 Assert-Condition ($Version -eq [string]$TauriConfig.version) "package.json and tauri.conf.json versions differ"
 Assert-Condition $CargoVersionMatch.Success "cannot read the Cargo package version"
 Assert-Condition ($Version -eq $CargoVersionMatch.Groups[1].Value) "package.json and Cargo.toml versions differ"
-Assert-Condition ($Version -eq "0.2.0") "this gate expects the current Desk Tools 0.2.0 release"
+Assert-Condition ($Version -eq "0.3.0") "this gate expects the current Desk Tools 0.3.0 release"
 
 $BundleDir = Join-Path $RepoRoot "src-tauri\target\release\bundle\nsis"
 $TempRoot = Join-Path ([IO.Path]::GetTempPath()) ("phoenix-nsis-smoke-" + [Guid]::NewGuid().ToString("N"))

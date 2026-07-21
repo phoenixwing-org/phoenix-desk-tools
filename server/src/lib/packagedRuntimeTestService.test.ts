@@ -12,9 +12,6 @@ const roots: string[] = [];
 const ENV_KEYS = [
   "PHOENIX_RESOURCES_DIR",
   "PHOENIX_USER_DATA_DIR",
-  "PHOENIX_FCSTD_READ",
-  "PHOENIX_FCSTD_XLINK",
-  "PHOENIX_FCSTD_QUERY",
 ] as const;
 const originalEnv = new Map(ENV_KEYS.map((key) => [key, process.env[key]]));
 
@@ -69,9 +66,6 @@ describe("packagedRuntimeTestService", () => {
 
     const nodeFile = writeFile(resources, "node/node.bin", "node");
     const serverFile = writeFile(resources, "server/server.mjs", "server");
-    const readFile = writeFile(resources, "bin/fcstd-read.bin", "read");
-    const xlinkFile = writeFile(resources, "bin/fcstd-xlink.bin", "xlink");
-    const queryFile = writeFile(resources, "bin/fcstd-query.bin", "query");
     writeFile(resources, "phoenix/config/app_config.json", JSON.stringify({
       navigation: [{ id: "home", page: "home" }, { id: "code", page: "code_index" }],
     }));
@@ -83,11 +77,6 @@ describe("packagedRuntimeTestService", () => {
       arch: process.arch,
       node: { version: process.version, filename: path.basename(nodeFile), sha256: hash(nodeFile) },
       server: { filename: path.basename(serverFile), sha256: hash(serverFile) },
-      native_tools: [
-        { name: "fcstd-read", filename: path.basename(readFile), sha256: hash(readFile) },
-        { name: "fcstd-xlink", filename: path.basename(xlinkFile), sha256: hash(xlinkFile) },
-        { name: "fcstd-query", filename: path.basename(queryFile), sha256: hash(queryFile) },
-      ],
     }));
 
     const modules = new Set([
@@ -105,23 +94,32 @@ describe("packagedRuntimeTestService", () => {
     expect(fs.existsSync(userData)).toBe(true);
   });
 
-  it("probes all configured native executables", async () => {
-    process.env.PHOENIX_FCSTD_READ = process.execPath;
-    process.env.PHOENIX_FCSTD_XLINK = process.execPath;
-    process.env.PHOENIX_FCSTD_QUERY = process.execPath;
-    const checks = packagedRuntimeChecks().filter((item) => item.module === "runtime/cad/native-tools");
-    const results = [];
-    for (const runtimeCheck of checks) results.push(await runPackagedRuntimeCheck(runtimeCheck));
-
-    expect(results).toHaveLength(3);
-    expect(results.every((result) => result.status === "passed")).toBe(true);
-  });
-
   it("reports the system Git dependency", async () => {
     const runtimeCheck = packagedRuntimeChecks().find((item) => item.module === "runtime/platform/git")!;
     await expect(runPackagedRuntimeCheck(runtimeCheck)).resolves.toMatchObject({
       status: "passed",
       message: expect.stringMatching(/^git version /i),
+    });
+  });
+
+  it("rejects legacy CAD Rust artifacts in the packaged runtime", async () => {
+    const resources = tempRoot();
+    process.env.PHOENIX_RESOURCES_DIR = resources;
+    const nodeFile = writeFile(resources, "node/node.bin", "node");
+    const serverFile = writeFile(resources, "server/server.mjs", "server");
+    writeFile(resources, "bin/fcstd-read", "legacy");
+    writeFile(resources, "runtime-manifest.json", JSON.stringify({
+      schema_version: 1,
+      platform: process.platform,
+      arch: process.arch,
+      node: { version: process.version, filename: path.basename(nodeFile), sha256: hash(nodeFile) },
+      server: { filename: path.basename(serverFile), sha256: hash(serverFile) },
+    }));
+
+    const runtimeCheck = packagedRuntimeChecks().find((item) => item.module === "runtime/platform/package")!;
+    await expect(runPackagedRuntimeCheck(runtimeCheck)).resolves.toMatchObject({
+      status: "failed",
+      message: "Packaged runtime must not contain a CAD native bin directory",
     });
   });
 });

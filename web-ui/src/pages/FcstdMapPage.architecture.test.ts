@@ -11,6 +11,7 @@ describe("FCStd map page boundary", () => {
     expect(page).toContain('from "../components/fcstd-map/FcstdMapIndexPane.vue"');
     expect(page).toContain('from "../models/fcstdMapViewModel"');
     expect(page).toContain('from "../composables/useFcstdMapEntries"');
+    expect(page).toContain('from "../composables/useFcstdMapScanController"');
     expect(page).toContain("hydrateFcstdMapPageSession");
     expect(page).toContain("serializeFcstdMapPageSession");
     expect(page).not.toContain("fetchFcstdMapEntries");
@@ -37,6 +38,20 @@ describe("FCStd map page boundary", () => {
     expect(entries).not.toMatch(/useAppShell|useAsyncProgress|startFcstdMapScan|purgeMissingFcstdMap|exportFcstdMapJson|localStorage/);
   });
 
+  it("扫描启动、冲突、终态和恢复进入可注入 controller", () => {
+    const page = source("./FcstdMapPage.vue");
+    const controller = source("../composables/useFcstdMapScanController.ts");
+    expect(page).toContain("const scanController = useFcstdMapScanController(");
+    expect(page).toContain("onCompleted: async (result)");
+    expect(page).not.toMatch(/useAsyncProgress|startFcstdMapScan|fetchFcstdMapScanProgress|cancelFcstdMapScan/);
+    expect(controller).toContain("progress?: ScanProgress");
+    expect(controller).toContain("transport?:");
+    expect(controller).toContain("() => progress.state.value?.status");
+    expect(controller).toContain('if (status === "done")');
+    expect(controller).toContain('if (status === "error")');
+    expect(controller).toContain('if (status === "cancelled")');
+  });
+
   it("索引 Pane 只装配显示与上行事件，不吸收 API、Host、Controller 或 session", () => {
     const pane = source("../components/fcstd-map/FcstdMapIndexPane.vue");
     expect(pane).toContain('defineModel<string>("searchQuery"');
@@ -58,7 +73,7 @@ describe("FCStd map page boundary", () => {
     expect(page).toContain("async function onExportJson()");
     expect(page).toContain("exportFcstdMapJson()");
     expect(page).toContain("saveFcstdMapPrefs(forceUpdatePartName.value)");
-    expect(page).toContain("startFcstdMapScan(forceUpdatePartName.value");
+    expect(page).toContain("useFcstdMapScanController({");
     expect(page).toContain("purgeMissingFcstdMap()");
 
     expect(pane).toContain("exportJson: []");

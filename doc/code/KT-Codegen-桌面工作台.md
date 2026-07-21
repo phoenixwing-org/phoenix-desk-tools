@@ -2,7 +2,7 @@
 
 > 状态：可用版已实现（配置编辑 + 控制符选择 + 源码预检 + 问题定位 + 会话恢复 + 真实源码 Apply）
 >
-> 最后更新：2026-07-17
+> 最后更新：2026-07-20
 >
 > 人工验收：[KT-Codegen-人工点检清单.md](KT-Codegen-人工点检清单.md)
 
@@ -10,7 +10,7 @@
 
 Desk Tools 的 `kt_codegen` 页是 `@phoenix-wing/kt-codegen` 的产品宿主，不拥有参数代码生成规则。
 
-- Phoenix Wing：`KtCodegenParam`、旧 v4 JSON / 17 列 CSV、17 列 Table、32 个 Block、Marker Scan、Analyze 与 Renderer。
+- Phoenix Wing 0.4.3：`KtCodegenParam`、旧 v4 JSON / 17 列 CSV、17 列 Table、32 个 Block、Marker Scan、Analyze、Renderer 与安全局部 Apply 判定。
 - Desk Tools Web：左侧 Block、主 View、Tab dirty、预览与用户确认。
 - Desk Tools Node：工作空间路径、UTF-8/GBK、BOM/换行、文件发现、磁盘指纹、源码快照与复读验证后的原子保存。
 - `kt-auto-code`：VS Code 宿主；桌面端持续对齐它已经验证的交互与安全边界。
@@ -50,12 +50,12 @@ Desk Tools 不复制 Renderer，不修改 `phoenix-wing`，也不在浏览器中
 
 ### 主 View
 
-- 参数表直接注册并使用 Wing 的 `<kt-codegen-table>` Web Component；列宽“自适应”、变更事件、选择前景色与 ARIA 行列信息均随 Wing 更新直接生效，Desk 不复制表格动作。
+- 参数表直接注册并使用 Wing 的 `<kt-codegen-table layout="page" collapsible>` Web Component；中央 View 负责页面滚动，Table 自然增高并保留横向滚动与 Header 折叠。列宽“自适应”、变更事件、选择前景色与 ARIA 行列信息均随 Wing 更新直接生效，Desk 不复制表格动作或折叠状态机。
 - 保存 JSON / CSV、从磁盘还原、执行预检并真实 Apply 源码。
 - 预检运行时按钮切换为“取消预检”；重复预检、配置/Block 变化和工作空间切换会通过 `AbortSignal` 中止旧浏览器请求。
 - `AppShell` 只创建一个全局 `WorkbenchBottomPanel`，以“预检 / 问题 / 运行日志”三个可收缩标签展示当前贡献和全局日志；切换 View 不新开或并列第二个面板，运行日志也不会回到右栏。
 - 预检标签并排展示命中的当前源码片段与 Wing 生成 Artifact；源码指纹变化时标记为过期并要求重新预检。
-- 配置 Reader、预检和 Apply 的结构化诊断统一进入“问题”；带 Wing `path.file/row/column` 的源码问题可点击定位，当前行使用黄色背景和左侧标识。
+- 配置 Reader、预检和 Apply 的结构化诊断统一进入“问题”；Marker 问题直接读取 Wing `diagnostic.marker` 的 Block、START/END、类身份与恢复边界，不解析本地化 message。带 Wing `path.file/row/column` 的源码问题可点击定位，当前行使用黄色背景和左侧标识。
 - 未保存 Param/Table 随 Workbench 会话保存。恢复时仅在磁盘指纹仍一致时自动载入；指纹冲突时保留磁盘版本和旧草稿，主编辑区会冻结，必须复制或明确放弃旧草稿。
 - 页面打开期间发生外部修改时，过期保存返回 `409`；宿主立即重读磁盘版本，同时把本地 Param/Table 作为冲突草稿保留，避免用户只看到错误后误操作丢稿。
 - 激活的 View 每 5 秒做一次轻量文件签名检查；签名未变只需 `stat`，签名变化才重新计算 SHA-256。clean View 自动载入外部修改；dirty View 或文件删除则保留当前草稿并显示警告，可先复制草稿再显式重载。
@@ -88,7 +88,7 @@ Desk Tools 不复制 Renderer，不修改 `phoenix-wing`，也不在浏览器中
 
 点击 `Apply 源码` 会先基于当前 Table/Block 强制重跑预检；本次预检取消/失败时不会回退使用旧 Plan。预检返回的 `plan_fingerprint` 同时覆盖规范化 Param、Block 顺序和全部候选源码内容指纹，Apply API 会再次 Analyze，只有身份与刚展示的计划完全一致才继续。
 
-宿主额外返回 `safe_to_apply`：它只有在 Wing `plan.canApply` 为真，且源码文件数与 64 MiB 快照扫描都完整时才为真。超过上限仍可查看部分预览和诊断，但左侧 Block、主 View 与状态日志都会标明“扫描不完整 / Apply 已关闭”，并提示通过 Code Ignore 缩小范围；服务端 Apply 再次强制此门禁，不信任前端按钮状态。文件数扫描采用“上限 + 1”探测，刚好 5000 个文件不会误报截断。
+宿主额外返回 `safe_to_apply`：它直接消费 Wing `ktCodegenCanApplyValidRegions(plan)`，再叠加 Desk 自己负责的“源码文件数与 64 MiB 快照扫描必须完整”门禁。完整计划显示“可 Apply”；只有 `marker.missing-end` / `marker.orphan-end` 等已被 Wing 隔离、且仍存在完整 Region/Artifact 时显示“可安全局部 Apply”，只写回完整区域，损坏区保持原样并继续出现在 Problems。Renderer、模型、Artifact 等其他 error 仍保持 fail-closed。超过扫描上限仍可查看部分预览和诊断，但 Primary、View、Properties 与状态日志都会标明“扫描不完整 / Apply 已关闭”，并提示通过 Code Ignore 缩小范围；服务端 Apply 再次强制此门禁，不信任前端按钮状态。文件数扫描采用“上限 + 1”探测，刚好 5000 个文件不会误报截断。
 
 真实 Apply 按以下事务边界执行：
 
@@ -108,11 +108,11 @@ Desk Tools 不复制 Renderer，不修改 `phoenix-wing`，也不在浏览器中
 
 ## 验证
 
-- `server/src/lib/ktCodegenService.test.ts`：发现、稳定快照读取、冷解析预算、配置保存、未知辅助 Marker、GBK/CRLF 真实 Apply、no-op 幂等、最终/即时 checkpoint 竞态、多文件失败回滚、扫描不完整门禁与批量边界。
+- `server/src/lib/ktCodegenService.test.ts`：发现、稳定快照读取、冷解析预算、配置保存、未知辅助 Marker、缺失/孤立 END 的安全局部 Apply、GBK/CRLF 真实 Apply、no-op 幂等、最终/即时 checkpoint 竞态、多文件失败回滚、扫描不完整门禁与批量边界。
 - `server/src/routes/shell-codegen.test.ts`：八个 HTTP 路径、16 MiB 请求上限、配置保存、真实源码 Apply、初始 stale 与保存/Apply 竞态均返回 `409`。
 - `web-ui/src/stores/ktCodegen.test.ts`：Wing 预设、预检取消/失效、问题行定位、真实 Apply、保存/切换门禁、发现合并、草稿摘要和竞态隔离。
 - `web-ui/src/utils/ktCodegenSession.test.ts`：安全热恢复、磁盘指纹冲突与非法快照拒绝。
-- `web-ui`：page registry、Block 显隐/Tab 上下文、多 Block 极窄窗口等分退让、单选状态机、Ribbon contract、`vue-tsc` 与 Vite production build。
+- `web-ui`：page registry、Block 显隐/Tab 上下文、VS Code 四区贡献、Wing Table page/collapsible、结构化 Marker Problems、多 Block 极窄窗口等分退让、单选状态机、Ribbon contract、`vue-tsc` 与 Vite production build。
 - 2026-07-17 全量回归：Web `24 files / 212 tests`、Server `62 files / 237 tests`；Web production build 通过，Server sidecar bundle 与 bundle health/shutdown smoke 在最终收口再次验证。
 - `pnpm -C server measure:kt-codegen [--] <workspace>`：可重复执行配置发现与单 Block 冷/热只读基准，输出版本化 JSON，不保存配置或源码。
 - PNXCaaStudy 实测：发现 11 个配置（冷解析约 21 KiB）；单个 `PARAM DECLARATION` 预检索引 217 个 C/C++ 文件、筛出并返回 46 个候选源码摘要（约 293 KiB），生成 1 个 `safe_to_apply=true` Artifact。2026-07-17 对原本 Git-clean 的 `PNXBomAnalysisCoreData.h` 做真实 Apply：只改 1 个 Marker 区域，UTF-8/LF 保持，1995→1996 bytes，最终指纹复读通过且无临时文件残留；Git diff 只包含该区域的空行和 3 个参数 id 更新。本机同进程配置发现冷/热约 `63ms/8ms`（热路径 11 命中、0 读取），预检冷/热约 `73ms/9ms`（热路径 `217/217` 文件命中且 Plan 复用）。

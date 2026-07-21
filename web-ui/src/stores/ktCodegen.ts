@@ -55,14 +55,19 @@ export type KtCodegenProblem = {
   diagnostic: KtCodegenDiagnostic;
 };
 
+export type KtCodegenPreflightViewState = "ready" | "applied" | "stale";
+
 function defineKtCodegenStore(scopeId: string) {
   return defineStore(`kt-codegen:${scopeId}`, () => {
   const documents = ref<KtCodegenDocumentSummary[]>([]);
   const active = ref<KtCodegenHostDocument | null>(null);
   const selectedBlockKeys = ref<KtCodegenBlockKey[]>([...ALL_BLOCK_KEYS]);
   const preflight = ref<KtCodegenPreflightPayload | null>(null);
+  const preservedPreflight = ref<KtCodegenPreflightPayload | null>(null);
+  const preflightViewState = ref<KtCodegenPreflightViewState | null>(null);
   const selectedArtifactId = ref("");
   const selectedRegionId = ref("");
+  const preflightViewFocusRequest = ref(0);
   const sourcePreview = ref<KtCodegenSourcePreviewPayload | null>(null);
   const sourcePreviewKind = ref<"region" | "candidate" | "diagnostic" | null>(null);
   const sourcePreviewLoading = ref(false);
@@ -111,9 +116,11 @@ function defineKtCodegenStore(scopeId: string) {
     promise: Promise<number | null>;
   } | null = null;
 
+  const preflightView = computed(() => preflight.value ?? preservedPreflight.value);
+
   const selectedArtifact = computed<KtCodegenArtifact | null>(() => {
     if (!selectedArtifactId.value) return null;
-    const artifacts = preflight.value?.plan.artifacts ?? [];
+    const artifacts = preflightView.value?.plan.artifacts ?? [];
     return artifacts.find((artifact) => artifact.id === selectedArtifactId.value) ?? null;
   });
 
@@ -123,7 +130,7 @@ function defineKtCodegenStore(scopeId: string) {
       origin: "配置" as const,
       diagnostic,
     })),
-    ...(preflight.value?.plan.diagnostics ?? []).map((diagnostic, index) => ({
+    ...(preflightView.value?.plan.diagnostics ?? []).map((diagnostic, index) => ({
       key: `preflight:${index}:${diagnostic.code}`,
       origin: "预检" as const,
       diagnostic,
@@ -176,8 +183,18 @@ function defineKtCodegenStore(scopeId: string) {
     }
   }
 
-  function resetPlan(message = "控制符选择已变化，请重新预检"): void {
+  function resetPlan(
+    message = "控制符选择已变化，请重新预检",
+    preserveAs: Exclude<KtCodegenPreflightViewState, "ready"> | null = "stale",
+  ): void {
     const hadActivePreflight = preflighting.value;
+    if (preflight.value && preserveAs) {
+      preservedPreflight.value = preflight.value;
+      preflightViewState.value = preserveAs;
+    } else if (!preserveAs) {
+      preservedPreflight.value = null;
+      preflightViewState.value = null;
+    }
     preflightRequest += 1;
     preflightAbort?.abort();
     preflightAbort = null;
@@ -301,6 +318,8 @@ function defineKtCodegenStore(scopeId: string) {
       observedFileSignature.value = document.file_signature;
       dirty.value = false;
       preflight.value = null;
+      preservedPreflight.value = null;
+      preflightViewState.value = null;
       selectedArtifactId.value = "";
       selectedRegionId.value = "";
       sourcePreview.value = null;
@@ -426,7 +445,11 @@ function defineKtCodegenStore(scopeId: string) {
         expected_plan_fingerprint: plan.plan_fingerprint,
       });
       if (request !== applyRequest || active.value?.path !== pathAtStart) return null;
-      resetPlan("源码已写回；原预检计划已失效");
+      resetPlan("源码已写回；原预检计划已失效", "applied");
+      selectedArtifactId.value = plan.plan.artifacts[0]?.id ?? "";
+      selectedRegionId.value = plan.plan.artifacts[0]?.regionId
+        ?? plan.plan.markerRegions[0]?.id
+        ?? "";
       lastApply.value = result;
       status.value = `已写回 ${result.files.length} 个源码文件 · ${result.region_count} 个区域 · 复读验证通过`;
       return result;
@@ -463,6 +486,8 @@ function defineKtCodegenStore(scopeId: string) {
       }, { signal: abort.signal });
       if (request !== preflightRequest) return null;
       preflight.value = result;
+      preservedPreflight.value = null;
+      preflightViewState.value = "ready";
       sourceStateCheckInFlight = null;
       selectedArtifactId.value = result.plan.artifacts[0]?.id ?? "";
       const firstRegion = result.plan.artifacts[0]?.regionId
@@ -485,6 +510,8 @@ function defineKtCodegenStore(scopeId: string) {
         return null;
       }
       preflight.value = null;
+      preservedPreflight.value = null;
+      preflightViewState.value = null;
       selectedArtifactId.value = "";
       selectedRegionId.value = "";
       sourcePreview.value = null;
@@ -623,8 +650,17 @@ function defineKtCodegenStore(scopeId: string) {
 
   function selectArtifact(id: string): void {
     selectedArtifactId.value = id;
-    const artifact = preflight.value?.plan.artifacts.find((item) => item.id === id);
-    if (artifact) void previewRegion(artifact.regionId);
+    const artifact = preflightView.value?.plan.artifacts.find((item) => item.id === id);
+    if (!artifact) return;
+    selectedRegionId.value = artifact.regionId;
+    if (preflight.value) void previewRegion(artifact.regionId);
+    else {
+      sourcePreview.value = null;
+      sourcePreviewKind.value = null;
+      sourcePreviewError.value = preflightViewState.value === "applied"
+        ? "该结果已经应用；重新预检后可读取最新源码"
+        : "该结果已经失效；重新预检后可读取源码";
+    }
   }
 
   async function previewRegion(regionId: string): Promise<KtCodegenSourcePreviewPayload | null> {
@@ -843,6 +879,8 @@ function defineKtCodegenStore(scopeId: string) {
     documents.value = [];
     active.value = null;
     preflight.value = null;
+    preservedPreflight.value = null;
+    preflightViewState.value = null;
     selectedArtifactId.value = "";
     selectedRegionId.value = "";
     sourcePreview.value = null;
@@ -879,8 +917,11 @@ function defineKtCodegenStore(scopeId: string) {
     active,
     selectedBlockKeys,
     preflight,
+    preflightView,
+    preflightViewState,
     selectedArtifactId,
     selectedRegionId,
+    preflightViewFocusRequest,
     selectedArtifact,
     sourcePreview,
     sourcePreviewKind,
@@ -921,6 +962,9 @@ function defineKtCodegenStore(scopeId: string) {
     checkPreflightSourceChanges,
     clearRuntimeProblems,
     reportRuntimeProblem,
+    requestPreflightViewFocus() {
+      preflightViewFocusRequest.value += 1;
+    },
     reset,
   };
   });
