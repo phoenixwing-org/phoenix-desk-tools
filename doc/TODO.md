@@ -4,7 +4,7 @@
 
 Owner：Desk Tools maintainers
 
-适用版本：0.2.x / 联合成熟度 84.75 → 92.00（本轮已接受）
+适用版本：0.3.x / 联合成熟度 84.75 → 92.00（本轮已接受）
 
 最后核验：2026-07-20
 
@@ -41,7 +41,7 @@ Owner：Desk Tools maintainers
 ## CAD 与运行可靠性
 
 - [x] 用 release profile Wing Rust 二进制和真实 `Document.xml` 构造 FCStd archive，自动验收协议读、XLink 修改、修改后复读与精确字节回滚。
-- [x] 从当前 0.2.0 源码构建 macOS arm64 Tauri `.app`，自动验收真实启动、隔离用户数据、Codegen Apply、FCStd 读取和 sidecar 正常回收。
+- [x] 曾从 0.2.0 源码构建 macOS arm64 Tauri `.app`，自动验收真实启动、隔离用户数据、Codegen Apply、FCStd 读取和 sidecar 正常回收；该回执作为历史基线保留。
 - [x] `fcstd_map` 已通过分页 API 与页码/页大小状态避免全表加载；大型 UI 目标进一步把查询、分页和 session 规则移入纯 ViewModel。
 - [x] FCStd ZIP/Document.xml 读取、BOM 写回、XLink/Label 修复和 SQLite 查询统一使用 TypeScript；XML 领域投影进入 Wing cad-core，Desk 只保留 ZIP、文件系统、原子替换和产品事务。
 - [x] 删除 Desk 的 `cad-rust-source`、native provider、三个 CAD Rust sidecar 构建/打包/状态 API 和发行版自检；Tauri 仅保留桌面壳自身的 Rust 生命周期代码。
@@ -49,7 +49,7 @@ Owner：Desk Tools maintainers
 - [x] CAD 索引扫描统一以 AsyncProgress 轮询终态驱动；刷新恢复复用同一 poller 并重新注册服务端取消，终态/异常注销 cancel，避免页面出现第二套扫描状态。
 - [ ] 继续把其它长任务的进度、取消与运行日志收敛到 AsyncProgress，不让页面各自维护第二套任务状态。
 - [ ] 将剩余 Python 兼容入口逐项判定为外部引擎 adapter 或退役路径；Node/Hono 是当前 HTTP 真源。
-- [ ] **用户手工验收**：在自有 Windows 机器执行已入库的 0.2.0 NSIS 构建/安装/Codegen/FCStd/退出/卸载门禁，回传脚本生成的 JSON 回执与最终成功日志；Codex 不连接远程 Windows、不创建 GitHub 镜像。FreeCAD/SolidWorks 外部进程 E/F 档仍需独立环境；历史 0.1.0 Windows 产物不计入当前版本。
+- [ ] **用户手工验收**：在自有 Windows 机器执行已入库的 0.3.0 NSIS 构建/安装/Codegen/FCStd/退出/卸载门禁，回传脚本生成的 JSON 回执与最终成功日志；Codex 不连接远程 Windows、不创建 GitHub 镜像。FreeCAD/SolidWorks 外部进程 E/F 档仍需独立环境；历史 0.1.0 Windows 产物不计入当前版本。
 
 ## 后期：大型 UI 拆分
 

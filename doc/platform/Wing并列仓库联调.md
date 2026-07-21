@@ -4,7 +4,7 @@
 
 Owner：Desk Tools maintainers
 
-适用版本：Desk Tools 0.2.x / Wing 0.5.x
+适用版本：Desk Tools 0.3.x / Wing 0.5.x
 
 最后核验：2026-07-22
 

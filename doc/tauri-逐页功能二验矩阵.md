@@ -10,7 +10,7 @@
 | 已达 `F` | Home/Config、Git、Test Fixtures、Unit Tests 开发态、工作集、Code 全链、CAA 首页/编辑器、CAD 主链与查重 |
 | 仅达 `I` | 欢迎面的 Tauri 原生操作、STEP Batch、SW -> STEP |
 | 已达 `D` | macOS 0.2.0 `.app` 的打包运行时、隔离用户数据、Codegen/FCStd 代表性服务链与 sidecar 生命周期；页面级 `D` 仍需逐页 UI 工作流 |
-| 下一验收点 | 在 Windows runner/VM 构建当前 0.2.0 NSIS，并在普通用户安装态检查代表性页面、安装登记与卸载 |
+| 下一验收点 | 在 macOS 与 Windows runner/VM 构建当前 0.3.0，并在普通用户安装态检查代表性页面、安装登记与卸载 |
 
 ## Shell / Core
 
@@ -58,5 +58,5 @@
 
 1. 原提交的 checkpoint 不可信，但当前工作区已经把大多数“页面打开但按钮空转”的主链改成真实 Node/TypeScript 实现；FreeCAD/SolidWorks 仅作为外部引擎适配器。
 2. 自主可验证的 Code、CAA、CAD 主要读写功能已达 `F`；它们不是由测试数量推断，而是检查了磁盘产物并重新加载回读。
-3. macOS 0.2.0 release 打包运行时与代表性服务链已经通过；当前版本的 Windows NSIS 构建/安装/卸载、逐页 release `D`、代码签名，以及 FreeCAD/SolidWorks 的真实引擎验证仍是缺口。
-4. 在上述缺口关闭前，项目应描述为“核心功能迁移已可接手，macOS 0.2.0 release 代表性链路已通过、Windows 0.2.0 与逐页桌面验收未完”，不能描述为“全部页面全部功能迁移完成”。
+3. macOS 0.2.0 release 打包运行时与代表性服务链已经作为历史基线通过；当前 0.3.0 的 macOS/Windows 制品、Windows NSIS 构建/安装/卸载、逐页 release `D`、代码签名，以及 FreeCAD/SolidWorks 的真实引擎验证仍是缺口。
+4. 在上述缺口关闭前，项目应描述为“核心功能迁移已可接手，macOS 0.2.0 历史 release 代表性链路已通过、0.3.0 跨平台制品与逐页桌面验收未完”，不能描述为“全部页面全部功能迁移完成”。
