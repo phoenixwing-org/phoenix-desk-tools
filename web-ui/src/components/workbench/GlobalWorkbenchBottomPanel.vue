@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, toValue } from "vue";
+import { computed, onUnmounted, toValue, watch } from "vue";
 import { useAppShell } from "../../composables/useAppShell";
 import {
   useGlobalWorkbenchBottomContribution,
@@ -31,11 +31,9 @@ const contributionProps = computed(() => {
   return value ? toValue(value) : {};
 });
 
-function resolveTab(id: "preflight" | "problems", label: string): WorkbenchBottomPanelTab {
-  const tab = contributedTabs.value.find((item) => item.id === id);
-  if (!tab) return { id, label, count: 0 };
+function resolveTab(tab: WorkbenchBottomContributionTab): WorkbenchBottomPanelTab {
   return {
-    id,
+    id: tab.id,
     label: tab.label,
     count: tab.count == null ? undefined : toValue(tab.count),
     tone: tab.tone == null ? undefined : toValue(tab.tone),
@@ -43,8 +41,7 @@ function resolveTab(id: "preflight" | "problems", label: string): WorkbenchBotto
 }
 
 const tabs = computed<readonly WorkbenchBottomPanelTab[]>(() => [
-  resolveTab("preflight", "预检"),
-  resolveTab("problems", "问题"),
+  ...contributedTabs.value.map(resolveTab),
   { id: "output", label: "运行日志", count: runtimeLogLineCount.value },
 ]);
 const activeTab = computed({
@@ -77,6 +74,11 @@ const summary = computed(() => {
   if (contributionSummary.value) return `${sourceLabel.value} · ${contributionSummary.value}`;
   return "全局面板会保留最近的预检与问题；切换 View 不会销毁";
 });
+
+watch(tabs, (available) => {
+  if (available.some((tab) => tab.id === activeTab.value)) return;
+  activeTab.value = available[0]?.id ?? "output";
+}, { immediate: true });
 
 function contentTab(tab: WorkbenchBottomContributionTab["id"]) {
   return contributedTabs.value.find((item) => item.id === tab);

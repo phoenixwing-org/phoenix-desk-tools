@@ -10,6 +10,7 @@ const dependencySections = [
   "optionalDependencies",
   "peerDependencies",
 ];
+const expectedWingVersion = "0.5.0";
 const wingDependencies = new Map();
 
 for (const relative of manifestFiles) {
@@ -34,6 +35,9 @@ if (wingDependencies.size === 0) throw new Error("No Wing dependencies were foun
 const versions = new Set([...wingDependencies.values()].map(({ specifier }) => specifier));
 if (versions.size !== 1) {
   throw new Error(`Wing dependencies must be lockstep, got ${[...versions].join(", ")}`);
+}
+if (![...versions].includes(expectedWingVersion)) {
+  throw new Error(`Wing dependencies must use Registry ${expectedWingVersion}, got ${[...versions].join(", ")}`);
 }
 const lockfile = fs.readFileSync(path.join(root, "pnpm-lock.yaml"), "utf8");
 if (/(?:link|file):[^\n]*phoenix-wing/iu.test(lockfile)) {

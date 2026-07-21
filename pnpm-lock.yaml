@@ -33,20 +33,20 @@ importers:
         specifier: ^1.13.8
         version: 1.19.14(hono@4.12.27)
       '@phoenix-wing/cad-core':
-        specifier: 0.4.3
-        version: 0.4.3
+        specifier: 0.5.0
+        version: 0.5.0
       '@phoenix-wing/code-core':
-        specifier: 0.4.3
-        version: 0.4.3
+        specifier: 0.5.0
+        version: 0.5.0
       '@phoenix-wing/db-node':
-        specifier: 0.4.3
-        version: 0.4.3
+        specifier: 0.5.0
+        version: 0.5.0
       '@phoenix-wing/kt-codegen':
-        specifier: 0.4.3
-        version: 0.4.3
+        specifier: 0.5.0
+        version: 0.5.0
       '@phoenix-wing/workspace-schema':
-        specifier: 0.4.3
-        version: 0.4.3
+        specifier: 0.5.0
+        version: 0.5.0
       fflate:
         specifier: 0.8.3
         version: 0.8.3
@@ -88,8 +88,8 @@ importers:
         specifier: ^2.3.2
         version: 2.3.2(vue@3.5.35(typescript@5.7.3))
       '@phoenix-wing/kt-codegen':
-        specifier: 0.4.3
-        version: 0.4.3
+        specifier: 0.5.0
+        version: 0.5.0
       diff2html:
         specifier: ^3.4.56
         version: 3.4.56
@@ -100,8 +100,8 @@ importers:
         specifier: ^2.14.2
         version: 2.14.2(vue@3.5.35(typescript@5.7.3))
       phoenix-wing:
-        specifier: 0.4.3
-        version: 0.4.3(element-plus@2.14.2(vue@3.5.35(typescript@5.7.3)))(pinia@3.0.4(typescript@5.7.3)(vue@3.5.35(typescript@5.7.3)))(vue@3.5.35(typescript@5.7.3))
+        specifier: 0.5.0
+        version: 0.5.0(element-plus@2.14.2(vue@3.5.35(typescript@5.7.3)))(pinia@3.0.4(typescript@5.7.3)(vue@3.5.35(typescript@5.7.3)))(vue@3.5.35(typescript@5.7.3))
       pinia:
         specifier: ^3.0.4
         version: 3.0.4(typescript@5.7.3)(vue@3.5.35(typescript@5.7.3))
@@ -593,20 +593,20 @@ packages:
     resolution: {integrity: sha512-tmmZ3lQxAe/k/+rNnXQRawJ4NjxO2hqiOLTHvWchtGZULp4RyFeh6aU4XdOYBFe2KE1oShQTv4AblOs2iOrNnQ==}
     engines: {node: '>= 10.0.0'}
 
-  '@phoenix-wing/cad-core@0.4.3':
-    resolution: {integrity: sha512-ZUI9irrqcx1ETXvGhiVqddzTO+s+9A+bZXUUOMQHlal0NNFdmy1i8Dwx/4zrWZBE326UgP1x8C5inL3JhnGdig==}
+  '@phoenix-wing/cad-core@0.5.0':
+    resolution: {integrity: sha512-GQt/2P5foy9ndGUVMoVSwr91vVy73ucN5i5mODssjnYh1v9EwI8psG8f5MwJwKx0ZdZAcsOMUw8HAihrWkczMw==}
 
-  '@phoenix-wing/code-core@0.4.3':
-    resolution: {integrity: sha512-JyzyWlSBQ/lw5f90cyx3cFGxmx62eXwHJHkmmBR24G9ErCrsFZId+188f9rKuy/bc5Lcu11VI2hTB6DDxmtMhQ==}
+  '@phoenix-wing/code-core@0.5.0':
+    resolution: {integrity: sha512-coYXR+NTYtUhE+xow8L+JqfcRIqJK3+OHn9A9CiDnp9NAdHgkBCo8wN8LW8G02xUCFSpDe7nBFd3mOh60zEZSA==}
 
-  '@phoenix-wing/db-node@0.4.3':
-    resolution: {integrity: sha512-btFByAR9eBYJEslSgzJKyqDgpMn4W++XwiXQP5Ty7Z61wwxVJ/T9yVCI1DyJMm9KMU7HI3pRBv7cTHqyqQmxTw==}
+  '@phoenix-wing/db-node@0.5.0':
+    resolution: {integrity: sha512-2JfSng6Jgchbm/eWiaIctvq4RYQtKtTu5OR2M7iRqFS01dFCKgi5rJ8FABlzXz0VmHsxKNwcjLAoSMMgOQn3OA==}
 
-  '@phoenix-wing/kt-codegen@0.4.3':
-    resolution: {integrity: sha512-1qApPokzspXD4n2vvjpZX0gonOEg3YUpkKYoVtM/E10/BA4QBwn6fvcUpPkC3cL7orA5sWp3aelR3h6dMmekdg==}
+  '@phoenix-wing/kt-codegen@0.5.0':
+    resolution: {integrity: sha512-3wiIdlzc6quMzpIT2JoiQkd7K+Lmd9jw+GWSsLm3/NzeY05b6wfqysR0eZSPnkRxjVQyniZAisayq5GFnultzQ==}
 
-  '@phoenix-wing/workspace-schema@0.4.3':
-    resolution: {integrity: sha512-QNTcjYwbl+ZE74U1y21ySI9qlfnXbV64DCISUUS0sbnubiDt6nDq9WXa7kCPh+qFddXIquQAgRXqdpONeltw/w==}
+  '@phoenix-wing/workspace-schema@0.5.0':
+    resolution: {integrity: sha512-GSIX63cdE6ef5S30P5A/XPXkvo8v/wx64M9NpPb2ywgvda5MPdPCsgNepVNzrGfN5eWllaIKOM4KiuOJ4AP8qQ==}
 
   '@polka/url@1.0.0-next.29':
     resolution: {integrity: sha512-wwQAWhWSuHaag8c4q/KN/vCoeOJYshAIvMQwD4GpSb3OiZklFfvAgmj0VCBBImRpuF/aFgIRzllXlVX93Jevww==}
@@ -1167,8 +1167,8 @@ packages:
   perfect-debounce@1.0.0:
     resolution: {integrity: sha512-xCy9V055GLEqoFaHoC1SoLIaLmWctgCUaBaWxDZ7/Zx4CTyX7cJQLJOok/orfjZAh9kEYpjJa4d0KcJmCbctZA==}
 
-  phoenix-wing@0.4.3:
-    resolution: {integrity: sha512-4bKUQxaXtwfraRcdXsk6SWz6GOPn6Z/kJFYT+gPo76d4E3wr7tWD4jBXE1sSVEZ2RmszFjVwrQUTozhkHyPL5Q==}
+  phoenix-wing@0.5.0:
+    resolution: {integrity: sha512-+vREluqgyS5CoaINcfEvrwiIf0yJJcQ+CzVnCCycNlRXEh4idy0RAw7156Vr1m8IOmmiuAoDDXRdt9xNRTin+w==}
     peerDependencies:
       element-plus: ^2.0.0
       pinia: ^2.0.0 || ^3.0.0
@@ -1883,17 +1883,17 @@ snapshots:
       '@parcel/watcher-win32-x64': 2.5.6
     optional: true
 
-  '@phoenix-wing/cad-core@0.4.3': {}
+  '@phoenix-wing/cad-core@0.5.0': {}
 
-  '@phoenix-wing/code-core@0.4.3': {}
+  '@phoenix-wing/code-core@0.5.0': {}
 
-  '@phoenix-wing/db-node@0.4.3':
+  '@phoenix-wing/db-node@0.5.0':
     dependencies:
       node-sqlite3-wasm: 0.8.59
 
-  '@phoenix-wing/kt-codegen@0.4.3': {}
+  '@phoenix-wing/kt-codegen@0.5.0': {}
 
-  '@phoenix-wing/workspace-schema@0.4.3': {}
+  '@phoenix-wing/workspace-schema@0.5.0': {}
 
   '@polka/url@1.0.0-next.29': {}
 
@@ -2461,10 +2461,10 @@ snapshots:
 
   perfect-debounce@1.0.0: {}
 
-  phoenix-wing@0.4.3(element-plus@2.14.2(vue@3.5.35(typescript@5.7.3)))(pinia@3.0.4(typescript@5.7.3)(vue@3.5.35(typescript@5.7.3)))(vue@3.5.35(typescript@5.7.3)):
+  phoenix-wing@0.5.0(element-plus@2.14.2(vue@3.5.35(typescript@5.7.3)))(pinia@3.0.4(typescript@5.7.3)(vue@3.5.35(typescript@5.7.3)))(vue@3.5.35(typescript@5.7.3)):
     dependencies:
-      '@phoenix-wing/code-core': 0.4.3
-      '@phoenix-wing/db-node': 0.4.3
+      '@phoenix-wing/code-core': 0.5.0
+      '@phoenix-wing/db-node': 0.5.0
     optionalDependencies:
       element-plus: 2.14.2(vue@3.5.35(typescript@5.7.3))
       node-sqlite3-wasm: 0.8.59

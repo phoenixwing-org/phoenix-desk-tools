@@ -110,6 +110,7 @@ declare module 'vue' {
     GitSectionHead: typeof import('./src/components/git/GitSectionHead.vue')['default']
     GlobalWorkbenchBottomPanel: typeof import('./src/components/workbench/GlobalWorkbenchBottomPanel.vue')['default']
     KtCodegenBottomContent: typeof import('./src/components/codegen/KtCodegenBottomContent.vue')['default']
+    KtCodegenPreflightBlock: typeof import('./src/components/codegen/KtCodegenPreflightBlock.vue')['default']
     KtCodegenSidebar: typeof import('./src/components/codegen/KtCodegenSidebar.vue')['default']
     OnboardingBanner: typeof import('./src/components/OnboardingBanner.vue')['default']
     OnboardingChecklist: typeof import('./src/components/OnboardingChecklist.vue')['default']

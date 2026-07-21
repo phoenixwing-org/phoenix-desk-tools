@@ -1,6 +1,8 @@
 # KT Codegen：Wing 0.4.3 与 VS Code 工作台收敛执行计划
 
-状态：current
+状态：已被三端共用计划替代
+
+> 2026-07-21 架构更正：本文件记录 0.4.3 首轮收敛历史；“不新增 Wing Web Component”和“预检位于下方面板”不再是当前方向。当前权威计划为 [Code 工具三端共用算法与 UI 内核执行计划](Code三端共用算法与UI内核-执行计划.md)：VS Code、Desk Web、Desk Tauri 共用 Wing 算法、ViewModel 与 Web Components，预检位于中央 View。
 
 执行状态：首轮收敛已完成（2026-07-20）
 

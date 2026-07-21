@@ -513,6 +513,13 @@
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
+      "path": "doc/code/Code三端共用算法与UI内核-执行计划.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.2.x",
+      "lastVerified": "2026-07-17"
+    },
+    {
       "path": "doc/code/KT-Codegen-人工点检清单.md",
       "status": "current",
       "owner": "Desk Tools maintainers",

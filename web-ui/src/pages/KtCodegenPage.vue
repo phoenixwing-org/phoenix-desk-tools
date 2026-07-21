@@ -12,6 +12,7 @@ import {
 } from "@phoenix-wing/kt-codegen/table";
 import KtCodegenSidebar from "../components/codegen/KtCodegenSidebar.vue";
 import KtCodegenBottomContent from "../components/codegen/KtCodegenBottomContent.vue";
+import KtCodegenPreflightBlock from "../components/codegen/KtCodegenPreflightBlock.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { usePageSummary } from "../composables/usePageSummary";
 import { usePagePrimaryContribution } from "../composables/usePagePrimaryContribution";
@@ -46,6 +47,8 @@ const {
   externalChange,
   opening,
   preflight,
+  preflightView,
+  preflightViewFocusRequest,
   preflighting,
   problems,
   problemTone,
@@ -57,6 +60,7 @@ const {
 } = storeToRefs(store);
 const tableRef = ref<KtCodegenTable | null>(null);
 const tableItemCount = ref(0);
+const preflightBlockOpen = ref(false);
 let draftHeartbeat: ReturnType<typeof setInterval> | null = null;
 let externalPoll: ReturnType<typeof setInterval> | null = null;
 let bootstrapDone = false;
@@ -86,13 +90,13 @@ const pageParam = computed(() => createKtCodegenPageParam({
   selectedBlockCount: selectedBlockKeys.value.length,
   totalBlockCount,
   preflighting: preflighting.value,
-  preflight: preflight.value
+  preflight: preflightView.value
     ? {
-        safeToApply: preflight.value.safe_to_apply,
-        planCanApply: preflight.value.plan.canApply,
-        regionCount: preflight.value.plan.markerRegions.length,
-        artifactCount: preflight.value.plan.artifacts.length,
-        diagnosticCount: preflight.value.plan.diagnostics.length,
+        safeToApply: preflight.value?.safe_to_apply ?? false,
+        planCanApply: preflight.value?.plan.canApply ?? false,
+        regionCount: preflightView.value.plan.markerRegions.length,
+        artifactCount: preflightView.value.plan.artifacts.length,
+        diagnosticCount: preflightView.value.plan.diagnostics.length,
       }
     : null,
   applying: applying.value,
@@ -107,16 +111,15 @@ const {
 } = useKtCodegenPagePropertySheet(pageParam);
 const className = computed(() => pageView.value.className === "—" ? "" : pageView.value.className);
 const encodingLabel = computed(() => pageView.value.encoding === "—" ? "" : pageView.value.encoding);
-const planPresentation = computed(() => deriveKtCodegenPlanPresentation(preflight.value));
+const planPresentation = computed(() => deriveKtCodegenPlanPresentation(preflightView.value));
 const bottomTabs = computed<readonly WorkbenchBottomContributionTab[]>(() => [
-  { id: "preflight", label: "预检", count: preflight.value?.plan.markerRegions.length ?? 0 },
   { id: "problems", label: "问题", count: problems.value.length, tone: problemTone.value },
 ]);
 const bottomSummary = computed(() => {
   if (applying.value) return "正在写回源码…";
   if (lastApply.value) return `已写回 ${lastApply.value.files.length} 文件 / ${lastApply.value.region_count} 区域`;
-  if (!preflight.value) return "全局保留预检、问题与运行日志";
-  return `${preflight.value.plan.artifacts.length} 个 Artifact · ${planPresentation.value.label}`;
+  if (!preflightView.value) return "Problems 与运行日志；预检结果位于当前 View";
+  return `${problems.value.length} 个问题 · 预检结果位于当前 View`;
 });
 useWorkbenchBottomContribution("kt_codegen", props.workbenchTabId, {
   sourceLabel: computed(() => active.value?.file_name ?? "KT Codegen"),
@@ -173,6 +176,9 @@ watch(recoveryConflict, (value) => {
   shell.scheduleWorkbenchSave();
 });
 watch(selectedBlockKeys, () => shell.scheduleWorkbenchSave(), { deep: true });
+watch(preflightViewFocusRequest, () => {
+  preflightBlockOpen.value = true;
+});
 watch(status, (message) => tableRef.value?.setStatus(
   planPresentation.value.tone === "error" ? "error" : "idle",
   message,
@@ -271,8 +277,7 @@ async function runPreflight(): Promise<boolean> {
   const table = currentTable();
   if (!table) return false;
   store.clearRuntimeProblems("预检");
-  bottomPanel.setActiveTab("preflight");
-  void shell.setLogOpen(true);
+  preflightBlockOpen.value = true;
   tableRef.value?.setStatus("idle", "正在扫描工作空间控制标记…");
   appendKtLog(`[KT Codegen] 预检 ${active.value?.path ?? ""}…`);
   try {
@@ -296,7 +301,10 @@ async function runPreflight(): Promise<boolean> {
         : "idle",
       message,
     );
-    if (result.plan.diagnostics.some((item) => item.severity === "error")) bottomPanel.setActiveTab("problems");
+    if (result.plan.diagnostics.some((item) => item.severity === "error")) {
+      bottomPanel.setActiveTab("problems");
+      void shell.setLogOpen(true);
+    }
     shell.setStatus(message);
     return true;
   } catch (error) {
@@ -573,6 +581,13 @@ onUnmounted(() => {
           <el-button v-else size="small" :disabled="opening || saving || applying || Boolean(recoveryConflict)" @click="runPreflight">预检</el-button>
           <el-button
             size="small"
+            :disabled="!preflightView"
+            :type="preflightBlockOpen ? 'primary' : 'default'"
+            plain
+            @click="preflightBlockOpen = !preflightBlockOpen"
+          >预检结果</el-button>
+          <el-button
+            size="small"
             :loading="applying"
             :disabled="opening || preflighting || saving || Boolean(recoveryConflict)"
             @click="applySource"
@@ -638,6 +653,10 @@ onUnmounted(() => {
         @kt-codegen-table-dirty-change="onTableDirty"
         @kt-codegen-table-change="onTableChange"
       />
+      <KtCodegenPreflightBlock
+        v-model="preflightBlockOpen"
+        :workbench-tab-id="workbenchTabId"
+      />
     </div>
   </div>
 </template>
@@ -694,11 +713,11 @@ onUnmounted(() => {
   display: block;
   flex: 1 1 auto;
   min-height: 0;
-  padding: 0;
+  padding: 8px 0 0;
   overflow: auto;
 }
 
-.parameter-table { width: 100%; min-height: 0; height: auto; }
+.parameter-table { width: calc(100% - 16px); min-height: 0; height: auto; margin: 0 8px; }
 .empty-view { display: grid; flex: 1 1 auto; min-height: 0; place-items: center; padding: 24px; }
 .empty-card { max-width: 520px; padding: 28px; text-align: center; color: var(--muted); border: 1px dashed var(--border-strong); border-radius: 8px; }
 .empty-card strong { color: var(--text); }
