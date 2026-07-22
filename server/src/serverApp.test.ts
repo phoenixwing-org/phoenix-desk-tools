@@ -16,8 +16,14 @@ describe("Phoenix server app", () => {
       app_version: "0.3.0",
     });
 
+    const tauriDev = await app.request("/api/health", {
+      headers: { Origin: "http://localhost:49373" },
+    });
+    expect(tauriDev.status).toBe(200);
+    expect(tauriDev.headers.get("access-control-allow-origin")).toBe("http://localhost:49373");
+
     const rejected = await app.request("/api/health", {
-      headers: { Origin: "https://example.com" },
+      headers: { Origin: "http://localhost:5173" },
     });
     expect(rejected.status).toBe(403);
     await expect(rejected.json()).resolves.toMatchObject({ detail: expect.stringMatching(/origin/i) });
