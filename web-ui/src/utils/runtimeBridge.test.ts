@@ -4,11 +4,13 @@ import { apiOrigin, apiUrl, initializeRuntimeBridge, invokeTauri, isTauriRuntime
 const runtime = globalThis as typeof globalThis & {
   __TAURI__?: { core?: { invoke: ReturnType<typeof vi.fn> } };
   __PHOENIX_API_ORIGIN__?: string;
+  __PHOENIX_RUNTIME_INFO__?: unknown;
 };
 
 afterEach(() => {
   delete runtime.__TAURI__;
   delete runtime.__PHOENIX_API_ORIGIN__;
+  delete runtime.__PHOENIX_RUNTIME_INFO__;
 });
 
 describe("runtime bridge", () => {
@@ -34,7 +36,12 @@ describe("runtime bridge", () => {
   });
 
   it("loads the actual managed API origin before the app mounts", async () => {
-    const invoke = vi.fn().mockResolvedValue({ api_origin: "http://127.0.0.1:48382" });
+    const invoke = vi.fn().mockResolvedValue({
+      api_origin: "http://127.0.0.1:48382",
+      api_source: "reused",
+      api_version: "0.3.0",
+      protocol_version: 1,
+    });
     runtime.__TAURI__ = { core: { invoke } };
     await initializeRuntimeBridge();
     expect(apiUrl("/api/health")).toBe("http://127.0.0.1:48382/api/health");

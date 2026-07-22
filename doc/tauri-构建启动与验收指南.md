@@ -17,7 +17,7 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-- UI：`http://localhost:5173/`
+- UI：首选 `http://localhost:49373/`，占用时由 `pnpm tauri:dev` 自动向上寻找
 - Node/Hono：首选 `http://127.0.0.1:48375/api/health`，占用时在登记范围内顺延
 - Windows 根脚本不再使用 Unix `sleep`。
 
@@ -27,7 +27,7 @@ Tauri 开发态：
 pnpm tauri:dev
 ```
 
-Tauri 会自行启动 Vite 和本地 Node 服务；不要同时运行 `pnpm dev`。release 只使用打包 runtime，不能借用仓库服务。
+Tauri 会自行启动 Vite。它先读取 Desk 服务登记并校验健康与协议：存在兼容 API 时复用，没有时才启动自己的 Node runtime；API 原子锁禁止第二份后台。release 包含可自行启动的 runtime，但同样遵循发现与复用规则。
 
 ## 3. Release 与安装包
 

@@ -119,7 +119,7 @@ Owner：Desk Tools / Web Workbench maintainers
 3. 每次点击时观察旧 View 是否保持到目标 View 完整出现，Header/Ribbon/Primary/Properties 不应白闪。
 4. 快速连续点击两个尚未打开的页面，最终只应落在第二个页面。
 5. 再次切换上述已打开页面，确认状态、滚动和编辑草稿仍由 `KeepAlive` 保留。
-6. 在浏览器访问 `http://localhost:5173/` 重复点检，确认 Web 版本一致受益。
+6. 在浏览器访问 `http://localhost:49373/` 重复点检，确认 Web 版本一致受益。
 
 ## 7. 2026-07-20 实施与验收记录
 

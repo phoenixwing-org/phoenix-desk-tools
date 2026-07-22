@@ -593,6 +593,13 @@
       "reason": "完成态会话、迁移或发布证据"
     },
     {
+      "path": "doc/platform/Desk-API单实例与多宿主发现.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.2.x",
+      "lastVerified": "2026-07-17"
+    },
+    {
       "path": "doc/platform/FileWorkset-规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",

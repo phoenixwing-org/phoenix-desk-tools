@@ -18,8 +18,8 @@ pnpm install --frozen-lockfile
 标准开发目录要求 `phoenix-desk-tools` 与 `phoenix-wing` 并列：
 
 ```bash
-pnpm dev                       # 本地 Wing；Vite :5173，Node 首选 :48375、占用时向上寻找
-# 浏览器打开 http://localhost:5173
+pnpm dev                       # 本地 Wing；Vite 首选 :49373，发现已登记 API 时直接复用
+# 浏览器打开 http://localhost:49373
 ```
 
 `pnpm dev` 找不到 `../phoenix-wing` 会直接停止，不会静默回退 npm 包。需要验证当前 Registry 正式包时明确运行：
@@ -32,12 +32,26 @@ pnpm dev:registry              # package.json + pnpm-lock.yaml 锁定版本
 
 ### Tauri 桌面开发模式
 
-桌面模式还需要 Rust 和 Tauri 2 CLI。Tauri 会自行启动前端和本地服务，不需要同时运行 `pnpm dev`。
+桌面模式还需要 Rust 和 Tauri 2 CLI。Tauri 会自行启动前端；发现兼容的已登记 Desk API 时复用它，否则启动自己的后台 API。
 
 ```bash
 cargo install tauri-cli --version "^2.6" --locked  # 仅首次安装
-pnpm tauri:dev
+pnpm tauri:dev                    # 49373 被占用时自动尝试 49374、49375……
 ```
+
+如需先关闭遗留进程，先查 PID，再只结束对应进程：
+
+```bash
+# macOS / Linux（把 49373 换成报错中的端口，例如 5137）
+lsof -nP -iTCP:49373 -sTCP:LISTEN
+kill <PID>                       # 普通终止；仍未退出时才使用 kill -9 <PID>
+
+# Windows PowerShell
+Get-NetTCPConnection -LocalPort 49373 -State Listen | Select-Object OwningProcess
+Stop-Process -Id <PID>
+```
+
+`pnpm tauri:dev` 会把选中的端口同时传给 Vite、Tauri `devUrl` 和开发 CSP；可用 `WEB_UI_PORT=50000 pnpm tauri:dev` 指定自动搜索的起始端口。浏览器模式 `pnpm dev` 同样会从 49373 开始自动寻找 UI 端口。Vite 端口不是 Desk API：Auto Code、Web 与 Tauri 都通过 `service.v1.json` 发现唯一 API。API 进程通过 `instance.v1.lock` 保证单实例，不能通过端口跃迁启动第二份。
 
 ### 从 VS Code / EXE 打开 CAA UI
 
@@ -70,7 +84,7 @@ FCStd 文件发现、SQLite 查询、ZIP/Document.xml 读取与 BOM/XLink 写回
 ## 架构
 
 ```
-前端 Vue 3 → Vite :5173
+前端 Vue 3 → Vite :49373
      │
      ▼ proxy /api/*
 Node.js Hono :48375（占用时向上寻找）
@@ -78,6 +92,8 @@ Node.js Hono :48375（占用时向上寻找）
      ├── /api/caa/*  CAA 对话
      └── /api/*      待迁移（Python 可选）
 ```
+
+Web 与 Tauri 的 API 发现、复用规则及多 UI 未决项见 [Desk API 单实例与多宿主发现](doc/platform/Desk-API单实例与多宿主发现.md)。
 
 ## 测试
 

@@ -47,6 +47,8 @@ Owner：Desk Tools maintainers
 - [x] 删除 Desk 的 `cad-rust-source`、native provider、三个 CAD Rust sidecar 构建/打包/状态 API 和发行版自检；Tauri 仅保留桌面壳自身的 Rust 生命周期代码。
 - [x] 建立 [2026-07-20 Web / Tauri / CAD 手动点检表](platform/2026-07-20-Desk-Web-Tauri-CAD手动点检表.md)，统一覆盖端口、首开 View、四区布局、Primary、Codegen、CAD TypeScript 与 release。
 - [x] CAD 索引扫描统一以 AsyncProgress 轮询终态驱动；刷新恢复复用同一 poller 并重新注册服务端取消，终态/异常注销 cancel，避免页面出现第二套扫描状态。
+- [x] 完成 [Desk API 单实例与多宿主发现](platform/Desk-API单实例与多宿主发现.md) 的近期范围：API 原子锁、Web/Tauri 登记发现与兼容复用、后台归属和版本显示。
+- [ ] 决定 Desk 多 UI 策略。近期建议采用“单 UI 宿主并明确拒绝第二个 UI”；若选择 Web/Tauri 同开，必须先实现后台工作空间 revision、状态广播和切换冲突处理。
 - [ ] 继续把其它长任务的进度、取消与运行日志收敛到 AsyncProgress，不让页面各自维护第二套任务状态。
 - [ ] 将剩余 Python 兼容入口逐项判定为外部引擎 adapter 或退役路径；Node/Hono 是当前 HTTP 真源。
 - [ ] **用户手工验收**：在自有 Windows 机器执行已入库的 0.3.0 NSIS 构建/安装/Codegen/FCStd/退出/卸载门禁，回传脚本生成的 JSON 回执与最终成功日志；Codex 不连接远程 Windows、不创建 GitHub 镜像。FreeCAD/SolidWorks 外部进程 E/F 档仍需独立环境；历史 0.1.0 Windows 产物不计入当前版本。

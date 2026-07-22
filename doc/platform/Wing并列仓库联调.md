@@ -39,7 +39,7 @@ phoenix/
 PHOENIX_WING_ROOT=/absolute/path/to/phoenix-wing pnpm dev
 ```
 
-若标准开发端口已被另一实例占用，可临时执行 `WEB_UI_PORT=5174 CAA_SERVER_PORT=5181 pnpm dev`；这不会改变 Wing 真源或提交配置。
+若标准开发端口已被另一实例占用，可临时执行 `WEB_UI_PORT=49374 CAA_SERVER_PORT=48376 pnpm dev`；这不会改变 Wing 真源或提交配置。
 
 旧的 `PHOENIX_WING_SRC=/path/to/phoenix-wing/src` 仅在 `pnpm dev` / `dev:local-wing` 包装器中会被识别并归一为根目录。未标记 `PHOENIX_WING_MODE=local` 的普通 build/test 子命令一律忽略残留路径并使用 Registry；`dev:registry` 还会明确清除两个本地路径变量，保证正式包对照不受当前 shell 污染。
 
@@ -66,7 +66,7 @@ PHOENIX_WING_ROOT=/absolute/path/to/phoenix-wing pnpm dev
 
 ## 2026-07-18 消费端验收
 
-- `WEB_UI_PORT=5174 CAA_SERVER_PORT=5181 pnpm dev`：Server 与 Web 均启动，分别输出 `[Wing][LOCAL][server]`、`[Wing][LOCAL][web]`，路径均为并列 `phoenix-wing`。
+- `WEB_UI_PORT=49374 CAA_SERVER_PORT=48376 pnpm dev`：Server 与 Web 均启动，分别输出 `[Wing][LOCAL][server]`、`[Wing][LOCAL][web]`，路径均为并列 `phoenix-wing`。
 - 带无效 `PHOENIX_WING_ROOT` 运行同端口的 `pnpm dev:registry`：两个服务均启动并输出 `[Wing][REGISTRY]`，证明 Registry 命令清除了残留本地路径。
 - `pnpm build:local-wing`：六个包、aggregate、Desk Web 与 Server bundle 在同一命令中构建通过；bundle resolver 命中本地 0.4.3 控制符边界逻辑。
 - 模式解析单元测试 2 个文件 / 11 项通过；Web 本地 aggregate + kt-codegen 定向测试 2 个文件 / 4 项通过；Server 本地 codegen/fixture 定向测试 3 个文件 / 22 项通过。

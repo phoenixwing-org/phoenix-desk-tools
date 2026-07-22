@@ -215,7 +215,7 @@ pnpm tauri:dev    # Tauri + 同一 Desk Web，消费并列 Wing
 - [ ] 两端仅文件打开、窗口和系统能力的 Host 反馈允许不同，业务状态与文案没有分叉
 - [ ] 首次打开新的 Codegen View 不先白屏再闪现；重新激活已打开 View 同样稳定
 - [ ] 连续新建并切换多个 Codegen View，Primary、中央表格和预检结果不串会话
-- [ ] 关闭 Tauri 后 Node 子进程退出；再次启动不因遗留进程或 5173 端口占用失败
+- [ ] 关闭 Tauri 后 Node 子进程退出；49373 被占用时再次启动会选择下一空闲 UI 端口
 - [ ] VS Code 接入 Wing UI 后，以同一 ViewModel fixture 对比 Primary 与预检 DOM 顺序和事件
 - [ ] VS Code Problems/Output 保持原生，Desk Problems/Output 保持 Workbench 壳层；两端都不复制页内预检
 

@@ -6,7 +6,7 @@ Owner：Desk Tools maintainers
 
 适用版本：Desk Tools 0.2.x / Phoenix Wing 0.4.3 起
 
-最后核验：2026-07-20
+最后核验：2026-07-22
 
 本文汇总 2026-07-20 累积的启动、端口、异步 View、VS Code 四区布局、Primary、KT Codegen、TypeScript FCStd 和 Tauri 点检步骤。每次大改、打包或 CAD 能力恢复后复制本文记录结果；不要在真实生产工作区直接执行写盘项。
 
@@ -21,14 +21,14 @@ Owner：Desk Tools maintainers
 ## 2. 启动前端口和后台进程
 
 ```bash
-lsof -nP -iTCP:5173 -sTCP:LISTEN
+lsof -nP -iTCP:49373 -sTCP:LISTEN
 lsof -nP -iTCP:48375 -sTCP:LISTEN
 ```
 
 - [ ] 两条命令无输出，或输出 PID 已确认属于本轮要复用的同一实例。
 - [ ] 若终端窗口丢失，对查到的明确 PID 执行 `kill <PID>`，再确认端口释放；不要按模糊进程名批量结束。
 - [ ] 正常关闭优先回到启动终端按 `Ctrl-C`；Tauri 优先从“配置 → 退出 Phoenix”退出。
-- [ ] 不同时运行 `pnpm dev` 与 `pnpm tauri:dev`。
+- [ ] 若保留已有 API，确认其 `service.v1.json` 指向的 `/api/health` 返回 `service=phoenix-node`、`app_version` 和兼容的 `protocol_version`。
 
 ## 3. 本地 Wing 与 Web 启动
 
@@ -39,7 +39,10 @@ pnpm dev
 
 - [ ] 日志明确显示 `[Wing][LOCAL]`，路径指向并列 `../phoenix-wing`。
 - [ ] Server 监听首选 `127.0.0.1:48375`；占用时在约定范围内选择后续端口并登记真实端口。
-- [ ] Vite 监听 `http://localhost:5173/`，没有 `Port 5173 is already in use`。
+- [ ] Vite 首选 `http://localhost:49373/`；占用时自动向上寻找并在日志中给出实际地址。
+- [ ] API 运行期间存在 `instance.v1.lock`；尝试再直接启动一份 Server 会明确失败，且不会登记第二个 API。
+- [ ] 已有兼容 API 时再次执行 `pnpm dev`，日志显示复用的地址和版本，只新增 UI、不新增 API 进程。
+- [ ] 状态栏显示 API 版本、协议版本和“本机 API / 复用 API”。
 - [ ] 浏览器能打开主页，API 请求不报连接失败。
 - [ ] 对照正式包时使用 `pnpm dev:registry`，日志必须是 `[Wing][REGISTRY]`；不要使用 `pnpm link`。
 
@@ -139,18 +142,20 @@ pnpm dev
 
 ## 10. Tauri 开发态
 
-先停止 Web 服务并确认端口释放：
+先保留 Web API 做一次发现复用点检；本节不要在两个 UI 中切换工作空间：
 
 ```bash
 pnpm tauri:dev
 ```
 
-- [ ] Tauri 自动启动 Vite 和 Node 服务，不需要第二个 `pnpm dev`。
+- [ ] Web API 已运行时，Tauri 从登记的真实端口复用同一 API，日志和状态栏显示相同地址/版本，不新增 Node 服务。
+- [ ] 退出复用 API 的 Tauri 后，Web API 仍健康；Tauri 不关闭自己没有创建的后台。
+- [ ] 再关闭 Web 后单独启动 Tauri；此时 Tauri 自动启动 Vite 和自己的 Node 服务。
 - [ ] 启动日志明确显示 `[Wing][LOCAL]`；只有显式执行 `pnpm tauri:dev:registry` 才允许显示 `[Wing][REGISTRY]`。
 - [ ] 完成第 4–9 节代表项，尤其是多个未打开 View 连续首开。
 - [ ] 新建 View 不出现“先白屏、再显示”的闪烁。
-- [ ] “退出 Phoenix”后 Tauri、Vite 和 Node 子进程都退出。
-- [ ] 再次执行 `lsof`，5173/48375 无遗留监听并可立即重启。
+- [ ] “退出 Phoenix”后 Tauri、Vite 和由它创建的 Node 子进程都退出。
+- [ ] 再次执行 `lsof`，49373/48375 无遗留监听并可立即重启。
 
 ## 11. Tauri runtime 与 release
 

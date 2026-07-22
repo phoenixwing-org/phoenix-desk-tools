@@ -9,6 +9,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { DESK_TOOLS_APP_VERSION } from "../lib/deskToolsRegistration.js";
 import {
   effectiveCodeIgnorePatterns,
   getCodeIgnorePrefs,
@@ -871,6 +872,7 @@ shellRoutes.get("/api/health", (c) => c.json({
   status: "ok",
   service: "phoenix-node",
   protocol_version: 1,
+  app_version: DESK_TOOLS_APP_VERSION,
 }));
 shellRoutes.get("/api/onboarding/status", (c) => c.json(onboardingStatusPayload()));
 shellRoutes.get("/api/phoenix/database/status", (c) => {
