@@ -27,10 +27,28 @@ function createWingFixture() {
     const packageRoot = path.join(wingRoot, "packages", packageDir);
     fs.mkdirSync(path.join(packageRoot, "src"), { recursive: true });
     fs.mkdirSync(path.join(packageRoot, "dist"), { recursive: true });
+    fs.writeFileSync(path.join(packageRoot, "src", "index.ts"), "export {};\n");
     fs.writeFileSync(path.join(packageRoot, "dist", "index.js"), "export {};\n");
+    const isKtCodegen = packageName === "@phoenix-wing/kt-codegen";
+    if (isKtCodegen) {
+      fs.mkdirSync(path.join(packageRoot, "src", "ui"), { recursive: true });
+      fs.writeFileSync(path.join(packageRoot, "src", "ui", "index.ts"), "export {};\n");
+      fs.writeFileSync(path.join(packageRoot, "src", "ui", "KtCodegenApplyReportModel.ts"), "export {};\n");
+    }
     fs.writeFileSync(
       path.join(packageRoot, "package.json"),
-      JSON.stringify({ name: packageName, exports: { ".": { import: "./dist/index.js" } } }),
+      JSON.stringify({
+        name: packageName,
+        exports: {
+          ".": { import: "./dist/index.js" },
+          ...(isKtCodegen
+            ? {
+                "./ui": { import: "./dist/ui/index.js" },
+                "./ui/report-model": { import: "./dist/ui/KtCodegenApplyReportModel.js" },
+              }
+            : {}),
+        },
+      }),
     );
   }
   return { deskRoot, wingRoot };
@@ -87,11 +105,15 @@ describe("Phoenix Wing 并列仓库模式", () => {
       .toThrow(/pnpm dev:registry/u);
   });
 
-  it("Web alias 覆盖 aggregate、六个包及 kt-codegen 子路径", () => {
+  it("Web alias 覆盖 aggregate、八个包及 kt-codegen 子路径", () => {
     const { wingRoot } = createWingFixture();
     const aliases = createPhoenixWingSourceAliases(wingRoot);
     expect(aliases).toEqual(expect.arrayContaining([
       expect.objectContaining({ find: "phoenix-wing", replacement: path.join(wingRoot, "src") }),
+      expect.objectContaining({
+        find: "@phoenix-wing/git-node",
+        replacement: path.join(wingRoot, "packages/git-node/src"),
+      }),
       expect.objectContaining({
         find: "@phoenix-wing/kt-codegen",
         replacement: path.join(wingRoot, "packages/kt-codegen/src"),
@@ -99,12 +121,23 @@ describe("Phoenix Wing 并列仓库模式", () => {
     ]));
     expect(aliases.some(({ find }) => find instanceof RegExp && find.test("@phoenix-wing/kt-codegen/fixtures/a.json")))
       .toBe(true);
+    expect(aliases).toContainEqual({
+      find: "@phoenix-wing/kt-codegen/ui/report-model",
+      replacement: path.join(
+        wingRoot,
+        "packages/kt-codegen/src/ui/KtCodegenApplyReportModel.ts",
+      ),
+    });
+    expect(aliases.findIndex(({ find }) => find === "@phoenix-wing/kt-codegen/ui/report-model"))
+      .toBeLessThan(aliases.findIndex(({ find }) => find === "@phoenix-wing/kt-codegen/ui"));
   });
 
   it("Node resolver 按本地 package exports 命中 dist", () => {
     const { wingRoot } = createWingFixture();
     expect(resolveLocalWingExport(wingRoot, "@phoenix-wing/kt-codegen"))
       .toBe(path.join(wingRoot, "packages/kt-codegen/dist/index.js"));
+    expect(resolveLocalWingExport(wingRoot, "@phoenix-wing/git-node"))
+      .toBe(path.join(wingRoot, "packages/git-node/dist/index.js"));
     expect(resolveLocalWingExport(wingRoot, "element-plus")).toBeNull();
   });
 });

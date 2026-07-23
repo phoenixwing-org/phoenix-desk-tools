@@ -1,6 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { pnwPromptChoice } from "phoenix-wing";
+import {
+  pnwCodeDefineReorderMembersPanel,
+  type PnwCodeReorderMembersPanel,
+  type PnwCodeReorderMembersPanelActionDetail,
+  type PnwCodeReorderMembersPanelModel,
+} from "@phoenix-wing/code-core/ui";
 import {
   fetchGitInfo,
   fetchReorderMembersPrefs,
@@ -12,9 +18,7 @@ import {
 } from "../api";
 import type { GitWorkspaceInfo } from "../types/gitWorkspace";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
-import GitChangePathLabel from "../components/git/GitChangePathLabel.vue";
-import GitDiffPreviewButton from "../components/git/GitDiffPreviewButton.vue";
-import GitRevertWorktreeButton from "../components/git/GitRevertWorktreeButton.vue";
+import { useGitDiffPreview } from "../composables/useGitDiffPreview";
 import { useAppShell } from "../composables/useAppShell";
 import { useReorderMembersPageStore } from "../stores/reorderMembersPage";
 import { useFileWorksetsStore } from "../stores/fileWorksets";
@@ -26,7 +30,8 @@ import {
   usePagePrimaryContribution,
   type PagePrimarySection,
 } from "../composables/usePagePrimaryContribution";
-import { formatFileAtRepoDir } from "../utils/workspaceFileQuery";
+
+pnwCodeDefineReorderMembersPanel();
 
 const props = defineProps<{
   workbenchTabId?: string;
@@ -35,8 +40,6 @@ const props = defineProps<{
 const shell = useAppShell();
 const pageStore = useReorderMembersPageStore();
 const worksetStore = useFileWorksetsStore();
-
-const CHANGED_PAGE_SIZE = 20;
 
 type ChangedFileStatus = "dry_run" | "written";
 
@@ -98,7 +101,8 @@ async function onResolve() {
 const changedFileRows = ref<ChangedFileRow[]>([]);
 const lastRunDryRun = ref(false);
 const lastRunSummary = ref("");
-const changedPage = ref(0);
+const resultRevision = ref(0);
+const reorderPanelRef = ref<PnwCodeReorderMembersPanel | null>(null);
 
 const saving = ref(false);
 const running = ref(false);
@@ -106,42 +110,53 @@ const running = ref(false);
 const gitInfo = ref<GitWorkspaceInfo | null>(null);
 const gitInitLoading = ref(false);
 const revertingPath = ref<string | null>(null);
+const { preview: previewGitDiff } = useGitDiffPreview();
 
 const gitReady = computed(() =>
   Boolean(gitInfo.value?.git_installed && gitInfo.value?.repo_initialized),
 );
 
 const changedTotal = computed(() => changedFileRows.value.length);
-const changedPageCount = computed(() =>
-  Math.max(1, Math.ceil(changedTotal.value / CHANGED_PAGE_SIZE)),
-);
-const changedPageSafe = computed(() =>
-  Math.min(changedPage.value, Math.max(0, changedPageCount.value - 1)),
-);
-const pagedChangedFiles = computed(() => {
-  const start = changedPageSafe.value * CHANGED_PAGE_SIZE;
-  return changedFileRows.value.slice(start, start + CHANGED_PAGE_SIZE);
+const reorderPanelMessage = computed(() => {
+  const summary = lastRunSummary.value.trim();
+  if (summary.length <= 240) return summary;
+  const firstPath = summary.indexOf(" - ");
+  return firstPath > 0 ? summary.slice(0, firstPath) : `${summary.slice(0, 237)}…`;
 });
 
-function fileKindLabel(path: string): string {
-  const lower = path.toLowerCase();
-  if (lower.endsWith(".cpp") || lower.endsWith(".cc") || lower.endsWith(".cxx")) return ".cpp";
-  if (lower.endsWith(".hpp") || lower.endsWith(".hh")) return ".hpp";
-  if (lower.endsWith(".h")) return ".h";
-  return "源文件";
-}
+const reorderPanelModel = computed<PnwCodeReorderMembersPanelModel>(() => ({
+  presentation: "results",
+  status: running.value ? "running" : "done",
+  message: reorderPanelMessage.value,
+  scanned: resolvedFiles.value.length || changedFileRows.value.length,
+  reorderRevision: resultRevision.value,
+  reorderSelectedUris: [],
+  reorderResults: changedFileRows.value.map((row) => ({
+    uri: row.path,
+    relativePath: row.path,
+    kind: /\.(?:h|hh|hpp)$/iu.test(row.path) ? "header" : "source",
+    encoding: "",
+    changed: true,
+    state: row.status === "dry_run" ? "pending" : "applied",
+    warnings: [],
+  })),
+  capabilities: {
+    scan: false,
+    apply: false,
+    addToWorkset: false,
+    open: false,
+    preview: false,
+    cancel: false,
+    selection: false,
+    gitDiff: gitReady.value,
+    revert: gitReady.value,
+  },
+}));
 
-function changedStatusLabel(status: ChangedFileStatus): string {
-  return status === "dry_run" ? "预检" : "已写盘";
-}
-
-function changedStatusTagType(status: ChangedFileStatus): "success" | "warning" {
-  return status === "dry_run" ? "warning" : "success";
-}
-
-function changedStatusTitle(status: ChangedFileStatus): string {
-  return status === "dry_run" ? "未写盘，仅分析变更范围" : "已写回磁盘";
-}
+watch(reorderPanelModel, async (model) => {
+  await nextTick();
+  if (reorderPanelRef.value) reorderPanelRef.value.model = model;
+}, { immediate: true, deep: true });
 
 function buildChangedRows(paths: string[], dryRun: boolean): ChangedFileRow[] {
   const status: ChangedFileStatus = dryRun ? "dry_run" : "written";
@@ -224,6 +239,22 @@ async function onRevertFile(row: ChangedFileRow) {
     shell.setStatus(String(e));
   } finally {
     revertingPath.value = null;
+  }
+}
+
+async function onReorderPanelAction(event: Event): Promise<void> {
+  const detail = (event as CustomEvent<PnwCodeReorderMembersPanelActionDetail>).detail;
+  if (detail.kind !== "reorderAction") return;
+  const path = detail.uris[0];
+  if (!path) return;
+  const row = changedFileRows.value.find((item) => item.path === path);
+  if (!row || !canGitActions(row)) return;
+  if (detail.action === "gitDiff") {
+    await previewGitDiff(path, "worktree");
+    return;
+  }
+  if (detail.action === "revert") {
+    await onRevertFile(row);
   }
 }
 
@@ -321,7 +352,7 @@ async function onRun(dryRun: boolean) {
       collectChangedPaths(out),
       out.dry_run,
     );
-    changedPage.value = 0;
+    resultRevision.value += 1;
     lastRunDryRun.value = dryRun;
     lastRunSummary.value = out.summary || "";
     const logText = pageStore.verbose
@@ -608,82 +639,10 @@ usePagePrimaryContribution("reorder_members", props.workbenchTabId, {
         </div>
       </header>
 
-      <el-table
-        v-if="changedFileRows.length"
-        :data="pagedChangedFiles"
-        size="small"
-        stripe
-        class="changed-table"
-      >
-        <el-table-column label="#" width="52" align="center">
-          <template #default="{ $index }">
-            {{ changedPageSafe * CHANGED_PAGE_SIZE + $index + 1 }}
-          </template>
-        </el-table-column>
-        <el-table-column
-          prop="path"
-          label="文件"
-          min-width="200"
-          class-name="mono"
-        >
-          <template #default="{ row }">
-            <GitChangePathLabel
-              :path="row.path"
-              :label="formatFileAtRepoDir(row.path)"
-              multiline
-            />
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="88" align="center">
-          <template #default="{ row }">
-            <el-tag
-              size="small"
-              effect="plain"
-              :type="changedStatusTagType(row.status)"
-              :title="changedStatusTitle(row.status)"
-            >
-              {{ changedStatusLabel(row.status) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="类型" width="80" align="center">
-          <template #default="{ row }">
-            <el-tag size="small" effect="plain">
-              {{ fileKindLabel(row.path) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column
-          label="操作"
-          width="96"
-          align="center"
-          fixed="right"
-        >
-          <template #default="{ row }">
-            <template v-if="canGitActions(row)">
-              <div class="git-row-actions">
-                <GitDiffPreviewButton :path="row.path" />
-                <GitRevertWorktreeButton
-                  :path="row.path"
-                  :loading="revertingPath === row.path"
-                  @click="onRevertFile(row)"
-                />
-              </div>
-            </template>
-            <span v-else class="muted small">—</span>
-          </template>
-        </el-table-column>
-      </el-table>
-
-      <el-pagination
-        v-if="changedPageCount > 1"
-        class="pager"
-        layout="prev, pager, next"
-        :total="changedTotal"
-        :page-size="CHANGED_PAGE_SIZE"
-        :current-page="changedPageSafe + 1"
-        size="small"
-        @current-change="(p: number) => (changedPage = p - 1)"
+      <pnw-code-reorder-members-panel
+        ref="reorderPanelRef"
+        class="shared-reorder-results"
+        @pnw-code-reorder-members-action="onReorderPanelAction"
       />
     </section>
   </div>
@@ -733,35 +692,8 @@ usePagePrimaryContribution("reorder_members", props.workbenchTabId, {
   text-overflow: ellipsis;
 }
 
-.changed-table :deep(.mono),
 .resolved-table :deep(.mono) {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
-.changed-table :deep(td.mono) {
-  vertical-align: top;
-}
-
-.changed-table :deep(td.mono .cell) {
-  white-space: normal !important;
-  overflow: hidden;
-  line-height: 1.35;
-}
-
-.changed-table :deep(td.mono .el-tooltip__trigger) {
-  display: flex;
-  align-items: flex-start;
-  overflow: hidden;
-  max-width: 100%;
-}
-
-.changed-table :deep(.git-row-actions) {
-  justify-content: center;
-}
-
-.pager {
-  margin-top: 10px;
-  justify-content: center;
 }
 
 .run-summary {

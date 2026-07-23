@@ -100,6 +100,10 @@ export interface KtCodegenApplyPayload {
   readonly applied_at: string;
   readonly plan_fingerprint: string;
   readonly region_count: number;
+  readonly region_outcomes: readonly {
+    readonly region_id: string;
+    readonly change: "updated" | "unchanged";
+  }[];
   readonly files: readonly KtCodegenAppliedFile[];
   readonly diagnostics: readonly KtCodegenDiagnostic[];
   readonly verified: true;
@@ -1116,12 +1120,23 @@ export async function applyKtCodegen(
     throw commit.error;
   }
 
+  const updatedRegionIds = new Set(
+    projection.changes.flatMap((change) => change.regions.map((region) => region.id)),
+  );
+  const artifactRegionIds = new Set(preflight.plan.artifacts.map((artifact) => artifact.regionId));
+
   return {
     kind: "kt.codegen.apply-result",
     schema_version: 1,
     applied_at: new Date().toISOString(),
     plan_fingerprint: preflight.plan_fingerprint,
     region_count: targets.reduce((sum, file) => sum + file.regionCount, 0),
+    region_outcomes: preflight.plan.markerRegions
+      .filter((region) => artifactRegionIds.has(region.id))
+      .map((region) => ({
+        region_id: region.id,
+        change: updatedRegionIds.has(region.id) ? "updated" as const : "unchanged" as const,
+      })),
     files: targets.map((file) => ({
       path: file.path,
       encoding: file.encoding,

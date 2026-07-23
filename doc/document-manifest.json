@@ -24,6 +24,13 @@
       "lastVerified": "2026-07-17"
     },
     {
+      "path": "doc/产品功能归属矩阵.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.2.x",
+      "lastVerified": "2026-07-17"
+    },
+    {
       "path": "doc/路径与目录显示约定.md",
       "status": "current",
       "owner": "Desk Tools maintainers",

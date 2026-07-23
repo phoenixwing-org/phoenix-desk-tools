@@ -1,5 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
+import {
+  pnwCodeIsIgnoredName,
+  pnwCodeNormalizeIgnorePatterns,
+} from "@phoenix-wing/code-core";
 import { runtimeUserDataDir } from "./appRuntimePaths.js";
 import {
   loadWorkspacePrefs,
@@ -108,17 +112,10 @@ function pathDisplay(p: string): string {
 }
 
 function dedupePatterns(patterns: string[]): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const raw of patterns) {
-    const p = String(raw || "").trim();
-    if (!p || p.startsWith("#")) continue;
-    const key = p.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(p);
-  }
-  return out;
+  return pnwCodeNormalizeIgnorePatterns(patterns, {
+    caseSensitive: false,
+    dedupe: true,
+  });
 }
 
 function parseCustomIgnore(raw: unknown): string[] {
@@ -127,19 +124,10 @@ function parseCustomIgnore(raw: unknown): string[] {
   return [];
 }
 
-function wildcardMatch(name: string, pattern: string): boolean {
-  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".");
-  return new RegExp(`^${escaped}$`, "i").test(name);
-}
-
 export function isIgnoredName(name: string, patterns: string[]): boolean {
-  if (name.startsWith(".")) return true;
-  const lower = name.toLowerCase();
-  return patterns.some((raw) => {
-    const p = String(raw || "").trim();
-    if (!p) return false;
-    if (/[*?[\]]/.test(p)) return wildcardMatch(name, p);
-    return lower === p.toLowerCase();
+  return pnwCodeIsIgnoredName(name, patterns, {
+    caseSensitive: false,
+    ignoreHidden: true,
   });
 }
 

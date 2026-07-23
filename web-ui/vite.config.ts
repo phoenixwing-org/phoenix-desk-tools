@@ -31,7 +31,7 @@ export default defineConfig({
     vue({
       template: {
         compilerOptions: {
-          isCustomElement: (tag) => tag.startsWith("kt-codegen-"),
+          isCustomElement: (tag) => tag.startsWith("kt-codegen-") || tag.startsWith("pnw-code-"),
         },
       },
     }),

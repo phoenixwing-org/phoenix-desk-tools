@@ -1004,16 +1004,16 @@ shellRoutes.post("/api/file-rename/scan-refs", async (c) => {
 });
 
 // Git
-shellRoutes.get("/api/git/info", (c) => c.json(gitWorkspaceInfo(currentWorkspace())));
-shellRoutes.get("/api/git/changes", (c) => {
-  try { return c.json(gitWorkspaceChanges(currentWorkspace())); }
+shellRoutes.get("/api/git/info", async (c) => c.json(await gitWorkspaceInfo(currentWorkspace())));
+shellRoutes.get("/api/git/changes", async (c) => {
+  try { return c.json(await gitWorkspaceChanges(currentWorkspace())); }
   catch (e: any) { return c.json({ detail: e.message || String(e) }, 500); }
 });
-shellRoutes.get("/api/git/diff", (c) => {
+shellRoutes.get("/api/git/diff", async (c) => {
   try {
     const scope = c.req.query("scope") || "worktree";
     if (scope !== "worktree" && scope !== "staged") throw new Error("scope must be worktree or staged");
-    return c.json(gitWorkspaceDiff(
+    return c.json(await gitWorkspaceDiff(
       currentWorkspace(),
       c.req.query("path") || "",
       scope as GitDiffScope,
@@ -1021,15 +1021,15 @@ shellRoutes.get("/api/git/diff", (c) => {
   }
   catch (e: any) { return c.json({ detail: e.message || String(e) }, 400); }
 });
-shellRoutes.post("/api/git/init", (c) => {
+shellRoutes.post("/api/git/init", async (c) => {
   try {
-    return c.json(gitWorkspaceInit(currentWorkspace()));
+    return c.json(await gitWorkspaceInit(currentWorkspace()));
   } catch (e: any) { return c.json({ detail: e.message || String(e) }, 400); }
 });
 shellRoutes.post("/api/git/stage", async (c) => {
   try {
     const body = await c.req.json();
-    return c.json(gitWorkspaceStage(currentWorkspace(), body?.paths));
+    return c.json(await gitWorkspaceStage(currentWorkspace(), body?.paths));
   } catch (e: any) { return c.json({ detail: e.message || String(e) }, 400); }
 });
 shellRoutes.post("/api/git/restore", async (c) => {
@@ -1037,7 +1037,7 @@ shellRoutes.post("/api/git/restore", async (c) => {
     const body = await c.req.json();
     const scope = String(body?.scope || "worktree");
     if (!["worktree", "staged", "untracked"].includes(scope)) return c.json({ detail: "Invalid scope" }, 400);
-    return c.json(gitWorkspaceRestore(
+    return c.json(await gitWorkspaceRestore(
       currentWorkspace(),
       body?.paths,
       scope as GitRestoreScope,
@@ -1047,7 +1047,7 @@ shellRoutes.post("/api/git/restore", async (c) => {
 shellRoutes.post("/api/git/commit", async (c) => {
   try {
     const body = await c.req.json();
-    return c.json(gitWorkspaceCommit(currentWorkspace(), body?.message));
+    return c.json(await gitWorkspaceCommit(currentWorkspace(), body?.message));
   } catch (e: any) { return c.json({ detail: e.message || String(e) }, 400); }
 });
 

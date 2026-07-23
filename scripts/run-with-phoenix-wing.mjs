@@ -65,7 +65,7 @@ async function prepareLocalWing(wingRoot) {
 if (context.mode === "local") {
   console.log(`[Wing][LOCAL] ${context.root}（${context.configuredBy}）`);
   if (checkOnly) {
-    console.log("[Wing][LOCAL][检查通过] 并列仓库及 6 个消费包完整；未改 package.json、pnpm-lock.yaml 或 node_modules");
+    console.log(`[Wing][LOCAL][检查通过] 并列仓库及 ${LOCAL_WING_PACKAGE_NAMES.length} 个消费包完整；未改 package.json、pnpm-lock.yaml 或 node_modules`);
     process.exit(0);
   }
   try {

@@ -41,6 +41,9 @@ importers:
       '@phoenix-wing/db-node':
         specifier: 0.5.0
         version: 0.5.0
+      '@phoenix-wing/git-node':
+        specifier: 0.5.0
+        version: 0.5.0
       '@phoenix-wing/kt-codegen':
         specifier: 0.5.0
         version: 0.5.0
@@ -87,6 +90,9 @@ importers:
       '@element-plus/icons-vue':
         specifier: ^2.3.2
         version: 2.3.2(vue@3.5.35(typescript@5.7.3))
+      '@phoenix-wing/code-core':
+        specifier: 0.5.0
+        version: 0.5.0
       '@phoenix-wing/kt-codegen':
         specifier: 0.5.0
         version: 0.5.0
@@ -601,6 +607,12 @@ packages:
 
   '@phoenix-wing/db-node@0.5.0':
     resolution: {integrity: sha512-2JfSng6Jgchbm/eWiaIctvq4RYQtKtTu5OR2M7iRqFS01dFCKgi5rJ8FABlzXz0VmHsxKNwcjLAoSMMgOQn3OA==}
+
+  '@phoenix-wing/git-core@0.5.0':
+    resolution: {integrity: sha512-wKqMWMOWHD12J/4y+iIhU0M33YmJnS5hotcaLYKtTFlAHFK45FHo1sRWiSRZX/yKkig7O3JmUkut9/jJ3f5jJw==}
+
+  '@phoenix-wing/git-node@0.5.0':
+    resolution: {integrity: sha512-4eTxPXeWXbBXmi8yMOjpxwp/wwY+TW6POS7XnqNUQhhFhdxd7ZGcUlUKi4uXZcPxBidZxv6hSzPpOWjYmy8lIg==}
 
   '@phoenix-wing/kt-codegen@0.5.0':
     resolution: {integrity: sha512-3wiIdlzc6quMzpIT2JoiQkd7K+Lmd9jw+GWSsLm3/NzeY05b6wfqysR0eZSPnkRxjVQyniZAisayq5GFnultzQ==}
@@ -1890,6 +1902,12 @@ snapshots:
   '@phoenix-wing/db-node@0.5.0':
     dependencies:
       node-sqlite3-wasm: 0.8.59
+
+  '@phoenix-wing/git-core@0.5.0': {}
+
+  '@phoenix-wing/git-node@0.5.0':
+    dependencies:
+      '@phoenix-wing/git-core': 0.5.0
 
   '@phoenix-wing/kt-codegen@0.5.0': {}
 

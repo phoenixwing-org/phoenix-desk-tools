@@ -1689,6 +1689,11 @@ export type KtCodegenApplyPayload = {
   applied_at: string;
   plan_fingerprint: string;
   region_count: number;
+  /** 逐区域真实写回结果；旧 Server 可能暂未提供。 */
+  region_outcomes?: Array<{
+    region_id: string;
+    change: "updated" | "unchanged" | "not-applied";
+  }>;
   files: KtCodegenAppliedFile[];
   diagnostics: KtCodegenDiagnostic[];
   verified: true;
