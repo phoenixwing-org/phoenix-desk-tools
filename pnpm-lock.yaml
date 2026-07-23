@@ -33,23 +33,23 @@ importers:
         specifier: ^1.13.8
         version: 1.19.14(hono@4.12.27)
       '@phoenix-wing/cad-core':
-        specifier: 0.5.0
-        version: 0.5.0
+        specifier: 0.5.1
+        version: 0.5.1
       '@phoenix-wing/code-core':
-        specifier: 0.5.0
-        version: 0.5.0
+        specifier: 0.5.1
+        version: 0.5.1
       '@phoenix-wing/db-node':
-        specifier: 0.5.0
-        version: 0.5.0
+        specifier: 0.5.1
+        version: 0.5.1
       '@phoenix-wing/git-node':
-        specifier: 0.5.0
-        version: 0.5.0
+        specifier: 0.5.1
+        version: 0.5.1
       '@phoenix-wing/kt-codegen':
-        specifier: 0.5.0
-        version: 0.5.0
+        specifier: 0.5.1
+        version: 0.5.1
       '@phoenix-wing/workspace-schema':
-        specifier: 0.5.0
-        version: 0.5.0
+        specifier: 0.5.1
+        version: 0.5.1
       fflate:
         specifier: 0.8.3
         version: 0.8.3
@@ -91,11 +91,11 @@ importers:
         specifier: ^2.3.2
         version: 2.3.2(vue@3.5.35(typescript@5.7.3))
       '@phoenix-wing/code-core':
-        specifier: 0.5.0
-        version: 0.5.0
+        specifier: 0.5.1
+        version: 0.5.1
       '@phoenix-wing/kt-codegen':
-        specifier: 0.5.0
-        version: 0.5.0
+        specifier: 0.5.1
+        version: 0.5.1
       diff2html:
         specifier: ^3.4.56
         version: 3.4.56
@@ -106,8 +106,8 @@ importers:
         specifier: ^2.14.2
         version: 2.14.2(vue@3.5.35(typescript@5.7.3))
       phoenix-wing:
-        specifier: 0.5.0
-        version: 0.5.0(element-plus@2.14.2(vue@3.5.35(typescript@5.7.3)))(pinia@3.0.4(typescript@5.7.3)(vue@3.5.35(typescript@5.7.3)))(vue@3.5.35(typescript@5.7.3))
+        specifier: 0.5.1
+        version: 0.5.1(element-plus@2.14.2(vue@3.5.35(typescript@5.7.3)))(pinia@3.0.4(typescript@5.7.3)(vue@3.5.35(typescript@5.7.3)))(vue@3.5.35(typescript@5.7.3))
       pinia:
         specifier: ^3.0.4
         version: 3.0.4(typescript@5.7.3)(vue@3.5.35(typescript@5.7.3))
@@ -599,26 +599,26 @@ packages:
     resolution: {integrity: sha512-tmmZ3lQxAe/k/+rNnXQRawJ4NjxO2hqiOLTHvWchtGZULp4RyFeh6aU4XdOYBFe2KE1oShQTv4AblOs2iOrNnQ==}
     engines: {node: '>= 10.0.0'}
 
-  '@phoenix-wing/cad-core@0.5.0':
-    resolution: {integrity: sha512-GQt/2P5foy9ndGUVMoVSwr91vVy73ucN5i5mODssjnYh1v9EwI8psG8f5MwJwKx0ZdZAcsOMUw8HAihrWkczMw==}
+  '@phoenix-wing/cad-core@0.5.1':
+    resolution: {integrity: sha512-Vy3Vng1KGLkFFmMGT4d5VZP8b084kilQz96Xp0YZ1yMWpFeQ+LweR2vRPsRL1I8av29Ogo9N2Oq+GIbhzReTbg==}
 
-  '@phoenix-wing/code-core@0.5.0':
-    resolution: {integrity: sha512-coYXR+NTYtUhE+xow8L+JqfcRIqJK3+OHn9A9CiDnp9NAdHgkBCo8wN8LW8G02xUCFSpDe7nBFd3mOh60zEZSA==}
+  '@phoenix-wing/code-core@0.5.1':
+    resolution: {integrity: sha512-ePd99OVLefImEBVuLrc+ZZ+vTvC9MsBB7HDahr6zJtFeweAI4Eer1PZLXjKXqBeOX8pmAUgnN3IpvvTO3Mnjew==}
 
-  '@phoenix-wing/db-node@0.5.0':
-    resolution: {integrity: sha512-2JfSng6Jgchbm/eWiaIctvq4RYQtKtTu5OR2M7iRqFS01dFCKgi5rJ8FABlzXz0VmHsxKNwcjLAoSMMgOQn3OA==}
+  '@phoenix-wing/db-node@0.5.1':
+    resolution: {integrity: sha512-Z9iKhcXRsoUWJXLPf7fZwTAQYNocyJdBWQpRB8x8c5pknAoaymOaQd93ZA/rbn42lOLwlfrYcDgzhOvCyyBnfw==}
 
-  '@phoenix-wing/git-core@0.5.0':
-    resolution: {integrity: sha512-wKqMWMOWHD12J/4y+iIhU0M33YmJnS5hotcaLYKtTFlAHFK45FHo1sRWiSRZX/yKkig7O3JmUkut9/jJ3f5jJw==}
+  '@phoenix-wing/git-core@0.5.1':
+    resolution: {integrity: sha512-TpsEE9745QoyjfkZnnkRrPKYb3PXMZTXraS6rB75RQAnZuvVHioPMInuPlMrxPCmz+NI6uDhO25rPpbqnRny4A==}
 
-  '@phoenix-wing/git-node@0.5.0':
-    resolution: {integrity: sha512-4eTxPXeWXbBXmi8yMOjpxwp/wwY+TW6POS7XnqNUQhhFhdxd7ZGcUlUKi4uXZcPxBidZxv6hSzPpOWjYmy8lIg==}
+  '@phoenix-wing/git-node@0.5.1':
+    resolution: {integrity: sha512-ePAnvfJYfeOWJ6e2NqDi/9QtsfcrYBDWjgNkpDSB+HuHjutw+eoFUkwuy+gL8vcAvAiGOXqvgE411HXTViGUMw==}
 
-  '@phoenix-wing/kt-codegen@0.5.0':
-    resolution: {integrity: sha512-3wiIdlzc6quMzpIT2JoiQkd7K+Lmd9jw+GWSsLm3/NzeY05b6wfqysR0eZSPnkRxjVQyniZAisayq5GFnultzQ==}
+  '@phoenix-wing/kt-codegen@0.5.1':
+    resolution: {integrity: sha512-vFjvgtyQWyLKA+ndHVw9CzTpxdQKVJx2ZFcsX9WQlov/rzJKz/fhQcqu6jmUkQ7C7MT5vg/V5Wr/gIIf7ee/ZQ==}
 
-  '@phoenix-wing/workspace-schema@0.5.0':
-    resolution: {integrity: sha512-GSIX63cdE6ef5S30P5A/XPXkvo8v/wx64M9NpPb2ywgvda5MPdPCsgNepVNzrGfN5eWllaIKOM4KiuOJ4AP8qQ==}
+  '@phoenix-wing/workspace-schema@0.5.1':
+    resolution: {integrity: sha512-z01ZoE+D0JDlZv5y7lepHMPC98eQYx9cgW4lgjMyU910FRv5PlPPAPJJ93J6pJHzdmusZ2aRwg4VUirjtMrQmQ==}
 
   '@polka/url@1.0.0-next.29':
     resolution: {integrity: sha512-wwQAWhWSuHaag8c4q/KN/vCoeOJYshAIvMQwD4GpSb3OiZklFfvAgmj0VCBBImRpuF/aFgIRzllXlVX93Jevww==}
@@ -1179,8 +1179,8 @@ packages:
   perfect-debounce@1.0.0:
     resolution: {integrity: sha512-xCy9V055GLEqoFaHoC1SoLIaLmWctgCUaBaWxDZ7/Zx4CTyX7cJQLJOok/orfjZAh9kEYpjJa4d0KcJmCbctZA==}
 
-  phoenix-wing@0.5.0:
-    resolution: {integrity: sha512-+vREluqgyS5CoaINcfEvrwiIf0yJJcQ+CzVnCCycNlRXEh4idy0RAw7156Vr1m8IOmmiuAoDDXRdt9xNRTin+w==}
+  phoenix-wing@0.5.1:
+    resolution: {integrity: sha512-V6sNU8OmiUdgIOq0T0eCVbeGscEtRq+y7vO/5OrRbKsn6YxzlczkhbIt2o5gbefYkpJHlHzQmLrvB6iq/+oDPg==}
     peerDependencies:
       element-plus: ^2.0.0
       pinia: ^2.0.0 || ^3.0.0
@@ -1895,23 +1895,23 @@ snapshots:
       '@parcel/watcher-win32-x64': 2.5.6
     optional: true
 
-  '@phoenix-wing/cad-core@0.5.0': {}
+  '@phoenix-wing/cad-core@0.5.1': {}
 
-  '@phoenix-wing/code-core@0.5.0': {}
+  '@phoenix-wing/code-core@0.5.1': {}
 
-  '@phoenix-wing/db-node@0.5.0':
+  '@phoenix-wing/db-node@0.5.1':
     dependencies:
       node-sqlite3-wasm: 0.8.59
 
-  '@phoenix-wing/git-core@0.5.0': {}
+  '@phoenix-wing/git-core@0.5.1': {}
 
-  '@phoenix-wing/git-node@0.5.0':
+  '@phoenix-wing/git-node@0.5.1':
     dependencies:
-      '@phoenix-wing/git-core': 0.5.0
+      '@phoenix-wing/git-core': 0.5.1
 
-  '@phoenix-wing/kt-codegen@0.5.0': {}
+  '@phoenix-wing/kt-codegen@0.5.1': {}
 
-  '@phoenix-wing/workspace-schema@0.5.0': {}
+  '@phoenix-wing/workspace-schema@0.5.1': {}
 
   '@polka/url@1.0.0-next.29': {}
 
@@ -2479,10 +2479,10 @@ snapshots:
 
   perfect-debounce@1.0.0: {}
 
-  phoenix-wing@0.5.0(element-plus@2.14.2(vue@3.5.35(typescript@5.7.3)))(pinia@3.0.4(typescript@5.7.3)(vue@3.5.35(typescript@5.7.3)))(vue@3.5.35(typescript@5.7.3)):
+  phoenix-wing@0.5.1(element-plus@2.14.2(vue@3.5.35(typescript@5.7.3)))(pinia@3.0.4(typescript@5.7.3)(vue@3.5.35(typescript@5.7.3)))(vue@3.5.35(typescript@5.7.3)):
     dependencies:
-      '@phoenix-wing/code-core': 0.5.0
-      '@phoenix-wing/db-node': 0.5.0
+      '@phoenix-wing/code-core': 0.5.1
+      '@phoenix-wing/db-node': 0.5.1
     optionalDependencies:
       element-plus: 2.14.2(vue@3.5.35(typescript@5.7.3))
       node-sqlite3-wasm: 0.8.59

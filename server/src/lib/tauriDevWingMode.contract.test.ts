@@ -11,10 +11,10 @@ describe("Tauri dev Wing 真源契约", () => {
 
   it("默认 Tauri dev 使用 Local Wing，并保留显式 Registry 对照入口", () => {
     expect(packageJson.scripts["tauri:dev"]).toBe(
-      "node scripts/run-with-phoenix-wing.mjs local -- cargo tauri dev",
+      "node scripts/run-with-phoenix-wing.mjs local -- node scripts/run-tauri-dev.mjs",
     );
     expect(packageJson.scripts["tauri:dev:registry"]).toBe(
-      "node scripts/run-with-phoenix-wing.mjs registry -- cargo tauri dev",
+      "node scripts/run-with-phoenix-wing.mjs registry -- node scripts/run-tauri-dev.mjs",
     );
   });
 
