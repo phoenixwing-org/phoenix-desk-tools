@@ -1,6 +1,6 @@
 # phoenix-desk-tools
 
-[Gitee](https://gitee.com/PhoenixWing321/phoenix-desk-tools.git) · Apache-2.0
+[Gitee](https://gitee.com/phoenixwing/phoenix-desk-tools.git) · Apache-2.0
 
 围绕 FreeCAD 工作空间的 **Web 桌面辅助工具**：CAD 索引与检索、BOM、Code 工具等。
 

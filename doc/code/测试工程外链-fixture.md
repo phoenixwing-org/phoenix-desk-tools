@@ -17,8 +17,8 @@ Web **系统 → 引用测试工程** 读取内置清单展示卡片；勾选与
 
 | 目录名 | 开源仓库 | 用途 |
 | --- | --- | --- |
-| `KtAlarmClock/` | [KtAlarmClock](https://gitee.com/PhoenixWing321/KtAlarmClock) | Kevin CAA Wizard 段（`KtAlarmClockParam.h/.cpp`）；成员排序批量回归 |
-| `PNXCaaStudy/` | [PNXCaaStudy](https://gitee.com/PhoenixWing321/PNXCaaStudy.git) | CAA2 Wizard 控件段、`GUID {…}` 字面量；排序 / UUID 扫描；**CAA 对话框**样例（见 [CAA模块-概览](../caa/CAA模块-概览.md)） |
+| `KtAlarmClock/` | [KtAlarmClock](https://gitee.com/phoenixwing/KtAlarmClock) | Kevin CAA Wizard 段（`KtAlarmClockParam.h/.cpp`）；成员排序批量回归 |
+| `PNXCaaStudy/` | [PNXCaaStudy](https://gitee.com/phoenixwing/PNXCaaStudy.git) | CAA2 Wizard 控件段、`GUID {…}` 字面量；排序 / UUID 扫描；**CAA 对话框**样例（见 [CAA模块-概览](../caa/CAA模块-概览.md)） |
 
 ## 推荐目录布局
 

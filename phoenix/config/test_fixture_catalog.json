@@ -6,7 +6,7 @@
     {
       "name": "KtAlarmClock",
       "description": "Qt 护眼闹钟 · Kevin CAA Wizard 段（Param.h/.cpp）",
-      "clone_url": "https://gitee.com/PhoenixWing321/KtAlarmClock",
+      "clone_url": "https://gitee.com/phoenixwing/KtAlarmClock",
       "fixture_rel": "tests/fixtures/KtAlarmClock",
       "candidates": [
         "../KtAlarmClock",
@@ -20,7 +20,7 @@
     {
       "name": "PNXCaaStudy",
       "description": "CAA RADE 开源学习工程 · CAA2 Wizard 控件段、GUID 字面量等",
-      "clone_url": "https://gitee.com/PhoenixWing321/PNXCaaStudy.git",
+      "clone_url": "https://gitee.com/phoenixwing/PNXCaaStudy.git",
       "fixture_rel": "tests/fixtures/PNXCaaStudy",
       "candidates": [
         "../PNXCaaStudy",
@@ -34,7 +34,7 @@
     {
       "name": "phoenix-freecad-study",
       "description": "FreeCAD 学习工程 · 测试库",
-      "clone_url": "https://gitee.com/PhoenixWing321/phoenix-freecad-study.git",
+      "clone_url": "https://gitee.com/phoenixwing/phoenix-freecad-study.git",
       "fixture_rel": "tests/fixtures/phoenix-freecad-study",
       "candidates": [
         "../phoenix-freecad-study",
@@ -45,7 +45,7 @@
     {
       "name": "phoenix-wing",
       "description": "Phoenix Wing 共享库 · Vue3 组件/组合式函数/类型定义",
-      "clone_url": "https://gitee.com/PhoenixWing321/phoenix-wing.git",
+      "clone_url": "https://gitee.com/phoenixwing/phoenix-wing.git",
       "fixture_rel": "tests/fixtures/phoenix-wing",
       "candidates": [
         "../phoenix-wing",

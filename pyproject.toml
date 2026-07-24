@@ -26,7 +26,7 @@ web = [
 windows-solidworks = ["pywin32>=307"]
 
 [project.urls]
-Repository = "https://gitee.com/PhoenixWing321/phoenix-desk-tools.git"
+Repository = "https://gitee.com/phoenixwing/phoenix-desk-tools.git"
 
 [project.scripts]
 phoenix-desktop = "phoenix.shell.app:run_app"
