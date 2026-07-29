@@ -65,11 +65,13 @@ describe("Ribbon navigation contract", () => {
     ]));
   });
 
-  it("deduplicates repeated page definitions inside a module group", () => {
+  it("deduplicates repeated page definitions while preserving the first navigation label", () => {
     const navigation: NavItem[] = [
       { id: "one", page: "same", label: "One", module: "code", ribbonGroup: "编辑" },
       { id: "two", page: "same", label: "Two", module: "code", ribbonGroup: "编辑" },
     ];
-    expect(buildRibbonTabs(navigation)[1]?.groups[0]?.items).toEqual([{ pageId: "same" }]);
+    const items = buildRibbonTabs(navigation)[1]?.groups[0]?.items ?? [];
+    expect(items).toHaveLength(1);
+    expect(items[0]).toEqual({ pageId: "same", label: "One" });
   });
 });

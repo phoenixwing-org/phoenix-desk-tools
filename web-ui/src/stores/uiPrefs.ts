@@ -4,7 +4,18 @@ import {
   clampExpandIconSize,
   EXPAND_ICON_SIZE_DEFAULT,
 } from "../utils/expandIconTheme";
-import { pnwApplyColorScheme, type PnwColorScheme } from "phoenix-wing";
+import {
+  pnwApplyColorScheme,
+  pnwNormalizeWorkbenchDisplayPreferences,
+  type PnwColorScheme,
+  type PnwWorkbenchDisplayPreferences,
+} from "phoenix-wing";
+import {
+  pdtClearWorkbenchDisplayPreferences,
+  pdtDefaultWorkbenchDisplayPreferences,
+  pdtReadWorkbenchDisplayPreferences,
+  pdtWriteWorkbenchDisplayPreferences,
+} from "../workbench/PdtWorkbenchDisplayPreferences";
 
 const STORAGE_KEY = "phoenix-ui-prefs-v1";
 
@@ -21,6 +32,7 @@ export const useUiPrefsStore = defineStore("uiPrefs", {
     expandControlSizePx: EXPAND_ICON_SIZE_DEFAULT,
     ribbonLayoutMode: "grouped" as RibbonLayoutMode,
     colorScheme: "light" as PnwColorScheme,
+    workbenchDisplayPreferences: pdtDefaultWorkbenchDisplayPreferences("light"),
     hydrated: false,
   }),
   actions: {
@@ -47,6 +59,10 @@ export const useUiPrefsStore = defineStore("uiPrefs", {
       } catch {
         /* ignore corrupt storage */
       }
+      this.workbenchDisplayPreferences = pdtReadWorkbenchDisplayPreferences(
+        pdtDefaultWorkbenchDisplayPreferences(this.colorScheme),
+      );
+      this.colorScheme = this.workbenchDisplayPreferences.colorScheme;
       applyExpandIconCssVars(this.expandControlSizePx);
       pnwApplyColorScheme(this.colorScheme);
       this.hydrated = true;
@@ -73,18 +89,36 @@ export const useUiPrefsStore = defineStore("uiPrefs", {
     },
     setColorScheme(scheme: PnwColorScheme) {
       this.colorScheme = scheme;
+      this.workbenchDisplayPreferences = pnwNormalizeWorkbenchDisplayPreferences({
+        ...this.workbenchDisplayPreferences,
+        colorScheme: scheme,
+      }, pdtDefaultWorkbenchDisplayPreferences(scheme));
+      pdtWriteWorkbenchDisplayPreferences(
+        this.workbenchDisplayPreferences,
+        pdtDefaultWorkbenchDisplayPreferences(scheme),
+      );
       pnwApplyColorScheme(scheme);
+      this.persist();
+    },
+    setWorkbenchDisplayPreferences(value: PnwWorkbenchDisplayPreferences) {
+      const fallback = pdtDefaultWorkbenchDisplayPreferences(this.colorScheme);
+      this.workbenchDisplayPreferences = pnwNormalizeWorkbenchDisplayPreferences(value, fallback);
+      this.colorScheme = this.workbenchDisplayPreferences.colorScheme;
+      pnwApplyColorScheme(this.colorScheme);
+      pdtWriteWorkbenchDisplayPreferences(this.workbenchDisplayPreferences, fallback);
       this.persist();
     },
     resetToDefaults() {
       this.expandControlSizePx = EXPAND_ICON_SIZE_DEFAULT;
       this.ribbonLayoutMode = "grouped";
       this.colorScheme = "light";
+      this.workbenchDisplayPreferences = pdtDefaultWorkbenchDisplayPreferences("light");
       try {
         localStorage.removeItem(STORAGE_KEY);
       } catch {
         /* ignore */
       }
+      pdtClearWorkbenchDisplayPreferences();
       applyExpandIconCssVars(this.expandControlSizePx);
       pnwApplyColorScheme(this.colorScheme);
     },

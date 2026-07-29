@@ -27,7 +27,8 @@ const MODULE_LABELS: Record<string, string> = {
 function ribbonItem(nav: NavItem): RibbonItemDef {
   return {
     pageId: nav.page,
-    ...(nav.ribbonLabel ? { label: nav.ribbonLabel } : {}),
+    // 0.6 导航树与旧 Ribbon 共用同一来源；短标题仍可由页面贡献覆盖。
+    label: nav.ribbonLabel || nav.label,
   };
 }
 

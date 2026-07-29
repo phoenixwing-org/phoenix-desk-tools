@@ -1,52 +1,36 @@
 <script setup lang="ts">
-import { computed, onUnmounted, toValue, watch } from "vue";
-import { useAppShell } from "../../composables/useAppShell";
+import { computed, onUnmounted, watch } from "vue";
 import {
-  useGlobalWorkbenchBottomContribution,
   useWorkbenchBottomPanelState,
-  type WorkbenchBottomContributionTab,
 } from "../../composables/useWorkbenchBottomContribution";
-import WorkbenchBottomPanel, { type WorkbenchBottomPanelTab } from "./WorkbenchBottomPanel.vue";
+import { usePdtWorkbenchBottomPanel } from "../../composables/usePdtWorkbenchBottomPanel";
+import WorkbenchBottomPanel from "./WorkbenchBottomPanel.vue";
 
-const shell = useAppShell();
-const contribution = useGlobalWorkbenchBottomContribution();
+const props = withDefaults(defineProps<{
+  /** 由 PnwWorkbenchShell 提供外层标签与尺寸时只渲染内容。 */
+  embedded?: boolean;
+  activeTabId?: string;
+}>(), {
+  embedded: false,
+  activeTabId: "output",
+});
+
+const {
+  shell,
+  contribution,
+  contributionProps,
+  tabs: pnwTabs,
+  contentTab,
+  summary: pnwSummary,
+} = usePdtWorkbenchBottomPanel();
 const panelState = useWorkbenchBottomPanelState();
 let heightPersistTimer: ReturnType<typeof setTimeout> | null = null;
 
-const runtimeLogLineCount = computed(() => shell.logText.value
-  .split(/\r?\n/)
-  .filter(Boolean)
-  .length);
-const contributedTabs = computed(() => contribution.value ? toValue(contribution.value.tabs) : []);
-const sourceLabel = computed(() => {
-  const value = contribution.value?.sourceLabel;
-  return value ? toValue(value) : "工作台";
-});
-const contributionSummary = computed(() => {
-  const value = contribution.value?.summary;
-  return value ? toValue(value) : "";
-});
-const contributionProps = computed(() => {
-  const value = contribution.value?.props;
-  return value ? toValue(value) : {};
-});
-
-function resolveTab(tab: WorkbenchBottomContributionTab): WorkbenchBottomPanelTab {
-  return {
-    id: tab.id,
-    label: tab.label,
-    count: tab.count == null ? undefined : toValue(tab.count),
-    tone: tab.tone == null ? undefined : toValue(tab.tone),
-  };
-}
-
-const tabs = computed<readonly WorkbenchBottomPanelTab[]>(() => [
-  ...contributedTabs.value.map(resolveTab),
-  { id: "output", label: "运行日志", count: runtimeLogLineCount.value },
-]);
 const activeTab = computed({
-  get: () => panelState.activeTab.value,
-  set: (value: string) => panelState.setActiveTab(value as "preflight" | "problems" | "output"),
+  get: () => props.embedded ? props.activeTabId : panelState.activeTab.value,
+  set: (value: string) => {
+    if (!props.embedded) panelState.setActiveTab(value as "preflight" | "problems" | "output");
+  },
 });
 const expanded = computed({
   get: () => shell.shellLayout.value.log_panel_open,
@@ -69,20 +53,12 @@ const height = computed({
     }, 180);
   },
 });
-const summary = computed(() => {
-  if (activeTab.value === "output") return `全局运行日志 · ${runtimeLogLineCount.value} 行`;
-  if (contributionSummary.value) return `${sourceLabel.value} · ${contributionSummary.value}`;
-  return "全局面板会保留最近的预检与问题；切换 View 不会销毁";
-});
+const summary = computed(() => pnwSummary(activeTab.value));
 
-watch(tabs, (available) => {
+watch(pnwTabs, (available) => {
   if (available.some((tab) => tab.id === activeTab.value)) return;
   activeTab.value = available[0]?.id ?? "output";
 }, { immediate: true });
-
-function contentTab(tab: WorkbenchBottomContributionTab["id"]) {
-  return contributedTabs.value.find((item) => item.id === tab);
-}
 
 onUnmounted(() => {
   if (heightPersistTimer) clearTimeout(heightPersistTimer);
@@ -92,10 +68,11 @@ onUnmounted(() => {
 
 <template>
   <WorkbenchBottomPanel
+    v-if="!embedded"
     v-model="activeTab"
     v-model:expanded="expanded"
     v-model:height="height"
-    :tabs="tabs"
+    :tabs="pnwTabs"
     aria-label="全局工作台面板"
     class="global-workbench-bottom-panel"
     data-tour="shell-log"
@@ -132,10 +109,38 @@ onUnmounted(() => {
       </div>
     </template>
   </WorkbenchBottomPanel>
+  <section v-else class="global-workbench-bottom-panel global-workbench-bottom-panel--embedded">
+    <template v-if="activeTab === 'preflight'">
+      <component
+        :is="contribution.component"
+        v-if="contribution && contentTab('preflight')"
+        v-bind="contributionProps"
+        panel-tab="preflight"
+      />
+      <p v-else class="global-panel-empty">当前没有预检结果。</p>
+    </template>
+    <template v-else-if="activeTab === 'problems'">
+      <component
+        :is="contribution.component"
+        v-if="contribution && contentTab('problems')"
+        v-bind="contributionProps"
+        panel-tab="problems"
+      />
+      <p v-else class="global-panel-empty">当前没有问题。</p>
+    </template>
+    <div v-else class="global-output">
+      <div class="output-actions">
+        <span>所有模块共用运行日志，不随 View 切换</span>
+        <button type="button" :disabled="!shell.logText.value" @click="shell.clearLog()">清空</button>
+      </div>
+      <pre>{{ shell.logText.value || "尚无运行日志。" }}</pre>
+    </div>
+  </section>
 </template>
 
 <style scoped>
 .global-workbench-bottom-panel { width: 100%; }
+.global-workbench-bottom-panel--embedded { height: 100%; min-height: 0; overflow: hidden; }
 .global-panel-empty { display: grid; height: 100%; margin: 0; padding: 20px; place-items: center; color: var(--muted); font-size: 0.7rem; }
 .global-output { display: flex; height: 100%; min-height: 0; flex-direction: column; }
 .output-actions { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; padding: 4px 8px; color: var(--muted); background: var(--panel-head-bg); border-bottom: 1px solid var(--border); font-size: 0.62rem; }

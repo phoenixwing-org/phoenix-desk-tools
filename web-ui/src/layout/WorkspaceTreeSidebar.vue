@@ -37,6 +37,8 @@ const props = withDefaults(
     showProps?: boolean;
     showGitCommit?: boolean;
     showWorksetBlock?: boolean;
+    /** 作为 Pnw Secondary Block 的内容渲染，不再自行绝对定位或决定宽度。 */
+    embedded?: boolean;
   }>(),
   {
     dockSide: "right",
@@ -45,6 +47,7 @@ const props = withDefaults(
     pageBlockTabId: "",
     showProps: false,
     showGitCommit: false,
+    embedded: false,
   },
 );
 
@@ -126,6 +129,7 @@ const treeTitle = computed(() => {
 const shellLayout = computed(() => shell.shellLayout.value);
 const workspacePath = computed(() => shell.workspacePath.value);
 const panelWidth = computed(() => {
+  if (props.embedded) return "100%";
   const px =
     props.dockSide === "left"
       ? shellLayout.value.left_panel_width_px
@@ -380,6 +384,7 @@ onUnmounted(() => {
     :class="[
       `dock-${dockSide}`,
       {
+        embedded: props.embedded,
         'props-only': showPropsWrap && !showMainBlock,
         'git-commit-only':
           showGitCommitPanel && !showPropsPanel && !showMainBlock,
@@ -600,6 +605,13 @@ onUnmounted(() => {
 .ws-sidebar.dock-left {
   left: 0;
   border-right: 1px solid var(--border);
+}
+
+.ws-sidebar.embedded {
+  position: relative;
+  inset: auto;
+  height: 100%;
+  border: 0;
 }
 
 .ws-sidebar.props-only .ws-props-wrap,

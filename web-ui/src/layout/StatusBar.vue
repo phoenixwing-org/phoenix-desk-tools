@@ -1,10 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import { PNW_VERSION } from "phoenix-wing";
 import ShellPanelToggleBar from "../components/ShellPanelToggleBar.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { apiUrl, runtimeInfo } from "../utils/runtimeBridge";
 
 const shell = useAppShell();
+withDefaults(defineProps<{
+  showPanelToggles?: boolean;
+}>(), {
+  showPanelToggles: true,
+});
 const apiVersion = ref("");
 const apiProtocolVersion = ref<number>();
 const apiSource = computed(() => String(runtimeInfo().api_source || "unknown"));
@@ -44,8 +50,9 @@ const line = computed(() => {
 <template>
   <footer class="status">
     <span class="status-main">{{ line }}</span>
+    <span class="status-wing" title="由运行时解析的 Phoenix Wing 版本">Wing v{{ PNW_VERSION }}</span>
     <span v-if="apiSummary" class="status-api" :title="String(runtimeInfo().api_origin || '')">{{ apiSummary }}</span>
-    <ShellPanelToggleBar />
+    <ShellPanelToggleBar v-if="showPanelToggles" />
   </footer>
 </template>
 
@@ -72,6 +79,12 @@ const line = computed(() => {
 }
 
 .status-api {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  color: var(--phoenix-text-muted);
+}
+
+.status-wing {
   flex: 0 0 auto;
   white-space: nowrap;
   color: var(--phoenix-text-muted);

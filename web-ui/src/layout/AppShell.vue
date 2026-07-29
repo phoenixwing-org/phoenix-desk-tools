@@ -1,20 +1,22 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch, type Component } from "vue";
-import AppToolbar from "./AppToolbar.vue";
-import PnwRibbonShell from "phoenix-wing/layout/PnwRibbonShell.vue";
-import RibbonPanel from "./ribbon/RibbonPanel.vue";
-import { useRibbonTabs } from "./ribbon/useRibbonTabs";
+import {
+  PnwWorkbenchShell,
+  PnwPhoenixWingMark,
+  pnwNavigationFromRibbonTabs,
+  type PnwNavigationNode,
+  type PnwViewBlockId,
+  type PnwWorkbenchDisplayPreferences,
+} from "phoenix-wing";
 import { useUiPrefsStore } from "../stores/uiPrefs";
 import StatusBar from "./StatusBar.vue";
 import WorkspaceTreeSidebar from "./WorkspaceTreeSidebar.vue";
 import WelcomePage from "../pages/WelcomePage.vue";
-import WorkbenchIdlePage from "../pages/WorkbenchIdlePage.vue";
 import WorkbenchViewLoadingPage from "./WorkbenchViewLoadingPage.vue";
 import PlaceholderPage from "../pages/PlaceholderPage.vue";
 import { PAGE_COMPONENTS, preloadPageComponent } from "./pageRegistry";
+import { pageSideBlockComponent } from "./pageSideBlockRegistry";
 import { createAsyncViewSwitchController } from "./asyncViewSwitch";
-import { isPageSideBlockOpen } from "../composables/usePageSideBlockVisibility";
-import { pnwBindPointerDrag } from "phoenix-wing";
 import { fetchPhoenixDatabaseStatus, recreatePhoenixDatabase } from "../api";
 import { provideAppShell } from "../composables/useAppShell";
 import { WORKBENCH_IDLE_PAGE } from "../constants/workbench";
@@ -25,6 +27,12 @@ import GitDiffPreviewHost from "../components/git/GitDiffPreviewHost.vue";
 import CaaRelatedFilePreviewHost from "../components/caa/CaaRelatedFilePreviewHost.vue";
 import AsyncProgressOverlay from "phoenix-wing/components/PnwAsyncProgressOverlay.vue";
 import GlobalWorkbenchBottomPanel from "../components/workbench/GlobalWorkbenchBottomPanel.vue";
+import { usePdtWorkbenchBottomPanel } from "../composables/usePdtWorkbenchBottomPanel";
+import { buildRibbonTabs } from "./ribbon/ribbonConfig";
+import { ribbonIconFor } from "./ribbon/ribbonIcons";
+import GiteeIcon from "../components/icons/GiteeIcon.vue";
+import { PROJECT_GITEE_HOME } from "../constants/projectLinks";
+import { pdtWithWorkbenchLayoutState } from "../workbench/PdtWorkbenchDisplayPreferences";
 import type { WorkbenchTab } from "../types/workbench";
 
 const shell = provideAppShell();
@@ -38,7 +46,9 @@ const legacyDbError = ref("");
 const legacyDbExpectedSchema = ref(13);
 
 const uiPrefs = useUiPrefsStore();
+const pnwBottomPanel = usePdtWorkbenchBottomPanel(shell);
 const activeTab = computed(() => shell.activeTab());
+const pnwActiveBottomTabId = ref("output");
 const displayedTab = shallowRef<WorkbenchTab>();
 const pendingViewLabel = ref("");
 const viewLoadError = ref("");
@@ -61,14 +71,18 @@ watch(activeTab, (tab) => {
 
 const isWelcomeFullscreen = computed(() => shell.currentPage.value === "welcome");
 
-const ribbonCollapsed = ref(false);
-const ribbonLayout = computed(() => uiPrefs.ribbonLayoutMode === "inline" ? "inline" : "stacked");
-
 const shellLayout = computed(() => shell.shellLayout.value);
 const navigation = computed(() => shell.appConfig.value?.navigation ?? []);
-const activePageBlockId = computed(() => isPageSideBlockOpen(shell.currentPage.value)
-  ? shell.currentPage.value
-  : "");
+// 与旧 useRibbonTabs 一致：系统页始终保留，受模块开关控制的页面不进入 Pnw 单一导航树。
+const pnwVisibleNavigation = computed(() => navigation.value.filter((item) =>
+  !item.module || shell.enabledNavModules.value.includes(item.module),
+));
+const pnwNavigationNodes = computed(() => pnwNavigationFromRibbonTabs(
+  buildRibbonTabs(pnwVisibleNavigation.value),
+  { iconFor: ribbonIconFor },
+));
+const pnwExpandedNodeIds = ref<readonly string[]>([]);
+const activePageBlockComponent = computed(() => pageSideBlockComponent(shell.currentPage.value));
 
 const pageLabel = computed(() => {
   const page = shell.currentPage.value;
@@ -78,25 +92,6 @@ const pageLabel = computed(() => {
 
 usePnwDocumentTitle({ workspaceShort, workspacePath, pageLabel });
 
-const { activeTab: ribbonActiveTab, visibleTabs: ribbonVisibleTabs, activeTabDef: ribbonActiveTabDef } =
-  useRibbonTabs({
-    navigation,
-    currentPage: computed(() => shell.currentPage.value),
-    enabledModules: computed(() => shell.enabledNavModules.value),
-    workbenchFocusScope: shell.workbenchFocusScope,
-  });
-
-watch(ribbonActiveTab, () => {
-  if (ribbonCollapsed.value) ribbonCollapsed.value = false;
-});
-
-watch(ribbonActiveTab, (tabId) => {
-  if (shell.currentPage.value !== WORKBENCH_IDLE_PAGE) return;
-  if (tabId === "cad") shell.workbenchFocusScope.value = "cad";
-  else if (tabId === "code") shell.workbenchFocusScope.value = "code";
-  else shell.workbenchFocusScope.value = "all";
-});
-
 const dockVis = computed(() => {
   const layout = shellLayout.value;
   const rightShowTree = layout.right_panel_open;
@@ -104,17 +99,7 @@ const dockVis = computed(() => {
   const rightShowGitCommit = shell.currentPage.value === "git" && layout.git_commit_panel_open;
   const rightShowWorkset = layout.workset_panel_open;
   return {
-    // 左栏只承载页面贡献的 VS Code 式 Block；系统块统一固定在右栏。
-    leftVisible: Boolean(activePageBlockId.value),
-    leftShowTree: false,
-    leftShowLog: false,
-    leftShowProps: false,
-    leftShowGitCommit: false,
-    leftShowWorkset: false,
-    leftPageBlockId: activePageBlockId.value,
     rightShowTree,
-    // 运行日志只允许出现在 AppShell 的全局底部面板。
-    rightShowLog: false,
     rightShowProps,
     rightShowGitCommit,
     rightShowWorkset,
@@ -127,45 +112,77 @@ const dockVis = computed(() => {
   };
 });
 
-const leftPanelWidth = computed(() => `${shellLayout.value.left_panel_width_px}px`);
-const rightPanelWidth = computed(() => `${shellLayout.value.right_panel_width_px}px`);
-
-const mainMargins = computed(() => ({
-  marginLeft: dockVis.value.leftVisible ? leftPanelWidth.value : undefined,
-  marginRight: dockVis.value.rightVisible ? rightPanelWidth.value : undefined,
+const pnwContributions = computed(() => ({
+  primary: Boolean(activePageBlockComponent.value),
+  bottom: true,
+  secondary: dockVis.value.rightVisible,
 }));
+
+const pnwDisplayPreferences = computed(() => uiPrefs.workbenchDisplayPreferences);
+
+function updatePnwDisplayPreferences(next: PnwWorkbenchDisplayPreferences): void {
+  uiPrefs.setWorkbenchDisplayPreferences(next);
+}
+
+function updatePnwLayoutState(next: PnwWorkbenchDisplayPreferences["layoutState"]): void {
+  updatePnwDisplayPreferences(pdtWithWorkbenchLayoutState(pnwDisplayPreferences.value, next));
+}
+
+function updatePnwPresentation(presentation: PnwWorkbenchDisplayPreferences["presentation"]): void {
+  updatePnwDisplayPreferences({ ...pnwDisplayPreferences.value, presentation });
+}
+
+function updatePnwRibbonAppearance(ribbonAppearance: PnwWorkbenchDisplayPreferences["ribbonAppearance"]): void {
+  updatePnwDisplayPreferences({ ...pnwDisplayPreferences.value, ribbonAppearance });
+}
+
+function updatePnwTreeAppearance(treeAppearance: PnwWorkbenchDisplayPreferences["treeAppearance"]): void {
+  updatePnwDisplayPreferences({ ...pnwDisplayPreferences.value, treeAppearance });
+}
+
+function updatePnwColorScheme(colorScheme: PnwWorkbenchDisplayPreferences["colorScheme"]): void {
+  updatePnwDisplayPreferences({ ...pnwDisplayPreferences.value, colorScheme });
+}
+
+function updatePnwTabBarPlacement(tabBarPlacement: PnwWorkbenchDisplayPreferences["tabBarPlacement"]): void {
+  updatePnwDisplayPreferences({ ...pnwDisplayPreferences.value, tabBarPlacement });
+}
+
+function updatePnwSettingsPositions(settingsPositions: PnwWorkbenchDisplayPreferences["settingsPositions"]): void {
+  updatePnwDisplayPreferences({ ...pnwDisplayPreferences.value, settingsPositions });
+}
 
 function pageComponent(pageId: string): Component {
   return PAGE_COMPONENTS[pageId] ?? PlaceholderPage;
 }
 
-function onRibbonOpen(pageId: string) {
+function onPnwActivate(pageId: string) {
+  if (!navigation.value.some((item) => item.page === pageId)) return;
   shell.goToPage(pageId);
+}
+
+function pnwFirstLeaf(node: PnwNavigationNode): string | undefined {
+  if (!node.children?.length) return node.id;
+  for (const child of node.children) {
+    const leaf = pnwFirstLeaf(child);
+    if (leaf) return leaf;
+  }
+  return undefined;
+}
+
+function onPnwSelectModule(moduleId: string): void {
+  const module = pnwNavigationNodes.value.find((node) => node.id === moduleId);
+  const pageId = module ? pnwFirstLeaf(module) : undefined;
+  if (pageId) onPnwActivate(pageId);
+}
+
+function onPnwToggleBlock(blockId: PnwViewBlockId): void {
+  // PnwWorkbenchLayout 已先通过 update:layout-state 返回新 visibility；这里仅记录事件。
+  shell.appendLog(`[Workbench][Layout] 切换 ${blockId} Block`, { source: "workbench" });
 }
 
 function retryActiveView(): void {
   void viewSwitch.select(activeTab.value);
-}
-
-function onResizeStart(e: PointerEvent, side: "left" | "right") {
-  const widthKey = side === "left" ? "left_panel_width_px" : "right_panel_width_px";
-  const startX = e.clientX;
-  const startW = shell.shellLayout.value[widthKey];
-  const minWidth = side === "left" ? 240 : 220;
-
-  pnwBindPointerDrag(e, {
-    cursor: "col-resize",
-    onMove(ev) {
-      const delta = side === "right" ? startX - ev.clientX : ev.clientX - startX;
-      const next = Math.min(560, Math.max(minWidth, startW + delta));
-      shell.shellLayout.value[widthKey] = next;
-    },
-    onEnd() {
-      void shell.persistShellLayout({
-        [widthKey]: shell.shellLayout.value[widthKey],
-      });
-    },
-  });
 }
 
 async function refreshLegacyDatabaseBanner() {
@@ -221,7 +238,7 @@ onUnmounted(() => {
 <template>
   <div v-if="loading" class="shell-loading">载入中…</div>
   <div v-else-if="loadError" class="shell-loading err">{{ loadError }}</div>
-  <div v-else class="shell" :class="{ 'shell-welcome': isWelcomeFullscreen }">
+  <div v-else class="shell">
     <div v-if="legacyDbBanner && !isWelcomeFullscreen" class="legacy-db-banner" role="alert">
       <div class="legacy-db-banner-text">
         <strong>工作空间数据库需要重建</strong>
@@ -238,99 +255,130 @@ onUnmounted(() => {
         {{ legacyDbRecreating ? "重建中…" : "确认重建数据库" }}
       </button>
     </div>
-    <AppToolbar
-      v-if="!isWelcomeFullscreen"
-      :ribbon-tabs="ribbonVisibleTabs"
-      v-model:ribbon-active-tab="ribbonActiveTab"
-      v-model:ribbon-collapsed="ribbonCollapsed"
-    />
-    <PnwRibbonShell
-      v-if="!isWelcomeFullscreen"
-      :collapsed="ribbonCollapsed"
-      :layout="ribbonLayout"
-      @update:layout="(v) => uiPrefs.setRibbonLayoutMode(v === 'inline' ? 'inline' : 'grouped')"
+    <WelcomePage v-if="isWelcomeFullscreen" />
+    <PnwWorkbenchShell
+      v-else
+      class="desk-pnw-workbench-shell"
+      :nodes="pnwNavigationNodes"
+      :presentation="pnwDisplayPreferences.presentation"
+      :active-node-id="shell.currentPage.value"
+      :expanded-node-ids="pnwExpandedNodeIds"
+      :ribbon-appearance="pnwDisplayPreferences.ribbonAppearance"
+      :tree-collapsed="pnwDisplayPreferences.treeCollapsed"
+      :tree-appearance="pnwDisplayPreferences.treeAppearance"
+      :contributions="pnwContributions"
+      :layout-state="pnwDisplayPreferences.layoutState"
+      :bottom-tabs="pnwBottomPanel.tabs.value"
+      :active-bottom-tab-id="pnwActiveBottomTabId"
+      :color-scheme="pnwDisplayPreferences.colorScheme"
+      :tabs="shell.tabBarTabs.value"
+      :tab-bar-placement="pnwDisplayPreferences.tabBarPlacement"
+      :active-tab-id="shell.activeTabId.value"
+      :can-close-all-tabs="shell.tabs.value.length > 1"
+      :brand-title="shell.appConfig.value?.title ?? 'Phoenix Desk Tools'"
+      :brand-subtitle="workspaceShort"
+      :show-empty-view="!activeTab"
+      empty-view-title="尚未打开工具"
+      empty-view-description="从上方 Ribbon 或侧面导航树选择一个 Desk Tools 页面。"
+      @activate="onPnwActivate"
+      @select-module="onPnwSelectModule"
+      @select-tab="shell.activateTab"
+      @close-tab="(tabId) => void shell.closeTab(tabId)"
+      @close-all-tabs="() => void shell.closeAllTabs()"
+      @toggle-block="onPnwToggleBlock"
+      @update:expanded-node-ids="pnwExpandedNodeIds = $event"
+      @update:presentation="updatePnwPresentation"
+      @update:ribbon-appearance="updatePnwRibbonAppearance"
+      @update:tree-collapsed="(treeCollapsed) => updatePnwDisplayPreferences({ ...pnwDisplayPreferences, treeCollapsed })"
+      @update:tree-appearance="updatePnwTreeAppearance"
+      @update:color-scheme="updatePnwColorScheme"
+      @update:layout-state="updatePnwLayoutState"
+      @update:active-bottom-tab-id="pnwActiveBottomTabId = $event"
+      @update:tab-bar-placement="updatePnwTabBarPlacement"
+      @update:display-settings-positions="updatePnwSettingsPositions"
     >
-      <RibbonPanel
-        v-if="!ribbonCollapsed && ribbonActiveTabDef"
-        :tab="ribbonActiveTabDef"
-        :navigation="navigation"
-        :current-page="shell.currentPage.value"
-        :can-open="(p) => shell.canNavigateToPage(p)"
-        @open="onRibbonOpen"
-      />
-    </PnwRibbonShell>
-    <div class="shell-body" :class="{ 'shell-body-welcome': isWelcomeFullscreen }">
-      <!-- 左栏 NavSidebar（快捷栏）默认不渲染；日后可能迁入工作空间树，见 layout/NavSidebar.vue -->
-      <main
-        class="shell-main"
-        :class="{ 'shell-main-welcome': isWelcomeFullscreen }"
-        :style="isWelcomeFullscreen ? undefined : mainMargins"
-      >
-        <div class="shell-pages" :class="{ 'shell-pages-welcome': isWelcomeFullscreen }" data-tour="main-content">
-          <WelcomePage v-if="isWelcomeFullscreen" />
-          <KeepAlive v-else :max="24">
-            <component
-              v-if="displayedTab"
-              :key="displayedTab.id"
-              :is="pageComponent(displayedTab.pageId)"
-              :workbench-tab-id="displayedTab.id"
-            />
-            <WorkbenchViewLoadingPage
-              v-else-if="activeTab"
-              key="workbench-view-loading"
-              :label="pendingViewLabel || activeTab.title"
-              :error="viewLoadError"
-              @retry="retryActiveView"
-            />
-            <WorkbenchIdlePage v-else key="workbench-idle" />
-          </KeepAlive>
-          <div v-if="pendingViewLabel && displayedTab" class="view-switch-indicator" role="status">
-            正在准备 {{ pendingViewLabel }}…
-          </div>
-          <div v-if="viewLoadError && displayedTab" class="view-switch-error" role="alert">
-            <span>View 加载失败：{{ viewLoadError }}</span>
-            <button type="button" @click="retryActiveView">重试</button>
-          </div>
+      <template #brand>
+        <button
+          type="button"
+          class="desk-workbench-brand"
+          :title="workspacePath ? `${shell.appConfig.value?.title ?? 'Phoenix Desk Tools'}\n${workspacePath}` : '返回欢迎页'"
+          @click="shell.goToPage('welcome')"
+        >
+          <PnwPhoenixWingMark class="desk-workbench-brand-mark" decorative />
+          <span class="desk-workbench-brand-copy">
+            <strong>{{ shell.appConfig.value?.title ?? 'Phoenix Desk Tools' }}</strong>
+            <small>{{ workspaceShort || '选择或打开工作空间' }}</small>
+          </span>
+        </button>
+      </template>
+      <template #header-actions>
+        <a
+          class="desk-workbench-gitee"
+          :href="PROJECT_GITEE_HOME"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Gitee 仓库主页 · phoenix-desk-tools"
+          aria-label="Gitee 仓库主页"
+        ><GiteeIcon /></a>
+      </template>
+      <div class="shell-pages" data-tour="main-content">
+        <KeepAlive :max="24">
+          <component
+            v-if="displayedTab"
+            :key="displayedTab.id"
+            :is="pageComponent(displayedTab.pageId)"
+            :workbench-tab-id="displayedTab.id"
+          />
+          <WorkbenchViewLoadingPage
+            v-else-if="activeTab"
+            key="workbench-view-loading"
+            :label="pendingViewLabel || activeTab.title"
+            :error="viewLoadError"
+            @retry="retryActiveView"
+          />
+        </KeepAlive>
+        <div v-if="pendingViewLabel && displayedTab" class="view-switch-indicator" role="status">
+          正在准备 {{ pendingViewLabel }}…
         </div>
-        <GlobalWorkbenchBottomPanel v-if="!isWelcomeFullscreen" />
-      </main>
-      <div
-        v-if="!isWelcomeFullscreen && dockVis.leftVisible"
-        class="shell-resizer shell-resizer-left"
-        :style="{ left: leftPanelWidth }"
-        title="拖拽调节宽度"
-        @pointerdown="onResizeStart($event, 'left')"
-      />
-      <WorkspaceTreeSidebar
-        v-if="!isWelcomeFullscreen && dockVis.leftVisible"
-        dock-side="left"
-        :show-tree="dockVis.leftShowTree"
-        :page-block-id="dockVis.leftPageBlockId"
-        :page-block-tab-id="activeTab?.id ?? ''"
-        :show-props="dockVis.leftShowProps"
-        :show-git-commit="dockVis.leftShowGitCommit"
-        :show-workset-block="dockVis.leftShowWorkset"
-      />
-      <div
-        v-if="!isWelcomeFullscreen && dockVis.rightVisible"
-        class="shell-resizer shell-resizer-right"
-        :style="{ right: rightPanelWidth }"
-        title="拖拽调节宽度"
-        @pointerdown="onResizeStart($event, 'right')"
-      />
-      <WorkspaceTreeSidebar
-        v-if="!isWelcomeFullscreen && dockVis.rightVisible"
-        dock-side="right"
-        :show-tree="dockVis.rightShowTree"
-        page-block-id=""
-        page-block-tab-id=""
-        :show-props="dockVis.rightShowProps"
-        :show-git-commit="dockVis.rightShowGitCommit"
-        :show-workset-block="dockVis.rightShowWorkset"
-      />
-    </div>
+        <div v-if="viewLoadError && displayedTab" class="view-switch-error" role="alert">
+          <span>View 加载失败：{{ viewLoadError }}</span>
+          <button type="button" @click="retryActiveView">重试</button>
+        </div>
+      </div>
 
-    <StatusBar v-if="!isWelcomeFullscreen" />
+      <template v-if="activePageBlockComponent" #primary>
+        <component
+          :is="activePageBlockComponent"
+          :key="activeTab?.id ?? shell.currentPage.value"
+          :page-id="shell.currentPage.value"
+          :workbench-tab-id="activeTab?.id"
+        />
+      </template>
+
+      <template v-if="dockVis.rightVisible" #secondary>
+        <WorkspaceTreeSidebar
+          embedded
+          dock-side="right"
+          :show-tree="dockVis.rightShowTree"
+          page-block-id=""
+          page-block-tab-id=""
+          :show-props="dockVis.rightShowProps"
+          :show-git-commit="dockVis.rightShowGitCommit"
+          :show-workset-block="dockVis.rightShowWorkset"
+        />
+      </template>
+
+      <template #bottom="bottomSlotProps">
+        <GlobalWorkbenchBottomPanel embedded :active-tab-id="bottomSlotProps.activeTabId" />
+      </template>
+      <template #bottom-summary>
+        {{ pnwBottomPanel.summary('output') }}
+      </template>
+      <template #footer>
+        <StatusBar :show-panel-toggles="false" />
+      </template>
+    </PnwWorkbenchShell>
+
     <ChoiceDialogHost />
     <GitDiffPreviewHost />
     <CaaRelatedFilePreviewHost />
@@ -347,6 +395,43 @@ onUnmounted(() => {
   overflow: hidden;
   background: var(--shell-bg);
 }
+
+.desk-pnw-workbench-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.desk-workbench-brand {
+  min-width: 0;
+  max-width: min(290px, 32vw);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.desk-workbench-brand:hover { background: var(--phoenix-brand-hover-bg, rgba(37, 99, 235, 0.08)); }
+.desk-workbench-brand:focus-visible { outline: 2px solid var(--phoenix-focus-ring, #2563eb); outline-offset: -2px; }
+.desk-workbench-brand-mark {
+  width: 27px;
+  height: 27px;
+  flex: 0 0 auto;
+  --pnw-phoenix-wing-mark-size: 27px;
+}
+.desk-workbench-brand-copy { min-width: 0; display: grid; gap: 1px; line-height: 1.2; }
+.desk-workbench-brand-copy strong,
+.desk-workbench-brand-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.desk-workbench-brand-copy strong { font-size: 0.78rem; }
+.desk-workbench-brand-copy small { color: var(--phoenix-text-muted, #64748b); font-size: 0.64rem; }
+.desk-workbench-gitee { width: 34px; height: 34px; display: inline-grid; place-items: center; color: var(--phoenix-text-muted, #64748b); }
+.desk-workbench-gitee:hover { background: var(--phoenix-brand-hover-bg, rgba(37, 99, 235, 0.08)); color: var(--phoenix-accent, #2563eb); }
+.desk-workbench-gitee:focus-visible { outline: 2px solid var(--phoenix-focus-ring, #2563eb); outline-offset: -2px; }
 
 .legacy-db-banner {
   display: flex;
@@ -406,24 +491,6 @@ onUnmounted(() => {
   text-align: center;
 }
 
-.shell-body {
-  flex: 1;
-  display: flex;
-  min-height: 0;
-  position: relative;
-}
-
-.shell-main {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  background: var(--page-bg);
-  transition: margin-left 0.15s ease, margin-right 0.15s ease;
-}
-
 .shell-pages {
   flex: 1;
   min-height: 0;
@@ -479,76 +546,6 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-.shell-resizer {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 6px;
-  cursor: col-resize;
-  z-index: 5;
-  background: transparent;
-}
-
-.shell-resizer-right {
-  margin-right: -3px;
-}
-
-.shell-resizer-left {
-  margin-left: -3px;
-}
-
-.shell-resizer:hover {
-  background: rgba(59, 130, 246, 0.25);
-}
-
-.shell-welcome {
-  background: var(--phoenix-bg-welcome-rail);
-}
-
-.shell-body-welcome {
-  flex: 1;
-  min-height: 0;
-}
-
-.shell-main-welcome {
-  background: transparent;
-}
-
-.shell-pages-welcome {
-  overflow: hidden;
-}
-
-.shell-pages-welcome :deep(> div) {
-  overflow: hidden;
-}
-
-/* 工作集独立面板 */
-.ws-workset-panel {
-  position: absolute;
-  top: 0;
-  bottom: 32px;
-  display: flex;
-  flex-direction: column;
-  background: var(--phoenix-bg-toolbar, #fff);
-  border-left: 1px solid var(--phoenix-border, #e5e7eb);
-  z-index: 10;
-  overflow: hidden;
-}
-
-.ws-panel-head {
-  padding: 6px 10px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  border-bottom: 1px solid var(--phoenix-border, #e5e7eb);
-  flex-shrink: 0;
-}
-
-.ws-panel-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 6px;
-}
 </style>
 
 <style>

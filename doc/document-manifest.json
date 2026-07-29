@@ -828,6 +828,13 @@
       "reason": "完成态会话、迁移或发布证据"
     },
     {
+      "path": "doc/platform/Web壳层-Pnw工作台0.6接入.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.2.x",
+      "lastVerified": "2026-07-17"
+    },
+    {
       "path": "doc/platform/Web壳层-Primary与全局下方面板-归档.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
