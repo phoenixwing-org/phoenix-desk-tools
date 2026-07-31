@@ -3,6 +3,7 @@ import { isAbsolute, resolve } from 'path'
 
 export {
   createPhoenixWingSourceAliases,
+  LOCAL_WING_PACKAGE_NAMES,
   resolvePhoenixWingContext,
 } from '../../scripts/phoenix-wing-mode.mjs'
 
