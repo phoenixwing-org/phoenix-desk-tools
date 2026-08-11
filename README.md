@@ -28,7 +28,7 @@ pnpm dev                       # 本地 Wing；Vite 首选 :49373，发现已登
 pnpm dev:registry              # package.json + pnpm-lock.yaml 锁定版本
 ```
 
-非并列目录可用 `PHOENIX_WING_ROOT=/path/to/phoenix-wing pnpm dev`。完整的本地测试、构建命令和安全边界见 [Wing 并列仓库联调](doc/platform/Wing并列仓库联调.md)。
+非并列目录可用 `PHOENIX_WING_ROOT=/path/to/phoenix-wing pnpm dev`。完整的本地测试、构建命令和安全边界见 [Wing 并列仓库联调](docs/platform/Wing并列仓库联调.md)。
 
 ### Tauri 桌面开发模式
 
@@ -93,7 +93,7 @@ Node.js Hono :48375（占用时向上寻找）
      └── /api/*      待迁移（Python 可选）
 ```
 
-Web 与 Tauri 的 API 发现、复用规则及多 UI 未决项见 [Desk API 单实例与多宿主发现](doc/platform/Desk-API单实例与多宿主发现.md)。
+Web 与 Tauri 的 API 发现、复用规则及多 UI 未决项见 [Desk API 单实例与多宿主发现](docs/platform/Desk-API单实例与多宿主发现.md)。
 
 ## 测试
 
@@ -125,15 +125,15 @@ python3 -m http.server 4173 --directory test-report
 | `web-ui/` | Vue 3 前端 |
 | `phoenix/` | Python 包（逐步退役） |
 | `scripts/` | 命令行工具 |
-| `doc/` | 文档 |
+| `docs/` | 文档 |
 
 ## 文档
 
-- [文档索引](doc/文档索引.md)：当前说明、草案和历史证据的唯一导航
-- [总待办](doc/TODO.md)：唯一维护的产品/技术债入口
-- [Tauri 当前状态](doc/tauri-当前迁移状态基线.md)与[构建验收](doc/tauri-构建启动与验收指南.md)
-- [CAA 当前架构与契约](doc/caa/CAA当前架构与契约.md)
-- [CAD 数据与 API 真源](doc/cad/CAD数据与API真源.md)
+- [文档索引](docs/文档索引.md)：当前说明、草案和历史证据的唯一导航
+- [总待办](docs/TODO.md)：唯一维护的产品/技术债入口
+- [Tauri 当前状态](docs/tauri-当前迁移状态基线.md)与[构建验收](docs/tauri-构建启动与验收指南.md)
+- [CAA 当前架构与契约](docs/caa/CAA当前架构与契约.md)
+- [CAD 数据与 API 真源](docs/cad/CAD数据与API真源.md)
 
 ## 许可证
 

@@ -3,16 +3,16 @@
 - **`fcstd_map.py`**：扫描生成映射。默认 **`--json`** 写出 **schema≥2** 结构化文档（`entries[]`：`repo_rel_path`、`filename`、**`PartNumber`、`PartVersion`、`TypeCode`、`ModelSeries`、`label`、`extra`**）；**`--legacy-json`** 仍可写旧扁平字典。推断见 **`phoenix/fcstd_mapping.py`**。
 - **`fix_fcstd_xlink_paths.py`**：按 **`--map-json`** 或 **`--map-sqlite <工作空间根>`**（读 `.phoenix/cad-database.sqlite`）解析映射重写 XLink；**`--map-anchor`** 须与索引相对路径基准一致（桌面壳下即 **工作空间根**）。未提供映射时可 **`--live-scan`**。
 - **`setup_desktop_venv.sh`**（macOS）：一键创建 `.venv-desktop` 并以可编辑方式安装本项目。
-- **`setup_dev.ps1`** / **`setup_dev.bat`**（Windows）：创建 `.venv-desktop`、`pip install -e ".[web]"`、`pnpm install`；见 [doc/user/桌面工具-安装说明.md](../doc/user/桌面工具-安装说明.md)。
-- **`link_test_fixtures.py`** / **`link_test_fixtures.sh`**：按 `phoenix/config/test_fixture_catalog.json` 将本机 clone 的 **KtAlarmClock**、**PNXCaaStudy** 等 symlink 到 `tests/fixtures/`；Web 启动时也会自动尝试。见 [doc/code/测试工程外链-fixture.md](../doc/code/测试工程外链-fixture.md)。
+- **`setup_dev.ps1`** / **`setup_dev.bat`**（Windows）：创建 `.venv-desktop`、`pip install -e ".[web]"`、`pnpm install`；见 [docs/user/桌面工具-安装说明.md](../docs/user/桌面工具-安装说明.md)。
+- **`link_test_fixtures.py`** / **`link_test_fixtures.sh`**：按 `phoenix/config/test_fixture_catalog.json` 将本机 clone 的 **KtAlarmClock**、**PNXCaaStudy** 等 symlink 到 `tests/fixtures/`；Web 启动时也会自动尝试。见 [docs/code/测试工程外链-fixture.md](../docs/code/测试工程外链-fixture.md)。
 
 **FreeCADCmd（须在 FreeCAD 安装内执行，不要用系统 Python 跑）：**
 
-- **`freecad_batch_step_runner.py`**：读环境变量 `FCD_BATCH_*`，批量 STEP→FCStd；桌面「STEP 批量」页会调用它。实现细节见 `doc/cad/STEP批量转FCStd.md`。
+- **`freecad_batch_step_runner.py`**：读环境变量 `FCD_BATCH_*`，批量 STEP→FCStd；桌面「STEP 批量」页会调用它。实现细节见 `docs/cad/STEP批量转FCStd.md`。
 - **`freecad_batch_step_fc.py`**：供 runner / 收件箱监听导入，依赖 FreeCAD 解释器。
-- **`freecad_phoenix_inbox_listener.py`**：在 **FreeCAD 已打开的 GUI** 内执行一遍，Phoenix「STEP 批量」可勾选 **收件箱桥接** 投递任务（见 `doc/cad/FreeCAD-Phoenix桥接.md`）。
+- **`freecad_phoenix_inbox_listener.py`**：在 **FreeCAD 已打开的 GUI** 内执行一遍，Phoenix「STEP 批量」可勾选 **收件箱桥接** 投递任务（见 `docs/cad/FreeCAD-Phoenix桥接.md`）。
 
-手写验收（**须 `export` 环境变量**，见 `example_run_step_batch.sh` 与 `doc/cad/STEP批量转FCStd.md`）。
+手写验收（**须 `export` 环境变量**，见 `example_run_step_batch.sh` 与 `docs/cad/STEP批量转FCStd.md`）。
 
 在仓库根执行示例：
 

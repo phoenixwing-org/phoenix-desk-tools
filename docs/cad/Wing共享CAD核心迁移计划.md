@@ -1,6 +1,6 @@
 # Desk Tools：Wing 共享 CAD 核心迁移计划
 
-> 本文只描述 `phoenix-desk-tools` 的 CAD/Rust/数据库迁出和消费工作。跨语言包结构、公共契约、版本策略与跨端验收，以 `phoenix-wing/doc/跨语言多包架构与三库迁移计划.md` 为唯一权威来源。`kt-auto-cad` 的 VS Code 接入由 `kt-auto-code` 仓库维护。
+> 本文只描述 `phoenix-desk-tools` 的 CAD/Rust/数据库迁出和消费工作。跨语言包结构、公共契约、版本策略与跨端验收，以 `phoenix-wing/docs/跨语言多包架构与三库迁移计划.md` 为唯一权威来源。`kt-auto-cad` 的 VS Code 接入由 `kt-auto-code` 仓库维护。
 
 ## 1. 目标
 

@@ -28,7 +28,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
       "主页与模块开关仅在 Ribbon「系统 → 主页」或左侧「主页 · 功能清单」打开。",
       "Gitee 链接在欢迎页；完整开工清单见新手指南。",
     ],
-    docPath: "doc/user/快速开始.md",
+    docPath: "docs/user/快速开始.md",
     tourSteps: [
       tour("[data-tour-page-welcome-recent]", "最近使用", "保存过的工作空间根目录会出现在这里；点击行切换工程。"),
     ],
@@ -39,7 +39,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
       "新手指南四步：工作空间 → FreeCAD（推荐）→ CAD 索引 → 打开文件详情。",
       "侧栏「? 新手指引」或主页清单可随时回到开工步骤；「界面巡游」为全壳层导览。",
     ],
-    docPath: "doc/user/新手指引.md",
+    docPath: "docs/user/新手指引.md",
     tourSteps: [
       tour("#onboarding-guide", "新手指南", "按步骤完成配置与首次扫描；完成后显示「已可开工」。"),
       tour("[data-tour-page-home-features]", "功能模块", "按 CAD / Code 分组勾选模块，并在下方卡片快捷打开各工具页。"),
@@ -51,7 +51,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
       "工作空间根、FreeCAD 目录须在此保存；保存后写入最近列表并解锁侧栏功能。",
       "界面区可调展开图标大小；可重新观看全壳层巡游。",
     ],
-    docPath: "doc/user/新手指引.md",
+    docPath: "docs/user/新手指引.md",
     tourSteps: [
       tour("[data-tour-page-config-workspace]", "工作空间", "填写工程根目录并点「保存偏好」。"),
       tour("[data-tour-page-config-freecad]", "FreeCAD", "STEP 批量等任务需要本机 FreeCAD 路径。"),
@@ -63,7 +63,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
       "「工程内搜索」写入 .phoenix/phoenix-workspace.sqlite，并重建 BOM 引用表。",
       "「删除缺失」清理索引里文件已不存在的条目。",
     ],
-    docPath: "doc/cad/CAD索引-缺失条目.md",
+    docPath: "docs/cad/CAD索引-缺失条目.md",
     tourSteps: [
       tour("[data-tour-page-fcstd-scan]", "工程内搜索", "首次使用或大改文件后请执行；日志在下方全局面板。"),
       tour("[data-tour-page-fcstd-table]", "索引表", "浏览扫描结果；可导出 JSON。"),
@@ -76,7 +76,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
       "点击行进入文件详情 · 装配结构（多级树已预计算缓存）。",
       "仅含 .assy.fcstd 或子件≥2；图纸档不列入。",
     ],
-    docPath: "doc/cad/BOM列表页设计.md",
+    docPath: "docs/cad/BOM列表页设计.md",
     tourSteps: [
       tour("[data-tour-page-bom-tabs]", "总成列表", "浏览工程内装配宿主数量与摘要。"),
       tour("[data-tour-page-bom-table]", "总成表", "点击行打开该文件的装配结构 Tab。"),
@@ -89,7 +89,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
       "子 Tab：概览、编辑属性（图纸档为「查看属性」）、引用、改名、装配结构等。",
       "纯图纸 FCStd：顶部提示 BOM 只读，点「打开模型」编辑 Link 源文件。",
     ],
-    docPath: "doc/cad/文件详情页-整改规划.md",
+    docPath: "docs/cad/文件详情页-整改规划.md",
     tourSteps: [
       tour("[data-tour-page-filedetail-tabs]", "子 Tab", "在不同子页之间切换属性、引用与改名。"),
       tour("[data-tour-page-filedetail-body]", "内容区", "当前子 Tab 的表单或表格；写入后注意看运行日志。"),
@@ -100,7 +100,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
     bullets: [
       "先分析再写回；未找到行可展开并手选目标 FCStd。",
     ],
-    docPath: "doc/cad/链接路径修正-未找到手选.md",
+    docPath: "docs/cad/链接路径修正-未找到手选.md",
     tourSteps: [
       tour("[data-tour-page-xlink-analyze]", "分析", "扫描问题列表，区分可自动修正与未找到。"),
       tour("[data-tour-page-xlink-table]", "问题表", "勾选后执行写回；展开行可选手动目标文件。"),
@@ -111,7 +111,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
     bullets: [
       "需先在配置填写 FreeCAD 目录；freecadcmd 批量 STEP→FCStd。",
     ],
-    docPath: "doc/cad/STEP批量转FCStd.md",
+    docPath: "docs/cad/STEP批量转FCStd.md",
     tourSteps: [
       tour("[data-tour-page-step-form]", "目录与选项", "设置 STEP 输入目录与 FCStd 输出目录。"),
       tour("[data-tour-page-step-run]", "执行", "先预览数量，再开始转换；输出见运行日志。"),
@@ -122,7 +122,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
     bullets: [
       "Windows + SolidWorks COM；导出后可接 STEP 批量。",
     ],
-    docPath: "doc/cad/SolidWorks批量STEP导出.md",
+    docPath: "docs/cad/SolidWorks批量STEP导出.md",
     tourSteps: [
       tour("[data-tour-page-sw-form]", "目录", "设置三维模型源目录与 STEP 输出目录。"),
       tour("[data-tour-page-sw-run]", "导出", "预览模型数量后执行 COM 导出。"),
@@ -153,7 +153,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
     bullets: [
       "针对已发生改名分析引用；磁盘改名在文件详情 · 改名 Tab。",
     ],
-    docPath: "doc/cad/改名与XLink引用修正-规划讨论.md",
+    docPath: "docs/cad/改名与XLink引用修正-规划讨论.md",
     tourSteps: [
       tour("[data-tour-page-rename-modes]", "数据来源", "改名历史或手动输入新旧文件名。"),
       tour("[data-tour-page-rename-panel]", "分析区", "查看影响范围并写回引用。"),
@@ -178,7 +178,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
       "锁定段（P0）：clang-format off/on、KEVIN/CAA Wizard、#pragma region 等成对标记内整段不重排。",
       "排序摘要：.cpp/.h 各访问段内特殊成员优先，其余字母序；.cpp 补 //--- 分隔符。",
     ],
-    docPath: "doc/code/成员函数排序-reorder_members.md",
+    docPath: "docs/code/成员函数排序-reorder_members.md",
   },
   kt_codegen: {
     title: "KT Codegen",
@@ -190,7 +190,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
       "源码扫描达到 5000 文件或 64 MiB 快照上限时仍可看部分预览，但 Apply 安全门禁关闭；请先在 Code Ignore 排除无关目录。",
       "保存配置有磁盘指纹并发保护；文件在外部变化时需先还原或重新打开。",
     ],
-    docPath: "doc/code/KT-Codegen-桌面工作台.md",
+    docPath: "docs/code/KT-Codegen-桌面工作台.md",
   },
   code_ignore: {
     title: "Code 忽略设定",
@@ -199,7 +199,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
       "Code 模块页可在侧栏「忽略设定」Tab 编辑；本页为全屏编辑入口。",
       "文件级 / 进程目录 / 自定义区可折叠；Git 式 code.ignore 在上方，自定义在下方。",
     ],
-    docPath: "doc/code/Code模块-批量改名-规划.md",
+    docPath: "docs/code/Code模块-批量改名-规划.md",
   },
   code_index: {
     title: "Code 索引",
@@ -208,7 +208,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
       "跳过 build、node_modules、.git 等目录；再次扫描会将磁盘上已删除的文件标为「缺失」。",
       "上次扫描时间与分类统计（源文件 / 配置 / 文档 / 资源）见侧栏「属性」。",
     ],
-    docPath: "doc/code/Code模块-工作空间索引.md",
+    docPath: "docs/code/Code模块-工作空间索引.md",
     tourSteps: [
       tour("[data-tour-page-code-scan]", "工程内搜索", "首次使用 Code 工具前建议先建立索引。"),
       tour("[data-tour-page-code-table]", "索引表", "按类型与路径筛选浏览。"),
@@ -221,7 +221,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
       "扫描范围见表单内工作集选择器；忽略规则在侧栏「忽略设定」统一配置。",
       "「包含忽略目录」慎用；完成后可勾选重扫 Code 索引。",
     ],
-    docPath: "doc/code/Code模块-批量改名-规划.md",
+    docPath: "docs/code/Code模块-批量改名-规划.md",
   },
   code_uuid: {
     title: "Code UUID 替换",
@@ -230,7 +230,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
       "替换策略：同值一组共用一个新 UUID，或每条命中独立新 UUID。",
       "忽略规则在侧栏「忽略设定」；可按 UUID 组全选。",
     ],
-    docPath: "doc/code/Code模块-批量改名-规划.md",
+    docPath: "docs/code/Code模块-批量改名-规划.md",
   },
   git: {
     title: "Git",
@@ -239,7 +239,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
       "提交说明与 Commit 在右侧属性面板下方的「提交」区。",
       "Git 状态摘要见属性；范围与说明见 ? 帮助。",
     ],
-    docPath: "doc/platform/Web壳层-Git工作区插件-规划.md",
+    docPath: "docs/platform/Web壳层-Git工作区插件-规划.md",
   },
   unit_tests: {
     title: "单元测试",
@@ -266,7 +266,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
 /** 未单独配置的 pageId 使用通用说明 */
 const FALLBACK: PageHelpContent = {
   title: "本页",
-  bullets: ["完整说明见侧栏对应功能文档（doc/）。"],
+  bullets: ["完整说明见侧栏对应功能文档（docs/）。"],
 };
 
 export function getPageHelp(pageId: string): PageHelpContent {

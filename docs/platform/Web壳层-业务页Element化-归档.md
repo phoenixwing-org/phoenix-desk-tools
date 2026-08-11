@@ -131,7 +131,7 @@
 
 | 主题 | 路径 |
 | --- | --- |
-| Element 状态表 | `doc/platform/Web壳层-业务页Element化-梳理.md` |
+| Element 状态表 | `docs/platform/Web壳层-业务页Element化-梳理.md` |
 | 单元测试模块历史 | `web-ui/src/utils/unitTestModuleHistory.ts` |
 | 确认框 | `web-ui/src/composables/choiceDialog.ts`、`ChoiceDialogHost.vue` |
 | 成员排序编码 | `phoenix/code/reorder_members.py`、`phoenix/code/rename/encoding.py` |

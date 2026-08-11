@@ -99,7 +99,7 @@ async function onStartTour() {
       >
         {{ store.shellTourDone ? "重新观看界面巡游" : "开始界面巡游" }}
       </button>
-      <span class="doc-hint muted">详细说明见仓库 <code>doc/user/新手指引.md</code></span>
+      <span class="doc-hint muted">详细说明见仓库 <code>docs/user/新手指引.md</code></span>
     </div>
   </section>
 </template>

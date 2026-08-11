@@ -2,7 +2,7 @@
 （挂载到 PartDesign::Body，或总成 ``Object.type`` 含 assembly / ``App::Part``，见 ``fcstd_document_bom_props``）。
 
 ``PartNumber`` / … / ``label``（Body 等挂载对象的 ``Label``）等与
-``FcstdMapEntry`` / ``fcstd_map.json`` 键名一致；其余路径类字段仍为 snake_case。约定见 ``doc/cad/Phoenix嵌入式BOM属性约定.md``。
+``FcstdMapEntry`` / ``fcstd_map.json`` 键名一致；其余路径类字段仍为 snake_case。约定见 ``docs/cad/Phoenix嵌入式BOM属性约定.md``。
 """
 
 from __future__ import annotations

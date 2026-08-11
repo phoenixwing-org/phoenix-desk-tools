@@ -281,7 +281,7 @@ async function onScan() {
 | 用户可编辑选项 | `PnxXxxParam` ↔ workspace prefs / 页 store |
 | 只读统计（上次扫描、引用边数） | **不**进 Param 持久化；由 Page `loadMeta()` 写入 Param 的 readonly 字段或单独 `PnxXxxMeta` |
 | API 请求体 | `param.toXxxBody()`，与 `phoenix/services/*` DTO 对齐 |
-| 未来 codegen | 可选：`doc/schemas/pnx-code-uuid.param.json` → TS + Python dataclass（**非本期**） |
+| 未来 codegen | 可选：`docs/schemas/pnx-code-uuid.param.json` → TS + Python dataclass（**非本期**） |
 
 工作集范围 today 在 `fileWorksets.pageScopes`：**Param 应读写 adapter**，而不是在 schema 里再存一份。
 

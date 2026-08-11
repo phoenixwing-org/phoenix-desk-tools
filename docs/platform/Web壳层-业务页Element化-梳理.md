@@ -82,4 +82,4 @@
 - [~] **P3 二批 smoke（等待人工验证）**：单元测试 · BOM 列表 · 改名分析 · 文件详情各 Tab · 零件详情检索/保存 — 见 [TODO §R4](../TODO.md)  
 - [~] 页内无裸 `.btn` / `.input`（引用/装配/关注等内嵌表仍保留原生）  
 - [~] 危险操作：`promptChoice`（写盘/侧栏）；配置页仍可用 `ElMessageBox`  
-- [x] 本表与 `doc/TODO.md` §R4 同步  
+- [x] 本表与 `docs/TODO.md` §R4 同步

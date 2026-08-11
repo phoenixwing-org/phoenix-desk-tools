@@ -3,7 +3,7 @@
 > 状态：**已归档 · Desk Tools 0.2.0**
 >
 > 日期：2026-07-15 · 归档：2026-07-17
-> 关联：[侧栏 Block 布局模式](Web壳层-侧栏Block布局模式-规划.md) · [Phoenix 多应用壳层](Phoenix平台-多应用壳层-规划讨论.md) · KT Auto Code `doc/0.4.0-Block工作流改造计划.md`
+> 关联：[侧栏 Block 布局模式](Web壳层-侧栏Block布局模式-规划.md) · [Phoenix 多应用壳层](Phoenix平台-多应用壳层-规划讨论.md) · KT Auto Code `docs/0.4.0-Block工作流改造计划.md`
 
 ## 0. 归档结论
 

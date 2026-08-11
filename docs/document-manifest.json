@@ -24,719 +24,719 @@
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/产品功能归属矩阵.md",
+      "path": "docs/产品功能归属矩阵.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/路径与目录显示约定.md",
+      "path": "docs/路径与目录显示约定.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/文档索引.md",
+      "path": "docs/文档索引.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/archive/TODO-2026-07-17.md",
+      "path": "docs/archive/TODO-2026-07-17.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "冻结的历史计划与完成记录"
     },
     {
-      "path": "doc/caa/修改说明_20260625 by sariko.md",
+      "path": "docs/caa/修改说明_20260625 by sariko.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "完成态修改流水、样例分析或旧 Python Web 可行性记录"
     },
     {
-      "path": "doc/caa/CAA-工具箱-折叠ribbon-规划.md",
+      "path": "docs/caa/CAA-工具箱-折叠ribbon-规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/caa/CAA-VSCode交接-人工点检清单.md",
+      "path": "docs/caa/CAA-VSCode交接-人工点检清单.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/caa/CAA单元测试-多后端规则.md",
+      "path": "docs/caa/CAA单元测试-多后端规则.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/caa/CAA当前架构与契约.md",
+      "path": "docs/caa/CAA当前架构与契约.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/caa/CAA对话框-撤销重做-规划.md",
+      "path": "docs/caa/CAA对话框-撤销重做-规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/caa/CAA对话框-画布命令责任与提炼点检.md",
+      "path": "docs/caa/CAA对话框-画布命令责任与提炼点检.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/caa/CAA对话框-控件组件化设计.md",
+      "path": "docs/caa/CAA对话框-控件组件化设计.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/caa/CAA对话框-NLS多语言模型-讨论.md",
+      "path": "docs/caa/CAA对话框-NLS多语言模型-讨论.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/caa/CAA对话框-NLS会话ViewModel验收.md",
+      "path": "docs/caa/CAA对话框-NLS会话ViewModel验收.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/caa/CAA对话框-P0快速原型-归档.md",
+      "path": "docs/caa/CAA对话框-P0快速原型-归档.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "完成态会话、迁移或发布证据"
     },
     {
-      "path": "doc/caa/CAA对话框-Web编辑器-规划.md",
+      "path": "docs/caa/CAA对话框-Web编辑器-规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/caa/CAA对话框索引与多Tab-规划.md",
+      "path": "docs/caa/CAA对话框索引与多Tab-规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/caa/CAA模块-概览.md",
+      "path": "docs/caa/CAA模块-概览.md",
       "status": "superseded",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/caa/CAA当前架构与契约.md",
+      "sourceOfTruth": "docs/caa/CAA当前架构与契约.md",
       "reason": "旧 Python/原型概览已由当前 Node/Hono 契约替代"
     },
     {
-      "path": "doc/cad/出向引用-N+1查库-研究.md",
+      "path": "docs/cad/出向引用-N+1查库-研究.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/cad/调试输出配置-设计讨论.md",
+      "path": "docs/cad/调试输出配置-设计讨论.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/cad/改名分析-迁移分析.md",
+      "path": "docs/cad/改名分析-迁移分析.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "旧迁移、旧 schema、旧桌面或完成态实现记录"
     },
     {
-      "path": "doc/cad/改名引用写回-装配Label同步-需求.md",
+      "path": "docs/cad/改名引用写回-装配Label同步-需求.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/cad/改名与XLink引用修正-规划讨论.md",
+      "path": "docs/cad/改名与XLink引用修正-规划讨论.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/cad/架构迁移-统一Node后端计划.md",
+      "path": "docs/cad/架构迁移-统一Node后端计划.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "旧迁移、旧 schema、旧桌面或完成态实现记录"
     },
     {
-      "path": "doc/cad/链接路径修正-未找到手选.md",
+      "path": "docs/cad/链接路径修正-未找到手选.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/cad/内部装配-BOM挂载-结构感知-归档.md",
+      "path": "docs/cad/内部装配-BOM挂载-结构感知-归档.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "完成态会话、迁移或发布证据"
     },
     {
-      "path": "doc/cad/图纸档-BOM属性规划.md",
+      "path": "docs/cad/图纸档-BOM属性规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/cad/文件变更历史与引用证据-待办讨论.md",
+      "path": "docs/cad/文件变更历史与引用证据-待办讨论.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/cad/文件详情-引用变更缓存刷新-归档.md",
+      "path": "docs/cad/文件详情-引用变更缓存刷新-归档.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "完成态会话、迁移或发布证据"
     },
     {
-      "path": "doc/cad/文件详情页-整改规划.md",
+      "path": "docs/cad/文件详情页-整改规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/cad/已知UI-bug.md",
+      "path": "docs/cad/已知UI-bug.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/cad/装配树行组件-页面壳验收.md",
+      "path": "docs/cad/装配树行组件-页面壳验收.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/cad/API接口规则-兼容对照表.md",
+      "path": "docs/cad/API接口规则-兼容对照表.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "旧迁移、旧 schema、旧桌面或完成态实现记录"
     },
     {
-      "path": "doc/cad/BOM工具说明.md",
+      "path": "docs/cad/BOM工具说明.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/cad/BOM列表页设计.md",
+      "path": "docs/cad/BOM列表页设计.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/cad/BOM物化路径重建-邻接表单次加载-归档.md",
+      "path": "docs/cad/BOM物化路径重建-邻接表单次加载-归档.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "完成态会话、迁移或发布证据"
     },
     {
-      "path": "doc/cad/cad-rust迁移点检表.md",
+      "path": "docs/cad/cad-rust迁移点检表.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "旧迁移、旧 schema、旧桌面或完成态实现记录"
     },
     {
-      "path": "doc/cad/CAD数据库表结构-重命名规划.md",
+      "path": "docs/cad/CAD数据库表结构-重命名规划.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "旧迁移、旧 schema、旧桌面或完成态实现记录"
     },
     {
-      "path": "doc/cad/CAD数据库表结构.md",
+      "path": "docs/cad/CAD数据库表结构.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "旧迁移、旧 schema、旧桌面或完成态实现记录"
     },
     {
-      "path": "doc/cad/CAD数据与API真源.md",
+      "path": "docs/cad/CAD数据与API真源.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/cad/CAD索引-缺失条目.md",
+      "path": "docs/cad/CAD索引-缺失条目.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/cad/CAD索引面板-人工点检清单.md",
+      "path": "docs/cad/CAD索引面板-人工点检清单.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/cad/CAD索引设置页面壳验收.md",
+      "path": "docs/cad/CAD索引设置页面壳验收.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/cad/FCStd真实制品验收.md",
+      "path": "docs/cad/FCStd真实制品验收.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/cad/FreeCAD-BOM概念与数据模型-研究.md",
+      "path": "docs/cad/FreeCAD-BOM概念与数据模型-研究.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/cad/FreeCAD-BOM宏-轻量Python界面计划.md",
+      "path": "docs/cad/FreeCAD-BOM宏-轻量Python界面计划.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/cad/FreeCAD-Phoenix桥接.md",
+      "path": "docs/cad/FreeCAD-Phoenix桥接.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/cad/Phoenix嵌入式BOM属性约定.md",
+      "path": "docs/cad/Phoenix嵌入式BOM属性约定.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/cad/pnwCadDb-数据库封装计划.md",
+      "path": "docs/cad/pnwCadDb-数据库封装计划.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "旧迁移、旧 schema、旧桌面或完成态实现记录"
     },
     {
-      "path": "doc/cad/Python后端迁移Node-Rust计划.md",
+      "path": "docs/cad/Python后端迁移Node-Rust计划.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "旧迁移、旧 schema、旧桌面或完成态实现记录"
     },
     {
-      "path": "doc/cad/Ribbon-actions-modules分离设计.md",
+      "path": "docs/cad/Ribbon-actions-modules分离设计.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/cad/samples/内部装配示例-挂载分析.md",
+      "path": "docs/cad/samples/内部装配示例-挂载分析.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "完成态修改流水、样例分析或旧 Python Web 可行性记录"
     },
     {
-      "path": "doc/cad/SolidWorks批量STEP导出.md",
+      "path": "docs/cad/SolidWorks批量STEP导出.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/cad/STEP批量转FCStd.md",
+      "path": "docs/cad/STEP批量转FCStd.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/cad/Wing共享CAD核心迁移计划.md",
+      "path": "docs/cad/Wing共享CAD核心迁移计划.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "旧迁移、旧 schema、旧桌面或完成态实现记录"
     },
     {
-      "path": "doc/code/测试工程外链-fixture.md",
+      "path": "docs/code/测试工程外链-fixture.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/code/成员变量字母序-规则与待实现.md",
+      "path": "docs/code/成员变量字母序-规则与待实现.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/code/成员函数排序-reorder_members.md",
+      "path": "docs/code/成员函数排序-reorder_members.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/code/成员排序-锁定段与回归用例.md",
+      "path": "docs/code/成员排序-锁定段与回归用例.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/code/跨产品共享整改执行计划.md",
+      "path": "docs/code/跨产品共享整改执行计划.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/code/Code模块-工作空间索引.md",
+      "path": "docs/code/Code模块-工作空间索引.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/code/Code模块-批量改名-规划.md",
+      "path": "docs/code/Code模块-批量改名-规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/code/Code三端共用算法与UI内核-执行计划.md",
+      "path": "docs/code/Code三端共用算法与UI内核-执行计划.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/code/KT-Codegen-人工点检清单.md",
+      "path": "docs/code/KT-Codegen-人工点检清单.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/code/KT-Codegen-桌面工作台.md",
+      "path": "docs/code/KT-Codegen-桌面工作台.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/code/KT-Codegen-Wing0.4.3-VSCode收敛执行计划.md",
+      "path": "docs/code/KT-Codegen-Wing0.4.3-VSCode收敛执行计划.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/phoenix-wing升级计划.md",
+      "path": "docs/phoenix-wing升级计划.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "旧迁移、旧 schema、旧桌面或完成态实现记录"
     },
     {
-      "path": "doc/platform/2026-07-20-Desk-Web-Tauri-CAD手动点检表.md",
+      "path": "docs/platform/2026-07-20-Desk-Web-Tauri-CAD手动点检表.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/platform/成员排序-变更Diff预览-待研究.md",
+      "path": "docs/platform/成员排序-变更Diff预览-待研究.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/platform/启动器配置路径-规划讨论.md",
+      "path": "docs/platform/启动器配置路径-规划讨论.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/platform/统一运行日志窗口-规划讨论.md",
+      "path": "docs/platform/统一运行日志窗口-规划讨论.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/platform/图纸档-编辑属性只读体验-归档.md",
+      "path": "docs/platform/图纸档-编辑属性只读体验-归档.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "完成态会话、迁移或发布证据"
     },
     {
-      "path": "doc/platform/Desk-API单实例与多宿主发现.md",
+      "path": "docs/platform/Desk-API单实例与多宿主发现.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/platform/FileWorkset-规划.md",
+      "path": "docs/platform/FileWorkset-规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/platform/Git插件-isomorphic-git-介绍与选型对比.md",
+      "path": "docs/platform/Git插件-isomorphic-git-介绍与选型对比.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/platform/Phoenix工作空间存储-规划讨论.md",
+      "path": "docs/platform/Phoenix工作空间存储-规划讨论.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/platform/Phoenix平台-多应用壳层-规划讨论.md",
+      "path": "docs/platform/Phoenix平台-多应用壳层-规划讨论.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/platform/SQL查询与递归点检-todo.md",
+      "path": "docs/platform/SQL查询与递归点检-todo.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/platform/UnitTests-失败关注页面壳验收.md",
+      "path": "docs/platform/UnitTests-失败关注页面壳验收.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/platform/UnitTests-运行范围页面壳验收.md",
+      "path": "docs/platform/UnitTests-运行范围页面壳验收.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/platform/web界面.md",
+      "path": "docs/platform/web界面.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "完成态修改流水、样例分析或旧 Python Web 可行性记录"
     },
     {
-      "path": "doc/platform/Web壳层-侧栏高度调节-规划.md",
+      "path": "docs/platform/Web壳层-侧栏高度调节-规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/platform/Web壳层-侧栏左右Dock-规划.md",
+      "path": "docs/platform/Web壳层-侧栏左右Dock-规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/platform/Web壳层-侧栏Block布局模式-规划.md",
+      "path": "docs/platform/Web壳层-侧栏Block布局模式-规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/platform/Web壳层-侧栏Dock高度与Git块-归档.md",
+      "path": "docs/platform/Web壳层-侧栏Dock高度与Git块-归档.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "完成态会话、迁移或发布证据"
     },
     {
-      "path": "doc/platform/Web壳层-属性面板与壳层稳定化-归档.md",
+      "path": "docs/platform/Web壳层-属性面板与壳层稳定化-归档.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "完成态会话、迁移或发布证据"
     },
     {
-      "path": "doc/platform/Web壳层-业务页Element化-归档.md",
+      "path": "docs/platform/Web壳层-业务页Element化-归档.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "完成态会话、迁移或发布证据"
     },
     {
-      "path": "doc/platform/Web壳层-业务页Element化-梳理.md",
+      "path": "docs/platform/Web壳层-业务页Element化-梳理.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/platform/Web壳层-页面参数与属性-MVC研讨.md",
+      "path": "docs/platform/Web壳层-页面参数与属性-MVC研讨.md",
       "status": "current",
       "owner": "Desk Tools web architecture maintainers",
       "appliesTo": "0.2.x",
@@ -744,302 +744,302 @@
       "reason": "KT Codegen Page Param/PropertySchema 试点的当前架构契约"
     },
     {
-      "path": "doc/platform/Web壳层-页面属性面板-规划.md",
+      "path": "docs/platform/Web壳层-页面属性面板-规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/platform/Web壳层-页面属性面板-P1归档.md",
+      "path": "docs/platform/Web壳层-页面属性面板-P1归档.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "完成态会话、迁移或发布证据"
     },
     {
-      "path": "doc/platform/Web壳层-页面属性面板-P2归档.md",
+      "path": "docs/platform/Web壳层-页面属性面板-P2归档.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "完成态会话、迁移或发布证据"
     },
     {
-      "path": "doc/platform/Web壳层-页面属性面板-P2续归档.md",
+      "path": "docs/platform/Web壳层-页面属性面板-P2续归档.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "完成态会话、迁移或发布证据"
     },
     {
-      "path": "doc/platform/Web壳层-页面属性面板.md",
+      "path": "docs/platform/Web壳层-页面属性面板.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/platform/Web壳层-异步View首开闪烁整改计划.md",
+      "path": "docs/platform/Web壳层-异步View首开闪烁整改计划.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/platform/Web壳层-Git变更分区批量预览-规划.md",
+      "path": "docs/platform/Web壳层-Git变更分区批量预览-规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/platform/Web壳层-Git工作区插件-规划.md",
+      "path": "docs/platform/Web壳层-Git工作区插件-规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/platform/Web壳层-Git工作区插件-G1点检清单.md",
+      "path": "docs/platform/Web壳层-Git工作区插件-G1点检清单.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/platform/Web壳层-Git工作区插件-G1续归档.md",
+      "path": "docs/platform/Web壳层-Git工作区插件-G1续归档.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "完成态会话、迁移或发布证据"
     },
     {
-      "path": "doc/platform/Web壳层-Pnw工作台0.6接入.md",
+      "path": "docs/platform/Web壳层-Pnw工作台0.6接入.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/platform/Web壳层-Primary与全局下方面板-归档.md",
+      "path": "docs/platform/Web壳层-Primary与全局下方面板-归档.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "完成态会话、迁移或发布证据"
     },
     {
-      "path": "doc/platform/Web壳层-Ribbon-WPS改型-归档.md",
+      "path": "docs/platform/Web壳层-Ribbon-WPS改型-归档.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "完成态会话、迁移或发布证据"
     },
     {
-      "path": "doc/platform/Web壳层-Ribbon改型-规划.md",
+      "path": "docs/platform/Web壳层-Ribbon改型-规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/platform/Web壳层-Ribbon壳层区补全-归档.md",
+      "path": "docs/platform/Web壳层-Ribbon壳层区补全-归档.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "完成态会话、迁移或发布证据"
     },
     {
-      "path": "doc/platform/Web壳层-Tab与状态持久化-规划讨论.md",
+      "path": "docs/platform/Web壳层-Tab与状态持久化-规划讨论.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/platform/Web与桌面迁移-待办.md",
+      "path": "docs/platform/Web与桌面迁移-待办.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/platform/Wing并列仓库联调.md",
+      "path": "docs/platform/Wing并列仓库联调.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/tauri-0.2.0-macOS发布态验收.md",
+      "path": "docs/tauri-0.2.0-macOS发布态验收.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/tauri-构建启动与验收指南.md",
+      "sourceOfTruth": "docs/tauri-构建启动与验收指南.md",
       "reason": "冻结的 0.1.0/早期 0.2.0 发布证据，不代表当前已去除 CAD Rust sidecar 的运行时"
     },
     {
-      "path": "doc/tauri-当前迁移状态基线.md",
+      "path": "docs/tauri-当前迁移状态基线.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/tauri-构建启动与验收指南.md",
+      "sourceOfTruth": "docs/tauri-构建启动与验收指南.md",
       "reason": "冻结的 0.1.0/早期 0.2.0 发布证据，不代表当前已去除 CAD Rust sidecar 的运行时"
     },
     {
-      "path": "doc/tauri-分支迁移审计与接手指南.md",
+      "path": "docs/tauri-分支迁移审计与接手指南.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/tauri-构建启动与验收指南.md",
+      "sourceOfTruth": "docs/tauri-构建启动与验收指南.md",
       "reason": "冻结的 0.1.0/早期 0.2.0 发布证据，不代表当前已去除 CAD Rust sidecar 的运行时"
     },
     {
-      "path": "doc/tauri-构建启动与验收指南.md",
+      "path": "docs/tauri-构建启动与验收指南.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/tauri-逐页功能二验矩阵.md",
+      "path": "docs/tauri-逐页功能二验矩阵.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/tauri-migration-correction.md",
+      "path": "docs/tauri-migration-correction.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "旧迁移、旧 schema、旧桌面或完成态实现记录"
     },
     {
-      "path": "doc/tauri-Windows发布态门禁-待办.md",
+      "path": "docs/tauri-Windows发布态门禁-待办.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/TODO-CAA.md",
+      "path": "docs/TODO-CAA.md",
       "status": "superseded",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "域待办已合并到唯一总入口"
     },
     {
-      "path": "doc/TODO-GIT.md",
+      "path": "docs/TODO-GIT.md",
       "status": "superseded",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "域待办已合并到唯一总入口"
     },
     {
-      "path": "doc/TODO.md",
+      "path": "docs/TODO.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/user/快速开始.md",
+      "path": "docs/user/快速开始.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/user/新手指引-规划讨论.md",
+      "path": "docs/user/新手指引-规划讨论.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/TODO.md",
+      "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
-      "path": "doc/user/新手指引-实现备忘.md",
+      "path": "docs/user/新手指引-实现备忘.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "旧迁移、旧 schema、旧桌面或完成态实现记录"
     },
     {
-      "path": "doc/user/新手指引.md",
+      "path": "docs/user/新手指引.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",
       "lastVerified": "2026-07-17"
     },
     {
-      "path": "doc/user/用户测试指南-tauri分支.md",
+      "path": "docs/user/用户测试指南-tauri分支.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "旧迁移、旧 schema、旧桌面或完成态实现记录"
     },
     {
-      "path": "doc/user/桌面工具-安装说明.md",
+      "path": "docs/user/桌面工具-安装说明.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "旧迁移、旧 schema、旧桌面或完成态实现记录"
     },
     {
-      "path": "doc/user/桌面工具-使用说明.md",
+      "path": "docs/user/桌面工具-使用说明.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
       "appliesTo": "historical",
       "lastVerified": "2026-07-17",
-      "sourceOfTruth": "doc/文档索引.md",
+      "sourceOfTruth": "docs/文档索引.md",
       "reason": "旧迁移、旧 schema、旧桌面或完成态实现记录"
     },
     {
-      "path": "doc/user/Web壳层-使用说明.md",
+      "path": "docs/user/Web壳层-使用说明.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.2.x",

@@ -38,4 +38,4 @@
 
 各功能页偏好（STEP 目录、XLink 等）在 **工作空间** `.phoenix/phoenix-workspace-prefs.json`，不在 launcher 里。
 
-详见 [doc/platform/启动器配置路径-规划讨论.md](../../doc/platform/启动器配置路径-规划讨论.md)。
+详见 [docs/platform/启动器配置路径-规划讨论.md](../../docs/platform/启动器配置路径-规划讨论.md)。

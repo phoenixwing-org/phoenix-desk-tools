@@ -147,7 +147,7 @@ flowchart TB
 | 层级 | 现四步中的项 | 完成判定 API | 文档归属 |
 | --- | --- | --- | --- |
 | **平台** | 步骤 1 工作空间；界面巡游 | `workspace_ok`；`localStorage` 巡游版本 | [新手指引.md](../user/新手指引.md)、[Web壳层-使用说明.md](../user/Web壳层-使用说明.md) |
-| **FreeCAD 插件** | 步骤 2～4（FreeCAD 目录、CAD 扫描、文件详情） | `freecad_ok`、`index_scanned`、打开过 `file_detail` | 同上（v1 合并展示）；远期可拆 `doc/plugins/freecad/快速开始.md` |
+| **FreeCAD 插件** | 步骤 2～4（FreeCAD 目录、CAD 扫描、文件详情） | `freecad_ok`、`index_scanned`、打开过 `file_detail` | 同上（v1 合并展示）；远期可拆 `docs/plugins/freecad/快速开始.md` |
 
 **原则**：
 
@@ -159,7 +159,7 @@ flowchart TB
 
 - [ ] `GET /api/onboarding/status` 返回分插件字段：`{ platform: {...}, plugins: { freecad: {...} } }`
 - [ ] 主页 `OnboardingChecklist` 按插件段渲染
-- [ ] 用户向文档目录：`doc/user/`（已落地）；架构与 CAD 见 `doc/platform/`、`doc/cad/`（避免与 `doc/TODO.md` 混在一起）
+- [ ] 用户向文档目录：`docs/user/`（已落地）；架构与 CAD 见 `docs/platform/`、`docs/cad/`（避免与 `docs/TODO.md` 混在一起）
 
 ---
 

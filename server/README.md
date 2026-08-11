@@ -23,4 +23,4 @@ pnpm build:tauri-runtime
 
 最后一项生成 Node sidecar 与 Tauri runtime，并执行 bundle、packaged runtime health/shutdown smoke；不再构建或打包 CAD Rust 工具。
 
-CAA 对外入口包含 `GET /api/caa/health`、对话框 list/parse/save 以及版本化 VS Code handoff；当前契约见 [`doc/caa/CAA当前架构与契约.md`](../doc/caa/CAA当前架构与契约.md)。
+CAA 对外入口包含 `GET /api/caa/health`、对话框 list/parse/save 以及版本化 VS Code handoff；当前契约见 [`docs/caa/CAA当前架构与契约.md`](../docs/caa/CAA当前架构与契约.md)。
