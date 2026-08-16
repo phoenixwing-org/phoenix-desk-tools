@@ -23,6 +23,12 @@ describe("KT Codegen tab binding", () => {
     expect(normalizeKtCodegenDocumentPath("./config/a.json")).toBe("config/a.json");
   });
 
+  it("rejects absolute paths and traversal before they become a View identity", () => {
+    expect(normalizeKtCodegenDocumentPath("../outside.json")).toBe("");
+    expect(normalizeKtCodegenDocumentPath("/tmp/outside.json")).toBe("");
+    expect(normalizeKtCodegenDocumentPath("C:\\outside.json")).toBe("");
+  });
+
   it("finds the existing view for the same JSON but not another JSON", () => {
     const opened = tab({ contextKey: "./config/a.json" });
     expect(findKtCodegenDocumentTab([opened], "config/a.json")).toBe(opened);

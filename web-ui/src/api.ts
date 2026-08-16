@@ -347,19 +347,20 @@ export function getWorkspace() {
   return jsonFetch<{ path: string; name: string }>("/api/workspace");
 }
 
-export function setWorkspace(path: string) {
+export function setWorkspace(path: string, signal?: AbortSignal) {
   return jsonFetch<{ path: string; name: string; nav_modules?: WorkspaceNavModules }>(
     "/api/workspace",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ path }),
+      signal,
     },
   );
 }
 
-export function closeWorkspaceApi() {
-  return jsonFetch<{ status: string }>("/api/workspace", { method: "DELETE" });
+export function closeWorkspaceApi(signal?: AbortSignal) {
+  return jsonFetch<{ status: string }>("/api/workspace", { method: "DELETE", signal });
 }
 
 export function fetchWorkspaceNavModules(path?: string) {

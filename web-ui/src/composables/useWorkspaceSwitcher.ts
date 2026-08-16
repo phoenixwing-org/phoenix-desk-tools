@@ -1,12 +1,13 @@
 import { computed } from "vue";
-import { removeRecentWorkspace } from "../api";
 import { useAppShell, type AppShellContext } from "./useAppShell";
 
 export function useWorkspaceSwitcher(shell?: AppShellContext) {
   const ctx = shell ?? useAppShell();
 
   const workspacePath = computed(() => ctx.workspacePath.value);
-  const recent = computed(() => ctx.launcher.value?.recent_workspaces ?? []);
+  const recent = computed(() => ctx.workspaceState.value.recent
+    .filter((entry) => entry.availability === "available")
+    .map((entry) => entry.rootPath));
 
   const workspaceShort = computed(() => {
     const p = workspacePath.value;
@@ -34,8 +35,7 @@ export function useWorkspaceSwitcher(shell?: AppShellContext) {
     event.stopPropagation();
     if (!window.confirm(`从最近列表中移除？\n\n${path}`)) return;
     try {
-      await removeRecentWorkspace(path);
-      await ctx.reloadLauncher();
+      await ctx.removeRecentWorkspace(path);
       ctx.setStatus("已从最近列表移除");
     } catch (e) {
       ctx.setStatus(String(e));

@@ -4,6 +4,7 @@ import type { BomFields } from "../api";
 import type { AppConfig, LauncherPrefs, NavItem, ShellLayout, WorkspaceNavModules } from "../types/config";
 import type { PageMessage, PageMessageHandler } from "../types/pageMessages";
 import {
+  addRecentWorkspace,
   closeWorkspaceApi,
   fetchAppConfig,
   fetchLauncherPrefs,
@@ -12,6 +13,7 @@ import {
   getWorkspace,
   patchShellLayout,
   patchWorkspaceNavModules,
+  removeRecentWorkspace as removeRecentWorkspaceApi,
   resetLauncherFactory,
   setWorkspace,
 } from "../api";
@@ -29,7 +31,12 @@ import { parseShellUrl, replaceShellUrl, type ShellUrlIntent } from "../utils/sh
 import { useOnboardingStore } from "../stores/onboarding";
 import { useFileWorksetsStore } from "../stores/fileWorksets";
 import { useUiPrefsStore } from "../stores/uiPrefs";
-import { pnwClearPhoenixBrowserStorage } from "phoenix-wing";
+import {
+  pnwClearPhoenixBrowserStorage,
+  type PnwWorkspaceController,
+  type PnwWorkspaceDescriptor,
+  type PnwWorkspaceState,
+} from "phoenix-wing";
 import { confirmCloseWorkspace } from "./tabCloseConfirm";
 import type { ModuleScope } from "../constants/moduleScope";
 import { WORKBENCH_IDLE_PAGE } from "../constants/workbench";
@@ -46,6 +53,10 @@ import {
   normalizeKtCodegenDocumentPath,
   reusableKtCodegenBlankTab,
 } from "../utils/ktCodegenTabBinding";
+import {
+  pdtCreateWorkspaceController,
+  pdtWorkspaceId,
+} from "../workspace/pdtWorkspaceController";
 
 export { WORKBENCH_IDLE_PAGE };
 
@@ -79,6 +90,8 @@ export type AppShellContext = {
   appConfig: Ref<AppConfig | null>;
   launcher: Ref<LauncherPrefs | null>;
   workspacePath: Ref<string>;
+  /** Wing controller 的单根目录、recent、phase 与结构化错误投影。 */
+  workspaceState: Ref<PnwWorkspaceState>;
   /** 当前激活 Tab 的 pageId；无 Tab 时为 workbench_idle */
   currentPage: Ref<string>;
   /** 无打开页面时 Ribbon 所聚焦的模块范围 */
@@ -140,6 +153,7 @@ export type AppShellContext = {
   ) => void;
   openRenameAnalysis: (opts?: PendingRenameAnalysis) => void;
   switchWorkspace: (path: string) => Promise<void>;
+  removeRecentWorkspace: (path: string) => Promise<void>;
   openToolTabCount: () => number;
   toolTabDirtyTitles: () => string[];
   discardAllToolTabs: () => void;
@@ -359,6 +373,13 @@ export function provideAppShell(): AppShellContext {
   const appConfig = shallowRef<AppConfig | null>(null);
   const launcher = shallowRef<LauncherPrefs | null>(null);
   const workspacePath = ref("");
+  const workspaceState = shallowRef<PnwWorkspaceState>({
+    phase: "closed",
+    recent: [],
+    revision: 0,
+  });
+  let workspaceController: PnwWorkspaceController | undefined;
+  let workspaceControllerSeeding = false;
   const navHover = ref<string | null>(null);
   const shellLayout = ref<ShellLayout>(normalizeShellLayout());
   const statusText = ref("");
@@ -1034,19 +1055,82 @@ export function provideAppShell(): AppShellContext {
     purgeHiddenModuleTabs();
   }
 
-  async function switchWorkspace(path: string) {
-    flushWorkbenchSession();
-    const ws = await setWorkspace(path.trim());
-    workspacePath.value = ws.path;
+  async function applyOpenedWorkspace(workspace: PnwWorkspaceDescriptor) {
+    workspacePath.value = workspace.rootPath;
     await reloadLauncher();
-    const nav = ws.nav_modules ?? (await fetchWorkspaceNavModules(ws.path));
+    const nav = await fetchWorkspaceNavModules(workspace.rootPath);
     applyWorkspaceNavModules(nav);
     await onboarding.refreshStatus();
     await restoreWorkbenchSession();
     purgeHiddenModuleTabs();
     syncOnboardingFromTabs();
-    void useFileWorksetsStore().hydrate(ws.path, true);
-    setStatus(`工作空间: ${ws.path}`);
+    void useFileWorksetsStore().hydrate(workspace.rootPath, true);
+    setStatus(`工作空间: ${workspace.rootPath}`);
+  }
+
+  async function applyClosedWorkspace() {
+    workspacePath.value = "";
+    clearWorkbenchAfterWorkspaceClose();
+    await reloadLauncher();
+    await onboarding.refreshStatus();
+    openWelcome();
+    setStatus("已关闭工作空间");
+  }
+
+  function ensureWorkspaceController(initialWorkspace?: { path: string; name: string }) {
+    if (workspaceController) return workspaceController;
+    workspaceController = pdtCreateWorkspaceController({
+      initialWorkspace,
+      api: {
+        setWorkspace,
+        closeWorkspace: closeWorkspaceApi,
+        fetchLauncherPrefs,
+        addRecentWorkspace,
+        removeRecentWorkspace: removeRecentWorkspaceApi,
+      },
+      lifecycle: {
+        prepare() {
+          if (!workspaceControllerSeeding) flushWorkbenchSession();
+        },
+        async applyOpened(workspace) {
+          if (!workspaceControllerSeeding) await applyOpenedWorkspace(workspace);
+        },
+        async applyClosed() {
+          if (!workspaceControllerSeeding) await applyClosedWorkspace();
+        },
+      },
+      onError(failure) {
+        appendLog(`[Workspace][${failure.code}] ${failure.message}`, {
+          source: "workbench",
+          open: false,
+        });
+      },
+    });
+    workspaceController.subscribe((state) => {
+      workspaceState.value = state;
+    });
+    return workspaceController;
+  }
+
+  async function switchWorkspace(path: string) {
+    const target = path.trim();
+    if (!target) throw new Error("工作空间路径不能为空");
+    const controller = ensureWorkspaceController();
+    const result = controller.getSnapshot().current
+      ? await controller.requestSwitch({ rootPath: target, source: "path" })
+      : await controller.requestOpen({ rootPath: target, source: "path" });
+    if (result.status === "rejected") {
+      throw new Error(result.error?.message || "工作空间切换失败");
+    }
+    if (result.status === "unchanged") setStatus(`工作空间: ${result.workspace?.rootPath ?? target}`);
+  }
+
+  async function removeRecentWorkspace(path: string) {
+    const controller = ensureWorkspaceController();
+    const workspaceId = controller.getSnapshot().recent.find((entry) => entry.rootPath === path)?.workspaceId
+      ?? pdtWorkspaceId(path);
+    await controller.removeRecent(workspaceId);
+    await reloadLauncher();
   }
 
   function openToolTabCount(): number {
@@ -1074,14 +1158,10 @@ export function provideAppShell(): AppShellContext {
         throw new Error(`请先关闭 ${n} 个工具 Tab（可保留「主页」）。`);
       }
     }
-    flushWorkbenchSession({ force: true });
-    await closeWorkspaceApi();
-    workspacePath.value = "";
-    clearWorkbenchAfterWorkspaceClose();
-    await reloadLauncher();
-    await onboarding.refreshStatus();
-    openWelcome();
-    setStatus("已关闭工作空间");
+    const result = await ensureWorkspaceController().requestClose();
+    if (result.status === "rejected") {
+      throw new Error(result.error?.message || "工作空间关闭失败");
+    }
   }
 
   async function requestCloseWorkspace(): Promise<boolean> {
@@ -1560,6 +1640,19 @@ export function provideAppShell(): AppShellContext {
     appConfig.value = await fetchAppConfig();
     const ws = await getWorkspace();
     workspacePath.value = ws.path;
+    const controller = ensureWorkspaceController(ws.path ? ws : undefined);
+    await controller.initialize();
+    if (ws.path) {
+      workspaceControllerSeeding = true;
+      try {
+        const seeded = await controller.requestOpen({ rootPath: ws.path, source: "path" });
+        if (seeded.status === "rejected") {
+          throw new Error(seeded.error?.message || "初始化工作空间控制器失败");
+        }
+      } finally {
+        workspaceControllerSeeding = false;
+      }
+    }
     await reloadLauncher();
     if (workspacePath.value) {
       try {
@@ -1618,6 +1711,7 @@ export function provideAppShell(): AppShellContext {
     appConfig,
     launcher,
     workspacePath,
+    workspaceState,
     currentPage,
     workbenchFocusScope,
     navHover,
@@ -1654,6 +1748,7 @@ export function provideAppShell(): AppShellContext {
     openFileRenameForRel,
     openRenameAnalysis,
     switchWorkspace,
+    removeRecentWorkspace,
     openToolTabCount,
     toolTabDirtyTitles: () => wb.toolTabDirtyTitles(),
     discardAllToolTabs: () => wb.discardAllToolTabs(),

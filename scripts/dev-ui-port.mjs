@@ -13,7 +13,7 @@ export function parsePreferredUiPort(value, fallback = DEV_UI_PREFERRED_PORT) {
   return port;
 }
 
-export function canListenOnLocalhost(port) {
+function canListenOnHost(port, host) {
   return new Promise((resolve) => {
     const server = net.createServer();
     const done = (available) => {
@@ -21,9 +21,24 @@ export function canListenOnLocalhost(port) {
       try { server.close(); } catch { /* the server never listened */ }
       resolve(available);
     };
-    server.once("error", () => done(false));
-    server.listen(port, "127.0.0.1", () => done(true));
+    server.once("error", (error) => {
+      // Some CI/container environments disable IPv6. That does not make the
+      // port occupied for the address families that are available there.
+      if (error?.code === "EAFNOSUPPORT" || error?.code === "EADDRNOTAVAIL") {
+        done(true);
+        return;
+      }
+      done(false);
+    });
+    server.listen(port, host, () => done(true));
   });
+}
+
+export async function canListenOnLocalhost(port) {
+  // Vite's `localhost` may resolve to ::1 (not 127.0.0.1). A listener on only
+  // one loopback family must still make the candidate unavailable to Tauri.
+  if (!(await canListenOnHost(port, "127.0.0.1"))) return false;
+  return canListenOnHost(port, "::1");
 }
 
 export async function selectDevUiPort({

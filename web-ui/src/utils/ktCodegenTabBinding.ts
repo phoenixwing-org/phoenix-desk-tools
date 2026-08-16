@@ -1,9 +1,14 @@
 import type { WorkbenchTab } from "../types/workbench";
+import { pnwNormalizeWorkspaceRelativePath } from "phoenix-wing";
 
 export const KT_CODEGEN_PAGE_ID = "kt_codegen";
 
 export function normalizeKtCodegenDocumentPath(path: string): string {
-  return path.replace(/\\/g, "/").replace(/^\.\/+/, "").trim();
+  try {
+    return pnwNormalizeWorkspaceRelativePath(path);
+  } catch {
+    return "";
+  }
 }
 
 /** 同一路径只允许绑定一个已打开的 KT Codegen View。 */

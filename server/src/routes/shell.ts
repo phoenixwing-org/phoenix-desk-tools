@@ -360,9 +360,9 @@ function recentWorkspaceScope(workspace: string): string {
 }
 
 function launcherPrefsPayload(extra: Record<string, unknown> = {}) {
-  const result = pruneRecentPrefs(loadPrefs());
-  if (result.removed) savePrefs(result.prefs);
-  const prefs = result.prefs;
+  // 读取 recent 时保留已失效条目，让 Host/UI 能明确呈现 missing 状态；
+  // 真正删除只由 /recent/prune 或用户的单条 remove 动作执行。
+  const prefs = loadPrefs();
   const entries = prefs.recent_workspaces.map((raw) => {
     const resolved = path.resolve(raw);
     return {

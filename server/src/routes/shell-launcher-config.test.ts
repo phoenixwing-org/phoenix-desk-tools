@@ -210,6 +210,16 @@ describe("launcher config routes", () => {
     vi.resetModules();
     const { shellRoutes } = await import("./shell.js");
 
+    const beforePrune = await shellRoutes.request("/api/config/launcher");
+    expect(beforePrune.status).toBe(200);
+    await expect(beforePrune.json()).resolves.toMatchObject({
+      recent_workspaces: [workspace],
+      recent_workspace_entries: [
+        { path: workspace, exists: true },
+        { path: missing, exists: false },
+      ],
+    });
+
     const response = await shellRoutes.request("/api/config/launcher/recent/prune", { method: "POST" });
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({

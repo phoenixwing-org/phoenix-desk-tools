@@ -133,6 +133,7 @@ declare module 'vue' {
     WorkbenchBottomPanel: typeof import('./src/components/workbench/WorkbenchBottomPanel.vue')['default']
     WorkbenchPanelToggleIcon: typeof import('./src/components/workbench/WorkbenchPanelToggleIcon.vue')['default']
     WorksetScopePicker: typeof import('./src/components/WorksetScopePicker.vue')['default']
+    WorkspaceDockableToolContent: typeof import('./src/components/workspace/WorkspaceDockableToolContent.vue')['default']
     XlinkReplaceDialog: typeof import('./src/components/XlinkReplaceDialog.vue')['default']
     XrefQuerySection: typeof import('./src/components/XrefQuerySection.vue')['default']
   }

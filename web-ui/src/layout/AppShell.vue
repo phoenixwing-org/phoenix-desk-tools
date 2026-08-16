@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch, type Component } from "vue";
 import {
+  PnwDockablePrimarySection,
+  PnwDockableToolWindow,
+  PnwIcon,
   PnwWorkbenchShell,
   PnwPhoenixWingMark,
+  pnwNormalizeDockableToolState,
   pnwNavigationFromRibbonTabs,
+  type PnwDockableToolState,
   type PnwNavigationNode,
   type PnwViewBlockId,
   type PnwWorkbenchDisplayPreferences,
@@ -34,6 +39,13 @@ import GiteeIcon from "../components/icons/GiteeIcon.vue";
 import { PROJECT_GITEE_HOME } from "../constants/projectLinks";
 import { pdtWithWorkbenchLayoutState } from "../workbench/PdtWorkbenchDisplayPreferences";
 import type { WorkbenchTab } from "../types/workbench";
+import WorkspaceDockableToolContent from "../components/workspace/WorkspaceDockableToolContent.vue";
+import {
+  PDT_WORKSPACE_TOOL_DEFINITION,
+  PDT_WORKSPACE_TOOL_STATE_KEY,
+  pdtCreateWorkspaceToolState,
+  pdtToggleWorkspaceTool,
+} from "../workbench/pdtWorkspaceDockableTool";
 
 const shell = provideAppShell();
 const { workspacePath, workspaceShort } = useWorkspaceSwitcher(shell);
@@ -44,6 +56,34 @@ const legacyDbReasons = ref<string[]>([]);
 const legacyDbRecreating = ref(false);
 const legacyDbError = ref("");
 const legacyDbExpectedSchema = ref(13);
+
+function readWorkspaceToolState(): PnwDockableToolState {
+  try {
+    const stored = localStorage.getItem(PDT_WORKSPACE_TOOL_STATE_KEY);
+    if (stored) return pnwNormalizeDockableToolState(JSON.parse(stored));
+  } catch {
+    /* 使用安全默认值 */
+  }
+  return pdtCreateWorkspaceToolState();
+}
+
+const workspaceToolState = ref<PnwDockableToolState>(readWorkspaceToolState());
+
+function updateWorkspaceToolState(next: PnwDockableToolState): void {
+  workspaceToolState.value = pnwNormalizeDockableToolState(next);
+}
+
+function toggleWorkspaceTool(): void {
+  updateWorkspaceToolState(pdtToggleWorkspaceTool(workspaceToolState.value));
+}
+
+watch(workspaceToolState, (state) => {
+  try {
+    localStorage.setItem(PDT_WORKSPACE_TOOL_STATE_KEY, JSON.stringify(state));
+  } catch {
+    /* Host 禁用 storage 时仅保留当前 session 状态 */
+  }
+}, { deep: true });
 
 const uiPrefs = useUiPrefsStore();
 const pnwBottomPanel = usePdtWorkbenchBottomPanel(shell);
@@ -113,7 +153,7 @@ const dockVis = computed(() => {
 });
 
 const pnwContributions = computed(() => ({
-  primary: Boolean(activePageBlockComponent.value),
+  primary: Boolean(activePageBlockComponent.value || workspaceToolState.value.mode === "primary"),
   bottom: true,
   secondary: dockVis.value.rightVisible,
 }));
@@ -312,6 +352,16 @@ onUnmounted(() => {
         </button>
       </template>
       <template #header-actions>
+        <button
+          type="button"
+          class="desk-workbench-header-action"
+          :class="{ 'is-active': workspaceToolState.mode !== 'closed' }"
+          :title="workspaceToolState.mode === 'closed' ? '打开工作空间工具' : '关闭工作空间工具'"
+          :aria-pressed="workspaceToolState.mode !== 'closed'"
+          @click="toggleWorkspaceTool"
+        >
+          <PnwIcon name="folder" :size="17" />
+        </button>
         <a
           class="desk-workbench-gitee"
           :href="PROJECT_GITEE_HOME"
@@ -346,13 +396,24 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <template v-if="activePageBlockComponent" #primary>
-        <component
-          :is="activePageBlockComponent"
-          :key="activeTab?.id ?? shell.currentPage.value"
-          :page-id="shell.currentPage.value"
-          :workbench-tab-id="activeTab?.id"
-        />
+      <template v-if="activePageBlockComponent || workspaceToolState.mode === 'primary'" #primary>
+        <div class="desk-primary-stack">
+          <PnwDockablePrimarySection
+            :definition="PDT_WORKSPACE_TOOL_DEFINITION"
+            :state="workspaceToolState"
+            @update:state="updateWorkspaceToolState"
+          >
+            <WorkspaceDockableToolContent />
+          </PnwDockablePrimarySection>
+          <component
+            :is="activePageBlockComponent"
+            v-if="activePageBlockComponent"
+            :key="activeTab?.id ?? shell.currentPage.value"
+            :page-id="shell.currentPage.value"
+            :workbench-tab-id="activeTab?.id"
+            class="desk-page-primary-contribution"
+          />
+        </div>
       </template>
 
       <template v-if="dockVis.rightVisible" #secondary>
@@ -378,6 +439,16 @@ onUnmounted(() => {
         <StatusBar :show-panel-toggles="false" />
       </template>
     </PnwWorkbenchShell>
+
+    <PnwDockableToolWindow
+      :definition="PDT_WORKSPACE_TOOL_DEFINITION"
+      :state="workspaceToolState"
+      :color-scheme="pnwDisplayPreferences.colorScheme"
+      :constrain-insets="{ top: 48, bottom: 24 }"
+      @update:state="updateWorkspaceToolState"
+    >
+      <WorkspaceDockableToolContent />
+    </PnwDockableToolWindow>
 
     <ChoiceDialogHost />
     <GitDiffPreviewHost />
@@ -432,6 +503,32 @@ onUnmounted(() => {
 .desk-workbench-gitee { width: 34px; height: 34px; display: inline-grid; place-items: center; color: var(--phoenix-text-muted, #64748b); }
 .desk-workbench-gitee:hover { background: var(--phoenix-brand-hover-bg, rgba(37, 99, 235, 0.08)); color: var(--phoenix-accent, #2563eb); }
 .desk-workbench-gitee:focus-visible { outline: 2px solid var(--phoenix-focus-ring, #2563eb); outline-offset: -2px; }
+.desk-workbench-header-action {
+  width: 34px;
+  height: 34px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  color: var(--phoenix-text-muted, #64748b);
+  background: transparent;
+  cursor: pointer;
+}
+.desk-workbench-header-action:hover,
+.desk-workbench-header-action.is-active {
+  color: var(--phoenix-accent, #2563eb);
+  background: var(--phoenix-brand-hover-bg, rgba(37, 99, 235, 0.08));
+}
+.desk-workbench-header-action:focus-visible { outline: 2px solid var(--phoenix-focus-ring, #2563eb); outline-offset: -2px; }
+
+.desk-primary-stack {
+  display: flex;
+  min-height: 0;
+  height: 100%;
+  flex-direction: column;
+  overflow: hidden;
+}
+.desk-page-primary-contribution { min-height: 0; flex: 1 1 auto; }
 
 .legacy-db-banner {
   display: flex;

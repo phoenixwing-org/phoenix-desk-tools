@@ -77,6 +77,7 @@ export type ShellLayout = {
 
 export type RecentWorkspaceEntry = {
   path: string;
+  name?: string;
   exists: boolean;
   module_scope?: ModuleScope;
 };
