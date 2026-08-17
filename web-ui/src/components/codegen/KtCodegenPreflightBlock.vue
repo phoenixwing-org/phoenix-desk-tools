@@ -11,6 +11,7 @@ import {
 import { useAppShell } from "../../composables/useAppShell";
 import { buildKtCodegenControlUiModel } from "../../models/ktCodegenControlUi";
 import { useKtCodegenStore } from "../../stores/ktCodegen";
+import KtCodegenSourceViewerDialog from "./KtCodegenSourceViewerDialog.vue";
 
 ktCodegenDefineControlPanelElement();
 
@@ -22,11 +23,16 @@ const {
   active,
   preflightView,
   preflightViewState,
+  lastApply,
   selectedBlockKeys,
+  sourcePreview,
+  sourcePreviewError,
+  sourcePreviewLoading,
   status,
 } = storeToRefs(store);
 const panelRef = ref<KtCodegenControlPanel | null>(null);
 const splitRatio = ref(42);
+const sourceDialogOpen = ref(false);
 
 const model = computed(() => buildKtCodegenControlUiModel({
   documentId: active.value?.path ?? "",
@@ -35,6 +41,7 @@ const model = computed(() => buildKtCodegenControlUiModel({
   preflight: preflightView.value,
   state: preflightViewState.value,
   message: status.value,
+  lastApply: lastApply.value,
 }));
 const issueCount = computed(() => preflightView.value?.plan.diagnostics
   .filter((item) => item.severity !== "info").length ?? 0);
@@ -54,10 +61,15 @@ function syncOpen(event: Event): void {
   open.value = (event.currentTarget as HTMLDetailsElement).open;
 }
 
-function openSource(event: Event): void {
+async function openSource(event: Event): Promise<void> {
   const detail = (event as CustomEvent<KtCodegenControlOpenDetail>).detail;
-  shell.openFileDetailForRel(detail.path, { subTab: "edit" });
-  shell.setStatus(`已打开 ${detail.path}:${detail.line + 1}`);
+  const preview = await store.previewLocation(detail.path, detail.line);
+  if (!preview) {
+    shell.setStatus(sourcePreviewError.value || `无法读取 ${detail.path}:${detail.line + 1}`);
+    return;
+  }
+  sourceDialogOpen.value = true;
+  shell.setStatus(`正在查看 ${preview.path}:${detail.line + 1}`);
 }
 
 async function copyEnd(event: Event): Promise<void> {
@@ -89,6 +101,12 @@ function rememberSplit(event: Event): void {
       @kt-codegen-control-split-change="rememberSplit"
     />
   </details>
+  <KtCodegenSourceViewerDialog
+    v-model="sourceDialogOpen"
+    :preview="sourcePreview"
+    :loading="sourcePreviewLoading"
+    :error="sourcePreviewError"
+  />
 </template>
 
 <style scoped>

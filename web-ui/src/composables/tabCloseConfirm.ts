@@ -57,7 +57,7 @@ export async function confirmCloseWorkspace(
   if (toolTabCount <= 0) {
     const choice = await pnwPromptChoice({
       title: "关闭工作空间",
-      message: `关闭当前工作空间？\n\n${base}`,
+      message: `关闭工作空间？\n\n${base}`,
       choices: [
         { id: "close", label: "关闭工作空间", variant: "danger" },
         { id: "cancel", label: "取消", variant: "default" },
@@ -151,7 +151,7 @@ export async function confirmCloseAllTabs(
 ): Promise<boolean> {
   if (total < 1) return false;
 
-  let message = `将关闭 ${total} 个 Tab，并回到首页。`;
+  let message = `将关闭 ${total} 个 Tab，并回到欢迎页。`;
   const dirty = dirtyTitles.length;
   if (dirty > 0) {
     const list =

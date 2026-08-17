@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { pnwRunGitCommand } from "@phoenix-wing/git-node";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -53,41 +53,46 @@ function isDirectory(candidate: string): boolean {
   }
 }
 
-function runGit(gitRoot: string, args: string[]): GitResult {
+async function runGit(gitRoot: string, args: string[]): Promise<GitResult> {
   const trustedRoot = path.resolve(gitRoot);
-  const proc = spawnSync("git", [
-    "-c",
-    "core.quotepath=false",
-    "-c",
-    `safe.directory=${trustedRoot}`,
-    "-C",
-    trustedRoot,
-    ...args,
-  ], {
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
-    windowsHide: true,
-  });
-  return {
-    status: proc.status ?? 1,
-    stdout: proc.stdout || "",
-    stderr: proc.stderr || proc.error?.message || "",
-  };
+  try {
+    const result = await pnwRunGitCommand([
+      "-c",
+      "core.quotepath=false",
+      "-c",
+      `safe.directory=${trustedRoot}`,
+      ...args,
+    ], {
+      cwd: trustedRoot,
+      allowFailure: true,
+      maxOutputBytes: 64 * 1024 * 1024,
+    });
+    return {
+      status: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    };
+  } catch (error) {
+    return {
+      status: 1,
+      stdout: "",
+      stderr: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 function gitError(result: GitResult, fallback: string): Error {
   return new Error((result.stderr || result.stdout || fallback).trim());
 }
 
-export function gitExecutableAvailable(): boolean {
-  const proc = spawnSync("git", ["--version"], { encoding: "utf8", windowsHide: true });
-  return proc.status === 0;
+export async function gitExecutableAvailable(): Promise<boolean> {
+  return (await runGit(process.cwd(), ["--version"])).status === 0;
 }
 
-function gitRootForWorkspace(workspace: string): string | null {
+async function gitRootForWorkspace(workspace: string): Promise<string | null> {
   const root = path.resolve(workspace || ".");
   if (!workspace || !isDirectory(root) || !fs.existsSync(path.join(root, ".git"))) return null;
-  const result = runGit(root, ["rev-parse", "--show-toplevel"]);
+  const result = await runGit(root, ["rev-parse", "--show-toplevel"]);
   if (result.status !== 0) return null;
   const top = path.resolve(result.stdout.trim());
   const comparableRoot = canonicalPath(root);
@@ -179,9 +184,9 @@ function parsePorcelainZ(output: string): GitChangeEntry[] {
   return entries;
 }
 
-export function gitWorkspaceInfo(workspace: string) {
-  const installed = gitExecutableAvailable();
-  const gitRoot = installed ? gitRootForWorkspace(workspace) : null;
+export async function gitWorkspaceInfo(workspace: string) {
+  const installed = await gitExecutableAvailable();
+  const gitRoot = installed ? await gitRootForWorkspace(workspace) : null;
   return {
     git_installed: installed,
     repo_initialized: Boolean(gitRoot),
@@ -191,10 +196,10 @@ export function gitWorkspaceInfo(workspace: string) {
   };
 }
 
-export function gitWorkspaceChanges(workspace: string): GitChangesPayload {
-  const gitRoot = gitRootForWorkspace(workspace);
+export async function gitWorkspaceChanges(workspace: string): Promise<GitChangesPayload> {
+  const gitRoot = await gitRootForWorkspace(workspace);
   if (!gitRoot) return emptyChanges();
-  const result = runGit(gitRoot, [
+  const result = await runGit(gitRoot, [
     "status",
     "--porcelain=v1",
     "-z",
@@ -228,24 +233,24 @@ function isBinaryDiff(text: string): boolean {
     || (text.includes("Binary files") && text.includes(" differ"));
 }
 
-export function gitWorkspaceDiff(
+export async function gitWorkspaceDiff(
   workspace: string,
   rawPath: string,
   scope: GitDiffScope = "worktree",
 ) {
-  const gitRoot = gitRootForWorkspace(workspace);
+  const gitRoot = await gitRootForWorkspace(workspace);
   if (!gitRoot) throw new Error("Current workspace is not a Git repository");
   if (scope !== "worktree" && scope !== "staged") {
     throw new Error("scope must be worktree or staged");
   }
   const resolved = resolveRepoPath(gitRoot, rawPath);
-  const tracked = runGit(gitRoot, ["ls-files", "--error-unmatch", "--", resolved.rel]).status === 0;
+  const tracked = (await runGit(gitRoot, ["ls-files", "--error-unmatch", "--", resolved.rel])).status === 0;
   let result: GitResult;
   if (scope === "worktree" && !tracked && fs.existsSync(resolved.full)) {
     if (!fs.statSync(resolved.full).isFile()) throw new Error(`Diff target is not a file: ${resolved.rel}`);
-    result = runGit(gitRoot, ["diff", "--no-index", "-U3", "--", "/dev/null", resolved.rel]);
+    result = await runGit(gitRoot, ["diff", "--no-index", "-U3", "--", "/dev/null", resolved.rel]);
   } else {
-    result = runGit(gitRoot, scope === "staged"
+    result = await runGit(gitRoot, scope === "staged"
       ? ["diff", "--cached", "-U3", "--", resolved.rel]
       : ["diff", "-U3", "--", resolved.rel]);
   }
@@ -287,14 +292,14 @@ export function gitWorkspaceDiff(
   };
 }
 
-export function gitWorkspaceInit(workspace: string) {
+export async function gitWorkspaceInit(workspace: string) {
   const root = path.resolve(workspace || ".");
   if (!workspace || !isDirectory(root)) throw new Error("Workspace is not configured");
-  if (!gitExecutableAvailable()) throw new Error("Git is not installed or is not available on PATH");
-  if (gitRootForWorkspace(root)) throw new Error("Workspace already has .git");
-  const result = runGit(root, ["init"]);
+  if (!await gitExecutableAvailable()) throw new Error("Git is not installed or is not available on PATH");
+  if (await gitRootForWorkspace(root)) throw new Error("Workspace already has .git");
+  const result = await runGit(root, ["init"]);
   if (result.status !== 0) throw gitError(result, "git init failed");
-  if (!gitRootForWorkspace(root)) throw new Error("git init completed but the repository root was not detected");
+  if (!await gitRootForWorkspace(root)) throw new Error("git init completed but the repository root was not detected");
   return { ok: true, git_root: root, git_root_display: root };
 }
 
@@ -308,22 +313,22 @@ function normalizedPaths(rawPaths: unknown): string[] {
   return paths;
 }
 
-export function gitWorkspaceStage(workspace: string, rawPaths: unknown) {
-  const gitRoot = gitRootForWorkspace(workspace);
+export async function gitWorkspaceStage(workspace: string, rawPaths: unknown) {
+  const gitRoot = await gitRootForWorkspace(workspace);
   if (!gitRoot) throw new Error("Current workspace is not a Git repository");
   const paths = normalizedPaths(rawPaths);
   if (!paths.length) throw new Error("No paths specified");
-  const result = runGit(gitRoot, ["add", "--", ...paths]);
+  const result = await runGit(gitRoot, ["add", "--", ...paths]);
   if (result.status !== 0) throw gitError(result, "git add failed");
   return { staged: paths };
 }
 
-function assertRestorePaths(
+async function assertRestorePaths(
   workspace: string,
   paths: string[],
   scope: GitRestoreScope,
-): void {
-  const payload = gitWorkspaceChanges(workspace);
+): Promise<void> {
+  const payload = await gitWorkspaceChanges(workspace);
   const rows = scope === "staged"
     ? payload.staged
     : scope === "untracked"
@@ -336,30 +341,30 @@ function assertRestorePaths(
   }
 }
 
-export function gitWorkspaceRestore(
+export async function gitWorkspaceRestore(
   workspace: string,
   rawPaths: unknown,
   scope: GitRestoreScope = "worktree",
 ) {
-  const gitRoot = gitRootForWorkspace(workspace);
+  const gitRoot = await gitRootForWorkspace(workspace);
   if (!gitRoot) throw new Error("Current workspace is not a Git repository");
   if (!["worktree", "staged", "untracked"].includes(scope)) throw new Error("Invalid restore scope");
   const paths = normalizedPaths(rawPaths);
   if (!paths.length) throw new Error("No paths specified");
-  assertRestorePaths(gitRoot, paths, scope);
+  await assertRestorePaths(gitRoot, paths, scope);
 
   let result: GitResult;
   if (scope === "staged") {
-    result = runGit(gitRoot, ["restore", "--staged", "--", ...paths]);
-    if (result.status !== 0 && runGit(gitRoot, ["rev-parse", "--verify", "HEAD"]).status !== 0) {
-      result = runGit(gitRoot, ["rm", "--cached", "-r", "--ignore-unmatch", "--", ...paths]);
+    result = await runGit(gitRoot, ["restore", "--staged", "--", ...paths]);
+    if (result.status !== 0 && (await runGit(gitRoot, ["rev-parse", "--verify", "HEAD"])).status !== 0) {
+      result = await runGit(gitRoot, ["rm", "--cached", "-r", "--ignore-unmatch", "--", ...paths]);
     }
   } else if (scope === "untracked") {
-    result = runGit(gitRoot, ["clean", "-fd", "--", ...paths]);
+    result = await runGit(gitRoot, ["clean", "-fd", "--", ...paths]);
   } else {
-    result = runGit(gitRoot, ["restore", "--", ...paths]);
+    result = await runGit(gitRoot, ["restore", "--", ...paths]);
     if (result.status !== 0) {
-      result = runGit(gitRoot, ["checkout", "HEAD", "--", ...paths]);
+      result = await runGit(gitRoot, ["checkout", "HEAD", "--", ...paths]);
     }
   }
   if (result.status !== 0) throw gitError(result, "git restore failed");
@@ -374,8 +379,8 @@ function isCommitIdentityError(message: string): boolean {
     || lower.includes("please tell me who you are");
 }
 
-export function gitWorkspaceCommit(workspace: string, rawMessage: unknown) {
-  const gitRoot = gitRootForWorkspace(workspace);
+export async function gitWorkspaceCommit(workspace: string, rawMessage: unknown) {
+  const gitRoot = await gitRootForWorkspace(workspace);
   if (!gitRoot) throw new Error("Current workspace is not a Git repository");
   const message = String(rawMessage || "").trim();
   if (!message) throw new Error("Commit message is required");
@@ -383,10 +388,10 @@ export function gitWorkspaceCommit(workspace: string, rawMessage: unknown) {
   if (message.length > COMMIT_MESSAGE_MAX_LENGTH) {
     throw new Error(`Commit message cannot exceed ${COMMIT_MESSAGE_MAX_LENGTH} characters`);
   }
-  const stagedPaths = gitWorkspaceChanges(gitRoot).staged.map((entry) => entry.path);
+  const stagedPaths = (await gitWorkspaceChanges(gitRoot)).staged.map((entry) => entry.path);
   if (!stagedPaths.length) throw new Error("No staged changes");
 
-  const result = runGit(gitRoot, ["commit", "-m", message]);
+  const result = await runGit(gitRoot, ["commit", "-m", message]);
   if (result.status !== 0) {
     const detail = (result.stderr || result.stdout || "").trim();
     if (isCommitIdentityError(detail)) {
@@ -394,7 +399,7 @@ export function gitWorkspaceCommit(workspace: string, rawMessage: unknown) {
     }
     throw gitError(result, "git commit failed");
   }
-  const shaResult = runGit(gitRoot, ["rev-parse", "HEAD"]);
+  const shaResult = await runGit(gitRoot, ["rev-parse", "HEAD"]);
   const sha = shaResult.status === 0 ? shaResult.stdout.trim().slice(0, 7) : "";
   return { commit_sha: sha, committed_paths: stagedPaths, message };
 }

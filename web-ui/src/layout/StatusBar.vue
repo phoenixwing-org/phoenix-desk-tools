@@ -1,9 +1,42 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted, ref } from "vue";
+import { PNW_VERSION } from "phoenix-wing";
 import ShellPanelToggleBar from "../components/ShellPanelToggleBar.vue";
 import { useAppShell } from "../composables/useAppShell";
+import { apiUrl, runtimeInfo } from "../utils/runtimeBridge";
 
 const shell = useAppShell();
+withDefaults(defineProps<{
+  showPanelToggles?: boolean;
+}>(), {
+  showPanelToggles: true,
+});
+const apiVersion = ref("");
+const apiProtocolVersion = ref<number>();
+const apiSource = computed(() => String(runtimeInfo().api_source || "unknown"));
+const apiSourceLabel = computed(() => {
+  if (apiSource.value === "reused") return "复用 API";
+  if (apiSource.value === "managed") return "本机 API";
+  return "API";
+});
+const apiSummary = computed(() => {
+  if (!apiVersion.value) return "";
+  const protocol = apiProtocolVersion.value == null ? "" : ` / p${apiProtocolVersion.value}`;
+  return `${apiSourceLabel.value} v${apiVersion.value}${protocol}`;
+});
+
+onMounted(async () => {
+  try {
+    const response = await fetch(apiUrl("/api/health"));
+    if (!response.ok) return;
+    const health = await response.json() as { app_version?: unknown; protocol_version?: unknown };
+    apiVersion.value = String(health.app_version || runtimeInfo().api_version || "");
+    const protocol = Number(health.protocol_version ?? runtimeInfo().protocol_version);
+    if (Number.isInteger(protocol)) apiProtocolVersion.value = protocol;
+  } catch {
+    // The shell already reports API availability; the status suffix is informational.
+  }
+});
 
 const line = computed(() => {
   const parts: string[] = [];
@@ -17,7 +50,9 @@ const line = computed(() => {
 <template>
   <footer class="status">
     <span class="status-main">{{ line }}</span>
-    <ShellPanelToggleBar />
+    <span class="status-wing" title="由运行时解析的 Phoenix Wing 版本">Wing v{{ PNW_VERSION }}</span>
+    <span v-if="apiSummary" class="status-api" :title="String(runtimeInfo().api_origin || '')">{{ apiSummary }}</span>
+    <ShellPanelToggleBar v-if="showPanelToggles" />
   </footer>
 </template>
 
@@ -41,5 +76,17 @@ const line = computed(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.status-api {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  color: var(--phoenix-text-muted);
+}
+
+.status-wing {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  color: var(--phoenix-text-muted);
 }
 </style>

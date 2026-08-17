@@ -8,7 +8,7 @@
 | **Windows** | `%LOCALAPPDATA%\phoenix-wing\phoenix\launcher.json` |
 | **Linux** | `~/.config/phoenix-wing/phoenix/launcher.json` |
 
-`phoenix-wing` 与 Gitee 组织 **PhoenixWing321** / 仓库 **phoenix-desk-tools** 对应；与 **源码 clone 路径无关**。字段示例见 `web-ui/config/launcher.json.example`。
+`phoenix-wing` 与 Gitee 组织 **phoenixwing** / 仓库 **phoenix-desk-tools** 对应；与 **源码 clone 路径无关**。字段示例见 `web-ui/config/launcher.json.example`。
 
 ## 迁移来源（首次启动 / 配置页合并时）
 
@@ -38,4 +38,4 @@
 
 各功能页偏好（STEP 目录、XLink 等）在 **工作空间** `.phoenix/phoenix-workspace-prefs.json`，不在 launcher 里。
 
-详见 [doc/platform/启动器配置路径-规划讨论.md](../../doc/platform/启动器配置路径-规划讨论.md)。
+详见 [docs/platform/启动器配置路径-规划讨论.md](../../docs/platform/启动器配置路径-规划讨论.md)。

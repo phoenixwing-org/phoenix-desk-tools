@@ -13,6 +13,7 @@ import type {
   KtCodegenHostDocument,
   KtCodegenPreflightPayload,
 } from "../api";
+import type { KtCodegenBatchReport } from "./ktCodegenBatchReport";
 
 export function buildKtCodegenControlUiModel(input: {
   readonly documentId: string;
@@ -21,6 +22,7 @@ export function buildKtCodegenControlUiModel(input: {
   readonly preflight: KtCodegenPreflightPayload | null;
   readonly state: KtCodegenPreflightUiState | null;
   readonly message: string;
+  readonly lastApply?: KtCodegenApplyPayload | null;
 }): KtCodegenControlUiModel {
   const unclosed = input.preflight?.plan.diagnostics
     .map(ktCodegenExpectedEndFromDiagnostic)
@@ -60,6 +62,12 @@ export function buildKtCodegenControlUiModel(input: {
         createdAt: input.preflight.created_at,
         state: input.state,
         message: input.message,
+        ...(input.state === "applied" && input.lastApply?.region_outcomes ? {
+          regionOutcomes: input.lastApply.region_outcomes.map((outcome) => ({
+            regionId: outcome.region_id,
+            change: outcome.change,
+          })),
+        } : {}),
       },
     } : {}),
   };
@@ -75,10 +83,14 @@ export function buildKtCodegenPrimaryUiModel(input: {
   readonly state: KtCodegenPreflightUiState | null;
   readonly message: string;
   readonly lastApply: KtCodegenApplyPayload | null;
+  readonly batchReports?: readonly KtCodegenBatchReport[];
   readonly loadingDocuments: boolean;
   readonly applying: boolean;
   readonly opening: boolean;
   readonly saving: boolean;
+  readonly batchApplying: boolean;
+  readonly batchProgress?: { readonly current: number; readonly total: number; readonly fileName: string };
+  readonly hostBlocked: boolean;
 }): KtCodegenPrimaryUiModel {
   const controls = input.active ? buildKtCodegenControlUiModel({
     documentId: input.active.path,
@@ -87,6 +99,7 @@ export function buildKtCodegenPrimaryUiModel(input: {
     preflight: input.preflight,
     state: input.state,
     message: input.message,
+    lastApply: input.lastApply,
   }) : undefined;
   return {
     kind: "kt.codegen.primary-ui-model",
@@ -122,25 +135,33 @@ export function buildKtCodegenPrimaryUiModel(input: {
       encoding: candidate.encoding,
       eol: candidate.eol,
     })),
-    reports: input.lastApply ? [{
-      id: input.lastApply.plan_fingerprint,
-      subject: input.active?.file_name ?? "Codegen Apply",
-      startedAt: input.lastApply.applied_at,
-      applyKind: "single",
-      itemCount: 1,
-      health: input.lastApply.diagnostics.some((item) => item.severity === "error")
-        ? "error"
-        : input.lastApply.diagnostics.some((item) => item.severity === "warning") ? "warning" : "success",
-      change: input.lastApply.files.length ? "updated" : "unchanged",
-    }] : [],
+    reports: [
+      ...(input.batchReports ?? []).map((report) => report.summary),
+      ...(input.lastApply && !(input.batchReports ?? []).some((report) => (
+        Date.parse(input.lastApply!.applied_at) >= Date.parse(report.startedAt)
+        && Date.parse(input.lastApply!.applied_at) <= Date.parse(report.completedAt)
+      )) ? [{
+        id: input.lastApply.plan_fingerprint,
+        subject: input.active?.file_name ?? "Codegen Apply",
+        startedAt: input.lastApply.applied_at,
+        applyKind: "single" as const,
+        itemCount: 1,
+        health: input.lastApply.diagnostics.some((item) => item.severity === "error")
+          ? "error" as const
+          : input.lastApply.diagnostics.some((item) => item.severity === "warning") ? "warning" as const : "success" as const,
+        change: input.lastApply.files.length ? "updated" as const : "unchanged" as const,
+      }] : []),
+    ],
     reportInvalidCount: 0,
-    ...(input.loadingDocuments ? { operation: "discovery" as const } : {}),
-    running: input.applying || input.opening || input.saving,
+    ...(input.batchApplying
+      ? { operation: "batch-apply" as const, ...(input.batchProgress ? { batch: input.batchProgress } : {}) }
+      : input.loadingDocuments ? { operation: "discovery" as const } : {}),
+    running: input.batchApplying || input.applying || input.opening || input.saving,
     capabilities: {
       openJson: false,
       importCsv: false,
-      applyAll: false,
-      scanCandidates: false,
+      applyAll: input.documents.length > 0 && !input.dirty && !input.externalChange && !input.hostBlocked,
+      scanCandidates: Boolean(input.active) && !input.hostBlocked,
       openReportDirectory: false,
     },
   };

@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "vue": ["./node_modules/vue/dist/vue.d.ts"],
+      "phoenix-wing": ["../../phoenix-wing/dist/index.d.ts"],
+      "phoenix-wing/*": ["../../phoenix-wing/dist/*"]
+    }
+  }
+}

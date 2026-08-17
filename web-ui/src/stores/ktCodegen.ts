@@ -30,6 +30,7 @@ import {
   type KtCodegenSourcePreviewPayload,
   type KtCodegenSourceCandidateSummary,
 } from "../api";
+import type { KtCodegenBatchReport } from "../models/ktCodegenBatchReport";
 
 const ALL_BLOCK_KEYS = ktCodegenBlockKeysForPreset("all");
 const STATE_REQUEST_TIMEOUT_MS = 15_000;
@@ -90,6 +91,7 @@ function defineKtCodegenStore(scopeId: string) {
   const recoveryConflict = ref<KtCodegenRecoveryConflict | null>(null);
   const externalChange = ref<KtCodegenFileStatePayload | null>(null);
   const lastApply = ref<KtCodegenApplyPayload | null>(null);
+  const applyReports = ref<KtCodegenBatchReport[]>([]);
   const runtimeProblems = ref<KtCodegenProblem[]>([]);
   const observedFileSignature = ref("");
   let sourcePreviewRequest = 0;
@@ -802,6 +804,61 @@ function defineKtCodegenStore(scopeId: string) {
     }
   }
 
+  /**
+   * 从共享预检结果按可信的文件与行号读取只读源码窗口。
+   * 与 previewRegion 不同，本入口也允许查看 applied/stale 的保留结果；后端仍会返回 stale 标记，
+   * 但不会把源码位置误当成零件详情页打开。
+   */
+  async function previewPath(path: string, line: number): Promise<KtCodegenSourcePreviewPayload | null> {
+    const result = preflightView.value;
+    const rel = path.replace(/\\/g, "/").trim();
+    if (!rel || !Number.isSafeInteger(line) || line < 0) return null;
+    const region = result?.plan.markerRegions.find((item) => (
+      item.path.replace(/\\/g, "/") === rel
+      && line >= item.start.line
+      && line <= item.end.line
+    ));
+    const expectedFingerprint = region?.sourceFingerprint ?? result?.source_file_fingerprints[rel] ?? "";
+    const startLine = region?.start.line ?? line;
+    const endLine = region?.end.line ?? line;
+    const request = ++sourcePreviewRequest;
+    sourceStateRequest += 1;
+    sourcePreviewAbort?.abort();
+    const abort = new AbortController();
+    sourcePreviewAbort = abort;
+    const timeout = setTimeout(() => abort.abort(), STATE_REQUEST_TIMEOUT_MS);
+    sourcePreview.value = null;
+    sourcePreviewKind.value = region ? "region" : "diagnostic";
+    sourcePreviewLoading.value = true;
+    sourcePreviewError.value = "";
+    try {
+      const preview = await fetchKtCodegenSourcePreview({
+        path: rel,
+        start_line: startLine,
+        end_line: endLine,
+        expected_fingerprint: expectedFingerprint,
+        context_lines: 5,
+      }, { signal: abort.signal });
+      if (request !== sourcePreviewRequest) return null;
+      sourcePreview.value = preview;
+      if (preview.stale && preflightViewState.value === "ready") {
+        resetPlan("源码在预检后已变化，请重新预检");
+      }
+      return preview;
+    } catch (error) {
+      if (request !== sourcePreviewRequest) return null;
+      sourcePreview.value = null;
+      sourcePreviewError.value = isAbortError(error) ? "源码预览已取消或超时" : String(error);
+      return null;
+    } finally {
+      clearTimeout(timeout);
+      if (sourcePreviewAbort === abort) sourcePreviewAbort = null;
+      if (request === sourcePreviewRequest) sourcePreviewLoading.value = false;
+    }
+  }
+
+  const previewLocation = previewPath;
+
   function checkPreflightSourceChanges(): Promise<number | null> {
     const result = preflight.value;
     if (!result || preflighting.value) return Promise.resolve(null);
@@ -938,6 +995,7 @@ function defineKtCodegenStore(scopeId: string) {
     recoveryConflict,
     externalChange,
     lastApply,
+    applyReports,
     runtimeProblems,
     problems,
     problemTone,
@@ -959,9 +1017,17 @@ function defineKtCodegenStore(scopeId: string) {
     previewRegion,
     previewCandidate,
     previewDiagnostic,
+    previewPath,
+    previewLocation,
     checkPreflightSourceChanges,
     clearRuntimeProblems,
     reportRuntimeProblem,
+    addApplyReport(report: KtCodegenBatchReport) {
+      applyReports.value = [
+        report,
+        ...applyReports.value.filter((item) => item.id !== report.id),
+      ].slice(0, 20);
+    },
     requestPreflightViewFocus() {
       preflightViewFocusRequest.value += 1;
     },

@@ -10,7 +10,10 @@ const dependencySections = [
   "optionalDependencies",
   "peerDependencies",
 ];
-const expectedWingVersion = "0.5.0";
+const expectedWingVersions = {
+  "phoenix-wing": "0.7.0",
+  scoped: "0.6.3",
+};
 const wingDependencies = new Map();
 
 for (const relative of manifestFiles) {
@@ -21,7 +24,21 @@ for (const relative of manifestFiles) {
       if (!/^\d+\.\d+\.\d+$/u.test(specifier)) {
         throw new Error(`${relative} ${section}.${name} must use an exact Registry version, got ${specifier}`);
       }
-      wingDependencies.set(`${relative}:${name}`, { name, specifier });
+      const expectedVersion = name === "phoenix-wing"
+        ? expectedWingVersions["phoenix-wing"]
+        : expectedWingVersions.scoped;
+      if (specifier !== expectedVersion) {
+        throw new Error(
+          `${relative} ${section}.${name} must use Registry ${expectedVersion}, got ${specifier}`,
+        );
+      }
+      const existing = wingDependencies.get(name);
+      if (existing && existing.specifier !== specifier) {
+        throw new Error(
+          `${name} must use one exact version across manifests, got ${existing.specifier} and ${specifier}`,
+        );
+      }
+      wingDependencies.set(name, { name, specifier });
     }
   }
   for (const [name, target] of Object.entries(manifest.pnpm?.overrides ?? {})) {
@@ -32,13 +49,6 @@ for (const relative of manifestFiles) {
 }
 
 if (wingDependencies.size === 0) throw new Error("No Wing dependencies were found");
-const versions = new Set([...wingDependencies.values()].map(({ specifier }) => specifier));
-if (versions.size !== 1) {
-  throw new Error(`Wing dependencies must be lockstep, got ${[...versions].join(", ")}`);
-}
-if (![...versions].includes(expectedWingVersion)) {
-  throw new Error(`Wing dependencies must use Registry ${expectedWingVersion}, got ${[...versions].join(", ")}`);
-}
 const lockfile = fs.readFileSync(path.join(root, "pnpm-lock.yaml"), "utf8");
 if (/(?:link|file):[^\n]*phoenix-wing/iu.test(lockfile)) {
   throw new Error("pnpm-lock.yaml must not resolve Wing from a local path");
@@ -50,5 +60,5 @@ for (const { name, specifier } of wingDependencies.values()) {
 }
 
 process.stdout.write(
-  `[verify] ${wingDependencies.size} Wing manifest references use Registry ${[...versions][0]} with no local overrides\n`,
+  `[verify] ${wingDependencies.size} Wing packages use Registry root ${expectedWingVersions["phoenix-wing"]} / scoped ${expectedWingVersions.scoped} with no local overrides\n`,
 );

@@ -157,6 +157,7 @@ describe("launcher config routes", () => {
     await expect((await shellRoutes.request("/api/workspace")).json()).resolves.toEqual({
       path: workspace,
       name: path.basename(workspace),
+      workspace_type_id: "mixed",
     });
     await expect((await shellRoutes.request("/api/onboarding/status")).json()).resolves.toMatchObject({
       workspace_ok: false,
@@ -189,7 +190,44 @@ describe("launcher config routes", () => {
     await expect((await shellRoutes.request("/api/workspace")).json()).resolves.toEqual({
       path: workspace,
       name: path.basename(workspace),
+      workspace_type_id: "mixed",
     });
+  });
+
+  it("persists a recent workspace type independently from module capability prefs", async () => {
+    const home = makeTempRoot();
+    const workspace = makeWorkspaceRoot();
+    process.env.HOME = home;
+    process.env.USERPROFILE = home;
+    vi.resetModules();
+    const { shellRoutes } = await import("./shell.js");
+
+    await shellRoutes.request("/api/config/launcher/recent/add", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: workspace }),
+    });
+    const updated = await shellRoutes.request("/api/config/launcher/recent/workspace-type", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: workspace, workspace_type_id: "lighting" }),
+    });
+
+    expect(updated.status).toBe(200);
+    await expect(updated.json()).resolves.toMatchObject({
+      recent_workspace_entries: [{
+        path: workspace,
+        workspace_type_id: "lighting",
+        module_scope: "all",
+      }],
+    });
+
+    const invalid = await shellRoutes.request("/api/config/launcher/recent/workspace-type", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: workspace, workspace_type_id: "../../bad" }),
+    });
+    expect(invalid.status).toBe(400);
   });
 
   it("prunes missing recent workspaces while preserving valid entries", async () => {
@@ -209,6 +247,16 @@ describe("launcher config routes", () => {
     );
     vi.resetModules();
     const { shellRoutes } = await import("./shell.js");
+
+    const beforePrune = await shellRoutes.request("/api/config/launcher");
+    expect(beforePrune.status).toBe(200);
+    await expect(beforePrune.json()).resolves.toMatchObject({
+      recent_workspaces: [workspace],
+      recent_workspace_entries: [
+        { path: workspace, exists: true },
+        { path: missing, exists: false },
+      ],
+    });
 
     const response = await shellRoutes.request("/api/config/launcher/recent/prune", { method: "POST" });
     expect(response.status).toBe(200);

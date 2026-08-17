@@ -40,13 +40,13 @@ afterEach(() => {
 });
 
 describe.skipIf(!gitAvailable)("git workspace service", () => {
-  it("handles Unicode/space paths, untracked diff, and unstage before the first commit", () => {
+  it("handles Unicode/space paths, untracked diff, and unstage before the first commit", async () => {
     const workspace = tempWorkspace();
-    expect(gitWorkspaceInfo(workspace)).toMatchObject({
+    expect(await gitWorkspaceInfo(workspace)).toMatchObject({
       git_installed: true,
       repo_initialized: false,
     });
-    expect(gitWorkspaceInit(workspace)).toMatchObject({ ok: true, git_root: workspace });
+    expect(await gitWorkspaceInit(workspace)).toMatchObject({ ok: true, git_root: workspace });
 
     const rel = "目录/hello world.txt";
     const target = path.join(workspace, "目录", "hello world.txt");
@@ -55,42 +55,42 @@ describe.skipIf(!gitAvailable)("git workspace service", () => {
     fs.mkdirSync(path.join(workspace, ".phoenix"));
     fs.writeFileSync(path.join(workspace, ".phoenix", "phoenix-workspace.sqlite"), "runtime\n", "utf8");
 
-    expect(gitWorkspaceChanges(workspace).untracked).toEqual([
+    expect((await gitWorkspaceChanges(workspace)).untracked).toEqual([
       expect.objectContaining({ path: rel, untracked: true }),
     ]);
-    expect(gitWorkspaceDiff(workspace, rel)).toMatchObject({
+    expect(await gitWorkspaceDiff(workspace, rel)).toMatchObject({
       path: rel,
       has_diff: true,
       is_binary: false,
       unified_diff: expect.stringContaining("+hello"),
     });
 
-    expect(gitWorkspaceStage(workspace, [rel])).toEqual({ staged: [rel] });
-    expect(gitWorkspaceChanges(workspace).staged).toEqual([
+    expect(await gitWorkspaceStage(workspace, [rel])).toEqual({ staged: [rel] });
+    expect((await gitWorkspaceChanges(workspace)).staged).toEqual([
       expect.objectContaining({ path: rel, index_status: "A" }),
     ]);
-    expect(gitWorkspaceRestore(workspace, [rel], "staged")).toEqual({
+    expect(await gitWorkspaceRestore(workspace, [rel], "staged")).toEqual({
       restored: [rel],
       scope: "staged",
     });
-    expect(gitWorkspaceChanges(workspace).untracked[0]?.path).toBe(rel);
+    expect((await gitWorkspaceChanges(workspace)).untracked[0]?.path).toBe(rel);
 
-    expect(gitWorkspaceRestore(workspace, [rel], "untracked")).toEqual({
+    expect(await gitWorkspaceRestore(workspace, [rel], "untracked")).toEqual({
       restored: [rel],
       scope: "untracked",
     });
     expect(fs.existsSync(target)).toBe(false);
-    expect(gitWorkspaceChanges(workspace).untracked).toEqual([]);
+    expect((await gitWorkspaceChanges(workspace)).untracked).toEqual([]);
   }, 20_000);
 
-  it("commits, previews staged/worktree changes, and restores tracked content", () => {
+  it("commits, previews staged/worktree changes, and restores tracked content", async () => {
     const workspace = tempWorkspace();
-    gitWorkspaceInit(workspace);
+    await gitWorkspaceInit(workspace);
     configureIdentity(workspace);
     const target = path.join(workspace, "tracked.txt");
     fs.writeFileSync(target, "one\n", "utf8");
-    gitWorkspaceStage(workspace, ["tracked.txt"]);
-    const first = gitWorkspaceCommit(workspace, "initial commit");
+    await gitWorkspaceStage(workspace, ["tracked.txt"]);
+    const first = await gitWorkspaceCommit(workspace, "initial commit");
     expect(first).toMatchObject({
       committed_paths: ["tracked.txt"],
       message: "initial commit",
@@ -98,31 +98,31 @@ describe.skipIf(!gitAvailable)("git workspace service", () => {
     expect(first.commit_sha).toHaveLength(7);
 
     fs.writeFileSync(target, "two\n", "utf8");
-    expect(gitWorkspaceDiff(workspace, "tracked.txt", "worktree").unified_diff).toContain("+two");
-    gitWorkspaceStage(workspace, ["tracked.txt"]);
-    expect(gitWorkspaceDiff(workspace, "tracked.txt", "staged").unified_diff).toContain("+two");
+    expect((await gitWorkspaceDiff(workspace, "tracked.txt", "worktree")).unified_diff).toContain("+two");
+    await gitWorkspaceStage(workspace, ["tracked.txt"]);
+    expect((await gitWorkspaceDiff(workspace, "tracked.txt", "staged")).unified_diff).toContain("+two");
 
-    gitWorkspaceRestore(workspace, ["tracked.txt"], "staged");
-    expect(gitWorkspaceChanges(workspace).changes[0]?.path).toBe("tracked.txt");
-    gitWorkspaceRestore(workspace, ["tracked.txt"], "worktree");
+    await gitWorkspaceRestore(workspace, ["tracked.txt"], "staged");
+    expect((await gitWorkspaceChanges(workspace)).changes[0]?.path).toBe("tracked.txt");
+    await gitWorkspaceRestore(workspace, ["tracked.txt"], "worktree");
     expect(fs.readFileSync(target, "utf8").replace(/\r\n/g, "\n")).toBe("one\n");
-    expect(gitWorkspaceChanges(workspace)).toMatchObject({
+    expect(await gitWorkspaceChanges(workspace)).toMatchObject({
       staged_count: 0,
       unstaged_count: 0,
     });
   });
 
-  it("parses staged renames without C-style path corruption", () => {
+  it("parses staged renames without C-style path corruption", async () => {
     const workspace = tempWorkspace();
-    gitWorkspaceInit(workspace);
+    await gitWorkspaceInit(workspace);
     configureIdentity(workspace);
     fs.writeFileSync(path.join(workspace, "old name.txt"), "same\n", "utf8");
-    gitWorkspaceStage(workspace, ["old name.txt"]);
-    gitWorkspaceCommit(workspace, "add old");
+    await gitWorkspaceStage(workspace, ["old name.txt"]);
+    await gitWorkspaceCommit(workspace, "add old");
 
     fs.renameSync(path.join(workspace, "old name.txt"), path.join(workspace, "新 name.txt"));
-    gitWorkspaceStage(workspace, ["old name.txt", "新 name.txt"]);
-    expect(gitWorkspaceChanges(workspace).staged).toEqual([
+    await gitWorkspaceStage(workspace, ["old name.txt", "新 name.txt"]);
+    expect((await gitWorkspaceChanges(workspace)).staged).toEqual([
       expect.objectContaining({
         path: "新 name.txt",
         original_path: "old name.txt",
@@ -131,16 +131,16 @@ describe.skipIf(!gitAvailable)("git workspace service", () => {
     ]);
   });
 
-  it("detects binary changes and rejects stale destructive restore requests", () => {
+  it("detects binary changes and rejects stale destructive restore requests", async () => {
     const workspace = tempWorkspace();
-    gitWorkspaceInit(workspace);
+    await gitWorkspaceInit(workspace);
     configureIdentity(workspace);
     const binary = path.join(workspace, "blob.bin");
     fs.writeFileSync(binary, Buffer.from([0, 1, 2]));
-    gitWorkspaceStage(workspace, ["blob.bin"]);
-    gitWorkspaceCommit(workspace, "add binary");
+    await gitWorkspaceStage(workspace, ["blob.bin"]);
+    await gitWorkspaceCommit(workspace, "add binary");
     fs.writeFileSync(binary, Buffer.from([0, 1, 3]));
-    expect(gitWorkspaceDiff(workspace, "blob.bin")).toMatchObject({
+    expect(await gitWorkspaceDiff(workspace, "blob.bin")).toMatchObject({
       has_diff: true,
       is_binary: true,
       unified_diff: "",
@@ -148,12 +148,12 @@ describe.skipIf(!gitAvailable)("git workspace service", () => {
 
     const keep = path.join(workspace, "keep.txt");
     fs.writeFileSync(keep, "keep\n", "utf8");
-    expect(() => gitWorkspaceRestore(workspace, ["other.txt"], "untracked"))
-      .toThrow("Paths are no longer present");
+    await expect(gitWorkspaceRestore(workspace, ["other.txt"], "untracked"))
+      .rejects.toThrow("Paths are no longer present");
     expect(fs.existsSync(keep)).toBe(true);
   });
 
-  it("enforces repository-relative paths and commit message limits", () => {
+  it("enforces repository-relative paths and commit message limits", async () => {
     expect(normalizeGitRepoPath(".gitignore")).toBe(".gitignore");
     expect(normalizeGitRepoPath("./src/a.cpp")).toBe("src/a.cpp");
     expect(() => normalizeGitRepoPath("../outside")).toThrow("Invalid repository path");
@@ -161,10 +161,10 @@ describe.skipIf(!gitAvailable)("git workspace service", () => {
     expect(() => normalizeGitRepoPath("C:/outside")).toThrow("Invalid repository path");
 
     const workspace = tempWorkspace();
-    gitWorkspaceInit(workspace);
-    expect(() => gitWorkspaceCommit(workspace, "x".repeat(4097)))
-      .toThrow("cannot exceed 4096 characters");
-    expect(() => gitWorkspaceStage(workspace, [".phoenix/phoenix-workspace.sqlite"]))
-      .toThrow("runtime database cannot be changed");
+    await gitWorkspaceInit(workspace);
+    await expect(gitWorkspaceCommit(workspace, "x".repeat(4097)))
+      .rejects.toThrow("cannot exceed 4096 characters");
+    await expect(gitWorkspaceStage(workspace, [".phoenix/phoenix-workspace.sqlite"]))
+      .rejects.toThrow("runtime database cannot be changed");
   });
 });

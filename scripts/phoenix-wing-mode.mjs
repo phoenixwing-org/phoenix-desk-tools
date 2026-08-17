@@ -6,6 +6,8 @@ export const LOCAL_WING_PACKAGE_NAMES = Object.freeze([
   "@phoenix-wing/cad-core",
   "@phoenix-wing/code-core",
   "@phoenix-wing/db-node",
+  "@phoenix-wing/git-core",
+  "@phoenix-wing/git-node",
   "@phoenix-wing/kt-codegen",
   "@phoenix-wing/workspace-schema",
 ]);
@@ -16,6 +18,8 @@ const PACKAGE_DIRS = Object.freeze({
   "@phoenix-wing/cad-core": "packages/cad-core",
   "@phoenix-wing/code-core": "packages/code-core",
   "@phoenix-wing/db-node": "packages/db-node",
+  "@phoenix-wing/git-core": "packages/git-core",
+  "@phoenix-wing/git-node": "packages/git-node",
   "@phoenix-wing/kt-codegen": "packages/kt-codegen",
   "@phoenix-wing/workspace-schema": "packages/workspace-schema",
 });
@@ -45,6 +49,37 @@ function selectExportTarget(value) {
   if (typeof value === "string") return value;
   if (!value || typeof value !== "object") return null;
   return value.import ?? value.default ?? null;
+}
+
+function sourcePathForBuildExport(packageRoot, exportTarget) {
+  if (typeof exportTarget !== "string" || !exportTarget.startsWith("./dist/")) return null;
+  const relativeBuildPath = exportTarget.slice("./dist/".length);
+  const sourceStem = path.join(packageRoot, "src", relativeBuildPath.replace(/\.js$/u, ""));
+  const candidates = [
+    `${sourceStem}.ts`,
+    `${sourceStem}.tsx`,
+    `${sourceStem}.js`,
+    `${sourceStem}.vue`,
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? null;
+}
+
+function createExactSourceExportAliases(wingRoot, packageName) {
+  const packageRoot = path.join(wingRoot, PACKAGE_DIRS[packageName]);
+  const manifest = readJson(path.join(packageRoot, "package.json"));
+  const aliases = [];
+  for (const [subpath, value] of Object.entries(manifest.exports ?? {})) {
+    if (subpath === "." || !subpath.startsWith("./") || subpath.includes("*")) continue;
+    const sourcePath = sourcePathForBuildExport(packageRoot, selectExportTarget(value));
+    if (!sourcePath) continue;
+    aliases.push({
+      find: `${packageName}/${subpath.slice(2)}`,
+      replacement: sourcePath,
+    });
+  }
+  // Vite 的字符串 alias 会同时匹配其 `/` 子路径；长子路径必须排在父入口前面，
+  // 例如 `ui/report-model` 不能先被 `ui` 改写成 `ui/index.ts/report-model`。
+  return aliases.sort((left, right) => String(right.find).length - String(left.find).length);
 }
 
 function matchExport(exportsMap, subpath) {
@@ -146,6 +181,9 @@ export function createPhoenixWingSourceAliases(wingRoot) {
       replacement: path.join(wingRoot, "packages/workspace-schema/fixtures", "$1"),
     },
   ];
+  for (const packageName of ["phoenix-wing", ...LOCAL_WING_PACKAGE_NAMES]) {
+    aliases.push(...createExactSourceExportAliases(wingRoot, packageName));
+  }
   for (const packageName of LOCAL_WING_PACKAGE_NAMES) {
     aliases.push({
       find: packageName,

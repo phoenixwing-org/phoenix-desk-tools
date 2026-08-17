@@ -49,4 +49,15 @@ describe("CAA dialog open request bridge", () => {
     await expect(enqueueCaaDialogOpenPayload({ workspaceRoot: root, file: __filename }))
       .rejects.toThrow("必须位于工作空间内");
   });
+
+  it("uses the shared Wing handoff guard before authorizing Host file access", async () => {
+    const { root, file } = fixture();
+    await expect(enqueueCaaDialogOpenPayload({
+      protocol: "phoenix-desk-tools.caa-dialog.v1",
+      workspaceUri: pathToFileURL(root).toString(),
+      selectedFiles: [{ uri: pathToFileURL(file).toString(), relativePath: "../Outside.CATDlg" }],
+    })).rejects.toThrow("CAA handoff v1 格式无效");
+
+    expect(listCaaDialogOpenRequests()).toEqual([]);
+  });
 });

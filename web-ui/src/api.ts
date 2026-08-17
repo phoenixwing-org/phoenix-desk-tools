@@ -227,6 +227,14 @@ export function addRecentWorkspace(path: string) {
   });
 }
 
+export function patchRecentWorkspaceType(path: string, workspaceTypeId: string) {
+  return jsonFetch<LauncherPrefs>("/api/config/launcher/recent/workspace-type", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path, workspace_type_id: workspaceTypeId }),
+  });
+}
+
 export function pickWorkspaceDirectory(pathHint = "") {
   if (isTauriRuntime()) {
     return invokeTauri<{ cancelled: boolean; path: string }>("pick_workspace_directory", { pathHint });
@@ -344,22 +352,23 @@ export function shutdownWebServer() {
 }
 
 export function getWorkspace() {
-  return jsonFetch<{ path: string; name: string }>("/api/workspace");
+  return jsonFetch<{ path: string; name: string; workspace_type_id?: string }>("/api/workspace");
 }
 
-export function setWorkspace(path: string) {
-  return jsonFetch<{ path: string; name: string; nav_modules?: WorkspaceNavModules }>(
+export function setWorkspace(path: string, signal?: AbortSignal) {
+  return jsonFetch<{ path: string; name: string; workspace_type_id?: string; nav_modules?: WorkspaceNavModules }>(
     "/api/workspace",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ path }),
+      signal,
     },
   );
 }
 
-export function closeWorkspaceApi() {
-  return jsonFetch<{ status: string }>("/api/workspace", { method: "DELETE" });
+export function closeWorkspaceApi(signal?: AbortSignal) {
+  return jsonFetch<{ status: string }>("/api/workspace", { method: "DELETE", signal });
 }
 
 export function fetchWorkspaceNavModules(path?: string) {
@@ -1689,6 +1698,11 @@ export type KtCodegenApplyPayload = {
   applied_at: string;
   plan_fingerprint: string;
   region_count: number;
+  /** 逐区域真实写回结果；旧 Server 可能暂未提供。 */
+  region_outcomes?: Array<{
+    region_id: string;
+    change: "updated" | "unchanged" | "not-applied";
+  }>;
   files: KtCodegenAppliedFile[];
   diagnostics: KtCodegenDiagnostic[];
   verified: true;

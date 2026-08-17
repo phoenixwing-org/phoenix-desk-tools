@@ -2,6 +2,11 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { pnwPromptChoice } from "phoenix-wing";
 import {
+  pnwCodeDefineRenameResultsPanel,
+  pnwCodeProjectRenameResults,
+  type PnwCodeRenameResultsPanelModel,
+} from "@phoenix-wing/code-core/ui";
+import {
   applyCodeRename,
   fetchCodeRenamePrefs,
   previewCodeRename,
@@ -22,6 +27,8 @@ import {
   useCodeRenamePageStore,
 } from "../stores/codeRenamePage";
 
+pnwCodeDefineRenameResultsPanel();
+
 const props = defineProps<{
   workbenchTabId?: string;
 }>();
@@ -34,7 +41,35 @@ const worksetStore = useFileWorksetsStore();
 const canRun = computed(() => pageStore.canRun);
 
 const hits = ref<CodeRenameHit[]>([]);
+const resultRows = computed(() => pnwCodeProjectRenameResults({
+  root: shell.workspacePath.value,
+  applied: false,
+  hits: hits.value.map((hit) => ({
+    id: hit.hit_id,
+    relativePath: hit.repo_rel_path,
+    originalPath: hit.repo_rel_path,
+    plannedPath: hit.new_path ?? hit.repo_rel_path,
+    targetPath: hit.new_path,
+    level: hit.level,
+    occurrences: hit.hits,
+    lines: hit.lines,
+    encoding: hit.encoding_out || hit.encoding_in,
+    status: hit.status || "preview",
+    detail: hit.detail,
+    matches: [{ search: pageStore.old, replace: pageStore.new }],
+  })),
+}));
 const previewSummary = ref<{ total_hits: number; text_files: number; dirs?: number; files?: number; skipped: number } | null>(null);
+const renameResultsModel = computed<PnwCodeRenameResultsPanelModel>(() => ({
+  rows: resultRows.value,
+  applied: false,
+  running: previewing.value || applying.value,
+  summary: previewSummary.value
+    ? `${previewSummary.value.total_hits} 处替换 · ${previewSummary.value.skipped} 跳过`
+    : "",
+  emptyMessage: loading.value ? "加载中…" : "点击「预览」列出命中",
+  capabilities: { open: false },
+}));
 const engineMessage = ref("");
 
 const loading = ref(false);
@@ -55,10 +90,6 @@ const encodingOptions = [
 
 function openIgnorePanel() {
   void shell.openCodeIgnoreSidebar();
-}
-
-function hitLevelLabel(level: string) {
-  return CODE_RENAME_LEVEL_OPTIONS.find((o) => o.id === level)?.label ?? level;
 }
 
 async function loadPrefs() {
@@ -358,27 +389,7 @@ onMounted(async () => {
         <p v-if="engineMessage" class="engine-msg">{{ engineMessage }}</p>
       </header>
 
-      <el-table
-        v-if="hits.length"
-        :data="hits"
-        size="small"
-        stripe
-        class="hits-table"
-        row-key="hit_id"
-        :empty-text="loading ? '加载中…' : '点击「预览」列出命中'"
-      >
-        <el-table-column prop="repo_rel_path" label="路径" min-width="200" class-name="mono" />
-        <el-table-column label="级别" width="72" align="center">
-          <template #default="{ row }">{{ hitLevelLabel(row.level) }}</template>
-        </el-table-column>
-        <el-table-column prop="hits" label="次数" width="64" align="center" />
-        <el-table-column label="目标 / 行号" min-width="160">
-          <template #default="{ row }">
-            <span class="mono muted">{{ row.new_path || row.lines?.join(', ') || '—' }}</span>
-          </template>
-        </el-table-column>
-      </el-table>
-      <el-empty v-else :description="loading ? '加载中…' : '点击「预览」列出命中'" :image-size="64" />
+      <pnw-code-rename-results-panel :model="renameResultsModel" />
     </section>
   </div>
 </template>
@@ -477,16 +488,14 @@ onMounted(async () => {
   color: #b45309;
 }
 
-.hits-table {
-  width: 100%;
-}
-
-.hits-table :deep(.mono) {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.82rem;
-}
-
 .muted {
   color: var(--muted);
+}
+
+pnw-code-rename-results-panel {
+  display: block;
+  max-height: calc(100vh - 300px);
+  min-height: 80px;
+  overflow: auto;
 }
 </style>

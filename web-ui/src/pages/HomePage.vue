@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, watch } from "vue";
+import { PnwWorkbenchHome, pnwCreateWorkbenchHomeDefinition } from "phoenix-wing";
 import PageHelpButton from "../components/PageHelpButton.vue";
 import OnboardingChecklist from "../components/OnboardingChecklist.vue";
 import { NAV_MODULE_OPTIONS, type NavModuleId } from "../constants/navModules";
@@ -24,6 +25,11 @@ watch(
 );
 
 const appTitle = computed(() => shell.appConfig.value?.title ?? DEFAULT_APP_TITLE);
+const homeDefinition = pnwCreateWorkbenchHomeDefinition({
+  viewId: "home",
+  title: "主页",
+  iconId: "pnw:home",
+});
 
 const HUB_SKIP_PAGES = new Set(["home", "config", "welcome"]);
 
@@ -70,21 +76,25 @@ function visibleFeatures(moduleId: NavModuleId): NavItem[] {
 </script>
 
 <template>
-  <div class="page home-page">
-    <div class="title-row">
-      <h1 class="page-title">主页</h1>
-      <div class="head-help">
-        <el-button link type="primary" class="back-welcome" @click="openWelcome">← 欢迎页</el-button>
-        <PageHelpButton page-id="home" />
-      </div>
-    </div>
+  <PnwWorkbenchHome
+    class="home-page"
+    :title="homeDefinition.title"
+    eyebrow="Phoenix Workbench"
+    max-content-width="1080px"
+  >
+    <template #description>
+      <p class="home-lead">
+        <strong>{{ appTitle }}</strong>
+        — FreeCAD / Code 工作空间。顶栏 Ribbon 为主入口；下方按模块勾选并快捷打开功能页。工作空间与 FreeCAD 路径在
+        <el-button link type="primary" @click="openConfig">配置</el-button>
+        中维护。
+      </p>
+    </template>
 
-    <p class="home-lead">
-      <strong>{{ appTitle }}</strong>
-      — FreeCAD / Code 工作空间 Web 壳层。顶栏 Ribbon 为主入口；下方按模块勾选并快捷打开功能页。工作空间与 FreeCAD 路径在
-      <el-button link type="primary" @click="openConfig">配置</el-button>
-      中维护。
-    </p>
+    <template #actions>
+      <el-button link type="primary" class="back-welcome" @click="openWelcome">← 欢迎页</el-button>
+      <PageHelpButton page-id="home" />
+    </template>
 
     <section class="module-hub" data-tour-page-home-modules data-tour-page-home-features>
       <div
@@ -162,53 +172,30 @@ function visibleFeatures(moduleId: NavModuleId): NavItem[] {
 
     <OnboardingChecklist />
 
-    <section class="hints-section">
-      <h2 class="hints-title">使用提示</h2>
-      <ul class="hint-list">
-        <li>模块偏好保存在当前工作空间 SQLite；欢迎页最近工程可设 CAD / Code / 全部。</li>
-        <li>首次使用请在配置中填写工作空间根目录。</li>
-        <li>「CAD 索引」扫描后，BOM 与文件详情属性才完整可用。</li>
-        <li>预检、问题与运行日志固定在下方全局面板，切换 View 后仍会保留。</li>
-      </ul>
-    </section>
-  </div>
+    <template #footer>
+      <section class="hints-section">
+        <h2 class="hints-title">使用提示</h2>
+        <ul class="hint-list">
+          <li>模块偏好保存在当前工作空间 SQLite；欢迎页最近工程可设置工作空间类型。</li>
+          <li>首次使用请在欢迎页打开工作空间根目录。</li>
+          <li>「CAD 索引」扫描后，BOM 与文件详情属性才完整可用。</li>
+          <li>预检、问题与运行日志固定在下方全局面板，切换 View 后仍会保留。</li>
+        </ul>
+      </section>
+    </template>
+  </PnwWorkbenchHome>
 </template>
 
 <style scoped>
 @import "./page-shared.css";
-
-.home-page {
-  padding: 24px 28px 40px;
-  max-width: 1080px;
-}
-
-.title-row {
-  margin-bottom: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.head-help {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
 
 .back-welcome {
   font-size: 0.82rem;
   white-space: nowrap;
 }
 
-.page-title {
-  margin: 0;
-  font-size: 1.25rem;
-  color: var(--phoenix-text);
-}
-
 .home-lead {
-  margin: 0 0 22px;
+  margin: 0;
   font-size: 0.9rem;
   line-height: 1.65;
   color: var(--phoenix-text-secondary);

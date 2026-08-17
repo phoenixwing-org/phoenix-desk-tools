@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
@@ -20,6 +20,13 @@ const SERVER_START_TIMEOUT: Duration = Duration::from_secs(20);
 struct ManagedServer {
     child: Mutex<Option<Child>>,
     address: Mutex<SocketAddr>,
+    runtime: Mutex<ApiRuntimeMetadata>,
+}
+
+struct ApiRuntimeMetadata {
+    source: &'static str,
+    app_version: String,
+    protocol_version: u64,
 }
 
 impl Default for ManagedServer {
@@ -30,6 +37,11 @@ impl Default for ManagedServer {
                 Ipv4Addr::LOCALHOST,
                 SERVER_PREFERRED_PORT,
             ))),
+            runtime: Mutex::new(ApiRuntimeMetadata {
+                source: "managed",
+                app_version: "unknown".to_string(),
+                protocol_version: SERVER_PROTOCOL_VERSION,
+            }),
         }
     }
 }
@@ -59,6 +71,23 @@ struct ShutdownResponse {
 #[derive(Serialize)]
 struct RuntimeInfoResponse {
     api_origin: String,
+    api_source: &'static str,
+    api_version: String,
+    protocol_version: u64,
+}
+
+#[derive(Deserialize)]
+struct DeskApiRegistration {
+    schema_version: u64,
+    service: String,
+    protocol_version: u64,
+    host: String,
+    port: u16,
+}
+
+struct DeskApiHealth {
+    app_version: String,
+    protocol_version: u64,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -154,15 +183,15 @@ fn dispatch_caa_dialog_launch_args(
     }
 }
 
-fn phoenix_server_healthy(address: SocketAddr) -> bool {
+fn phoenix_server_health(address: SocketAddr) -> Option<DeskApiHealth> {
     let request =
         format!("GET /api/health HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n\r\n");
     let response = match http_request(address, request.as_bytes()) {
         Ok(response) => response,
-        Err(_) => return false,
+        Err(_) => return None,
     };
     if !response.starts_with("HTTP/1.1 200") && !response.starts_with("HTTP/1.0 200") {
-        return false;
+        return None;
     }
     let body = response
         .split_once("\r\n\r\n")
@@ -170,13 +199,69 @@ fn phoenix_server_healthy(address: SocketAddr) -> bool {
         .unwrap_or("");
     let payload: serde_json::Value = match serde_json::from_str(body) {
         Ok(payload) => payload,
-        Err(_) => return false,
+        Err(_) => return None,
     };
-    payload.get("service").and_then(|value| value.as_str()) == Some("phoenix-node")
-        && payload
+    if payload.get("service").and_then(|value| value.as_str()) != Some("phoenix-node") {
+        return None;
+    }
+    Some(DeskApiHealth {
+        app_version: payload
+            .get("app_version")
+            .and_then(|value| value.as_str())
+            .unwrap_or("unknown")
+            .to_string(),
+        protocol_version: payload
             .get("protocol_version")
             .and_then(|value| value.as_u64())
-            == Some(SERVER_PROTOCOL_VERSION)
+            .unwrap_or(0),
+    })
+}
+
+fn desk_api_registration_path(app: &AppHandle) -> Result<PathBuf, String> {
+    if let Some(override_path) = std::env::var_os("PHOENIX_DESK_TOOLS_REGISTRY_DIR") {
+        if !override_path.is_empty() {
+            return Ok(PathBuf::from(override_path).join("service.v1.json"));
+        }
+    }
+    Ok(app
+        .path()
+        .config_dir()
+        .map_err(|error| format!("cannot resolve user configuration directory: {error}"))?
+        .join("phoenix-wing/phoenix/services/desk-tools/service.v1.json"))
+}
+
+fn discover_registered_server(
+    app: &AppHandle,
+) -> Result<Option<(SocketAddr, DeskApiHealth)>, String> {
+    let service_path = desk_api_registration_path(app)?;
+    let source = match std::fs::read_to_string(&service_path) {
+        Ok(source) => source,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => return Ok(None),
+    };
+    let registration: DeskApiRegistration = match serde_json::from_str(&source) {
+        Ok(registration) => registration,
+        Err(_) => return Ok(None),
+    };
+    if registration.schema_version != 1
+        || registration.service != "phoenix-desk-tools"
+        || registration.host != "127.0.0.1"
+    {
+        return Ok(None);
+    }
+    let address = SocketAddr::from((Ipv4Addr::LOCALHOST, registration.port));
+    let Some(health) = phoenix_server_health(address) else {
+        return Ok(None);
+    };
+    if registration.protocol_version != SERVER_PROTOCOL_VERSION
+        || health.protocol_version != SERVER_PROTOCOL_VERSION
+    {
+        return Err(format!(
+            "The running Desk API at {address} uses protocol {}/{}; this app requires protocol {SERVER_PROTOCOL_VERSION}.",
+            registration.protocol_version, health.protocol_version,
+        ));
+    }
+    Ok(Some((address, health)))
 }
 
 fn select_available_server_address() -> Result<SocketAddr, String> {
@@ -207,6 +292,23 @@ fn set_managed_server_address(app: &AppHandle, address: SocketAddr) -> Result<()
         .address
         .lock()
         .map_err(|_| "Phoenix server address lock is poisoned".to_string())? = address;
+    Ok(())
+}
+
+fn set_api_runtime_metadata(
+    app: &AppHandle,
+    source: &'static str,
+    health: DeskApiHealth,
+) -> Result<(), String> {
+    *app.state::<ManagedServer>()
+        .runtime
+        .lock()
+        .map_err(|_| "Phoenix runtime metadata lock is poisoned".to_string())? =
+        ApiRuntimeMetadata {
+            source,
+            app_version: health.app_version,
+            protocol_version: health.protocol_version,
+        };
     Ok(())
 }
 
@@ -260,6 +362,7 @@ fn backend_command(_app: &AppHandle, port: u16) -> Result<Command, String> {
         .arg(entry)
         .current_dir(&root)
         .env("CAA_SERVER_PORT", port.to_string())
+        .env("PHOENIX_DESK_HOST", "tauri")
         .env("PHOENIX_REPO_ROOT", &root);
     Ok(command)
 }
@@ -289,6 +392,7 @@ fn backend_command(app: &AppHandle, port: u16) -> Result<Command, String> {
         .arg(entry)
         .current_dir(&resources)
         .env("CAA_SERVER_PORT", port.to_string())
+        .env("PHOENIX_DESK_HOST", "tauri")
         .env("PHOENIX_PACKAGED", "1")
         .env("PHOENIX_REPO_ROOT", &resources)
         .env("PHOENIX_RESOURCES_DIR", &resources)
@@ -303,20 +407,12 @@ fn backend_command(app: &AppHandle, port: u16) -> Result<Command, String> {
 }
 
 fn start_managed_server(app: &AppHandle) -> Result<(), String> {
-    let preferred = SocketAddr::from((Ipv4Addr::LOCALHOST, SERVER_PREFERRED_PORT));
-    if phoenix_server_healthy(preferred) {
-        #[cfg(debug_assertions)]
-        {
-            set_managed_server_address(app, preferred)?;
-            eprintln!("[tauri] using existing Phoenix server at http://{preferred}");
-            return Ok(());
-        }
-        #[cfg(not(debug_assertions))]
-        {
-            return Err(format!(
-                "Phoenix server at {preferred} is already running. Stop pnpm dev or another Phoenix instance, then start the desktop app again."
-            ));
-        }
+    if let Some((address, health)) = discover_registered_server(app)? {
+        set_managed_server_address(app, address)?;
+        let version = health.app_version.clone();
+        set_api_runtime_metadata(app, "reused", health)?;
+        eprintln!("[tauri] reusing registered Phoenix server v{version} at http://{address}");
+        return Ok(());
     }
 
     let address = select_available_server_address()?;
@@ -353,9 +449,13 @@ fn start_managed_server(app: &AppHandle) -> Result<(), String> {
 
     let deadline = Instant::now() + SERVER_START_TIMEOUT;
     while Instant::now() < deadline {
-        if phoenix_server_healthy(address) {
-            eprintln!("[tauri] Phoenix server ready at http://{address}");
-            return Ok(());
+        if let Some(health) = phoenix_server_health(address) {
+            if health.protocol_version == SERVER_PROTOCOL_VERSION {
+                let version = health.app_version.clone();
+                set_api_runtime_metadata(app, "managed", health)?;
+                eprintln!("[tauri] Phoenix server v{version} ready at http://{address}");
+                return Ok(());
+            }
         }
         {
             let server = app.state::<ManagedServer>();
@@ -457,8 +557,16 @@ fn shutdown_desktop(app: AppHandle) -> ShutdownResponse {
 #[tauri::command]
 fn get_runtime_info(app: AppHandle) -> Result<RuntimeInfoResponse, String> {
     let address = managed_server_address(&app)?;
+    let server = app.state::<ManagedServer>();
+    let runtime = server
+        .runtime
+        .lock()
+        .map_err(|_| "Phoenix runtime metadata lock is poisoned".to_string())?;
     Ok(RuntimeInfoResponse {
         api_origin: format!("http://{address}"),
+        api_source: runtime.source,
+        api_version: runtime.app_version.clone(),
+        protocol_version: runtime.protocol_version,
     })
 }
 

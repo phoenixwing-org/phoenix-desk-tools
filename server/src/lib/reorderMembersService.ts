@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pnwCodeIsIgnoredName } from "@phoenix-wing/code-core";
 import { reorderCppText } from "./reorderCppEngine.js";
 import { extractLockedRegionContents, reorderHeaderText } from "./reorderHeaderEngine.js";
 import { readSourceText, writeSourceText } from "./sourceTextCodec.js";
@@ -114,15 +115,7 @@ function isSourceFile(filename: string, includeCpp = true, includeHeader = true)
 }
 
 function isIgnoredName(name: string, patterns: string[]): boolean {
-  return patterns.some((pattern) => {
-    const p = String(pattern || "").trim();
-    if (!p) return false;
-    if (p.includes("*")) {
-      const re = new RegExp("^" + p.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*") + "$", "i");
-      return re.test(name);
-    }
-    return name.toLowerCase() === p.toLowerCase();
-  });
+  return pnwCodeIsIgnoredName(name, patterns, { caseSensitive: false });
 }
 
 function ignoreInfo(ctx?: ReorderContext) {

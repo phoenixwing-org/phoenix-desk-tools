@@ -4,6 +4,7 @@ import { setShellShutdownHandler } from "./routes/shell.js";
 import { createPhoenixServerApp } from "./serverApp.js";
 import { migrateLegacyRuntimeUserData } from "./lib/appRuntimePaths.js";
 import {
+  acquireDeskToolsInstanceLease,
   deskToolsPortCandidates,
   registerDeskToolsRuntime,
 } from "./lib/deskToolsRegistration.js";
@@ -63,14 +64,32 @@ async function startServer(): Promise<{ readonly server: ServerType; readonly po
   throw new Error(`Desk Tools 本地 API 在候选端口范围内均无法启动：${lastError instanceof Error ? lastError.message : String(lastError)}`);
 }
 
-const { server, port } = await startServer();
-const registration = registerDeskToolsRuntime(port);
+const instanceLease = acquireDeskToolsInstanceLease();
+let started: Awaited<ReturnType<typeof startServer>>;
+try {
+  started = await startServer();
+} catch (error) {
+  instanceLease.dispose();
+  throw error;
+}
+const { server, port } = started;
+let registration: ReturnType<typeof registerDeskToolsRuntime>;
+try {
+  registration = registerDeskToolsRuntime(port, process.env, new Date(), instanceLease.instanceId);
+} catch (error) {
+  instanceLease.dispose();
+  server.close();
+  throw error;
+}
 console.log(`Phoenix server http://127.0.0.1:${port}`);
 console.log(`  /api/caa/*  CAA 对话`);
 console.log(`  /api/cad/*  CAD 工具 (TypeScript/SQLite)`);
 console.log(`  service registration ${registration.servicePath}`);
 
-const disposeRegistration = (): void => registration.dispose();
+const disposeRegistration = (): void => {
+  registration.dispose();
+  instanceLease.dispose();
+};
 process.once("exit", disposeRegistration);
 process.once("SIGINT", () => {
   disposeRegistration();

@@ -1,6 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import {
+  pnwCodeDefineUuidResultsPanel,
+  pnwCodeGroupUuidHits,
+  pnwCodeSelectedUuidGroupCount,
+  pnwCodeSelectUuidHitIds,
+  type PnwCodeUuidResultHit,
+  type PnwCodeUuidResultsActionDetail,
+  type PnwCodeUuidResultsPanelModel,
+} from "@phoenix-wing/code-core/ui";
+import {
   applyCodeUuids,
   scanCodeUuids,
   type CodeUuidHit,
@@ -8,8 +17,8 @@ import {
   type UuidKind,
 } from "../api";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
-import GitDiffPreviewButton from "../components/git/GitDiffPreviewButton.vue";
 import { useAppShell } from "../composables/useAppShell";
+import { useGitDiffPreview } from "../composables/useGitDiffPreview";
 import {
   CODE_UUID_STRATEGY_OPTIONS,
   useCodeUuidPropertySheet,
@@ -21,39 +30,17 @@ import {
 import { pnwPromptChoice } from "phoenix-wing";
 import { useWorksetPageScope } from "../composables/useWorksetPageScope";
 import { useFileWorksetsStore } from "../stores/fileWorksets";
-import { usePnwResizableTable, type PnwTableColumnDef } from "phoenix-wing";
-import { basenameFromRel, repoDirFromRel } from "../utils/workspaceFileQuery";
+
+pnwCodeDefineUuidResultsPanel();
 
 const props = defineProps<{
   workbenchTabId?: string;
 }>();
 
-const hitColumns: PnwTableColumnDef[] = [
-  { key: "check", label: "", width: 40, minWidth: 40 },
-  { key: "filename", label: "文件名", width: 200, minWidth: 120 },
-  { key: "line", label: "行", width: 52, minWidth: 44 },
-  { key: "new_text", label: "替换后", width: 240, minWidth: 120 },
-  { key: "text", label: "原文", width: 240, minWidth: 120 },
-  { key: "dir", label: "目录", width: 320, minWidth: 160 },
-];
-
-const showReplacementColumn = ref(false);
 const replacementsWritten = ref(false);
 
-const visibleHitColumns = computed(() =>
-  showReplacementColumn.value ? hitColumns : hitColumns.filter((c) => c.key !== "new_text"),
-);
-
-const { widths, onResizeStart } = usePnwResizableTable(() => visibleHitColumns.value);
-
-const visibleTableWidth = computed(() =>
-  visibleHitColumns.value.reduce(
-    (sum, col) => sum + (widths.value[col.key] ?? col.width ?? 120),
-    0,
-  ),
-);
-
 const shell = useAppShell();
+const { preview: previewGitDiff } = useGitDiffPreview();
 const worksetStore = useFileWorksetsStore();
 const worksetScope = useWorksetPageScope("code_uuid");
 
@@ -83,39 +70,34 @@ const selectedCount = computed(() => selected.value.size);
 const allChecked = computed(
   () => hits.value.length > 0 && hits.value.every((h) => selected.value.has(h.hit_id)),
 );
-const uniqueUuidCount = computed(() => new Set(hits.value.map((h) => h.uuid_normalized)).size);
+const uuidViewHits = computed<PnwCodeUuidResultHit[]>(() => hits.value.map((hit) => ({
+  id: hit.hit_id,
+  fileId: hit.repo_rel_path,
+  relativePath: hit.repo_rel_path,
+  line: hit.line,
+  column: hit.col,
+  from: hit.matched_text,
+  normalized: hit.uuid_normalized,
+  kind: hit.kind,
+  to: replacementByHitId.value[hit.hit_id],
+  state: replacementByHitId.value[hit.hit_id] && replacementsWritten.value ? "applied" : "pending",
+})));
+const uniqueUuidCount = computed(() => pnwCodeGroupUuidHits(uuidViewHits.value).length);
 
-type UuidHitGroup = {
-  uuid_normalized: string;
-  hits: CodeUuidHit[];
-};
+const uuidResultsModel = computed<PnwCodeUuidResultsPanelModel>(() => ({
+  presentation: "hits",
+  running: scanning.value || applying.value,
+  hits: uuidViewHits.value,
+  selectedIds: [...selected.value],
+  emptyMessage: "点击「扫描 UUID」查看命中",
+  capabilities: {
+    selection: true,
+    gitDiff: replacementsWritten.value,
+  },
+}));
 
-const hitGroups = computed<UuidHitGroup[]>(() => {
-  const map = new Map<string, CodeUuidHit[]>();
-  for (const h of hits.value) {
-    const key = h.uuid_normalized || h.matched_text;
-    const list = map.get(key) ?? [];
-    list.push(h);
-    map.set(key, list);
-  }
-  return [...map.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([uuid_normalized, groupHits]) => ({
-      uuid_normalized,
-      hits: groupHits.sort((a, b) =>
-        a.repo_rel_path.localeCompare(b.repo_rel_path) || a.line - b.line,
-      ),
-    }));
-});
-
-const selectedNormCount = computed(() => {
-  const norms = new Set<string>();
-  for (const id of selected.value) {
-    const h = hits.value.find((x) => x.hit_id === id);
-    if (h) norms.add(h.uuid_normalized);
-  }
-  return norms.size;
-});
+const selectedNormCount = computed(() =>
+  pnwCodeSelectedUuidGroupCount(uuidViewHits.value, [...selected.value]));
 
 const pathsFromSelectedHits = computed(() => {
   const out = new Set<string>();
@@ -131,53 +113,15 @@ const pathsFromAllHits = computed(() => [...new Set(hits.value.map((h) => h.repo
 const activeWorksetLabel = computed(() => worksetStore.activeWorkset?.name ?? "当前工作集");
 const wsPathCount = computed(() => (worksetStore.activeWorkset?.entries ?? worksetStore.activeWorkset?.paths)?.length ?? 0);
 
-function formatNormDisplay(norm: string): string {
-  const s = norm.replace(/[^0-9a-fA-F]/g, "").toLowerCase();
-  if (s.length !== 32) return norm;
-  return `${s.slice(0, 8)}-${s.slice(8, 12)}-${s.slice(12, 16)}-${s.slice(16, 20)}-${s.slice(20)}`;
-}
-
-function groupAllChecked(group: UuidHitGroup): boolean {
-  return group.hits.length > 0 && group.hits.every((h) => selected.value.has(h.hit_id));
-}
-
-function groupSomeChecked(group: UuidHitGroup): boolean {
-  return group.hits.some((h) => selected.value.has(h.hit_id));
-}
-
-function toggleGroup(group: UuidHitGroup, checked: boolean) {
-  const next = new Set(selected.value);
-  for (const h of group.hits) {
-    if (checked) next.add(h.hit_id);
-    else next.delete(h.hit_id);
-  }
-  selected.value = next;
-}
-
-const hitsTableStyle = computed(() => ({
-  width: `${visibleTableWidth.value}px`,
-  minWidth: "100%",
-  "--sticky-check-w": `${widths.value.check ?? 40}px`,
-}));
-
-function toggleHit(id: string, checked: boolean) {
-  const next = new Set(selected.value);
-  if (checked) next.add(id);
-  else next.delete(id);
-  selected.value = next;
-}
-
 function toggleAll(checked: boolean) {
-  selected.value = checked ? new Set(hits.value.map((h) => h.hit_id)) : new Set();
-}
-
-function replacementText(hitId: string): string {
-  return replacementByHitId.value[hitId] ?? "";
+  selected.value = new Set(pnwCodeSelectUuidHitIds(
+    uuidViewHits.value,
+    checked ? hits.value.map((hit) => hit.hit_id) : [],
+  ));
 }
 
 watch(strategy, () => {
   replacementByHitId.value = {};
-  showReplacementColumn.value = false;
   replacementsWritten.value = false;
 });
 
@@ -187,7 +131,6 @@ async function onScan() {
   hits.value = [];
   selected.value = new Set();
   replacementByHitId.value = {};
-  showReplacementColumn.value = false;
   replacementsWritten.value = false;
   shell.appendLog("[Code UUID] 扫描…", { source: "code_uuid", open: true });
   try {
@@ -272,9 +215,6 @@ async function onApply(dryRun: boolean) {
       if (m.hit_id && m.new) next[m.hit_id] = m.new;
     }
     replacementByHitId.value = next;
-    if (Object.keys(next).length > 0) {
-      showReplacementColumn.value = true;
-    }
     replacementsWritten.value = !dryRun && Object.keys(next).length > 0;
     const logText = out.lines?.join("\n") || out.log || out.message || "完成";
     shell.appendLog(logText, { source: "code_uuid" });
@@ -291,18 +231,16 @@ function openIgnorePanel() {
   void shell.openCodeIgnoreSidebar();
 }
 
-function hitFilename(rel: string) {
-  return basenameFromRel(rel);
-}
-
-function hitDir(rel: string) {
-  return repoDirFromRel(rel);
-}
-
-function thClass(key: string) {
-  if (key === "check") return "col-check sticky-col-left sticky-col-check";
-  if (key === "filename") return "sticky-col-left sticky-col-filename filename-cell";
-  return "";
+async function onUuidResultsAction(event: Event): Promise<void> {
+  const detail = (event as CustomEvent<PnwCodeUuidResultsActionDetail>).detail;
+  if (detail.scope !== "hit") return;
+  if (detail.kind === "selection") {
+    selected.value = new Set(pnwCodeSelectUuidHitIds(uuidViewHits.value, detail.ids));
+    return;
+  }
+  if (detail.action !== "gitDiff") return;
+  const hit = uuidViewHits.value.find((item) => item.id === detail.ids[0]);
+  if (hit) await previewGitDiff(hit.relativePath, "worktree");
 }
 
 usePagePrimaryContribution("code_uuid", props.workbenchTabId, {
@@ -493,97 +431,10 @@ usePagePrimaryContribution("code_uuid", props.workbenchTabId, {
         <p v-if="engineMessage" class="engine-msg">{{ engineMessage }}</p>
       </header>
 
-      <div class="hits-table-wrap">
-        <table
-          v-if="hits.length"
-          class="entry-table resizable-hits-table"
-          :style="hitsTableStyle"
-        >
-          <colgroup>
-            <col
-              v-for="col in visibleHitColumns"
-              :key="col.key"
-              :style="{ width: `${widths[col.key]}px` }"
-            />
-          </colgroup>
-          <thead>
-            <tr>
-              <th v-for="col in visibleHitColumns" :key="col.key" :class="thClass(col.key)">
-                <input
-                  v-if="col.key === 'check'"
-                  type="checkbox"
-                  :checked="allChecked"
-                  aria-label="全选"
-                  @change="toggleAll(($event.target as HTMLInputElement).checked)"
-                />
-                <span v-else class="th-label">{{ col.label }}</span>
-                <span
-                  class="col-resizer"
-                  title="拖拽调节列宽"
-                  @mousedown="onResizeStart(col.key, $event)"
-                />
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-for="(group, gi) in hitGroups" :key="group.uuid_normalized">
-              <tr class="uuid-group-head">
-                <td class="col-check sticky-col-left sticky-col-check">
-                  <input
-                    type="checkbox"
-                    :checked="groupAllChecked(group)"
-                    :indeterminate="groupSomeChecked(group) && !groupAllChecked(group)"
-                    :aria-label="`全选 ${formatNormDisplay(group.uuid_normalized)}`"
-                    @change="toggleGroup(group, ($event.target as HTMLInputElement).checked)"
-                  />
-                </td>
-                <td :colspan="visibleHitColumns.length - 1" class="uuid-group-label">
-                  <span class="uuid-group-title">同值组 {{ gi + 1 }}</span>
-                  <code class="uuid-group-norm">{{ formatNormDisplay(group.uuid_normalized) }}</code>
-                  <span class="muted small">{{ group.hits.length }} 处</span>
-                </td>
-              </tr>
-              <tr
-                v-for="(h, hi) in group.hits"
-                :key="h.hit_id"
-                class="uuid-group-row"
-                :class="{ 'row-alt': hi % 2 === 1 }"
-              >
-                <td class="col-check sticky-col-left sticky-col-check">
-                  <input
-                    type="checkbox"
-                    :checked="selected.has(h.hit_id)"
-                    @change="toggleHit(h.hit_id, ($event.target as HTMLInputElement).checked)"
-                  />
-                </td>
-                <td class="mono filename-cell sticky-col-left sticky-col-filename" :title="h.repo_rel_path">
-                  {{ hitFilename(h.repo_rel_path) }}
-                </td>
-                <td class="col-line mono">{{ h.line }}</td>
-                <td
-                  v-if="showReplacementColumn"
-                  class="mono uuid-cell uuid-new-cell"
-                  :class="{ 'uuid-new-filled': replacementText(h.hit_id) }"
-                  :title="replacementText(h.hit_id)"
-                >
-                  <div class="uuid-new-cell-inner">
-                    <span class="uuid-new-text">{{ replacementText(h.hit_id) || "—" }}</span>
-                    <GitDiffPreviewButton
-                      v-if="replacementText(h.hit_id) && replacementsWritten"
-                      :path="h.repo_rel_path"
-                    />
-                  </div>
-                </td>
-                <td class="mono uuid-cell" :title="h.matched_text">{{ h.matched_text }}</td>
-                <td class="mono dir-cell" :title="h.repo_rel_path">
-                  {{ hitDir(h.repo_rel_path) }}
-                </td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
-        <el-empty v-else description="点击「扫描 UUID」查看命中" :image-size="64" />
-      </div>
+      <pnw-code-uuid-results-panel
+        :model="uuidResultsModel"
+        @pnw-code-uuid-results-action="onUuidResultsAction"
+      />
     </section>
   </div>
 </template>
@@ -705,196 +556,10 @@ usePagePrimaryContribution("code_uuid", props.workbenchTabId, {
   color: #b45309;
 }
 
-.hits-table-wrap {
-  max-height: calc(100vh - 420px);
-  overflow: auto;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #fff;
-}
-
-.resizable-hits-table {
-  table-layout: fixed;
-  border-collapse: separate;
-  border-spacing: 0;
-  font-size: 0.82rem;
-}
-
-.entry-table th,
-.entry-table td {
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--border);
-  text-align: left;
-  vertical-align: middle;
-}
-
-.entry-table th {
-  position: sticky;
-  top: 0;
-  background: #f8fafc;
-  font-size: 0.78rem;
-  color: var(--muted);
-  z-index: 2;
-  height: 34px;
-  padding: 0;
-  overflow: hidden;
-}
-
-.entry-table td {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  background: #fff;
-}
-
-.row-alt td {
-  background: #fafbfc;
-}
-
-.th-label {
+pnw-code-uuid-results-panel {
   display: block;
-  padding: 0 10px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.col-resizer {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 7px;
-  height: 100%;
-  cursor: col-resize;
-  z-index: 3;
-  transform: translateX(50%);
-}
-
-.col-resizer:hover,
-.col-resizer:active {
-  background: rgba(37, 99, 235, 0.22);
-}
-
-.col-check {
-  width: 40px;
-  text-align: center;
-}
-
-.col-line {
-  width: 48px;
-  text-align: right;
-}
-
-.sticky-col-left {
-  position: sticky;
-  z-index: 4;
-}
-
-.sticky-col-check {
-  left: 0;
-  z-index: 5;
-  box-shadow: 1px 0 0 #e2e8f0;
-}
-
-.sticky-col-filename {
-  left: var(--sticky-check-w, 40px);
-  box-shadow: 1px 0 0 #e2e8f0;
-}
-
-.entry-table thead .sticky-col-check {
-  z-index: 8;
-}
-
-.entry-table thead .sticky-col-filename {
-  z-index: 7;
-}
-
-.row-alt .sticky-col-check,
-.row-alt .sticky-col-filename {
-  background: #fafbfc;
-}
-
-.uuid-group-head td {
-  background: #eef2ff;
-  border-bottom: 1px solid #c7d2fe;
-  padding: 6px 10px;
-}
-
-.uuid-group-label {
-  font-size: 0.78rem;
-}
-
-.uuid-group-title {
-  font-weight: 600;
-  margin-right: 8px;
-  color: #4338ca;
-}
-
-.uuid-group-norm {
-  margin-right: 8px;
-  font-size: 0.76rem;
-}
-
-.uuid-group-row td {
-  background: #fff;
-}
-
-.uuid-group-row .sticky-col-check {
-  padding-left: 12px;
-  text-align: left;
-}
-
-.uuid-group-row.row-alt td {
-  background: #fafbfc;
-}
-
-.filename-cell {
-  font-weight: 500;
-}
-
-.dir-cell {
-  color: var(--muted);
-  font-size: 0.78rem;
-}
-
-.uuid-cell {
-  font-size: 0.76rem;
-}
-
-.uuid-new-cell {
-  color: var(--muted);
-}
-
-.uuid-new-cell.uuid-new-filled {
-  color: #047857;
-}
-
-.uuid-new-cell-inner {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  min-width: 0;
-}
-
-.uuid-new-text {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.uuid-new-cell-inner :deep(.git-row-actions) {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.row-alt {
-  background: #fafbfc;
-}
-
-.empty {
-  margin: 0;
-  padding: 16px;
-  text-align: center;
-  color: var(--muted);
+  max-height: calc(100vh - 420px);
+  min-height: 80px;
+  overflow: auto;
 }
 </style>

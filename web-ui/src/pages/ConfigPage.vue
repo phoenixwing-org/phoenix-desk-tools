@@ -15,7 +15,7 @@ import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
 import { useShellTour } from "../composables/useShellTour";
 import { useOnboardingStore } from "../stores/onboarding";
 import { useUiPrefsStore } from "../stores/uiPrefs";
-import { apiOrigin, apiUrl, isTauriRuntime } from "../utils/runtimeBridge";
+import { apiOrigin, apiUrl, isTauriRuntime, runtimeInfo } from "../utils/runtimeBridge";
 
 import SideDockPrefsPanel from "../components/SideDockPrefsPanel.vue";
 import {
@@ -54,6 +54,8 @@ const recentEntries = computed(
 );
 const webRunning = ref(false);
 const desktopRuntime = isTauriRuntime();
+const reusedApi = computed(() => String(runtimeInfo().api_source || "") === "reused");
+const canStopApi = computed(() => desktopRuntime || !reusedApi.value);
 const webUrl = ref(apiOrigin() || "http://127.0.0.1:48375");
 const defaultFreecadDir = computed(() => launcher.value?.default_freecad_dir ?? "");
 
@@ -189,7 +191,9 @@ async function stopWebServer() {
   const result = await pnwPromptChoice({
     title: desktopRuntime ? "退出 Phoenix" : "关闭后端服务",
     message: desktopRuntime
-      ? "退出 Phoenix 桌面程序并停止其本地服务？"
+      ? (reusedApi.value
+        ? "退出 Phoenix 桌面程序？当前 API 由其他宿主管理，不会随本窗口关闭。"
+        : "退出 Phoenix 桌面程序并停止其本地服务？")
       : `停止本地后端服务并释放端口？\n\n${webUrl.value}`,
     choices: [
       { id: "stop", label: "关闭", variant: "danger" },
@@ -495,12 +499,16 @@ const navItems = () =>
         {{ webRunning ? `运行中 · ${webUrl}` : "未检测到本页面对应的服务（可能已在其它端口运行）" }}
       </p>
       <div class="btn-row">
-        <el-button type="danger" plain :disabled="!webRunning" @click="stopWebServer">
+        <el-button type="danger" plain :disabled="!webRunning || !canStopApi" @click="stopWebServer">
           {{ desktopRuntime ? "退出 Phoenix" : "关闭后端服务" }}
         </el-button>
         <el-button @click="refreshWebStatus">刷新状态</el-button>
       </div>
-      <p class="hint">{{ desktopRuntime ? "退出时会同步回收桌面壳启动的后端进程。" : "关闭后释放当前本地 API 端口；Vite 开发页面仍会保留。" }}</p>
+      <p class="hint">
+        {{ reusedApi
+          ? (desktopRuntime ? "当前窗口复用其他宿主的 API；退出窗口不会关闭后台。" : "当前 Web 界面复用其他宿主的 API，因此不能从这里关闭后台。")
+          : (desktopRuntime ? "退出时会同步回收桌面壳启动的后端进程。" : "关闭后释放当前本地 API 端口；Vite 开发页面仍会保留。") }}
+      </p>
     </section>
 
     <section class="section">

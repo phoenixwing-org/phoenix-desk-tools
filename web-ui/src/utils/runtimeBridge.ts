@@ -5,10 +5,14 @@ type TauriCore = {
 type PhoenixRuntimeGlobal = typeof globalThis & {
   __TAURI__?: { core?: TauriCore };
   __PHOENIX_API_ORIGIN__?: string;
+  __PHOENIX_RUNTIME_INFO__?: PhoenixRuntimeInfo;
 };
 
-type PhoenixRuntimeInfo = {
+export type PhoenixRuntimeInfo = {
   api_origin?: unknown;
+  api_source?: unknown;
+  api_version?: unknown;
+  protocol_version?: unknown;
 };
 
 function runtimeGlobal(): PhoenixRuntimeGlobal {
@@ -44,6 +48,13 @@ export async function invokeTauri<T>(command: string, args?: Record<string, unkn
   return invoke<T>(command, args);
 }
 
+export function runtimeInfo(): PhoenixRuntimeInfo {
+  return runtimeGlobal().__PHOENIX_RUNTIME_INFO__ ?? {
+    api_origin: apiOrigin(),
+    api_source: import.meta.env.VITE_DESK_API_SOURCE || "unknown",
+  };
+}
+
 /** Resolve the managed API port before Vue mounts and any store starts fetching. */
 export async function initializeRuntimeBridge(): Promise<void> {
   if (!isTauriRuntime() || trimOrigin(runtimeGlobal().__PHOENIX_API_ORIGIN__)) return;
@@ -54,4 +65,5 @@ export async function initializeRuntimeBridge(): Promise<void> {
     throw new Error("Tauri returned an invalid Phoenix API origin");
   }
   runtimeGlobal().__PHOENIX_API_ORIGIN__ = parsed.origin;
+  runtimeGlobal().__PHOENIX_RUNTIME_INFO__ = info;
 }

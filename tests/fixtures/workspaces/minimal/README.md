@@ -7,4 +7,4 @@
 | `document-xml/内部装配示例-Document.xml` | 内部装配 BOM 挂载错误复现 |
 | `document-xml/图纸-通过link来创建-Document.xml` | Link 图纸 Document 结构 |
 
-分析文档：[doc/cad/samples/内部装配示例-挂载分析.md](../../../../doc/cad/samples/内部装配示例-挂载分析.md)
+分析文档：[docs/cad/samples/内部装配示例-挂载分析.md](../../../../docs/cad/samples/内部装配示例-挂载分析.md)

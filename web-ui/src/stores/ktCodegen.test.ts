@@ -774,6 +774,38 @@ describe("KT Codegen store", () => {
     }), expect.objectContaining({ signal: expect.anything() }));
   });
 
+  it("opens an arbitrary report source path without requiring a current preflight", async () => {
+    const store = useKtCodegenStore();
+    api.fetchKtCodegenSourcePreview.mockResolvedValue({
+      path: "Widget.cpp",
+      fingerprint: "sha256:current",
+      file_signature: "signature:current",
+      expected_fingerprint: "",
+      stale: false,
+      encoding: "utf8",
+      eol: "lf",
+      focus_start_line: 41,
+      focus_end_line: 41,
+      from_line: 36,
+      to_line: 46,
+      lines: [],
+    });
+
+    await expect(store.previewPath("Widget.cpp", 41)).resolves.toMatchObject({
+      path: "Widget.cpp",
+      focus_start_line: 41,
+    });
+
+    expect(store.sourcePreviewKind).toBe("diagnostic");
+    expect(api.fetchKtCodegenSourcePreview).toHaveBeenCalledWith({
+      path: "Widget.cpp",
+      start_line: 41,
+      end_line: 41,
+      expected_fingerprint: "",
+      context_lines: 5,
+    }, expect.objectContaining({ signal: expect.anything() }));
+  });
+
   it("applies only the currently displayed safe plan and invalidates it after verified writeback", async () => {
     const store = useKtCodegenStore();
     const document = makeDocument();

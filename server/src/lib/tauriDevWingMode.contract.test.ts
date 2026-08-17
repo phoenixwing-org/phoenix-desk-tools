@@ -9,12 +9,18 @@ describe("Tauri dev Wing 真源契约", () => {
   const packageJson = JSON.parse(read("../../../package.json"));
   const tauriSource = read("../../../src-tauri/src/lib.rs");
 
-  it("默认 Tauri dev 使用 Local Wing，并保留显式 Registry 对照入口", () => {
+  it("默认 Tauri dev 使用 Local Wing 并先同步品牌资产，保留 Registry 对照入口", () => {
     expect(packageJson.scripts["tauri:dev"]).toBe(
-      "node scripts/run-with-phoenix-wing.mjs local -- cargo tauri dev",
+      "node scripts/run-with-phoenix-wing.mjs local -- pnpm run tauri:dev:local-wing-services",
+    );
+    expect(packageJson.scripts["tauri:dev:local-wing-services"]).toBe(
+      "pnpm brand:sync && node scripts/run-tauri-dev.mjs",
+    );
+    expect(packageJson.scripts["brand:sync"]).toBe(
+      "node scripts/sync-phoenix-wing-brand-assets.mjs",
     );
     expect(packageJson.scripts["tauri:dev:registry"]).toBe(
-      "node scripts/run-with-phoenix-wing.mjs registry -- cargo tauri dev",
+      "node scripts/run-with-phoenix-wing.mjs registry -- node scripts/run-tauri-dev.mjs",
     );
   });
 

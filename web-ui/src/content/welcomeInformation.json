@@ -1,0 +1,94 @@
+{
+  "project": {
+    "id": "desk-product",
+    "title": "项目与运行方式",
+    "status": "v0.4.0",
+    "defaultExpanded": true,
+    "items": [
+      {
+        "id": "product",
+        "label": "产品",
+        "value": "Phoenix Desk Tools"
+      },
+      {
+        "id": "hosts",
+        "label": "使用入口",
+        "value": "Web / Tauri",
+        "note": "两个界面共用同一套 Web UI 和唯一 Desk API。"
+      },
+      {
+        "id": "api-protocol",
+        "label": "后台协议",
+        "value": "desk.api.v1"
+      },
+      {
+        "id": "shared-framework",
+        "label": "共享框架",
+        "value": "Phoenix Wing",
+        "note": "Codegen 算法、状态契约和公共 Web UI 与 KT Auto Code 共享。"
+      }
+    ]
+  },
+  "contribution": {
+    "block": {
+      "id": "desk-contributions",
+      "title": "贡献与维护",
+      "status": "1 位贡献者 · 1 项说明",
+      "defaultExpanded": true,
+      "items": []
+    },
+    "cardGroup": {
+      "id": "desk-contribution-cards",
+      "ariaLabel": "Phoenix Desk Tools 贡献者卡片",
+      "cards": [
+        {
+          "id": "desk-open-collaboration",
+          "title": "开放协作",
+          "status": "共同维护",
+          "items": [
+            {
+              "id": "maintainers",
+              "label": "共同维护",
+              "value": "凤凰之翼贡献者"
+            },
+            {
+              "id": "open-collaboration",
+              "label": "开放协作",
+              "value": "个人与机构贡献者共同参与",
+              "note": "凤凰之翼开放协作后的架构、代码、文档、测试和设计由社区共同形成。"
+            },
+            {
+              "id": "attribution",
+              "label": "历史与归属",
+              "value": "贡献说明",
+              "note": "详见 CONTRIBUTING.md；具体来源以 Git 历史、LICENSE、NOTICE 和归档证据为准。"
+            }
+          ]
+        },
+        {
+          "id": "contributor-placeholder-zhang-san",
+          "title": "张三",
+          "status": "占位示例",
+          "items": [
+            {
+              "id": "role",
+              "label": "参与方式",
+              "value": "待补充"
+            },
+            {
+              "id": "contribution",
+              "label": "贡献内容",
+              "value": "待补充"
+            },
+            {
+              "id": "notice",
+              "label": "说明",
+              "value": "非正式名单",
+              "note": "仅用于预留多位贡献者的卡片展示位置。"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

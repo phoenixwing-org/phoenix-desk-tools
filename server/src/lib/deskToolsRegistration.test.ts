@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   DESK_TOOLS_PREFERRED_PORT,
+  acquireDeskToolsInstanceLease,
   deskToolsPortCandidates,
   deskToolsRegistrationDirectory,
   registerDeskToolsRuntime,
@@ -46,6 +47,7 @@ describe("Desk Tools registration", () => {
       schema_version: 1,
       service: "phoenix-desk-tools",
       protocol_version: 1,
+      app_version: "0.4.0",
       host: "127.0.0.1",
       port: 48_377,
       started_at: "2026-07-20T12:00:00.000Z",
@@ -53,6 +55,26 @@ describe("Desk Tools registration", () => {
     expect(fs.readdirSync(directory).filter((entry) => entry.endsWith(".tmp"))).toEqual([]);
     handle.dispose();
     expect(fs.existsSync(handle.servicePath)).toBe(false);
+  });
+
+  it("prevents a second live API and recovers a stale instance lock", () => {
+    const directory = temporaryDirectory();
+    const env = { PHOENIX_DESK_TOOLS_REGISTRY_DIR: directory, PHOENIX_DESK_HOST: "web" };
+    const first = acquireDeskToolsInstanceLease(env, new Date("2026-07-22T10:00:00.000Z"), () => true);
+    expect(() => acquireDeskToolsInstanceLease(env, new Date(), () => true)).toThrow(/不要启动第二份/);
+    first.dispose();
+
+    fs.writeFileSync(path.join(directory, "instance.v1.lock"), JSON.stringify({
+      instance_id: "stale",
+      pid: 999_999,
+      host_kind: "tauri",
+    }));
+    const recovered = acquireDeskToolsInstanceLease(env, new Date(), () => false);
+    expect(JSON.parse(fs.readFileSync(recovered.lockPath, "utf8"))).toMatchObject({
+      instance_id: recovered.instanceId,
+      host_kind: "web",
+    });
+    recovered.dispose();
   });
 
   it("does not delete a registration replaced by a newer instance", () => {

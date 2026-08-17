@@ -13,6 +13,8 @@ const node = path.join(runtimeRoot, "node", `node${executableSuffix}`);
 const entry = path.join(runtimeRoot, "server", "server.mjs");
 const port = 5198;
 const userData = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-runtime-smoke-"));
+const registrationDirectory = path.join(userData, "service-registration");
+const serviceRegistrationPath = path.join(registrationDirectory, "service.v1.json");
 
 for (const file of [node, entry]) {
   if (!fs.existsSync(file)) throw new Error(`Missing packaged runtime file: ${file}`);
@@ -27,6 +29,7 @@ const child = spawn(node, [entry], {
     PHOENIX_REPO_ROOT: runtimeRoot,
     PHOENIX_RESOURCES_DIR: runtimeRoot,
     PHOENIX_USER_DATA_DIR: userData,
+    PHOENIX_DESK_TOOLS_REGISTRY_DIR: registrationDirectory,
   },
   stdio: ["ignore", "pipe", "pipe"],
   windowsHide: true,
@@ -69,6 +72,9 @@ try {
       code === 0 ? resolve() : reject(new Error(`Packaged runtime exited ${code}\n${output}`));
     });
   });
+  if (fs.existsSync(serviceRegistrationPath)) {
+    throw new Error("Packaged runtime left a stale service registration after shutdown");
+  }
   process.stdout.write("[tauri] packaged runtime health/shutdown smoke passed\n");
 } finally {
   if (child.exitCode == null) child.kill();

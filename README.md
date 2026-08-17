@@ -1,8 +1,20 @@
 # phoenix-desk-tools
 
-[Gitee](https://gitee.com/PhoenixWing321/phoenix-desk-tools.git) · Apache-2.0
+[Phoenix Wing](https://gitee.com/phoenixwing) · [Gitee 仓库](https://gitee.com/phoenixwing/phoenix-desk-tools) · Apache-2.0
 
 围绕 FreeCAD 工作空间的 **Web 桌面辅助工具**：CAD 索引与检索、BOM、Code 工具等。
+
+## 与 KT Auto Code 的关系
+
+[KT Auto Code](https://gitee.com/phoenixwing/kt-auto-code) 与 Desk Tools 是高度关联、可独立使用的两个宿主。两者共用 Phoenix Wing 中的 Codegen 算法、状态契约和 Web UI 组件，但面向不同的使用场景：
+
+| 选择 | 更适合的场景 |
+| --- | --- |
+| **KT Auto Code（VS Code 扩展）** | 希望在编辑器内完成代码生成、预检、Apply 和文件级操作，与源码编辑、Problems 和 Git 流程保持在同一个 VS Code 窗口。 |
+| **Desk Tools（Web / Tauri）** | 需要独立的本地工作台，统一处理 FreeCAD/CAD 索引、BOM、CAA 与 Code 工具，或不希望将工作流限定在 VS Code 中。 |
+| **组合使用** | 日常编辑使用 KT Auto Code，同时保留 Desk Tools 的 CAD/桌面能力。两个前端可发现并复用同一个 Desk API 进程，不应各自启动一份后台。 |
+
+它们不是“同一个应用的两张皮”：可共享的算法和交互下沉到 [Phoenix Wing](https://gitee.com/phoenixwing/phoenix-wing)，VS Code 编辑器能力留在 KT Auto Code，本地服务、Tauri 生命周期和 CAD 业务留在 Desk Tools。详细选型、安装和组合边界见[安装说明](docs/user/桌面工具-安装说明.md)。
 
 ## 快速启动
 
@@ -18,8 +30,8 @@ pnpm install --frozen-lockfile
 标准开发目录要求 `phoenix-desk-tools` 与 `phoenix-wing` 并列：
 
 ```bash
-pnpm dev                       # 本地 Wing；Vite :5173，Node 首选 :48375、占用时向上寻找
-# 浏览器打开 http://localhost:5173
+pnpm dev                       # 本地 Wing；Vite 首选 :49373，发现已登记 API 时直接复用
+# 浏览器打开 http://localhost:49373
 ```
 
 `pnpm dev` 找不到 `../phoenix-wing` 会直接停止，不会静默回退 npm 包。需要验证当前 Registry 正式包时明确运行：
@@ -28,16 +40,30 @@ pnpm dev                       # 本地 Wing；Vite :5173，Node 首选 :48375�
 pnpm dev:registry              # package.json + pnpm-lock.yaml 锁定版本
 ```
 
-非并列目录可用 `PHOENIX_WING_ROOT=/path/to/phoenix-wing pnpm dev`。完整的本地测试、构建命令和安全边界见 [Wing 并列仓库联调](doc/platform/Wing并列仓库联调.md)。
+非并列目录可用 `PHOENIX_WING_ROOT=/path/to/phoenix-wing pnpm dev`。完整的本地测试、构建命令和安全边界见 [Wing 并列仓库联调](docs/platform/Wing并列仓库联调.md)。
 
 ### Tauri 桌面开发模式
 
-桌面模式还需要 Rust 和 Tauri 2 CLI。Tauri 会自行启动前端和本地服务，不需要同时运行 `pnpm dev`。
+桌面模式还需要 Rust 和 Tauri 2 CLI。Tauri 会自行启动前端；发现兼容的已登记 Desk API 时复用它，否则启动自己的后台 API。
 
 ```bash
 cargo install tauri-cli --version "^2.6" --locked  # 仅首次安装
-pnpm tauri:dev
+pnpm tauri:dev                    # 49373 被占用时自动尝试 49374、49375……
 ```
+
+如需先关闭遗留进程，先查 PID，再只结束对应进程：
+
+```bash
+# macOS / Linux（把 49373 换成报错中的端口，例如 5137）
+lsof -nP -iTCP:49373 -sTCP:LISTEN
+kill <PID>                       # 普通终止；仍未退出时才使用 kill -9 <PID>
+
+# Windows PowerShell
+Get-NetTCPConnection -LocalPort 49373 -State Listen | Select-Object OwningProcess
+Stop-Process -Id <PID>
+```
+
+`pnpm tauri:dev` 会把选中的端口同时传给 Vite、Tauri `devUrl` 和开发 CSP；可用 `WEB_UI_PORT=50000 pnpm tauri:dev` 指定自动搜索的起始端口。浏览器模式 `pnpm dev` 同样会从 49373 开始自动寻找 UI 端口。Vite 端口不是 Desk API：Auto Code、Web 与 Tauri 都通过 `service.v1.json` 发现唯一 API。API 进程通过 `instance.v1.lock` 保证单实例，不能通过端口跃迁启动第二份。
 
 ### 从 VS Code / EXE 打开 CAA UI
 
@@ -63,14 +89,14 @@ phoenix-desktop --workspace /path/to/workspace --catdlg /path/to/workspace/UI/Sa
 pnpm install --frozen-lockfile --force
 ```
 
-正式依赖始终使用 `package.json` 锁定的 Wing Registry 0.4.3 包。Codegen Host/Apply、Workspace Schema、Ribbon、UUID/GUID 和 workspace path 契约直接消费包内 fixture；聚合根入口与 composable 子路径的 singleton 由自动测试保护。本地联调由启动进程临时 alias/resolver 完成，不执行 `link:` / `file:` 安装，也不修改清单、锁文件或 `node_modules`。
+正式依赖始终使用 `package.json` 与 `pnpm-lock.yaml` 锁定的 Wing Registry 精确版本。Codegen Host/Apply、Workspace Schema、Ribbon、UUID/GUID 和 workspace path 契约直接消费包内 fixture；聚合根入口与 composable 子路径的 singleton 由自动测试保护。本地联调由启动进程临时 alias/resolver 完成，不执行 `link:` / `file:` 安装，也不修改清单、锁文件或 `node_modules`。
 
 FCStd 文件发现、SQLite 查询、ZIP/Document.xml 读取与 BOM/XLink 写回均由 TypeScript 完成。Desk 不再构建或随 Tauri 打包 `fcstd-read`、`fcstd-xlink`、`fcstd-query` Rust sidecar；Tauri 自身只保留桌面窗口和 Node sidecar 生命周期所需的薄 Rust 壳。
 
 ## 架构
 
 ```
-前端 Vue 3 → Vite :5173
+前端 Vue 3 → Vite :49373
      │
      ▼ proxy /api/*
 Node.js Hono :48375（占用时向上寻找）
@@ -78,6 +104,8 @@ Node.js Hono :48375（占用时向上寻找）
      ├── /api/caa/*  CAA 对话
      └── /api/*      待迁移（Python 可选）
 ```
+
+Web 与 Tauri 的 API 发现、复用规则及多 UI 未决项见 [Desk API 单实例与多宿主发现](docs/platform/Desk-API单实例与多宿主发现.md)。
 
 ## 测试
 
@@ -109,16 +137,18 @@ python3 -m http.server 4173 --directory test-report
 | `web-ui/` | Vue 3 前端 |
 | `phoenix/` | Python 包（逐步退役） |
 | `scripts/` | 命令行工具 |
-| `doc/` | 文档 |
+| `docs/` | 文档 |
 
 ## 文档
 
-- [文档索引](doc/文档索引.md)：当前说明、草案和历史证据的唯一导航
-- [总待办](doc/TODO.md)：唯一维护的产品/技术债入口
-- [Tauri 当前状态](doc/tauri-当前迁移状态基线.md)与[构建验收](doc/tauri-构建启动与验收指南.md)
-- [CAA 当前架构与契约](doc/caa/CAA当前架构与契约.md)
-- [CAD 数据与 API 真源](doc/cad/CAD数据与API真源.md)
+- [0.4.0 变更日志](CHANGELOG.md)：本次发布的用户可见新增、调整、修复与平台兼容性
+- [0.4.0 发布候选](docs/releases/0.4.0-发布候选.md)：版本选择、依赖前置条件与发布门禁
+- [文档索引](docs/文档索引.md)：当前说明、草案和历史证据的唯一导航
+- [总待办](docs/TODO.md)：唯一维护的产品/技术债入口
+- [Tauri 当前状态](docs/tauri-当前迁移状态基线.md)与[构建验收](docs/tauri-构建启动与验收指南.md)
+- [CAA 当前架构与契约](docs/caa/CAA当前架构与契约.md)
+- [CAD 数据与 API 真源](docs/cad/CAD数据与API真源.md)
 
 ## 许可证
 
-Copyright © 2024–2026 上海锟钛。项目使用 [Apache License 2.0](LICENSE) 开源。
+本项目由凤凰之翼贡献者共同维护，基于 [Apache License 2.0](LICENSE) 开源。历史来源、贡献归属和参与方式见[贡献与来源说明](CONTRIBUTING.md)。

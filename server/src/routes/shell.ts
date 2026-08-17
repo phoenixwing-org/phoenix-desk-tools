@@ -9,6 +9,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { DESK_TOOLS_APP_VERSION } from "../lib/deskToolsRegistration.js";
 import {
   effectiveCodeIgnorePatterns,
   getCodeIgnorePrefs,
@@ -129,6 +130,7 @@ interface TestFixturePrefs { checkout_root?: string | null; enabled?: string[]; 
 interface LauncherPrefs {
   version?: number;
   recent_workspaces: string[];
+  workspace_types?: Record<string, string>;
   freecad_dir: string;
   workspace?: string;
   test_fixtures?: TestFixturePrefs;
@@ -198,6 +200,9 @@ function loadPrefs(): LauncherPrefs {
           recent_workspaces: Array.isArray(raw.recent_workspaces)
             ? raw.recent_workspaces.map(String).filter(Boolean)
             : [],
+          workspace_types: raw.workspace_types && typeof raw.workspace_types === "object" && !Array.isArray(raw.workspace_types)
+            ? { ...raw.workspace_types }
+            : {},
           freecad_dir: String(raw.freecad_dir || ""),
           nav_modules: normalizeNavModules(raw.nav_modules),
           shell_layout: normalizeShellLayout(raw.shell_layout),
@@ -304,6 +309,7 @@ function factoryPrefs(): LauncherPrefs {
   return {
     version: 2,
     recent_workspaces: [],
+    workspace_types: {},
     freecad_dir: "",
     workspace: "",
     shell_layout: { ...DEFAULT_SHELL_LAYOUT },
@@ -315,6 +321,44 @@ function factoryPrefs(): LauncherPrefs {
 function normalizedPathKey(raw: string): string {
   const resolved = path.resolve(raw);
   return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
+const WORKSPACE_TYPE_ID_PATTERN = /^[a-z0-9][a-z0-9._-]*$/u;
+
+function normalizeWorkspaceTypeId(raw: unknown): string {
+  const value = String(raw || "").trim().toLocaleLowerCase();
+  if (!WORKSPACE_TYPE_ID_PATTERN.test(value)) throw new Error("Invalid workspace type id");
+  return value;
+}
+
+function workspaceTypeForPath(prefs: LauncherPrefs, workspace: string): string {
+  const targetKey = normalizedPathKey(workspace);
+  for (const [rawPath, rawType] of Object.entries(prefs.workspace_types || {})) {
+    if (normalizedPathKey(rawPath) !== targetKey) continue;
+    try {
+      return normalizeWorkspaceTypeId(rawType);
+    } catch {
+      break;
+    }
+  }
+  const scope = recentWorkspaceScope(workspace);
+  return scope === "cad" || scope === "code" ? scope : "mixed";
+}
+
+function setWorkspaceType(rawPath: unknown, rawType: unknown): void {
+  const workspace = String(rawPath || "").trim();
+  if (!workspace) throw new Error("Workspace path is required");
+  const resolved = path.resolve(workspace);
+  const prefs = loadPrefs();
+  const targetKey = normalizedPathKey(resolved);
+  if (!prefs.recent_workspaces.some((item) => normalizedPathKey(item) === targetKey)) {
+    throw new Error("Workspace is not in the recent list");
+  }
+  const existing = Object.fromEntries(Object.entries(prefs.workspace_types || {}).filter(
+    ([itemPath]) => normalizedPathKey(itemPath) !== targetKey,
+  ));
+  prefs.workspace_types = { ...existing, [resolved]: normalizeWorkspaceTypeId(rawType) };
+  savePrefs(prefs);
 }
 
 function isEphemeralWorkspacePath(raw: string): boolean {
@@ -345,7 +389,13 @@ function pruneRecentPrefs(prefs: LauncherPrefs): { prefs: LauncherPrefs; removed
     seen.add(key);
     kept.push(resolved);
   }
-  if (removed) prefs.recent_workspaces = kept;
+  if (removed) {
+    prefs.recent_workspaces = kept;
+    const keptKeys = new Set(kept.map(normalizedPathKey));
+    prefs.workspace_types = Object.fromEntries(Object.entries(prefs.workspace_types || {}).filter(
+      ([itemPath]) => keptKeys.has(normalizedPathKey(itemPath)),
+    ));
+  }
   return { prefs, removed };
 }
 
@@ -359,9 +409,9 @@ function recentWorkspaceScope(workspace: string): string {
 }
 
 function launcherPrefsPayload(extra: Record<string, unknown> = {}) {
-  const result = pruneRecentPrefs(loadPrefs());
-  if (result.removed) savePrefs(result.prefs);
-  const prefs = result.prefs;
+  // 读取 recent 时保留已失效条目，让 Host/UI 能明确呈现 missing 状态；
+  // 真正删除只由 /recent/prune 或用户的单条 remove 动作执行。
+  const prefs = loadPrefs();
   const entries = prefs.recent_workspaces.map((raw) => {
     const resolved = path.resolve(raw);
     return {
@@ -370,6 +420,7 @@ function launcherPrefsPayload(extra: Record<string, unknown> = {}) {
       exists: isDir(resolved),
       ephemeral: false,
       module_scope: recentWorkspaceScope(resolved),
+      workspace_type_id: workspaceTypeForPath(prefs, resolved),
     };
   });
   return {
@@ -418,6 +469,9 @@ function removeRecentWorkspaceEntry(raw: unknown): void {
   const targetKey = normalizedPathKey(value);
   const prefs = loadPrefs();
   prefs.recent_workspaces = prefs.recent_workspaces.filter((item) => normalizedPathKey(item) !== targetKey);
+  prefs.workspace_types = Object.fromEntries(Object.entries(prefs.workspace_types || {}).filter(
+    ([itemPath]) => normalizedPathKey(itemPath) !== targetKey,
+  ));
   savePrefs(prefs);
 }
 
@@ -758,6 +812,15 @@ shellRoutes.post("/api/config/launcher/recent/remove", async (c) => {
     return c.json({ detail: e.message || String(e) }, 400);
   }
 });
+shellRoutes.patch("/api/config/launcher/recent/workspace-type", async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    setWorkspaceType(body?.path, body?.workspace_type_id);
+    return c.json(launcherPrefsPayload());
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
+});
 shellRoutes.post("/api/config/launcher/recent/prune", (c) => {
   const result = pruneRecentPrefs(loadPrefs());
   if (result.removed) savePrefs(result.prefs);
@@ -810,7 +873,12 @@ shellRoutes.post("/api/config/pick-workspace-directory", async (c) => {
 
 shellRoutes.get("/api/workspace", (c) => {
   const workspace = currentWorkspace();
-  return c.json({ path: workspace, name: workspaceName(workspace) });
+  const prefs = loadPrefs();
+  return c.json({
+    path: workspace,
+    name: workspaceName(workspace),
+    workspace_type_id: workspace ? workspaceTypeForPath(prefs, workspace) : undefined,
+  });
 });
 
 shellRoutes.post("/api/workspace", async (c) => {
@@ -829,6 +897,7 @@ shellRoutes.post("/api/workspace", async (c) => {
     return c.json({
       path: workspace,
       name: workspaceName(workspace),
+      workspace_type_id: workspaceTypeForPath(prefs, workspace),
       nav_modules: navModules,
       nav_warning: navWarning || undefined,
     });
@@ -871,6 +940,7 @@ shellRoutes.get("/api/health", (c) => c.json({
   status: "ok",
   service: "phoenix-node",
   protocol_version: 1,
+  app_version: DESK_TOOLS_APP_VERSION,
 }));
 shellRoutes.get("/api/onboarding/status", (c) => c.json(onboardingStatusPayload()));
 shellRoutes.get("/api/phoenix/database/status", (c) => {
@@ -1002,16 +1072,16 @@ shellRoutes.post("/api/file-rename/scan-refs", async (c) => {
 });
 
 // Git
-shellRoutes.get("/api/git/info", (c) => c.json(gitWorkspaceInfo(currentWorkspace())));
-shellRoutes.get("/api/git/changes", (c) => {
-  try { return c.json(gitWorkspaceChanges(currentWorkspace())); }
+shellRoutes.get("/api/git/info", async (c) => c.json(await gitWorkspaceInfo(currentWorkspace())));
+shellRoutes.get("/api/git/changes", async (c) => {
+  try { return c.json(await gitWorkspaceChanges(currentWorkspace())); }
   catch (e: any) { return c.json({ detail: e.message || String(e) }, 500); }
 });
-shellRoutes.get("/api/git/diff", (c) => {
+shellRoutes.get("/api/git/diff", async (c) => {
   try {
     const scope = c.req.query("scope") || "worktree";
     if (scope !== "worktree" && scope !== "staged") throw new Error("scope must be worktree or staged");
-    return c.json(gitWorkspaceDiff(
+    return c.json(await gitWorkspaceDiff(
       currentWorkspace(),
       c.req.query("path") || "",
       scope as GitDiffScope,
@@ -1019,15 +1089,15 @@ shellRoutes.get("/api/git/diff", (c) => {
   }
   catch (e: any) { return c.json({ detail: e.message || String(e) }, 400); }
 });
-shellRoutes.post("/api/git/init", (c) => {
+shellRoutes.post("/api/git/init", async (c) => {
   try {
-    return c.json(gitWorkspaceInit(currentWorkspace()));
+    return c.json(await gitWorkspaceInit(currentWorkspace()));
   } catch (e: any) { return c.json({ detail: e.message || String(e) }, 400); }
 });
 shellRoutes.post("/api/git/stage", async (c) => {
   try {
     const body = await c.req.json();
-    return c.json(gitWorkspaceStage(currentWorkspace(), body?.paths));
+    return c.json(await gitWorkspaceStage(currentWorkspace(), body?.paths));
   } catch (e: any) { return c.json({ detail: e.message || String(e) }, 400); }
 });
 shellRoutes.post("/api/git/restore", async (c) => {
@@ -1035,7 +1105,7 @@ shellRoutes.post("/api/git/restore", async (c) => {
     const body = await c.req.json();
     const scope = String(body?.scope || "worktree");
     if (!["worktree", "staged", "untracked"].includes(scope)) return c.json({ detail: "Invalid scope" }, 400);
-    return c.json(gitWorkspaceRestore(
+    return c.json(await gitWorkspaceRestore(
       currentWorkspace(),
       body?.paths,
       scope as GitRestoreScope,
@@ -1045,7 +1115,7 @@ shellRoutes.post("/api/git/restore", async (c) => {
 shellRoutes.post("/api/git/commit", async (c) => {
   try {
     const body = await c.req.json();
-    return c.json(gitWorkspaceCommit(currentWorkspace(), body?.message));
+    return c.json(await gitWorkspaceCommit(currentWorkspace(), body?.message));
   } catch (e: any) { return c.json({ detail: e.message || String(e) }, 400); }
 });
 

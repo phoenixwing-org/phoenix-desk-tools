@@ -3,6 +3,9 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { pnwCreateDb, type PnwDbAdapter } from "@phoenix-wing/db-node";
 import {
+  pnwCodeIsIgnoredName,
+  pnwCodeReplaceTextByRules,
+  pnwCodeResolveReplacementRules,
   pnwApplyUuidReplacementPlan,
   pnwFindUuidOccurrences,
   pnwNormalizeUuid,
@@ -183,13 +186,7 @@ export function isCodeIndexFilename(filename: string, extraExts: string[] = []):
 }
 
 export function isIgnoredName(name: string, patterns: string[]): boolean {
-  return patterns.some((p) => {
-    if (p.includes("*")) {
-      const re = new RegExp("^" + p.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*") + "$", "i");
-      return re.test(name);
-    }
-    return name.toLowerCase() === p.toLowerCase();
-  });
+  return pnwCodeIsIgnoredName(name, patterns, { caseSensitive: false });
 }
 
 const PROCESS_DIR_NAMES = ["build", "debug", "release", "out", "bin", "obj", "dist", ".cache", "_build"];
@@ -1107,28 +1104,8 @@ function resolveUnderWorkspace(root: string, rel: string): string {
   return full;
 }
 
-function replaceAllLiteral(text: string, oldText: string, newText: string): string {
-  return text.split(oldText).join(newText);
-}
-
-function countOccurrences(text: string, needle: string): number {
-  if (!needle) return 0;
-  let count = 0;
-  let i = 0;
-  while ((i = text.indexOf(needle, i)) >= 0) {
-    count += 1;
-    i += needle.length;
-  }
-  return count;
-}
-
-function hitLines(text: string, needle: string): number[] {
-  const out: number[] = [];
-  const lines = text.split(/\r?\n/);
-  for (let i = 0; i < lines.length; i += 1) {
-    if (lines[i].includes(needle)) out.push(i + 1);
-  }
-  return out;
+function codeRenameRules(oldText: string, newText: string) {
+  return pnwCodeResolveReplacementRules([{ id: "primary", search: oldText, replace: newText }]);
 }
 
 function listAllFiles(root: string, ignorePatterns: string[], includeIgnored: boolean): string[] {
@@ -1296,6 +1273,7 @@ function computeRenamePreview(workspaceRoot: string, opts: CodeRenameOptions, dr
   const newText = out.new;
   if (!oldText || !newText) return { ...out, ok: false, message: "Both old and new names are required" };
   if (oldText === newText) return { ...out, ok: false, message: "Old and new values are identical" };
+  const replacementRules = codeRenameRules(oldText, newText);
 
   const fileRels = scopeFiles(root, opts);
   let seq = 0;
@@ -1312,9 +1290,10 @@ function computeRenamePreview(workspaceRoot: string, opts: CodeRenameOptions, dr
       continue;
     }
     const text = payload.text;
-    const hits = countOccurrences(text, oldText);
+    const replacement = pnwCodeReplaceTextByRules(text, replacementRules);
+    const hits = replacement.occurrences;
     if (!hits) continue;
-    const nextText = replaceAllLiteral(text, oldText, newText);
+    const nextText = replacement.output;
     const outputPayload = chooseSourceWritePayload(payload, nextText, out.target_encoding);
     let encodingError = "";
     try {
@@ -1330,7 +1309,7 @@ function computeRenamePreview(workspaceRoot: string, opts: CodeRenameOptions, dr
       repo_rel_path: rel,
       level: "text",
       hits,
-      lines: hitLines(text, oldText),
+      lines: [...replacement.lines],
       encoding_in: sourceTextEncodingLabel(payload),
       encoding_out: sourceTextEncodingLabel(outputPayload),
       status: encodingError ? "encoding-error" : dryRun ? "preview" : "pending",
@@ -1721,6 +1700,7 @@ export function applyRenameInWorkspace(workspaceRoot: string, opts: CodeRenameOp
   const root = workspaceRoot.trim();
   const oldText = preview.old;
   const newText = preview.new;
+  const replacementRules = codeRenameRules(oldText, newText);
   const appliedLines: string[] = [];
 
   for (const hit of preview.hits.filter((h: CodeRenameHit) => h.level === "text" && h.status === "pending")) {
@@ -1732,7 +1712,7 @@ export function applyRenameInWorkspace(workspaceRoot: string, opts: CodeRenameOp
       preview.summary.skipped += 1;
       continue;
     }
-    const after = replaceAllLiteral(payload.text, oldText, newText);
+    const after = pnwCodeReplaceTextByRules(payload.text, replacementRules).output;
     if (after === payload.text) continue;
     try {
       const outputPayload = chooseSourceWritePayload(payload, after, preview.target_encoding);

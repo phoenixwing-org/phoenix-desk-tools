@@ -1,6 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  pnwIsCaaDialogHandoff,
+  type PnwCaaDialogHandoff,
+} from "@phoenix-wing/code-core";
 
 export type CaaDialogOpenRequest = {
   id: number;
@@ -15,12 +19,6 @@ type DirectOpenPayload = {
   file?: unknown;
   catDlg?: unknown;
   catDlgRel?: unknown;
-};
-
-type HandoffPayload = {
-  protocol?: unknown;
-  workspaceUri?: unknown;
-  selectedFiles?: unknown;
 };
 
 const pending: CaaDialogOpenRequest[] = [];
@@ -72,17 +70,15 @@ export async function enqueueCaaDialogOpenPayload(
   fallbackWorkspace = "",
 ): Promise<CaaDialogOpenRequest[]> {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("请求体必须是对象");
-  const payload = raw as DirectOpenPayload & HandoffPayload;
+  const payload = raw as DirectOpenPayload & { protocol?: unknown };
   const normalized: Array<Omit<CaaDialogOpenRequest, "id" | "receivedAt">> = [];
 
   if (payload.protocol === "phoenix-desk-tools.caa-dialog.v1") {
-    const workspaceRoot = await requireDirectory(localPathFromFileUri(payload.workspaceUri, "workspaceUri"));
-    if (!Array.isArray(payload.selectedFiles) || payload.selectedFiles.length === 0) {
-      throw new Error("selectedFiles 至少需要一个文件");
-    }
-    for (const entry of payload.selectedFiles) {
-      if (!entry || typeof entry !== "object") throw new Error("selectedFiles 项必须是对象");
-      const file = localPathFromFileUri((entry as { uri?: unknown }).uri, "selectedFiles.uri");
+    if (!pnwIsCaaDialogHandoff(raw)) throw new Error("CAA handoff v1 格式无效");
+    const handoff: PnwCaaDialogHandoff = raw;
+    const workspaceRoot = await requireDirectory(localPathFromFileUri(handoff.workspaceUri, "workspaceUri"));
+    for (const entry of handoff.selectedFiles) {
+      const file = localPathFromFileUri(entry.uri, "selectedFiles.uri");
       normalized.push(await normalizeOne(workspaceRoot, file));
     }
   } else {

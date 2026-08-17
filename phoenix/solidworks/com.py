@@ -1,6 +1,6 @@
 """Windows SolidWorks COM：连接已打开的进程并批量导出 STEP。
 
-说明与排障：``doc/cad/SolidWorks批量STEP导出.md``。
+说明与排障：``docs/cad/SolidWorks批量STEP导出.md``。
 """
 
 from __future__ import annotations
