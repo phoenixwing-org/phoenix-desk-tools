@@ -12,6 +12,7 @@ import type { LauncherPrefs } from "../types/config";
 export type PdtWorkspaceApiValue = {
   path: string;
   name: string;
+  workspace_type_id?: string;
 };
 
 export type PdtWorkspaceApi = {
@@ -54,25 +55,37 @@ export function pdtWorkspaceDescriptor(value: PdtWorkspaceApiValue): PnwWorkspac
     workspaceId: pdtWorkspaceId(rootPath),
     name: value.name.trim() || fallbackName,
     rootPath,
+    workspaceTypeId: value.workspace_type_id,
     readonly: false,
     capabilities: ["read", "write", "watch", "database", "native-directory-picker"],
   };
 }
 
-function pdtRecentEntry(path: string, name: string | undefined, exists: boolean): PnwRecentWorkspaceEntry {
+function pdtRecentEntry(
+  path: string,
+  name: string | undefined,
+  exists: boolean,
+  workspaceTypeId?: string,
+): PnwRecentWorkspaceEntry {
   const normalized = pdtNormalizeRootPath(path);
   return {
     workspaceId: pdtWorkspaceId(path),
     rootPath: path,
     name: name?.trim() || normalized.split("/").filter(Boolean).at(-1) || normalized,
     availability: exists ? "available" : "missing",
+    workspaceTypeId,
   };
 }
 
 function pdtRecentFromPrefs(prefs: LauncherPrefs): readonly PnwRecentWorkspaceEntry[] {
   const detailed = prefs.recent_workspace_entries;
   if (detailed?.length) {
-    return detailed.map((entry) => pdtRecentEntry(entry.path, entry.name, entry.exists));
+    return detailed.map((entry) => pdtRecentEntry(
+      entry.path,
+      entry.name,
+      entry.exists,
+      entry.workspace_type_id,
+    ));
   }
   return prefs.recent_workspaces.map((path) => pdtRecentEntry(path, undefined, true));
 }

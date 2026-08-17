@@ -227,6 +227,14 @@ export function addRecentWorkspace(path: string) {
   });
 }
 
+export function patchRecentWorkspaceType(path: string, workspaceTypeId: string) {
+  return jsonFetch<LauncherPrefs>("/api/config/launcher/recent/workspace-type", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path, workspace_type_id: workspaceTypeId }),
+  });
+}
+
 export function pickWorkspaceDirectory(pathHint = "") {
   if (isTauriRuntime()) {
     return invokeTauri<{ cancelled: boolean; path: string }>("pick_workspace_directory", { pathHint });
@@ -344,11 +352,11 @@ export function shutdownWebServer() {
 }
 
 export function getWorkspace() {
-  return jsonFetch<{ path: string; name: string }>("/api/workspace");
+  return jsonFetch<{ path: string; name: string; workspace_type_id?: string }>("/api/workspace");
 }
 
 export function setWorkspace(path: string, signal?: AbortSignal) {
-  return jsonFetch<{ path: string; name: string; nav_modules?: WorkspaceNavModules }>(
+  return jsonFetch<{ path: string; name: string; workspace_type_id?: string; nav_modules?: WorkspaceNavModules }>(
     "/api/workspace",
     {
       method: "POST",

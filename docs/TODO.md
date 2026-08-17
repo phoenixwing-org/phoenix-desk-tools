@@ -4,7 +4,7 @@
 
 Owner：Desk Tools maintainers
 
-适用版本：0.3.x / 联合成熟度 84.75 → 92.00（本轮已接受）
+适用版本：0.4.x / 联合成熟度 84.75 → 92.00（本轮已接受）
 
 最后核验：2026-07-20
 
@@ -51,7 +51,7 @@ Owner：Desk Tools maintainers
 - [ ] 决定 Desk 多 UI 策略。近期建议采用“单 UI 宿主并明确拒绝第二个 UI”；若选择 Web/Tauri 同开，必须先实现后台工作空间 revision、状态广播和切换冲突处理。
 - [ ] 继续把其它长任务的进度、取消与运行日志收敛到 AsyncProgress，不让页面各自维护第二套任务状态。
 - [ ] 将剩余 Python 兼容入口逐项判定为外部引擎 adapter 或退役路径；Node/Hono 是当前 HTTP 真源。
-- [ ] **用户手工验收**：在自有 Windows 机器执行已入库的 0.3.0 NSIS 构建/安装/Codegen/FCStd/退出/卸载门禁，回传脚本生成的 JSON 回执与最终成功日志；Codex 不连接远程 Windows、不创建 GitHub 镜像。FreeCAD/SolidWorks 外部进程 E/F 档仍需独立环境；历史 0.1.0 Windows 产物不计入当前版本。
+- [ ] **用户手工验收**：在自有 Windows 机器执行已入库的 0.4.0 NSIS 构建/安装/Codegen/FCStd/退出/卸载门禁，回传脚本生成的 JSON 回执与最终成功日志；Codex 不连接远程 Windows、不创建 GitHub 镜像。FreeCAD/SolidWorks 外部进程 E/F 档仍需独立环境；历史 0.1.0 Windows 产物不计入当前版本。
 
 ## 后期：大型 UI 拆分
 

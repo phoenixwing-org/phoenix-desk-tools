@@ -1,4 +1,4 @@
-name: Desk Tools Windows 0.3.0 release gate
+name: Desk Tools Windows 0.4.0 release gate
 
 on:
   workflow_dispatch:
@@ -50,9 +50,9 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: phoenix-desk-tools-0.3.0-windows-nsis
+          name: phoenix-desk-tools-0.4.0-windows-nsis
           path: |
-            src-tauri/target/release/bundle/nsis/*0.3.0*setup.exe
-            src-tauri/target/release/bundle/nsis/*0.3.0*receipt.json
+            src-tauri/target/release/bundle/nsis/*0.4.0*setup.exe
+            src-tauri/target/release/bundle/nsis/*0.4.0*receipt.json
           if-no-files-found: error
           retention-days: 14

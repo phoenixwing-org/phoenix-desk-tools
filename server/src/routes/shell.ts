@@ -130,6 +130,7 @@ interface TestFixturePrefs { checkout_root?: string | null; enabled?: string[]; 
 interface LauncherPrefs {
   version?: number;
   recent_workspaces: string[];
+  workspace_types?: Record<string, string>;
   freecad_dir: string;
   workspace?: string;
   test_fixtures?: TestFixturePrefs;
@@ -199,6 +200,9 @@ function loadPrefs(): LauncherPrefs {
           recent_workspaces: Array.isArray(raw.recent_workspaces)
             ? raw.recent_workspaces.map(String).filter(Boolean)
             : [],
+          workspace_types: raw.workspace_types && typeof raw.workspace_types === "object" && !Array.isArray(raw.workspace_types)
+            ? { ...raw.workspace_types }
+            : {},
           freecad_dir: String(raw.freecad_dir || ""),
           nav_modules: normalizeNavModules(raw.nav_modules),
           shell_layout: normalizeShellLayout(raw.shell_layout),
@@ -305,6 +309,7 @@ function factoryPrefs(): LauncherPrefs {
   return {
     version: 2,
     recent_workspaces: [],
+    workspace_types: {},
     freecad_dir: "",
     workspace: "",
     shell_layout: { ...DEFAULT_SHELL_LAYOUT },
@@ -316,6 +321,44 @@ function factoryPrefs(): LauncherPrefs {
 function normalizedPathKey(raw: string): string {
   const resolved = path.resolve(raw);
   return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
+const WORKSPACE_TYPE_ID_PATTERN = /^[a-z0-9][a-z0-9._-]*$/u;
+
+function normalizeWorkspaceTypeId(raw: unknown): string {
+  const value = String(raw || "").trim().toLocaleLowerCase();
+  if (!WORKSPACE_TYPE_ID_PATTERN.test(value)) throw new Error("Invalid workspace type id");
+  return value;
+}
+
+function workspaceTypeForPath(prefs: LauncherPrefs, workspace: string): string {
+  const targetKey = normalizedPathKey(workspace);
+  for (const [rawPath, rawType] of Object.entries(prefs.workspace_types || {})) {
+    if (normalizedPathKey(rawPath) !== targetKey) continue;
+    try {
+      return normalizeWorkspaceTypeId(rawType);
+    } catch {
+      break;
+    }
+  }
+  const scope = recentWorkspaceScope(workspace);
+  return scope === "cad" || scope === "code" ? scope : "mixed";
+}
+
+function setWorkspaceType(rawPath: unknown, rawType: unknown): void {
+  const workspace = String(rawPath || "").trim();
+  if (!workspace) throw new Error("Workspace path is required");
+  const resolved = path.resolve(workspace);
+  const prefs = loadPrefs();
+  const targetKey = normalizedPathKey(resolved);
+  if (!prefs.recent_workspaces.some((item) => normalizedPathKey(item) === targetKey)) {
+    throw new Error("Workspace is not in the recent list");
+  }
+  const existing = Object.fromEntries(Object.entries(prefs.workspace_types || {}).filter(
+    ([itemPath]) => normalizedPathKey(itemPath) !== targetKey,
+  ));
+  prefs.workspace_types = { ...existing, [resolved]: normalizeWorkspaceTypeId(rawType) };
+  savePrefs(prefs);
 }
 
 function isEphemeralWorkspacePath(raw: string): boolean {
@@ -346,7 +389,13 @@ function pruneRecentPrefs(prefs: LauncherPrefs): { prefs: LauncherPrefs; removed
     seen.add(key);
     kept.push(resolved);
   }
-  if (removed) prefs.recent_workspaces = kept;
+  if (removed) {
+    prefs.recent_workspaces = kept;
+    const keptKeys = new Set(kept.map(normalizedPathKey));
+    prefs.workspace_types = Object.fromEntries(Object.entries(prefs.workspace_types || {}).filter(
+      ([itemPath]) => keptKeys.has(normalizedPathKey(itemPath)),
+    ));
+  }
   return { prefs, removed };
 }
 
@@ -371,6 +420,7 @@ function launcherPrefsPayload(extra: Record<string, unknown> = {}) {
       exists: isDir(resolved),
       ephemeral: false,
       module_scope: recentWorkspaceScope(resolved),
+      workspace_type_id: workspaceTypeForPath(prefs, resolved),
     };
   });
   return {
@@ -419,6 +469,9 @@ function removeRecentWorkspaceEntry(raw: unknown): void {
   const targetKey = normalizedPathKey(value);
   const prefs = loadPrefs();
   prefs.recent_workspaces = prefs.recent_workspaces.filter((item) => normalizedPathKey(item) !== targetKey);
+  prefs.workspace_types = Object.fromEntries(Object.entries(prefs.workspace_types || {}).filter(
+    ([itemPath]) => normalizedPathKey(itemPath) !== targetKey,
+  ));
   savePrefs(prefs);
 }
 
@@ -759,6 +812,15 @@ shellRoutes.post("/api/config/launcher/recent/remove", async (c) => {
     return c.json({ detail: e.message || String(e) }, 400);
   }
 });
+shellRoutes.patch("/api/config/launcher/recent/workspace-type", async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    setWorkspaceType(body?.path, body?.workspace_type_id);
+    return c.json(launcherPrefsPayload());
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
+});
 shellRoutes.post("/api/config/launcher/recent/prune", (c) => {
   const result = pruneRecentPrefs(loadPrefs());
   if (result.removed) savePrefs(result.prefs);
@@ -811,7 +873,12 @@ shellRoutes.post("/api/config/pick-workspace-directory", async (c) => {
 
 shellRoutes.get("/api/workspace", (c) => {
   const workspace = currentWorkspace();
-  return c.json({ path: workspace, name: workspaceName(workspace) });
+  const prefs = loadPrefs();
+  return c.json({
+    path: workspace,
+    name: workspaceName(workspace),
+    workspace_type_id: workspace ? workspaceTypeForPath(prefs, workspace) : undefined,
+  });
 });
 
 shellRoutes.post("/api/workspace", async (c) => {
@@ -830,6 +897,7 @@ shellRoutes.post("/api/workspace", async (c) => {
     return c.json({
       path: workspace,
       name: workspaceName(workspace),
+      workspace_type_id: workspaceTypeForPath(prefs, workspace),
       nav_modules: navModules,
       nav_warning: navWarning || undefined,
     });

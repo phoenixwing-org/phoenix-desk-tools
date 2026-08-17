@@ -2,10 +2,19 @@
 import { computed, onMounted, ref } from "vue";
 import { Setting } from "@element-plus/icons-vue";
 import {
-  PnwSelect,
-  PnwWorkspaceWelcome,
+  PnwWorkspaceGate,
+  PnwWorkspaceTypeSelect,
+  PnwWorkspaceRailAction,
+  PnwColorSchemeToggle,
+  PnwPhoenixWingMark,
+  PnwInformationBlock,
+  PnwInformationCardGroup,
+  pnwPromptChoice,
+  type PnwInformationBlockDefinition,
+  type PnwInformationCardGroupDefinition,
+  type PnwColorScheme,
   type PnwRecentWorkspaceEntry,
-  type PnwSelectOption,
+  type PnwWorkspaceGateMode,
 } from "phoenix-wing";
 import {
   PROJECT_GITEE_HOME,
@@ -13,7 +22,6 @@ import {
   PROJECT_QUICKSTART_DOC,
 } from "../constants/projectLinks";
 import {
-  MODULE_SCOPE_OPTIONS,
   moduleScopeLabel,
   type ModuleScope,
 } from "../constants/moduleScope";
@@ -23,28 +31,35 @@ import CaaUnsavedDraftsPanel from "../components/caa/CaaUnsavedDraftsPanel.vue";
 import { useWorkspaceDirectoryPicker } from "../composables/useWorkspaceDirectoryPicker";
 import { confirmCloseTabsBeforeWorkspacePick } from "../composables/tabCloseConfirm";
 import { DEFAULT_APP_TITLE } from "../types/config";
+import deskWelcomeInformation from "../content/welcomeInformation.json";
 
 const shell = useAppShell();
+const props = defineProps<{
+  colorScheme: PnwColorScheme;
+}>();
+const emit = defineEmits<{
+  "update:colorScheme": [colorScheme: PnwColorScheme];
+}>();
 const { startShellTour } = useShellTour(shell);
 const { picking, pickAndOpenWorkspace } = useWorkspaceDirectoryPicker();
 const touring = ref(false);
+const projectInformation: PnwInformationBlockDefinition = deskWelcomeInformation.project;
+const contributionInformation: PnwInformationBlockDefinition = deskWelcomeInformation.contribution.block;
+const contributionCards: PnwInformationCardGroupDefinition = deskWelcomeInformation.contribution.cardGroup;
 
 const appTitle = computed(() => shell.appConfig.value?.title ?? DEFAULT_APP_TITLE);
 const workspacePath = computed(() => shell.workspacePath.value);
 const workspaceWelcomeDisabled = computed(() => picking.value || touring.value);
-const moduleScopeOptions: readonly PnwSelectOption[] = MODULE_SCOPE_OPTIONS.map((option) => ({
-  value: option.id,
-  label: option.label,
-}));
+const gateMode = computed<PnwWorkspaceGateMode>(() => (
+  shell.currentPage.value === "welcome" ? "welcome" : "workbench"
+));
 
 onMounted(() => {
   void shell.reloadLauncher();
 });
 
-function entryScope(rootPath: string): ModuleScope {
-  return shell.launcher.value?.recent_workspace_entries
-    ?.find((entry) => entry.path === rootPath)
-    ?.module_scope ?? "all";
+function moduleScopeForWorkspaceType(workspaceTypeId: string): ModuleScope {
+  return workspaceTypeId === "cad" || workspaceTypeId === "code" ? workspaceTypeId : "all";
 }
 
 function isWorkspaceBlockingTab(pageId: string) {
@@ -53,7 +68,6 @@ function isWorkspaceBlockingTab(pageId: string) {
 
 async function openWorkspace(entry: PnwRecentWorkspaceEntry) {
   if (entry.availability === "missing" || entry.availability === "unauthorized") return;
-  const scope = entryScope(entry.rootPath);
   if (entry.rootPath !== workspacePath.value) {
     const tabTitles = shell.tabs.value.filter((tab) => isWorkspaceBlockingTab(tab.pageId)).map((tab) => tab.title);
     if (tabTitles.length) {
@@ -71,15 +85,19 @@ async function openWorkspace(entry: PnwRecentWorkspaceEntry) {
       return;
     }
   }
-  try {
-    await shell.enterWorkbenchFromWelcome({ scope });
-  } catch (error) {
-    shell.setStatus(String(error));
-  }
 }
 
 async function removeRecent(entry: PnwRecentWorkspaceEntry) {
-  if (!window.confirm(`从最近列表中移除？\n\n${entry.rootPath}`)) return;
+  const choice = await pnwPromptChoice({
+    title: "移除最近工作空间",
+    message: `仅从最近列表移除，不会删除磁盘上的项目文件。\n\n${entry.rootPath}`,
+    choices: [
+      { id: "remove", label: "移除记录", variant: "default" },
+      { id: "cancel", label: "取消", variant: "default" },
+    ],
+    defaultChoiceId: "cancel",
+  });
+  if (choice.choiceId !== "remove") return;
   try {
     await shell.removeRecentWorkspace(entry.rootPath);
     shell.setStatus("已从最近列表移除");
@@ -88,69 +106,80 @@ async function removeRecent(entry: PnwRecentWorkspaceEntry) {
   }
 }
 
-async function onScopeChange(rootPath: string, scope: string) {
-  if (!MODULE_SCOPE_OPTIONS.some((option) => option.id === scope)) return;
+async function onWorkspaceTypeChange(rootPath: string, workspaceTypeId: string) {
   try {
-    await shell.setWorkspaceModuleScope(rootPath, scope as ModuleScope);
-    shell.setStatus(`模块范围已设为 ${moduleScopeLabel(scope)}`);
+    const scope = moduleScopeForWorkspaceType(workspaceTypeId);
+    await shell.setWorkspaceType(rootPath, workspaceTypeId);
+    await shell.setWorkspaceModuleScope(rootPath, scope);
+    shell.setStatus(`工作空间类型已更新；模块范围为 ${moduleScopeLabel(scope)}`);
   } catch (error) {
     shell.setStatus(String(error));
   }
 }
 
 function openWorkspacePicker() {
-  void pickAndOpenWorkspace();
+  void pickAndOpenWorkspace({ enterWorkbench: false });
 }
 
 function openConfig() {
+  if (!workspacePath.value) return;
   shell.openConfig();
 }
 
+function onGateModeUpdate(mode: PnwWorkspaceGateMode) {
+  if (mode === "welcome") {
+    shell.goToPage("welcome");
+    return;
+  }
+  void shell.enterWorkbenchFromWelcome();
+}
+
+async function closeWorkspace() {
+  try {
+    await shell.requestCloseWorkspace();
+  } catch (error) {
+    shell.setStatus(String(error));
+  }
+}
+
 async function enterAndStartTour() {
-  if (touring.value || picking.value) return;
+  if (!workspacePath.value || touring.value || picking.value) return;
   touring.value = true;
   try {
-    if (!workspacePath.value) {
-      const result = await pickAndOpenWorkspace({
-        enterWorkbench: true,
-        logSource: "welcome",
-      });
-      if (!result.ok) return;
-    }
     await startShellTour(true);
   } finally {
     touring.value = false;
   }
 }
 
-function returnToWorkspace() {
-  if (!workspacePath.value) {
-    shell.setStatus("请先打开工作空间");
-    return;
-  }
-  void shell.enterWorkbenchFromWelcome();
-}
 </script>
 
 <template>
-  <PnwWorkspaceWelcome
-    class="desk-workspace-welcome"
+  <PnwWorkspaceGate
     data-tour-page-welcome
     :state="shell.workspaceState.value"
+    :mode="gateMode"
+    :color-scheme="props.colorScheme"
+    policy="required"
     :app-title="appTitle"
     product-subtitle="Phoenix 桌面工具"
     heading="欢迎使用 Phoenix"
-    description="在下方选择工程与模块（CAD / Code / 全部），点击进入对应工具台；若该模块有未关闭的文档，将自动恢复。"
+    description="在下方选择工程类型（综合 / Code / CAD / 照明），打开后进入对应工具台；未关闭的业务 View 会按工作空间恢复。"
     open-label="打开工作空间"
+    close-workspace-label="关闭工作空间"
     recent-title="最近使用"
+    recent-collapsible
+    :recent-default-open="true"
     :disabled="workspaceWelcomeDisabled"
     @open-workspace="openWorkspacePicker"
     @open-recent="openWorkspace"
     @remove-recent="removeRecent"
+    @close-workspace="closeWorkspace"
+    @update:mode="onGateModeUpdate"
   >
     <template #brand>
       <header class="desk-welcome-brand">
-        <span class="desk-welcome-brand-mark" aria-hidden="true">P</span>
+        <PnwPhoenixWingMark class="desk-welcome-brand-mark" decorative />
         <span class="desk-welcome-brand-copy">
           <strong>PHOENIX</strong>
           <small>{{ appTitle }}</small>
@@ -158,22 +187,15 @@ function returnToWorkspace() {
       </header>
     </template>
 
-    <template #rail-actions>
-      <el-button
-        class="desk-welcome-rail-action"
-        :loading="touring || picking"
+    <template #secondary-actions>
+      <PnwWorkspaceRailAction
+        v-if="workspacePath"
+        label="界面巡游"
+        icon="search"
+        :disabled="touring || picking"
         title="进入工作空间并逐步介绍 Ribbon、页面 Tab 与工作区树"
-        @click="enterAndStartTour"
-      >
-        界面巡游
-      </el-button>
-      <el-button
-        class="desk-welcome-rail-action"
-        :disabled="!workspacePath"
-        @click="returnToWorkspace"
-      >
-        返回工作空间
-      </el-button>
+        @activate="enterAndStartTour"
+      />
     </template>
 
     <template #links>
@@ -191,7 +213,15 @@ function returnToWorkspace() {
     </template>
 
     <template #head-actions>
-      <el-button title="工作空间、FreeCAD 与界面偏好" @click="openConfig">
+      <PnwColorSchemeToggle
+        :model-value="props.colorScheme"
+        @update:model-value="emit('update:colorScheme', $event)"
+      />
+      <el-button
+        :disabled="!workspacePath"
+        :title="workspacePath ? '工作空间、FreeCAD 与界面偏好' : '请先打开工作空间'"
+        @click="openConfig"
+      >
         <el-icon aria-hidden="true"><Setting /></el-icon>
         设置
       </el-button>
@@ -202,14 +232,12 @@ function returnToWorkspace() {
     </template>
 
     <template #entry-actions="{ entry }">
-      <PnwSelect
+      <PnwWorkspaceTypeSelect
         v-if="entry.availability === 'available' || entry.availability === 'unknown'"
-        class="desk-welcome-scope-select"
-        :model-value="entryScope(entry.rootPath)"
-        :options="moduleScopeOptions"
+        :model-value="entry.workspaceTypeId ?? 'mixed'"
         size="compact"
-        :aria-label="`${entry.name} 模块范围`"
-        @update:model-value="onScopeChange(entry.rootPath, $event)"
+        :aria-label="`${entry.name} 工作空间类型`"
+        @update:model-value="onWorkspaceTypeChange(entry.rootPath, $event)"
       />
     </template>
 
@@ -218,14 +246,28 @@ function returnToWorkspace() {
     </template>
 
     <template #after-recent>
+      <PnwInformationBlock
+        class="desk-welcome-information"
+        :definition="projectInformation"
+      />
+      <PnwInformationBlock
+        class="desk-welcome-information"
+        :definition="contributionInformation"
+      >
+        <template #footer>
+          <PnwInformationCardGroup :definition="contributionCards" />
+        </template>
+      </PnwInformationBlock>
       <CaaUnsavedDraftsPanel />
     </template>
-  </PnwWorkspaceWelcome>
+
+    <template #workbench="slotProps">
+      <slot name="workbench" v-bind="slotProps" />
+    </template>
+  </PnwWorkspaceGate>
 </template>
 
 <style scoped>
-.desk-workspace-welcome { height: 100%; }
-
 .desk-welcome-brand {
   display: flex;
   align-items: center;
@@ -234,17 +276,7 @@ function returnToWorkspace() {
 }
 
 .desk-welcome-brand-mark {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  flex: none;
-  border-radius: 10px;
-  color: #fff;
-  background: linear-gradient(145deg, #2563eb 0%, #1d4ed8 100%);
-  box-shadow: 0 2px 8px rgb(37 99 235 / 35%);
-  font-size: 1.1rem;
-  font-weight: 800;
+  --pnw-phoenix-wing-mark-size: 40px;
 }
 
 .desk-welcome-brand-copy { display: grid; min-width: 0; gap: 2px; }
@@ -257,9 +289,8 @@ function returnToWorkspace() {
   white-space: nowrap;
 }
 
-.desk-welcome-rail-action { width: 100%; margin: 0; }
 .desk-welcome-links { display: grid; gap: 8px; justify-items: start; }
-.desk-welcome-scope-select { width: 112px; margin: 8px; }
+.desk-welcome-information { margin-top: 8px; }
 .desk-welcome-empty {
   margin: 0;
   padding: 20px;

@@ -12,6 +12,7 @@ import {
   fetchWorkspaceNavModules,
   getWorkspace,
   patchShellLayout,
+  patchRecentWorkspaceType,
   patchWorkspaceNavModules,
   removeRecentWorkspace as removeRecentWorkspaceApi,
   resetLauncherFactory,
@@ -169,6 +170,7 @@ export type AppShellContext = {
   persistNavModules: (enabled: string[]) => Promise<void>;
   toggleNavModule: (id: string) => Promise<void>;
   setWorkspaceModuleScope: (path: string, scope: ModuleScope) => Promise<void>;
+  setWorkspaceType: (path: string, workspaceTypeId: string) => Promise<void>;
   reloadLauncher: () => Promise<void>;
   init: () => Promise<void>;
   treeSelectHandler: Ref<TreeSelectHandler | null>;
@@ -502,13 +504,8 @@ export function provideAppShell(): AppShellContext {
   }
 
   function stayInWorkbenchIdle() {
-    if (!workspacePath.value || !onboarding.workspaceOk) {
-      openWelcome();
-      return;
-    }
-    leaveWelcomeForWorkbench();
+    openWelcome();
     wb.activeTabId.value = "";
-    focusWorkbenchForModuleScope(workbenchFocusScope.value);
   }
 
   function syncOnboardingFromTabs() {
@@ -1077,7 +1074,11 @@ export function provideAppShell(): AppShellContext {
     setStatus("已关闭工作空间");
   }
 
-  function ensureWorkspaceController(initialWorkspace?: { path: string; name: string }) {
+  function ensureWorkspaceController(initialWorkspace?: {
+    path: string;
+    name: string;
+    workspace_type_id?: string;
+  }) {
     if (workspaceController) return workspaceController;
     workspaceController = pdtCreateWorkspaceController({
       initialWorkspace,
@@ -1089,8 +1090,8 @@ export function provideAppShell(): AppShellContext {
         removeRecentWorkspace: removeRecentWorkspaceApi,
       },
       lifecycle: {
-        prepare() {
-          if (!workspaceControllerSeeding) flushWorkbenchSession();
+        async prepare() {
+          if (!workspaceControllerSeeding) await flushWorkbenchSession();
         },
         async applyOpened(workspace) {
           if (!workspaceControllerSeeding) await applyOpenedWorkspace(workspace);
@@ -1215,7 +1216,7 @@ export function provideAppShell(): AppShellContext {
       wb.activateTab(tabId);
       return;
     }
-    wb.activeTabId.value = "";
+    wb.openTab({ pageId: "home" });
   }
 
   async function enterWorkbenchFromWelcome(opts?: { scope?: ModuleScope }) {
@@ -1235,14 +1236,14 @@ export function provideAppShell(): AppShellContext {
     focusWorkbenchForModuleScope(scope);
   }
 
-  function flushWorkbenchSession(opts?: { force?: boolean }) {
+  async function flushWorkbenchSession(opts?: { force?: boolean }): Promise<void> {
     if (!workspacePath.value) return;
     if (!persistenceReady && !opts?.force) return;
     const ids = wb.tabs.value.map((t) => t.id);
     const states = persistenceReady ? collectPageStates(ids) : {};
     const snap = wb.exportSession(states);
     if (persistenceReady) {
-      void saveWorkbenchSessionAll(workspacePath.value, snap);
+      await saveWorkbenchSessionAll(workspacePath.value, snap);
     } else {
       writeLocalWorkbenchSession(workspacePath.value, snap);
     }
@@ -1253,7 +1254,7 @@ export function provideAppShell(): AppShellContext {
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       saveTimer = null;
-      flushWorkbenchSession();
+      void flushWorkbenchSession();
     }, 800);
   }
 
@@ -1325,10 +1326,10 @@ export function provideAppShell(): AppShellContext {
     });
     if (typeof window !== "undefined") {
       window.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === "hidden") flushWorkbenchSession({ force: true });
+        if (document.visibilityState === "hidden") void flushWorkbenchSession({ force: true });
       });
-      window.addEventListener("beforeunload", () => flushWorkbenchSession({ force: true }));
-      window.addEventListener("pagehide", () => flushWorkbenchSession({ force: true }));
+      window.addEventListener("beforeunload", () => void flushWorkbenchSession({ force: true }));
+      window.addEventListener("pagehide", () => void flushWorkbenchSession({ force: true }));
     }
     persistenceReady = true;
     syncShellUrl();
@@ -1437,6 +1438,11 @@ export function provideAppShell(): AppShellContext {
     if (path === workspacePath.value) {
       applyWorkspaceNavModules(nav);
     }
+  }
+
+  async function setWorkspaceType(path: string, workspaceTypeId: string) {
+    await patchRecentWorkspaceType(path, workspaceTypeId);
+    await reloadLauncher();
   }
 
   /** @deprecated 使用 registerPageMessages */
@@ -1664,7 +1670,11 @@ export function provideAppShell(): AppShellContext {
     await onboarding.refreshStatus();
 
     const urlIntent = parseShellUrl();
-    const sessionRestored = await restoreWorkbenchSession();
+    const sessionRestored = workspacePath.value ? await restoreWorkbenchSession() : false;
+    if (!workspacePath.value) {
+      wb.discardAllToolTabs();
+      openWelcome();
+    }
 
     syncOnboardingFromTabs();
     purgeConfigTabs();
@@ -1691,10 +1701,7 @@ export function provideAppShell(): AppShellContext {
     }
 
     if (!onboarding.workspaceOk) {
-      if (!wb.tabs.value.length && !urlIntent) {
-        openWelcome();
-      }
-      goToPage("config");
+      openWelcome();
     }
 
     purgeHiddenModuleTabs();
@@ -1763,6 +1770,7 @@ export function provideAppShell(): AppShellContext {
     persistNavModules,
     toggleNavModule,
     setWorkspaceModuleScope,
+    setWorkspaceType,
     reloadLauncher,
     init,
     treeSelectHandler,

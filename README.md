@@ -1,8 +1,20 @@
 # phoenix-desk-tools
 
-[Gitee](https://gitee.com/phoenixwing/phoenix-desk-tools.git) · Apache-2.0
+[Phoenix Wing](https://gitee.com/phoenixwing) · [Gitee 仓库](https://gitee.com/phoenixwing/phoenix-desk-tools) · Apache-2.0
 
 围绕 FreeCAD 工作空间的 **Web 桌面辅助工具**：CAD 索引与检索、BOM、Code 工具等。
+
+## 与 KT Auto Code 的关系
+
+[KT Auto Code](https://gitee.com/phoenixwing/kt-auto-code) 与 Desk Tools 是高度关联、可独立使用的两个宿主。两者共用 Phoenix Wing 中的 Codegen 算法、状态契约和 Web UI 组件，但面向不同的使用场景：
+
+| 选择 | 更适合的场景 |
+| --- | --- |
+| **KT Auto Code（VS Code 扩展）** | 希望在编辑器内完成代码生成、预检、Apply 和文件级操作，与源码编辑、Problems 和 Git 流程保持在同一个 VS Code 窗口。 |
+| **Desk Tools（Web / Tauri）** | 需要独立的本地工作台，统一处理 FreeCAD/CAD 索引、BOM、CAA 与 Code 工具，或不希望将工作流限定在 VS Code 中。 |
+| **组合使用** | 日常编辑使用 KT Auto Code，同时保留 Desk Tools 的 CAD/桌面能力。两个前端可发现并复用同一个 Desk API 进程，不应各自启动一份后台。 |
+
+它们不是“同一个应用的两张皮”：可共享的算法和交互下沉到 [Phoenix Wing](https://gitee.com/phoenixwing/phoenix-wing)，VS Code 编辑器能力留在 KT Auto Code，本地服务、Tauri 生命周期和 CAD 业务留在 Desk Tools。详细选型、安装和组合边界见[安装说明](docs/user/桌面工具-安装说明.md)。
 
 ## 快速启动
 
@@ -77,7 +89,7 @@ phoenix-desktop --workspace /path/to/workspace --catdlg /path/to/workspace/UI/Sa
 pnpm install --frozen-lockfile --force
 ```
 
-正式依赖始终使用 `package.json` 锁定的 Wing Registry 0.4.3 包。Codegen Host/Apply、Workspace Schema、Ribbon、UUID/GUID 和 workspace path 契约直接消费包内 fixture；聚合根入口与 composable 子路径的 singleton 由自动测试保护。本地联调由启动进程临时 alias/resolver 完成，不执行 `link:` / `file:` 安装，也不修改清单、锁文件或 `node_modules`。
+正式依赖始终使用 `package.json` 与 `pnpm-lock.yaml` 锁定的 Wing Registry 精确版本。Codegen Host/Apply、Workspace Schema、Ribbon、UUID/GUID 和 workspace path 契约直接消费包内 fixture；聚合根入口与 composable 子路径的 singleton 由自动测试保护。本地联调由启动进程临时 alias/resolver 完成，不执行 `link:` / `file:` 安装，也不修改清单、锁文件或 `node_modules`。
 
 FCStd 文件发现、SQLite 查询、ZIP/Document.xml 读取与 BOM/XLink 写回均由 TypeScript 完成。Desk 不再构建或随 Tauri 打包 `fcstd-read`、`fcstd-xlink`、`fcstd-query` Rust sidecar；Tauri 自身只保留桌面窗口和 Node sidecar 生命周期所需的薄 Rust 壳。
 
@@ -129,6 +141,8 @@ python3 -m http.server 4173 --directory test-report
 
 ## 文档
 
+- [0.4.0 变更日志](CHANGELOG.md)：本次发布的用户可见新增、调整、修复与平台兼容性
+- [0.4.0 发布候选](docs/releases/0.4.0-发布候选.md)：版本选择、依赖前置条件与发布门禁
 - [文档索引](docs/文档索引.md)：当前说明、草案和历史证据的唯一导航
 - [总待办](docs/TODO.md)：唯一维护的产品/技术债入口
 - [Tauri 当前状态](docs/tauri-当前迁移状态基线.md)与[构建验收](docs/tauri-构建启动与验收指南.md)
@@ -137,4 +151,4 @@ python3 -m http.server 4173 --directory test-report
 
 ## 许可证
 
-Copyright © 2024–2026 上海锟钛。项目使用 [Apache License 2.0](LICENSE) 开源。
+本项目由凤凰之翼贡献者共同维护，基于 [Apache License 2.0](LICENSE) 开源。历史来源、贡献归属和参与方式见[贡献与来源说明](CONTRIBUTING.md)。

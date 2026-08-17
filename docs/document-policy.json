@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "owner": "Desk Tools maintainers",
-  "lastVerified": "2026-07-17",
-  "appliesTo": "0.2.x",
+  "lastVerified": "2026-08-17",
+  "appliesTo": "0.4.x",
   "rules": [
     {
       "match": "^docs/archive/",

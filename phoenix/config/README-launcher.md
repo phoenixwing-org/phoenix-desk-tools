@@ -8,7 +8,7 @@
 | **Windows** | `%LOCALAPPDATA%\phoenix-wing\phoenix\launcher.json` |
 | **Linux** | `~/.config/phoenix-wing/phoenix/launcher.json` |
 
-`phoenix-wing` 与 Gitee 组织 **PhoenixWing321** / 仓库 **phoenix-desk-tools** 对应；与 **源码 clone 路径无关**。字段示例见 `web-ui/config/launcher.json.example`。
+`phoenix-wing` 与 Gitee 组织 **phoenixwing** / 仓库 **phoenix-desk-tools** 对应；与 **源码 clone 路径无关**。字段示例见 `web-ui/config/launcher.json.example`。
 
 ## 迁移来源（首次启动 / 配置页合并时）
 

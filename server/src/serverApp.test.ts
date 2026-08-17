@@ -13,7 +13,7 @@ describe("Phoenix server app", () => {
       status: "ok",
       service: "phoenix-node",
       protocol_version: 1,
-      app_version: "0.3.0",
+      app_version: "0.4.0",
     });
 
     const tauriDev = await app.request("/api/health", {

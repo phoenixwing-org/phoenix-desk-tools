@@ -4,9 +4,9 @@
 
 Owner：Desk Tools web architecture maintainers
 
-适用版本：Desk Tools 0.3.x / 本地 Wing 0.6.x（Registry 依赖保持 0.5.1）
+适用版本：Desk Tools 0.4.0 / Wing 根包 0.7.0（稳定 scoped 包 0.6.3）
 
-最后核验：2026-07-29
+最后核验：2026-08-17
 
 ## 目标
 
@@ -14,8 +14,8 @@ Desk Tools 以真实 consumer 身份接入 `PnwWorkbenchShell`，把通用的导
 Tree 呈现、可调整面板、底部 Tab 与 Footer 交给 Wing；领域 View、路由与业务状态仍
 属于 Desk。
 
-这是一条并列仓库验证路径，不修改 `package.json`、lockfile 或 `node_modules`，也不代表
-Registry 包已升级。正式包升级须等待 Wing 0.6 发布后另行执行。
+并列仓库仍是未发布能力的开发验证路径，不修改 Registry 依赖图。正式发行与普通消费使用
+`package.json`、lockfile 锁定的 npm 包；当前已升级到根包 0.7.0 / scoped 包 0.6.3。
 
 ## 责任边界
 
@@ -64,8 +64,8 @@ pnpm -C web-ui exec vue-tsc --noEmit --pretty false -p tsconfig.local-wing.json
 
 ## 当前限制与后续检查
 
-1. Registry 清单仍固定在 Wing 0.5.1；等待 0.6 真实发布后，使用独立提交升级并运行 Registry
-   对照验证。
+1. Registry 根包已固定为 Wing 0.7.0，稳定 scoped 包固定为 0.6.3；Registry 测试、生产构建
+   与 macOS Tauri 发布冒烟已通过。
 2. 这次只验证外壳接入，不重写 Desk 领域 View。后续新增页面时优先注册
    Primary/Secondary/Bottom contribution，不把业务逻辑放进 `AppShell`。
 3. 窄屏、浮层 Tree 等响应式策略以 Wing 为唯一布局实现；Desk 不保留第二套手工 margin、

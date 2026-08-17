@@ -49,7 +49,7 @@ describe("Desk Workspace controller adapter", () => {
     const applied: string[] = [];
     const controller = pdtCreateWorkspaceController({
       api: host.mock,
-      initialWorkspace: { path: "/work/a", name: "a" },
+      initialWorkspace: { path: "/work/a", name: "a", workspace_type_id: "cad" },
       lifecycle: {
         async applyOpened(workspace) { applied.push(`open:${workspace.rootPath}`); },
         async applyClosed() { applied.push("closed"); },
@@ -60,6 +60,7 @@ describe("Desk Workspace controller adapter", () => {
     await expect(controller.requestOpen({ rootPath: "/work/a" }))
       .resolves.toMatchObject({ status: "opened" });
     expect(host.mock.setWorkspace).not.toHaveBeenCalled();
+    expect(controller.getSnapshot().current?.workspaceTypeId).toBe("cad");
 
     await expect(controller.requestSwitch({ rootPath: "/work/b" }))
       .resolves.toMatchObject({ status: "switched" });

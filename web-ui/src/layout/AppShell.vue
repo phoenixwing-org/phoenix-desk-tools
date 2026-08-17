@@ -109,8 +109,6 @@ watch(activeTab, (tab) => {
   void viewSwitch.select(tab);
 }, { immediate: true });
 
-const isWelcomeFullscreen = computed(() => shell.currentPage.value === "welcome");
-
 const shellLayout = computed(() => shell.shellLayout.value);
 const navigation = computed(() => shell.appConfig.value?.navigation ?? []);
 // 与旧 useRibbonTabs 一致：系统页始终保留，受模块开关控制的页面不进入 Pnw 单一导航树。
@@ -279,25 +277,29 @@ onUnmounted(() => {
   <div v-if="loading" class="shell-loading">载入中…</div>
   <div v-else-if="loadError" class="shell-loading err">{{ loadError }}</div>
   <div v-else class="shell">
-    <div v-if="legacyDbBanner && !isWelcomeFullscreen" class="legacy-db-banner" role="alert">
-      <div class="legacy-db-banner-text">
-        <strong>工作空间数据库需要重建</strong>
-        <span>检测到旧文件、旧表或 schema 版本不匹配。重建后才能继续使用索引与 BOM 功能。</span>
-        <span v-if="legacyDbReasons.length" class="legacy-db-reasons">{{ legacyDbReasons.join(" · ") }}</span>
-        <span v-if="legacyDbError" class="legacy-db-error">{{ legacyDbError }}</span>
-      </div>
-      <button
-        type="button"
-        class="legacy-db-action"
-        :disabled="legacyDbRecreating"
-        @click="confirmRecreateLegacyDatabase"
-      >
-        {{ legacyDbRecreating ? "重建中…" : "确认重建数据库" }}
-      </button>
-    </div>
-    <WelcomePage v-if="isWelcomeFullscreen" />
-    <PnwWorkbenchShell
-      v-else
+    <WelcomePage
+      :color-scheme="pnwDisplayPreferences.colorScheme"
+      @update:color-scheme="updatePnwColorScheme"
+    >
+      <template #workbench="{ showWelcome }">
+        <div class="desk-gated-workbench">
+          <div v-if="legacyDbBanner" class="legacy-db-banner" role="alert">
+            <div class="legacy-db-banner-text">
+              <strong>工作空间数据库需要重建</strong>
+              <span>检测到旧文件、旧表或 schema 版本不匹配。重建后才能继续使用索引与 BOM 功能。</span>
+              <span v-if="legacyDbReasons.length" class="legacy-db-reasons">{{ legacyDbReasons.join(" · ") }}</span>
+              <span v-if="legacyDbError" class="legacy-db-error">{{ legacyDbError }}</span>
+            </div>
+            <button
+              type="button"
+              class="legacy-db-action"
+              :disabled="legacyDbRecreating"
+              @click="confirmRecreateLegacyDatabase"
+            >
+              {{ legacyDbRecreating ? "重建中…" : "确认重建数据库" }}
+            </button>
+          </div>
+          <PnwWorkbenchShell
       class="desk-pnw-workbench-shell"
       :nodes="pnwNavigationNodes"
       :presentation="pnwDisplayPreferences.presentation"
@@ -342,7 +344,7 @@ onUnmounted(() => {
           type="button"
           class="desk-workbench-brand"
           :title="workspacePath ? `${shell.appConfig.value?.title ?? 'Phoenix Desk Tools'}\n${workspacePath}` : '返回欢迎页'"
-          @click="shell.goToPage('welcome')"
+          @click="showWelcome"
         >
           <PnwPhoenixWingMark class="desk-workbench-brand-mark" decorative />
           <span class="desk-workbench-brand-copy">
@@ -438,17 +440,20 @@ onUnmounted(() => {
       <template #footer>
         <StatusBar :show-panel-toggles="false" />
       </template>
-    </PnwWorkbenchShell>
+          </PnwWorkbenchShell>
 
-    <PnwDockableToolWindow
-      :definition="PDT_WORKSPACE_TOOL_DEFINITION"
-      :state="workspaceToolState"
-      :color-scheme="pnwDisplayPreferences.colorScheme"
-      :constrain-insets="{ top: 48, bottom: 24 }"
-      @update:state="updateWorkspaceToolState"
-    >
-      <WorkspaceDockableToolContent />
-    </PnwDockableToolWindow>
+          <PnwDockableToolWindow
+            :definition="PDT_WORKSPACE_TOOL_DEFINITION"
+            :state="workspaceToolState"
+            :color-scheme="pnwDisplayPreferences.colorScheme"
+            :constrain-insets="{ top: 48, bottom: 24 }"
+            @update:state="updateWorkspaceToolState"
+          >
+            <WorkspaceDockableToolContent />
+          </PnwDockableToolWindow>
+        </div>
+      </template>
+    </WelcomePage>
 
     <ChoiceDialogHost />
     <GitDiffPreviewHost />
@@ -465,6 +470,16 @@ onUnmounted(() => {
   flex-direction: column;
   overflow: hidden;
   background: var(--shell-bg);
+}
+
+.desk-gated-workbench {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .desk-pnw-workbench-shell {

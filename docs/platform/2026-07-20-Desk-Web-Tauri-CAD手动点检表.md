@@ -4,9 +4,9 @@
 
 Owner：Desk Tools maintainers
 
-适用版本：Desk Tools 0.2.x / Phoenix Wing 0.4.3 起
+适用版本：Desk Tools 0.4.x / Phoenix Wing 0.7.0 起
 
-最后核验：2026-07-22
+最后核验：2026-08-17
 
 本文汇总 2026-07-20 累积的启动、端口、异步 View、VS Code 四区布局、Primary、KT Codegen、TypeScript FCStd 和 Tauri 点检步骤。每次大改、打包或 CAD 能力恢复后复制本文记录结果；不要在真实生产工作区直接执行写盘项。
 
