@@ -44,7 +44,7 @@ pnpm dev
 - [ ] 已有兼容 API 时再次执行 `pnpm dev`，日志显示复用的地址和版本，只新增 UI、不新增 API 进程。
 - [ ] 状态栏显示 API 版本、协议版本和“本机 API / 复用 API”。
 - [ ] 浏览器能打开主页，API 请求不报连接失败。
-- [ ] 对照正式包时使用 `pnpm dev:registry`，日志必须是 `[Wing][REGISTRY]`；不要使用 `pnpm link`。
+- [ ] 对照正式包时使用 `pnpm dev`，日志必须是 `[Wing][REGISTRY]`；不要使用 `pnpm link`。
 
 ## 4. 壳层与首次打开 View
 
@@ -151,7 +151,7 @@ pnpm tauri:dev
 - [ ] Web API 已运行时，Tauri 从登记的真实端口复用同一 API，日志和状态栏显示相同地址/版本，不新增 Node 服务。
 - [ ] 退出复用 API 的 Tauri 后，Web API 仍健康；Tauri 不关闭自己没有创建的后台。
 - [ ] 再关闭 Web 后单独启动 Tauri；此时 Tauri 自动启动 Vite 和自己的 Node 服务。
-- [ ] 启动日志明确显示 `[Wing][LOCAL]`；只有显式执行 `pnpm tauri:dev:registry` 才允许显示 `[Wing][REGISTRY]`。
+- [ ] `pnpm tauri:dev` 日志明确显示 `[Wing][REGISTRY]`；需要联调并列 Wing 时改用 `pnpm tauri:wing`，日志必须显示 `[Wing][LOCAL]`。
 - [ ] 完成第 4–9 节代表项，尤其是多个未打开 View 连续首开。
 - [ ] 新建 View 不出现“先白屏、再显示”的闪烁。
 - [ ] “退出 Phoenix”后 Tauri、Vite 和由它创建的 Node 子进程都退出。

@@ -3,8 +3,8 @@
 ## Wing 联调真源
 
 - 标准开发目录为 `phoenix-desk-tools/` 与 `phoenix-wing/` 并列。
-- 根目录 `pnpm dev` 必须消费并列 `../phoenix-wing`，同时启动 Server 与 Web；找不到本地 Wing 时应停止，禁止静默回退 npm 包。
-- 需要与 npm 正式包对照时使用 `pnpm dev:registry`。日志中的 `[Wing][LOCAL]` / `[Wing][REGISTRY]` 是当前真源标识。
+- 根目录 `pnpm dev` 固定消费 manifest/lockfile 的 Registry Wing；`pnpm wing` 必须消费并列 `../phoenix-wing`，同时启动 Server 与 Web。找不到本地 Wing 时应停止，禁止静默回退 npm 包。
+- 不得新增或恢复根级 `pnpm dev:registry`、`pnpm dev:local-wing`；日志中的 `[Wing][LOCAL]` / `[Wing][REGISTRY]` 是当前真源标识。
 - 非标准目录可设置 `PHOENIX_WING_ROOT=/absolute/path/to/phoenix-wing`。`PHOENIX_WING_SRC` 仅为旧配置兼容入口，新脚本和文档不得继续推广它。
 
 ## 依赖安全边界

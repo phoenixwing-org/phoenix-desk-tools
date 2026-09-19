@@ -206,8 +206,8 @@ Desk Web 与 Tauri 必须先证明使用同一份前端产物；VS Code 在按�
 启动方式：
 
 ```bash
-pnpm dev          # Browser Web + Node，消费并列 Wing
-pnpm tauri:dev    # Tauri + 同一 Desk Web，消费并列 Wing
+pnpm wing          # Browser Web + Node，消费并列 Wing
+pnpm tauri:wing    # Tauri + 同一 Desk Web，消费并列 Wing
 ```
 
 - [ ] Web 与 Tauri 的 Primary Block 顺序、操作入口、两列属性、行高、折叠和滚动行为一致

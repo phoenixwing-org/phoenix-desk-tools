@@ -30,17 +30,17 @@ pnpm install --frozen-lockfile
 标准开发目录要求 `phoenix-desk-tools` 与 `phoenix-wing` 并列：
 
 ```bash
-pnpm dev                       # 本地 Wing；Vite 首选 :49373，发现已登记 API 时直接复用
+pnpm dev                       # Registry Wing；Vite 首选 :49373
 # 浏览器打开 http://localhost:49373
 ```
 
-`pnpm dev` 找不到 `../phoenix-wing` 会直接停止，不会静默回退 npm 包。需要验证当前 Registry 正式包时明确运行：
+需要联合修改并列 Wing 源码时运行：
 
 ```bash
-pnpm dev:registry              # package.json + pnpm-lock.yaml 锁定版本
+pnpm wing                      # 校验并构建 ../phoenix-wing，再启动 Server + Web
 ```
 
-非并列目录可用 `PHOENIX_WING_ROOT=/path/to/phoenix-wing pnpm dev`。完整的本地测试、构建命令和安全边界见 [Wing 并列仓库联调](docs/platform/Wing并列仓库联调.md)。
+`pnpm wing` 找不到 `../phoenix-wing` 会直接停止，不会静默回退 npm 包。非并列目录可用 `PHOENIX_WING_ROOT=/path/to/phoenix-wing pnpm wing`。完整的本地测试、构建命令和安全边界见 [Wing 并列仓库联调](docs/platform/Wing并列仓库联调.md)。
 
 ### Tauri 桌面开发模式
 
@@ -48,7 +48,8 @@ pnpm dev:registry              # package.json + pnpm-lock.yaml 锁定版本
 
 ```bash
 cargo install tauri-cli --version "^2.6" --locked  # 仅首次安装
-pnpm tauri:dev                    # 49373 被占用时自动尝试 49374、49375……
+pnpm tauri:dev                    # Registry Wing
+pnpm tauri:wing                   # 并列本地 Wing
 ```
 
 如需先关闭遗留进程，先查 PID，再只结束对应进程：

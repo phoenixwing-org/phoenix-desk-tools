@@ -102,7 +102,7 @@ describe("Phoenix Wing 并列仓库模式", () => {
     const deskRoot = fs.mkdtempSync(path.join(os.tmpdir(), "desk-without-wing-"));
     temporaryRoots.push(deskRoot);
     expect(() => resolvePhoenixWingContext(deskRoot, { PHOENIX_WING_MODE: "local" }))
-      .toThrow(/pnpm dev:registry/u);
+      .toThrow(/pnpm dev/u);
   });
 
   it("Web alias 覆盖 aggregate、八个包及 kt-codegen 子路径", () => {

@@ -109,7 +109,7 @@ function normalizeConfiguredRoot(deskRoot, configuredPath, legacySource) {
 export function assertLocalWingRoot(wingRoot) {
   const rootManifest = path.join(wingRoot, "package.json");
   if (!fs.existsSync(rootManifest)) {
-    throw new Error(`本地 Wing 不存在：${wingRoot}\n若要测试 npm 正式包，请运行 pnpm dev:registry`);
+    throw new Error(`本地 Wing 不存在：${wingRoot}\n若要测试 npm 正式包，请运行 pnpm dev`);
   }
   const rootPackage = readJson(rootManifest);
   if (rootPackage.name !== "phoenix-wing") {

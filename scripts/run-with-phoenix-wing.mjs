@@ -72,7 +72,7 @@ if (context.mode === "local") {
     await prepareLocalWing(context.root);
   } catch (error) {
     console.error(`[Wing][LOCAL][停止] ${error instanceof Error ? error.message : String(error)}`);
-    console.error(`请先在 ${context.root} 执行 pnpm install；若要测试 npm 正式包，请运行 pnpm dev:registry`);
+    console.error(`请先在 ${context.root} 执行 pnpm install；若要测试 npm 正式包，请运行 pnpm dev`);
     process.exit(1);
   }
 } else {
