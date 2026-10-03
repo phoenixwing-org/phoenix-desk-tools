@@ -12,7 +12,10 @@
 - **`freecad_batch_step_fc.py`**：供 runner / 收件箱监听导入，依赖 FreeCAD 解释器。
 - **`freecad_phoenix_inbox_listener.py`**：在 **FreeCAD 已打开的 GUI** 内执行一遍，Phoenix「STEP 批量」可勾选 **收件箱桥接** 投递任务（见 `docs/cad/FreeCAD-Phoenix桥接.md`）。
 
-手写验收（**须 `export` 环境变量**，见 `example_run_step_batch.sh` 与 `docs/cad/STEP批量转FCStd.md`）。
+手写验收使用 `example_run_step_batch.sh`。脚本通过 `env -i` 只传系统运行白名单与
+`FCD_BATCH_*` 任务变量，不把当前 Shell 的令牌、Cookie 或其他凭据传给 FreeCADCmd；
+同时拒绝 `FreeCAD.app/Contents/MacOS/FreeCAD` GUI launcher。详见
+`docs/cad/STEP批量转FCStd.md`。
 
 在仓库根执行示例：
 

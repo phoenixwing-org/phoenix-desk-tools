@@ -815,116 +815,6 @@ export function exportRenameAnalysisReport(body: {
   );
 }
 
-export type FcstdMapEntry = {
-  repo_rel_path: string;
-  filename: string;
-  asset_kind: string;
-  PartNumber: string;
-  PartVersion: string;
-  TypeCode: string;
-  ModelSeries: string;
-  PartName: string;
-  label: string;
-  file_status: "present" | "missing";
-  last_seen_at: string;
-};
-
-export type FcstdMapStats = {
-  total_entries: number;
-  present: number;
-  missing: number;
-  unique_filenames: number;
-  duplicate_filename_kinds: number;
-  cad_file_count: number;
-  fcstd_file_count: number;
-  markdown_file_count: number;
-  pdf_file_count: number;
-  cad_exchange_file_count: number;
-  image_file_count: number;
-};
-
-export type FcstdMapPayload = {
-  database_path: string;
-  database_path_display: string;
-  map_path: string;
-  map_path_display: string;
-  exists: boolean;
-  prefs: { force_update_part_name: boolean };
-  last_scan_at: string;
-  /** 历史字段，固定为 ``.``（工作空间根） */
-  scan_root: string;
-  stats: FcstdMapStats;
-  entries: FcstdMapEntry[];
-  scan_log?: string;
-  bom_xref?: BomXrefMeta & { scan_id?: number };
-};
-
-export function fetchFcstdMap() {
-  return jsonFetch<FcstdMapPayload>("/api/cad/fcstd-map");
-}
-
-export type FcstdMapEntriesPayload = {
-  offset: number;
-  limit: number;
-  total: number;
-  count: number;
-  entries: FcstdMapEntry[];
-  debug_sql: string;
-};
-
-export function fetchFcstdMapEntries(opts?: {
-  offset?: number;
-  limit?: number;
-  status?: "all" | "present" | "missing";
-  kind?: string;
-  search?: string;
-}) {
-  const q = new URLSearchParams();
-  if (opts?.offset != null) q.set("offset", String(opts.offset));
-  if (opts?.limit != null) q.set("limit", String(opts.limit));
-  if (opts?.status && opts.status !== "all") q.set("status", opts.status);
-  if (opts?.kind && opts.kind !== "all") q.set("kind", opts.kind);
-  if (opts?.search?.trim()) q.set("search", opts.search.trim());
-  const qs = q.toString();
-  return jsonFetch<FcstdMapEntriesPayload>(`/api/cad/fcstd-map/entries${qs ? `?${qs}` : ""}`);
-}
-
-export function saveFcstdMapPrefs(force_update_part_name?: boolean) {
-  return jsonFetch<{ force_update_part_name: boolean }>("/api/cad/fcstd-map/prefs", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ force_update_part_name }),
-  });
-}
-
-export function scanFcstdMap(force_update_part_name?: boolean) {
-  return jsonFetch<FcstdMapPayload>("/api/cad/fcstd-map/scan", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ force_update_part_name }),
-  });
-}
-
-export function purgeMissingFcstdMap() {
-  return jsonFetch<FcstdMapPayload & { purge_deleted?: number }>("/api/cad/fcstd-map/purge-missing", {
-    method: "POST",
-  });
-}
-
-export function startFcstdMapScan(forceUpdatePartName = false, scopeWorksetId?: string) {
-  return jsonFetch<{ scan_id: string; phase: string }>(
-    "/api/cad/fcstd-map/scan/start",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        force_update_part_name: forceUpdatePartName,
-        scope_workset_id: scopeWorksetId || null,
-      }),
-    },
-  );
-}
-
 export type ScanProgressPayload = {
   scan_id: string;
   phase: string;
@@ -955,63 +845,6 @@ export type ScanProgressPayload = {
   };
 };
 
-export function fetchFcstdMapScanProgress(scanId: string) {
-  return jsonFetch<ScanProgressPayload>(
-    `/api/cad/fcstd-map/scan/progress?scan_id=${encodeURIComponent(scanId)}`,
-  );
-}
-
-export function cancelFcstdMapScan(scanId: string) {
-  return jsonFetch<{ cancelled: boolean }>(
-    `/api/cad/fcstd-map/scan/cancel?scan_id=${encodeURIComponent(scanId)}`,
-    { method: "POST" },
-  );
-}
-
-export type ScanHistoryEntry = {
-  scan_uuid: string;
-  status: string;
-  phase: string;
-  scanned_at: string;
-  started_at?: string;
-  finished_at?: string;
-  stats: Record<string, unknown>;
-};
-
-export function fetchFcstdMapScanHistory(limit = 20) {
-  return jsonFetch<{ scans: ScanHistoryEntry[] }>(
-    `/api/cad/fcstd-map/scan/history?limit=${limit}`,
-  );
-}
-
-export type ScanResumePayload = {
-  active: boolean;
-  scan_id?: string;
-  source?: "memory" | "db";
-  progress?: ScanProgressPayload | null;
-};
-
-export function fetchFcstdMapScanResume() {
-  return jsonFetch<ScanResumePayload>("/api/cad/fcstd-map/scan/resume");
-}
-
-export function exportFcstdMapJson() {
-  return jsonFetch<{ path: string; path_display: string }>("/api/cad/fcstd-map/export-json", {
-    method: "POST",
-  });
-}
-
-export type BomXrefMeta = {
-  edge_count: number;
-  host_count: number;
-  last_bom_xref_at?: string;
-  target_resolved?: number;
-  target_ambiguous?: number;
-  target_missing?: number;
-  database_path?: string;
-  database_path_display?: string;
-};
-
 export type BomXrefEdge = {
   id: number;
   host_repo_rel_path: string;
@@ -1029,10 +862,6 @@ export type BomXrefEdge = {
   rule_label?: string;
   label_mismatch?: boolean;
 };
-
-export function fetchBomXrefMeta() {
-  return jsonFetch<BomXrefMeta>("/api/cad/bom/xref/meta");
-}
 
 export type BomXrefHost = {
   host_repo_rel_path: string;
@@ -1140,8 +969,8 @@ export function refreshBomXrefHostIndex(body: {
   });
 }
 
-/** 异步启动单文件引用索引重建，返回 {scan_id} */
-export function startBomXrefRebuild(body: {
+/** 异步启动当前文件/子装配的引用索引局部刷新，返回 {scan_id} */
+export function startBomXrefHostRefresh(body: {
   host_repo_rel: string;
   recursive?: boolean;
   max_hosts?: number;
@@ -1153,90 +982,16 @@ export function startBomXrefRebuild(body: {
   });
 }
 
-/** 轮询异步重建进度 */
-export function fetchBomXrefRebuildProgress(scanId: string) {
+/** 轮询局部刷新进度 */
+export function fetchBomXrefHostRefreshProgress(scanId: string) {
   const params = new URLSearchParams({ scan_id: scanId });
   return jsonFetch<ScanProgressPayload>(`/api/cad/bom/xref/refresh-host-index/progress?${params}`);
 }
 
-/** 取消正在运行的异步重建 */
-export function cancelBomXrefRebuild(scanId: string) {
+/** 取消正在运行的局部刷新 */
+export function cancelBomXrefHostRefresh(scanId: string) {
   const params = new URLSearchParams({ scan_id: scanId });
   return jsonFetch<{ ok: boolean }>(`/api/cad/bom/xref/refresh-host-index/cancel?${params}`, { method: "POST" });
-}
-
-export type AssemblyBomHostRow = {
-  host_repo_rel_path: string;
-  filename: string;
-  part_number: string;
-  part_version: string;
-  part_key: string;
-  TypeCode: string;
-  ModelSeries: string;
-  PartName: string;
-  label: string;
-  ref_count: number;
-  missing_count: number;
-  ambiguous_count: number;
-  /** 直接引用本文件的宿主数（bom_xref） */
-  incoming_host_count: number;
-  file_role: string;
-};
-
-export type BomTargetUsageStats = {
-  target_repo_rel_path: string;
-  direct_incoming_host_count: number;
-  bom_occurrence_count: number;
-  bom_root_count: number;
-  occurrences: {
-    root_host_repo_rel_path: string;
-    tree_path: string;
-    host_repo_rel_path: string;
-    link_label: string;
-  }[];
-};
-
-export function fetchBomTargetUsageStats(rel: string) {
-  const q = new URLSearchParams({ rel });
-  return jsonFetch<BomTargetUsageStats>(`/api/cad/bom/xref/usage-stats?${q}`);
-}
-
-export function fetchAssemblyBomHosts(search?: string) {
-  const q = new URLSearchParams();
-  if (search?.trim()) q.set("search", search.trim());
-  const qs = q.toString();
-  return jsonFetch<{
-    count: number;
-    hosts: AssemblyBomHostRow[];
-    filter?: { assembly_only?: boolean; exclude_drawings?: boolean; note?: string };
-  }>(`/api/cad/bom/xref/assembly-hosts${qs ? `?${qs}` : ""}`);
-}
-
-export function fetchBomXrefEdges(opts?: { offset?: number; limit?: number; search?: string }) {
-  const q = new URLSearchParams();
-  if (opts?.offset != null) q.set("offset", String(opts.offset));
-  if (opts?.limit != null) q.set("limit", String(opts.limit));
-  if (opts?.search?.trim()) q.set("search", opts.search.trim());
-  const qs = q.toString();
-  return jsonFetch<{
-    offset: number;
-    limit: number;
-    total: number;
-    count: number;
-    refs: BomXrefEdge[];
-  }>(`/api/cad/bom/xref/edges${qs ? `?${qs}` : ""}`);
-}
-
-export function rebuildBomXrefs() {
-  return jsonFetch<
-    BomXrefMeta & {
-      scan_id?: number;
-      log?: string;
-      host_files_scanned?: number;
-      hosts_with_xlink?: number;
-      hosts_without_xlink?: number;
-    }
-  >("/api/cad/bom/xref/rebuild", { method: "POST" });
 }
 
 export type PartKeyEntry = {

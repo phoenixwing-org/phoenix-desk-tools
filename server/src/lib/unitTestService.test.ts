@@ -29,9 +29,9 @@ function sampleCatalog() {
       tests: ["code index > scans files", "code uuid > applies selected hits"],
     },
     {
-      file: "server/src/lib/pnwFcstdMapService.test.ts",
+      file: "server/src/lib/pnwBomXrefService.test.ts",
       count: 1,
-      tests: ["pnwFcstdMapService > scans FCStd files"],
+      tests: ["pnwBomXrefService > reads Auto CAD index data"],
     },
     {
       file: "packages/catdlg-core/src/emitCatDlg.test.ts",

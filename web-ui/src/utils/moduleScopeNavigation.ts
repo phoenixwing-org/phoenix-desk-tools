@@ -57,10 +57,10 @@ export function defaultPageForModuleScope(
   enabledModules: readonly string[],
 ): string {
   if (scope === "code" && enabledModules.includes("code")) return "code_index";
-  if (scope === "cad" && enabledModules.includes("cad")) return "fcstd_map";
-  if (enabledModules.includes("cad")) return "fcstd_map";
+  if (scope === "cad" && enabledModules.includes("cad")) return "part_catalog";
+  if (enabledModules.includes("cad")) return "part_catalog";
   if (enabledModules.includes("code")) return "code_index";
-  return "fcstd_map";
+  return "home";
 }
 
 export function ribbonTabIdForModuleScope(

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   extractDocumentXmlFromFcstdBytes,
   readFcstdEmbeddedBomFields,
@@ -68,6 +68,8 @@ describe("FCStd Document.xml Node adapter", () => {
     });
     const archive = unzipSync(new Uint8Array(fs.readFileSync(filename)));
     expect(strFromU8(archive["GuiDocument.xml"])).toBe("keep me");
+    expect(strFromU8(archive["Document.xml"]))
+      .toMatch(/<Property name="PartNumber" type="App::PropertyString" group="CustomDefine" doc="零件号" attr="0" ro="0" hide="0" status="2097152">/);
     expect(fs.readdirSync(root).sort()).toEqual(["part.FCStd"]);
 
     expect(writeFcstdEmbeddedBomFields(filename, {
@@ -75,5 +77,29 @@ describe("FCStd Document.xml Node adapter", () => {
       PartName: "支架 <左>",
       label: "新标签",
     }).changed).toBe(false);
+  });
+
+  it("restores the original bytes and removes temp files when atomic replacement fails", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "fcstd-ts-rollback-"));
+    const filename = path.join(root, "part.FCStd");
+    const original = zipSync({ "Document.xml": strToU8(DOCUMENT_XML) });
+    fs.writeFileSync(filename, original);
+    const realRename = fs.renameSync.bind(fs);
+    let calls = 0;
+    const rename = vi.spyOn(fs, "renameSync").mockImplementation((source, target) => {
+      calls += 1;
+      if (calls === 2) throw new Error("injected atomic replacement failure");
+      return realRename(source, target);
+    });
+
+    try {
+      expect(() => writeFcstdEmbeddedBomFields(filename, { PartName: "Should rollback" }))
+        .toThrow("injected atomic replacement failure");
+    } finally {
+      rename.mockRestore();
+    }
+
+    expect(fs.readFileSync(filename)).toEqual(Buffer.from(original));
+    expect(fs.readdirSync(root)).toEqual(["part.FCStd"]);
   });
 });

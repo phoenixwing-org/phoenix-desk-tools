@@ -12,6 +12,79 @@ export type FcstdEmbeddedBomWriteResult = {
   objectName: string;
 };
 
+const FREECAD_DYNAMIC_STRING_PROPERTY_META: Record<string, { group: string; doc: string }> = {
+  PartNumber: { group: "CustomDefine", doc: "零件号" },
+  PartVersion: { group: "CustomDefine", doc: "零件版本" },
+  TypeCode: { group: "CustomDefine", doc: "类型码 (H/S/R)" },
+  ModelSeries: { group: "CustomDefine", doc: "型号系列" },
+  PartName: { group: "CustomDefine", doc: "零件名称" },
+};
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function objectBlock(xml: string, objectName: string): { start: number; text: string } | null {
+  const objectPattern = /<Object\b([^>]*)>([\s\S]*?)<\/Object>/gi;
+  for (const match of xml.matchAll(objectPattern)) {
+    if (match.index == null) continue;
+    const nameMatch = /\bname\s*=\s*(["'])([\s\S]*?)\1/i.exec(match[1]);
+    if (nameMatch?.[2] === objectName) return { start: match.index, text: match[0] };
+  }
+  return null;
+}
+
+function propertyOpening(block: string, propertyName: string): string | null {
+  const pattern = new RegExp(`<Property\\b[^>]*\\bname\\s*=\\s*(["'])${escapeRegExp(propertyName)}\\1[^>]*>`, "i");
+  return pattern.exec(block)?.[0] || null;
+}
+
+function ensureOpeningAttribute(opening: string, name: string, value: string): string {
+  if (new RegExp(`\\b${escapeRegExp(name)}\\s*=`, "i").test(opening)) return opening;
+  const encoded = value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  return opening.replace(/>$/, ` ${name}="${encoded}">`);
+}
+
+/**
+ * Wing 0.6.3 owns root-object selection and value patching, but its compact
+ * replacement currently drops FreeCAD's dynamic-property metadata. Restore
+ * existing tags and add the canonical metadata for newly introduced fields so
+ * FreeCAD keeps them after save/reopen.
+ */
+function restoreFreeCadPropertyMetadata(
+  originalXml: string,
+  patchedXml: string,
+  objectName: string,
+): string {
+  const original = objectBlock(originalXml, objectName);
+  const patched = objectBlock(patchedXml, objectName);
+  if (!patched) return patchedXml;
+  let nextBlock = patched.text;
+  for (const propertyName of ["Label", ...Object.keys(FREECAD_DYNAMIC_STRING_PROPERTY_META)]) {
+    const patchedOpening = propertyOpening(nextBlock, propertyName);
+    if (!patchedOpening) continue;
+    const originalOpening = original ? propertyOpening(original.text, propertyName) : null;
+    let replacement = originalOpening || patchedOpening;
+    const meta = FREECAD_DYNAMIC_STRING_PROPERTY_META[propertyName];
+    if (meta) {
+      replacement = ensureOpeningAttribute(replacement, "group", meta.group);
+      replacement = ensureOpeningAttribute(replacement, "doc", meta.doc);
+      replacement = ensureOpeningAttribute(replacement, "attr", "0");
+      replacement = ensureOpeningAttribute(replacement, "ro", "0");
+      replacement = ensureOpeningAttribute(replacement, "hide", "0");
+      replacement = ensureOpeningAttribute(replacement, "status", "2097152");
+    }
+    nextBlock = nextBlock.replace(patchedOpening, replacement);
+  }
+  return patchedXml.slice(0, patched.start)
+    + nextBlock
+    + patchedXml.slice(patched.start + patched.text.length);
+}
+
 /** 写临时文件、保留原件作短暂备份，再原子替换；失败时恢复原件。 */
 export function replaceFileAtomically(filename: string, bytes: Uint8Array): void {
   const token = `${process.pid}-${Date.now()}`;
@@ -90,9 +163,12 @@ export function writeFcstdEmbeddedBomFields(
   if (!documentBytes) throw new Error(`Document.xml is missing from ${filePath}`);
   const result = pnwPatchEmbeddedBomFieldsInDocumentXml(strFromU8(documentBytes), fields);
   if (!result) throw new Error(`No writable BOM root object found in ${filePath}`);
-  if (result.changed) {
-    files["Document.xml"] = strToU8(result.xml);
+  const originalXml = strFromU8(documentBytes);
+  const patchedXml = restoreFreeCadPropertyMetadata(originalXml, result.xml, result.objectName);
+  const changed = patchedXml !== originalXml;
+  if (changed) {
+    files["Document.xml"] = strToU8(patchedXml);
     replaceFileAtomically(filePath, zipSync(files, { level: 6 }));
   }
-  return { changed: result.changed, objectName: result.objectName };
+  return { changed, objectName: result.objectName };
 }

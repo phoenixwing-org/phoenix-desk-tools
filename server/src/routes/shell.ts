@@ -11,6 +11,10 @@ import os from "node:os";
 import path from "node:path";
 import { DESK_TOOLS_APP_VERSION } from "../lib/deskToolsRegistration.js";
 import {
+  hasSafeFreecadCommand,
+  normalizeFreecadDirectoryPreference,
+} from "../lib/freecadProcessSecurity.js";
+import {
   effectiveCodeIgnorePatterns,
   getCodeIgnorePrefs,
   listCodeIgnoreSuggestions,
@@ -85,7 +89,7 @@ import {
   PHOENIX_SCHEMA_VERSION,
   recreatePhoenixDatabase,
 } from "../lib/phoenixDatabaseService.js";
-import { loadFcstdMapPayload } from "../lib/pnwFcstdMapService.js";
+import { loadCadIndexStatus } from "../lib/cadIndexStatusService.js";
 import { syncTestFixtureCheckouts } from "../lib/testFixtureService.js";
 import {
   runtimeAppConfigPath,
@@ -495,7 +499,7 @@ function appendShellLogLine(rawText: unknown, rawSource: unknown): void {
 function onboardingStatusPayload() {
   const prefs = loadPrefs();
   const workspace = currentWorkspace();
-  const freecadOk = Boolean(prefs.freecad_dir) && isDir(prefs.freecad_dir);
+  const freecadOk = hasSafeFreecadCommand(prefs.freecad_dir);
   if (!workspace) {
     return {
       workspace_ok: false,
@@ -521,9 +525,9 @@ function onboardingStatusPayload() {
   let indexScanned = false;
   if (workspaceOk) {
     try {
-      const payload = loadFcstdMapPayload(workspace);
-      lastScanAt = String(payload?.last_scan_at || "").trim();
-      indexScanned = Boolean(lastScanAt) || Number(payload?.stats?.total_entries || 0) > 0;
+      const status = loadCadIndexStatus(workspace);
+      lastScanAt = status.lastScanAt;
+      indexScanned = status.indexed;
     } catch {
       // A damaged or migration-era index should not prevent onboarding from loading.
     }
@@ -783,9 +787,7 @@ shellRoutes.patch("/api/config/launcher/shell-layout", async (c) => {
 shellRoutes.post("/api/config/launcher/freecad", async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
-    const raw = String(body?.path || "").trim();
-    const freecadDir = raw ? path.resolve(raw) : "";
-    if (freecadDir && !isDir(freecadDir)) throw new Error(`Not a valid directory: ${freecadDir}`);
+    const freecadDir = normalizeFreecadDirectoryPreference(body?.path);
     const prefs = loadPrefs();
     prefs.freecad_dir = freecadDir;
     savePrefs(prefs);

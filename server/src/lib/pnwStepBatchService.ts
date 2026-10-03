@@ -6,6 +6,14 @@ import {
   replaceWorkspaceSection,
 } from "./workspacePrefsService.js";
 import { runtimeScriptCandidates, runtimeUserDataDir } from "./appRuntimePaths.js";
+import {
+  buildFreecadChildEnvironment,
+  redactSensitiveText,
+  resolveFreecadCommand,
+  truncateExternalProcessText,
+} from "./freecadProcessSecurity.js";
+
+export { resolveFreecadCommand } from "./freecadProcessSecurity.js";
 
 export type StepBatchPrefs = {
   step_dir: string;
@@ -70,6 +78,8 @@ type ProcessResult = {
 };
 
 const REPORT_FILENAME = "batch_step_convert_report.md";
+const FREECAD_STREAM_MAX_BYTES = 1024 * 1024;
+const FREECAD_LOG_MAX_CHARACTERS = 256 * 1024;
 const DEFAULT_PREFS: StepBatchPrefs = {
   step_dir: ".",
   out_dir: ".",
@@ -225,33 +235,6 @@ function executableFile(candidate: string): string | null {
   }
 }
 
-export function resolveFreecadCommand(freecadHome: unknown, override?: unknown): string | null {
-  const explicit = String(override || "").trim();
-  if (explicit) return executableFile(explicit);
-  const raw = String(freecadHome || "").trim();
-  if (!raw) return null;
-  const home = path.resolve(raw);
-  const candidates = [
-    home,
-    path.join(home, "Contents", "Resources", "bin", "freecadcmd"),
-    path.join(home, "Contents", "MacOS", "FreeCADCmd"),
-    path.join(home, "Contents", "Resources", "bin", "FreeCADCmd"),
-    path.join(home, "Resources", "bin", "freecadcmd"),
-    path.join(home, "Resources", "bin", "FreeCADCmd"),
-    path.join(home, "MacOS", "FreeCADCmd"),
-    path.join(home, "bin", "freecadcmd"),
-    path.join(home, "bin", "FreeCADCmd"),
-    path.join(home, "FreeCADCmd"),
-    path.join(home, "FreeCADCmd.exe"),
-    path.join(home, "bin", "FreeCADCmd.exe"),
-  ];
-  for (const candidate of candidates) {
-    const found = executableFile(candidate);
-    if (found) return found;
-  }
-  return null;
-}
-
 function resolveRunnerPath(override?: unknown, env: NodeJS.ProcessEnv = process.env): string | null {
   const explicit = String(override || "").trim();
   const candidates = explicit
@@ -300,6 +283,30 @@ function jobEnvironment(job: StepBatchJob): Record<string, string> {
   };
 }
 
+class BoundedOutputTail {
+  private buffer = Buffer.alloc(0);
+  private omittedBytes = 0;
+
+  append(chunk: unknown): void {
+    const incoming = Buffer.from(chunk as any);
+    const combined = Buffer.concat([this.buffer, incoming]);
+    if (combined.length <= FREECAD_STREAM_MAX_BYTES) {
+      this.buffer = combined;
+      return;
+    }
+    const remove = combined.length - FREECAD_STREAM_MAX_BYTES;
+    this.omittedBytes += remove;
+    this.buffer = combined.subarray(remove);
+  }
+
+  text(): string {
+    const output = this.buffer.toString("utf8");
+    return this.omittedBytes > 0
+      ? `[phoenix] earlier FreeCAD output truncated (${this.omittedBytes} bytes omitted)\n${output}`
+      : output;
+  }
+}
+
 function execute(command: string, args: string[], cwd: string, env: NodeJS.ProcessEnv): Promise<ProcessResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -309,16 +316,16 @@ function execute(command: string, args: string[], cwd: string, env: NodeJS.Proce
       shell: false,
       stdio: ["ignore", "pipe", "pipe"],
     });
-    const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
-    child.stdout.on("data", (chunk) => stdout.push(Buffer.from(chunk)));
-    child.stderr.on("data", (chunk) => stderr.push(Buffer.from(chunk)));
-    child.once("error", (error) => reject(new Error(`Failed to start FreeCADCmd: ${error.message}`)));
+    const stdout = new BoundedOutputTail();
+    const stderr = new BoundedOutputTail();
+    child.stdout.on("data", (chunk) => stdout.append(chunk));
+    child.stderr.on("data", (chunk) => stderr.append(chunk));
+    child.once("error", (error) => reject(new Error(`Failed to start FreeCADCmd: ${redactSensitiveText(error.message)}`)));
     child.once("close", (code) => {
       resolve({
         exitCode: typeof code === "number" ? code : 1,
-        stdout: Buffer.concat(stdout).toString("utf8"),
-        stderr: Buffer.concat(stderr).toString("utf8"),
+        stdout: redactSensitiveText(stdout.text()),
+        stderr: redactSensitiveText(stderr.text()),
       });
     });
   });
@@ -368,10 +375,10 @@ function formatRunLog(
   }
   lines.push(`输出目录：${displayPath(root, job.outDir)}`);
   if (reportWritten) lines.push(`报告文件：${displayPath(root, path.join(job.outDir, job.reportFilename))}`);
-  const output = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
+  const output = redactSensitiveText([result.stdout, result.stderr].filter(Boolean).join("\n")).trim();
   if (output) lines.push("", "--- 运行日志 ---", output);
   else if (!summary) lines.push("（无控制台输出）");
-  return lines.join("\n");
+  return truncateExternalProcessText(lines.join("\n"), FREECAD_LOG_MAX_CHARACTERS);
 }
 
 export async function runStepBatch(
@@ -395,7 +402,7 @@ export async function runStepBatch(
   const runner = resolveRunnerPath(ctx.runnerPath || baseEnv.PHOENIX_STEP_BATCH_RUNNER, baseEnv);
   if (!runner) throw new Error("freecad_batch_step_runner.py was not found");
 
-  const env: NodeJS.ProcessEnv = { ...baseEnv, ...jobEnvironment(job) };
+  const env = buildFreecadChildEnvironment(baseEnv, jobEnvironment(job));
   const processResult = await execute(freecadCmd, [runner], root, env);
   const processOutput = [processResult.stdout, processResult.stderr].filter(Boolean).join("\n");
   const reportPath = path.join(job.outDir, job.reportFilename);

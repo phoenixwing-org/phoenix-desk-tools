@@ -11,7 +11,10 @@ import {
   type PnwCadDocumentKinds,
 } from "@phoenix-wing/cad-core";
 import { pnwCreateDb } from "@phoenix-wing/db-node";
-import { updateFcstdMapEntryRename } from "./pnwFcstdMapService.js";
+import {
+  updateCadIndexEntryAfterBomWrite,
+  updateCadIndexEntryAfterRename,
+} from "./cadIndexMutationService.js";
 import { executeDiskFileRename } from "./pnwRenameService.js";
 import {
   loadWorkspaceSection,
@@ -417,11 +420,13 @@ export async function writeBomToFcstd(workspaceRoot: string, rel: string, values
     writeValues[key] = fields[key] || "";
   }
   const result = writeFcstdEmbeddedBomFields(abs, writeValues);
+  const indexUpdated = updateCadIndexEntryAfterBomWrite(workspaceRoot, safeRel, fields);
   rememberBomApplyPrefs(workspaceRoot, fields);
   return {
     status: "ok",
     rel: safeRel,
     changed: result.changed,
+    index_updated: indexUpdated,
     object_name: result.objectName,
     engine: "typescript",
   };
@@ -452,7 +457,7 @@ export async function renameBomFcstdFile(workspaceRoot: string, rel: string, bod
   }
 
   const renamed = executeDiskFileRename(workspaceRoot, rel, { filename: targetFilename });
-  const mapUpdated = updateFcstdMapEntryRename(workspaceRoot, rel, renamed.rel_path);
+  const mapUpdated = updateCadIndexEntryAfterRename(workspaceRoot, rel, renamed.rel_path);
   return {
     ...renamed,
     map_updated: mapUpdated,

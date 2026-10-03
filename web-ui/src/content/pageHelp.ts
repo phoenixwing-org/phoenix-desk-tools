@@ -36,13 +36,21 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
   home: {
     title: "主页",
     bullets: [
-      "新手指南四步：工作空间 → FreeCAD（推荐）→ CAD 索引 → 打开文件详情。",
+      "新手指南四步：工作空间 → FreeCAD（推荐）→ KT Auto CAD 扫描 → 打开文件详情。",
       "侧栏「? 新手指引」或主页清单可随时回到开工步骤；「界面巡游」为全壳层导览。",
     ],
     docPath: "docs/user/新手指引.md",
     tourSteps: [
       tour("#onboarding-guide", "新手指南", "按步骤完成配置与首次扫描；完成后显示「已可开工」。"),
       tour("[data-tour-page-home-features]", "功能模块", "按 CAD / Code 分组勾选模块，并在下方卡片快捷打开各工具页。"),
+    ],
+  },
+  audio_extract: {
+    title: "视频音频提取",
+    bullets: [
+      "选择或拖入浏览器可解码的 MP4、WebM、MOV 或音频文件，再点“提取 MP3”。",
+      "文件仅在当前 Web/Tauri 内存中解码与编码，不经过 Desk API，也不会上传。",
+      "输出为 44.1 kHz、128 kbps MP3；AVI、MKV 等浏览器通常不能直接解码，需先转换容器。",
     ],
   },
   config: {
@@ -55,31 +63,6 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
     tourSteps: [
       tour("[data-tour-page-config-workspace]", "工作空间", "填写工程根目录并点「保存偏好」。"),
       tour("[data-tour-page-config-freecad]", "FreeCAD", "STEP 批量等任务需要本机 FreeCAD 路径。"),
-    ],
-  },
-  fcstd_map: {
-    title: "CAD 索引",
-    bullets: [
-      "「工程内搜索」写入 .phoenix/phoenix-workspace.sqlite，并重建 BOM 引用表。",
-      "「删除缺失」清理索引里文件已不存在的条目。",
-    ],
-    docPath: "docs/cad/CAD索引-缺失条目.md",
-    tourSteps: [
-      tour("[data-tour-page-fcstd-scan]", "工程内搜索", "首次使用或大改文件后请执行；日志在下方全局面板。"),
-      tour("[data-tour-page-fcstd-table]", "索引表", "浏览扫描结果；可导出 JSON。"),
-    ],
-  },
-  bom_export: {
-    title: "BOM 列表",
-    bullets: [
-      "一次 SQL 汇总各总成及直接子件数；不加载全部引用边。",
-      "点击行进入文件详情 · 装配结构（多级树已预计算缓存）。",
-      "仅含 .assy.fcstd 或子件≥2；图纸档不列入。",
-    ],
-    docPath: "docs/cad/BOM列表页设计.md",
-    tourSteps: [
-      tour("[data-tour-page-bom-tabs]", "总成列表", "浏览工程内装配宿主数量与摘要。"),
-      tour("[data-tour-page-bom-table]", "总成表", "点击行打开该文件的装配结构 Tab。"),
     ],
   },
   file_detail: {

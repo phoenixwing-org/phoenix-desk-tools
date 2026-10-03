@@ -541,7 +541,7 @@ onMounted(async () => {
                       <span class="muted">· 从原 XLink 文件名推断（编号不必六位）</span>
                     </div>
                     <p v-else-if="!candidatesLoading[issueRowKey(row)]" class="expand-hint">
-                      无法从文件名推断零件标识；若已加载，请从下表按文件名选择，或到 CAD 索引 / 零件目录查找。
+                      无法从文件名推断零件标识；若已加载，请从下表按文件名选择，或到零件目录查找。
                     </p>
 
                     <div
@@ -550,7 +550,7 @@ onMounted(async () => {
                     >
                       <p v-if="candidatesLoading[issueRowKey(row)]" class="expand-hint">加载候选…</p>
                       <p v-else-if="!fcstdCandidates(issueRowKey(row)).length" class="expand-hint">
-                        该零件标识下无 present 的 FCStd，请先在「CAD 索引」搜索工程。
+                        该零件标识下无 present 的 FCStd，请先在 KT Auto CAD 扫描工作空间。
                       </p>
                       <ul v-else class="candidate-list">
                         <li v-for="file in fcstdCandidates(issueRowKey(row))" :key="file.id">

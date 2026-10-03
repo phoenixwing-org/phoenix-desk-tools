@@ -36,16 +36,16 @@
 | `FCD_BATCH_PROJECT_TAG` | 报告中的工程标记（可选） |
 | `FCD_BATCH_VERBOSE` | `1`：stderr 多打路径 |
 
-**未 `export`** 变量时 subprocess 拿不到，看起来像「没转出任何 FCStd」。STEP 若在子目录需 **`FCD_BATCH_STEP_RECURSIVE=1`**。CLI 需落盘报告时设 **`FCD_BATCH_WRITE_REPORT=1`**。详见 **`scripts/example_run_step_batch.sh`**。
+Desk Server 与 `scripts/example_run_step_batch.sh` 都以空环境启动 FreeCADCmd，只注入系统运行白名单和上述 `FCD_BATCH_*` 任务变量；当前 Shell 中的令牌、Cookie、代理认证和其它凭据不会继承。STEP 若在子目录需 **`FCD_BATCH_STEP_RECURSIVE=1`**，CLI 需落盘报告时设 **`FCD_BATCH_WRITE_REPORT=1`**。禁止调用 `FreeCAD.app/Contents/MacOS/FreeCAD` GUI launcher；macOS 使用内部 `Contents/Resources/bin/freecadcmd`。日志、异常和 CAD 点检回执会脱敏并限制外部进程输出长度。
 
 ## 手写一例
 
 ```bash
-export FCD_BATCH_STEP_DIR="/path/repo/proj/step"
-export FCD_BATCH_OUT_DIR="/path/repo/proj/FreeCAD"
-export FCD_BATCH_SKIP_EXISTING=1
-/Applications/FreeCAD.app/Contents/Resources/bin/freecadcmd \\
-  /path/repo/scripts/freecad_batch_step_runner.py
+STEP_DIR="/path/repo/proj/step" \\
+OUT_DIR="/path/repo/proj/FreeCAD" \\
+FCD_BATCH_SKIP_EXISTING=1 \\
+./scripts/example_run_step_batch.sh
 ```
 
-单元测试：`python -m unittest discover -s tests -v`。
+安全门禁：`pnpm verify:freecad-security`。旧 Python 单元测试仍可用
+`python -m unittest discover -s tests -v` 复验 adapter 本身。

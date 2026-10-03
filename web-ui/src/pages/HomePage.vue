@@ -178,7 +178,7 @@ function visibleFeatures(moduleId: NavModuleId): NavItem[] {
         <ul class="hint-list">
           <li>模块偏好保存在当前工作空间 SQLite；欢迎页最近工程可设置工作空间类型。</li>
           <li>首次使用请在欢迎页打开工作空间根目录。</li>
-          <li>「CAD 索引」扫描后，BOM 与文件详情属性才完整可用。</li>
+          <li>先在 VS Code 的 KT Auto CAD 扫描；Desk 读取同一工作空间索引并提供文件级修复工具。</li>
           <li>预检、问题与运行日志固定在下方全局面板，切换 View 后仍会保留。</li>
         </ul>
       </section>

@@ -63,6 +63,9 @@ function createBomXrefFixture(workspace: string) {
       value TEXT NOT NULL
     );
 
+    CREATE TABLE phoenix_cad_scan (id INTEGER PRIMARY KEY);
+    INSERT INTO phoenix_cad_scan(id) VALUES (1);
+
     CREATE TABLE phoenix_cad_file_asset (
       id INTEGER PRIMARY KEY,
       repo_rel_path TEXT NOT NULL UNIQUE,
@@ -156,19 +159,12 @@ afterEach(() => {
 });
 
 describe("cad BOM xref routes", () => {
-  it("serves BOM xref and file-detail xref pages from the native SQLite service", async () => {
+  it("serves retained file-detail XRef reads and local host refreshes", async () => {
     const home = makeTempRoot("cad-bom-xref-home-");
     const workspace = makeTempRoot("cad-bom-xref-ws-");
     createBomXrefFixture(workspace);
 
     const { cadRoutes, shellRoutes } = await importRoutes(home, workspace);
-
-    const metaRes = await cadRoutes.request("/bom/xref/meta");
-    expect(metaRes.status).toBe(200);
-    const meta = await metaRes.json();
-    expect(meta).toMatchObject({ edge_count: 3, host_count: 2, index_pending: false });
-    expect(meta).not.toHaveProperty("_stub");
-    expect(meta).not.toHaveProperty("_proxy");
 
     const incomingRes = await cadRoutes.request(`/bom/xref/incoming?rel=${encodeURIComponent("parts/Bolt.FCStd")}&transitive=true`);
     expect(incomingRes.status).toBe(200);
@@ -189,25 +185,14 @@ describe("cad BOM xref routes", () => {
       direct_incoming_count: 1,
     });
 
-    const usageRes = await cadRoutes.request(`/bom/xref/usage-stats?rel=${encodeURIComponent("parts/Bolt.FCStd")}`);
-    expect(usageRes.status).toBe(200);
-    await expect(usageRes.json()).resolves.toMatchObject({
-      target_repo_rel_path: "./parts/Bolt.FCStd",
-      direct_incoming_host_count: 1,
-      bom_occurrence_count: 1,
-    });
-
-    const edgesRes = await cadRoutes.request("/bom/xref/edges?search=Bolt");
-    expect(edgesRes.status).toBe(200);
-    const edges = await edgesRes.json();
-    expect(edges).toMatchObject({ total: 1, count: 1 });
-    expect(edges.refs[0]).toMatchObject({ target_repo_rel_path: "./parts/Bolt.FCStd" });
-
-    const hostsRes = await cadRoutes.request("/bom/xref/assembly-hosts");
-    expect(hostsRes.status).toBe(200);
-    const hosts = await hostsRes.json();
-    expect(hosts.count).toBe(2);
-    expect(hosts.hosts[0]).toMatchObject({ host_repo_rel_path: "./asm/Root.ASSY.FCStd" });
+    for (const retiredRoute of [
+      "/bom/xref/meta",
+      "/bom/xref/usage-stats?rel=parts%2FBolt.FCStd",
+      "/bom/xref/edges?search=Bolt",
+      "/bom/xref/assembly-hosts",
+    ]) {
+      expect((await cadRoutes.request(retiredRoute)).status).toBe(404);
+    }
 
     const detailRes = await shellRoutes.request(`/api/file-detail/xrefs?rel=${encodeURIComponent("parts/Bolt.FCStd")}&transitive=true`);
     expect(detailRes.status).toBe(200);
@@ -235,13 +220,7 @@ describe("cad BOM xref routes", () => {
       failed: [],
     });
 
-    const rebuildRes = await cadRoutes.request("/bom/xref/rebuild", { method: "POST" });
-    expect(rebuildRes.status).toBe(200);
-    await expect(rebuildRes.json()).resolves.toMatchObject({
-      edge_count: 3,
-      host_files_scanned: 3,
-      hosts_with_xlink: 2,
-    });
+    expect((await cadRoutes.request("/bom/xref/rebuild", { method: "POST" })).status).toBe(404);
 
     const startRes = await cadRoutes.request("/bom/xref/refresh-host-index/start", {
       method: "POST",

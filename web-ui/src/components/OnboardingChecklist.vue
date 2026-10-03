@@ -29,11 +29,11 @@ const steps = computed(() => [
   },
   {
     id: "index",
-    label: "CAD 索引扫描至少一次",
-    hint: "BOM 与文件详情属性才完整",
+    label: "KT Auto CAD 已扫描至少一次",
+    hint: "请在 VS Code 的 KT Auto CAD 中扫描；Desk 不再维护第二套扫描器",
     done: store.indexScanned,
-    action: () => shell.goToPage("fcstd_map"),
-    actionLabel: "去 CAD 索引",
+    action: () => shell.setStatus("请在 VS Code 中运行“KT Auto CAD：扫描并更新 SQLite 索引”"),
+    actionLabel: "查看扫描方式",
     required: true,
   },
   {

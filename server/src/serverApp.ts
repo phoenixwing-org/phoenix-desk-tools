@@ -3,7 +3,6 @@ import { cors } from "hono/cors";
 import { createCaaApp } from "./routes/dialog.js";
 import { unitTestRoutes } from "./routes/unit-tests.js";
 import { cadRoutes } from "./routes/cad.js";
-import { cadScanRoutes } from "./routes/cad-scan.js";
 import { shellRoutes } from "./routes/shell.js";
 import { isAllowedPhoenixUiOrigin } from "./lib/localApiOrigin.js";
 
@@ -26,7 +25,6 @@ export function createPhoenixServerApp(): Hono {
 
   app.route("/", createCaaApp());
   app.route("/api/caa/unit-tests", unitTestRoutes);
-  app.route("/api/cad", cadScanRoutes);
   app.route("/api/cad", cadRoutes);
   app.route("/", shellRoutes);
 

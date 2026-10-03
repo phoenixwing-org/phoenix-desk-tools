@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { strToU8, zipSync } from "fflate";
 import { afterEach, describe, expect, it } from "vitest";
+import { pnwCreateDb } from "@phoenix-wing/db-node";
 import {
   applyBomLabelFormula,
   fillBomFromEmbedded,
@@ -20,10 +21,7 @@ import {
   renameBomFcstdFile,
   writeBomToFcstd,
 } from "./bomAttributeService.js";
-import {
-  runFcstdMapScan,
-  searchFcstdMapEntries,
-} from "./pnwFcstdMapService.js";
+import { ensurePhoenixDatabase } from "./phoenixDatabaseService.js";
 
 const tempRoots: string[] = [];
 
@@ -206,7 +204,14 @@ describe("bomAttributeService", () => {
   it("renames FCStd files, records the rename, and updates the fcstd map when present", async () => {
     const workspace = makeTempRoot();
     writeFile(workspace, "parts/OldPart.FCStd", "not a real fcstd zip\n");
-    runFcstdMapScan(workspace);
+    const index = pnwCreateDb(ensurePhoenixDatabase(workspace));
+    index.run(
+      `INSERT INTO phoenix_cad_file_asset (
+         repo_rel_path, filename, asset_kind, file_status, last_seen_at, updated_at
+       ) VALUES (?, ?, 'fcstd', 'present', datetime('now'), datetime('now'))`,
+      ["./parts/OldPart.FCStd", "OldPart.FCStd"],
+    );
+    index.close();
 
     await expect(renameBomFcstdFile(workspace, "parts/OldPart.FCStd", {
       filename: "Blocked.FCStd",
@@ -230,7 +235,11 @@ describe("bomAttributeService", () => {
     expect(fs.existsSync(path.join(workspace, "parts/NewPart.FCStd"))).toBe(true);
     expect(fs.existsSync(path.join(workspace, "parts/OldPart.FCStd"))).toBe(false);
 
-    const entries = searchFcstdMapEntries(workspace, { kind: "fcstd", limit: 10 });
-    expect(entries.entries[0].repo_rel_path).toBe("./parts/NewPart.FCStd");
+    const check = pnwCreateDb(ensurePhoenixDatabase(workspace));
+    const entry = check.get<{ repo_rel_path: string }>(
+      "SELECT repo_rel_path FROM phoenix_cad_file_asset WHERE asset_kind = 'fcstd' LIMIT 1",
+    );
+    check.close();
+    expect(entry?.repo_rel_path).toBe("./parts/NewPart.FCStd");
   });
 });

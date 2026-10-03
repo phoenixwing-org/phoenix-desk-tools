@@ -96,8 +96,10 @@ onMounted(async () => {
   await Promise.all([refreshWebStatus(), onboarding.refreshStatus()]);
 });
 
-function openCadIndex() {
-  shell.goToPage("fcstd_map");
+function showAutoCadScanGuide() {
+  const message = "请在 VS Code 中运行“KT Auto CAD：扫描并更新 SQLite 索引”；Desk 会继续读取同一工作区的 Schema v13 数据库。";
+  shell.setStatus(message);
+  shell.appendLog(`[CAD] ${message}`, { source: "cad", open: true });
 }
 
 onUnmounted(() => {});
@@ -396,7 +398,7 @@ usePagePrimaryContribution("config", props.workbenchTabId, {
           run: fillDefaultFreecad,
         },
         { id: "refresh-server", label: "刷新服务状态", run: refreshWebStatus },
-        { id: "cad-index", label: "打开 CAD 索引", run: openCadIndex },
+        { id: "auto-cad-index", label: "KT Auto CAD 扫描说明", run: showAutoCadScanGuide },
         { id: "tour", label: "界面指引", run: startShellTour },
       ],
     },
@@ -457,8 +459,8 @@ const navItems = () =>
         show-icon
       >
         <template #title>
-          该工作空间尚未执行 CAD 索引扫描，BOM/引用功能可能不完整。
-          <el-button link type="primary" @click="openCadIndex">打开 CAD 索引</el-button>
+          该工作空间尚未由 KT Auto CAD 完成索引扫描，Desk 的 BOM/引用工具可能不完整。
+          <el-button link type="primary" @click="showAutoCadScanGuide">查看扫描方式</el-button>
         </template>
       </el-alert>
     </section>

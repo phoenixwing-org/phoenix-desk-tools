@@ -230,7 +230,12 @@ export function createWorkbench(appConfig: Ref<AppConfig | null>) {
 
   function restoreSession(snapshot: WorkbenchSessionSnapshot): boolean {
     if (snapshot.version !== 1 || !snapshot.tabs.length) return false;
-    const mapped = snapshot.tabs
+    const retiredCadPage = (pageId: string) => pageId === "fcstd_map" || pageId === "bom_export";
+    const hasCurrentPartCatalog = snapshot.tabs.some((tab) => tab.pageId === "part_catalog");
+    const sourceTabs = hasCurrentPartCatalog
+      ? snapshot.tabs.filter((tab) => !retiredCadPage(tab.pageId))
+      : snapshot.tabs;
+    const mapped = sourceTabs
       .map((t) => ({
         id: t.id,
         pageId:
@@ -238,17 +243,22 @@ export function createWorkbench(appConfig: Ref<AppConfig | null>) {
             ? "file_rename"
             : t.pageId === "bom_apply"
               ? "file_detail"
+              : retiredCadPage(t.pageId)
+                ? "part_catalog"
               : t.pageId === "home" && t.title === "配置"
                 ? "config"
                 : t.pageId,
-        title: t.title,
+        title: retiredCadPage(t.pageId) ? "零件目录" : t.title,
         subtitle: t.subtitle,
         contextKey: t.contextKey,
         dirty: false,
         payloadConsumed: true,
-        pageState: t.pageState,
+        pageState: retiredCadPage(t.pageId) ? undefined : t.pageState,
       }))
-      .filter((t) => !EPHEMERAL_TAB_PAGES.has(t.pageId));
+      .filter((t) => !EPHEMERAL_TAB_PAGES.has(t.pageId))
+      .filter((tab, index, all) =>
+        tab.pageId !== "part_catalog" || all.findIndex((candidate) => candidate.pageId === "part_catalog") === index,
+      );
     if (!mapped.length) return false;
     tabs.value = mapped;
     const active = snapshot.activeTabId && getTab(snapshot.activeTabId);

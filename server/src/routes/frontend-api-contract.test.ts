@@ -4,7 +4,6 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import { createCaaApp } from "./dialog.js";
 import { cadRoutes } from "./cad.js";
-import { cadScanRoutes } from "./cad-scan.js";
 import { shellRoutes } from "./shell.js";
 import { unitTestRoutes } from "./unit-tests.js";
 
@@ -86,7 +85,6 @@ describe("frontend API contract", () => {
     const caaApp = createCaaApp();
     const registered = [
       ...mountedRoutes("", shellRoutes.routes),
-      ...mountedRoutes("/api/cad", cadScanRoutes.routes),
       ...mountedRoutes("/api/cad", cadRoutes.routes),
       ...mountedRoutes("", caaApp.routes),
       ...mountedRoutes("/api/caa/unit-tests", unitTestRoutes.routes),

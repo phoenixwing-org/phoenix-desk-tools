@@ -6,14 +6,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { pnwCreateDb } from "@phoenix-wing/db-node";
 import {
   fileDetailXrefs,
-  loadAssemblyBomCatalog,
-  loadBomXrefPayload,
-  loadTargetUsageStats,
   patchBomLinkLabels,
   queryXrefCountsForRel,
-  rebuildBomXrefsFromLastScan,
   refreshBomXrefForHost,
-  searchBomXrefEdges,
   searchIncomingRefs,
   searchOutgoingRefs,
 } from "./pnwBomXrefService.js";
@@ -53,6 +48,9 @@ function createBomXrefFixture(workspace: string) {
       key TEXT PRIMARY KEY NOT NULL,
       value TEXT NOT NULL
     );
+
+    CREATE TABLE phoenix_cad_scan (id INTEGER PRIMARY KEY);
+    INSERT INTO phoenix_cad_scan(id) VALUES (1);
 
     CREATE TABLE phoenix_cad_file_asset (
       id INTEGER PRIMARY KEY,
@@ -138,13 +136,6 @@ describe("pnwBomXrefService", () => {
     const workspace = makeTempRoot();
     createBomXrefFixture(workspace);
 
-    const meta = loadBomXrefPayload(workspace);
-    expect(meta.edge_count).toBe(3);
-    expect(meta.host_count).toBe(2);
-    expect(meta.last_bom_xref_at).toBe("2026-07-10T10:00:00");
-    expect(meta.index_pending).toBe(false);
-    expect(meta.target_resolved).toBe(2);
-
     expect(queryXrefCountsForRel(workspace, "asm/Sub.ASSY.FCStd")).toMatchObject({
       outgoing_count: 1,
       direct_incoming_count: 1,
@@ -177,34 +168,6 @@ describe("pnwBomXrefService", () => {
       via_chain: ["./asm/Sub.ASSY.FCStd"],
     });
 
-    const usage = loadTargetUsageStats(workspace, "parts/Bolt.FCStd");
-    expect(usage).toMatchObject({
-      target_repo_rel_path: "./parts/Bolt.FCStd",
-      direct_incoming_host_count: 1,
-      bom_occurrence_count: 1,
-      bom_root_count: 1,
-    });
-    expect(usage.occurrences[0].host_repo_rel_path).toBe("./asm/Sub.ASSY.FCStd");
-
-    const catalog = loadAssemblyBomCatalog(workspace);
-    expect(catalog.count).toBe(2);
-    expect(catalog.hosts.map((h: any) => h.host_repo_rel_path)).toEqual([
-      "./asm/Root.ASSY.FCStd",
-      "./asm/Sub.ASSY.FCStd",
-    ]);
-    expect(catalog.hosts[1]).toMatchObject({
-      incoming_host_count: 1,
-      file_role: "assembly",
-    });
-
-    const edges = searchBomXrefEdges(workspace, { search: "Bolt" });
-    expect(edges.total).toBe(1);
-    expect(edges.refs[0]).toMatchObject({
-      host_repo_rel_path: "./asm/Sub.ASSY.FCStd",
-      target_repo_rel_path: "./parts/Bolt.FCStd",
-      label_mismatch: true,
-    });
-
     const detail = fileDetailXrefs(workspace, "parts/Bolt.FCStd", { transitive: true });
     expect(detail.incoming).toMatchObject({ count: 2, direct_count: 1 });
     expect(detail.outgoing).toMatchObject({ count: 0, label_mismatch_count: 0 });
@@ -223,13 +186,7 @@ describe("pnwBomXrefService", () => {
     });
     expect(searchOutgoingRefs(workspace, "asm/Sub.ASSY.FCStd").label_mismatch_count).toBe(0);
 
-    expect(rebuildBomXrefsFromLastScan(workspace)).toMatchObject({
-      edge_count: 3,
-      host_files_scanned: 3,
-      hosts_with_xlink: 2,
-      target_resolved: 2,
-      target_missing: 1,
-    });
+    refreshBomXrefForHost(workspace, "asm/Root.ASSY.FCStd", { recursive: true, maxHosts: 10 });
     expect(searchOutgoingRefs(workspace, "asm/Sub.ASSY.FCStd").refs[0]).toMatchObject({
       xlink_file_attr: "../parts/Bolt.FCStd",
       link_label: "Bolt",
@@ -237,10 +194,39 @@ describe("pnwBomXrefService", () => {
     });
   });
 
+  it("reads Auto CAD v0.2.0 indexes whose relative paths omit the ./ prefix", () => {
+    const workspace = makeTempRoot();
+    createBomXrefFixture(workspace);
+    const db = pnwCreateDb(path.join(workspace, ".phoenix", "phoenix-workspace.sqlite"));
+    db.exec(`
+      UPDATE phoenix_cad_file_asset SET repo_rel_path = substr(repo_rel_path, 3);
+      UPDATE phoenix_cad_bom_xref SET host_repo_rel_path = substr(host_repo_rel_path, 3);
+      UPDATE phoenix_cad_bom_xref
+      SET target_repo_rel_path = substr(target_repo_rel_path, 3)
+      WHERE target_repo_rel_path LIKE './%';
+    `);
+    db.close();
+
+    expect(queryXrefCountsForRel(workspace, "asm/Sub.ASSY.FCStd")).toMatchObject({
+      outgoing_count: 1,
+      direct_incoming_count: 1,
+      index_pending: false,
+    });
+    expect(searchOutgoingRefs(workspace, "asm/Root.ASSY.FCStd").count).toBe(2);
+    expect(searchIncomingRefs(workspace, { rel: "parts/Bolt.FCStd", transitive: true })).toMatchObject({
+      count: 2,
+      direct_count: 1,
+    });
+    expect(patchBomLinkLabels(workspace, [{
+      host_repo_rel: "asm/Sub.ASSY.FCStd",
+      xlink_file_attr: "../parts/Bolt.FCStd",
+      link_label: "Bolt",
+    }])).toMatchObject({ label_patches: 1, failed: [] });
+  });
+
   it("re-reads host files, follows recursive FCStd links, and removes deleted edges", () => {
     const workspace = makeTempRoot();
     createBomXrefFixture(workspace);
-    rebuildBomXrefsFromLastScan(workspace);
 
     const recursive = refreshBomXrefForHost(workspace, "asm/Root.ASSY.FCStd", {
       recursive: true,
@@ -267,12 +253,7 @@ describe("pnwBomXrefService", () => {
 
   it("returns index_pending payloads when the xref table is unavailable", () => {
     const workspace = makeTempRoot();
-    const payload = loadBomXrefPayload(workspace);
-    expect(payload).toMatchObject({
-      edge_count: 0,
-      host_count: 0,
-      index_pending: true,
-    });
+    expect(queryXrefCountsForRel(workspace, "asm/Root.ASSY.FCStd")).toMatchObject({ index_pending: true });
     expect(searchOutgoingRefs(workspace, "asm/Root.ASSY.FCStd")).toMatchObject({
       count: 0,
       refs: [],

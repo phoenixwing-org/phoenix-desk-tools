@@ -239,7 +239,7 @@ async function confirmRecreateLegacyDatabase() {
   const ok = window.confirm(
     `将删除当前工作空间数据库并创建空的 phoenix-workspace.sqlite（schema v${legacyDbExpectedSchema.value}）。\n`
       + "遗留文件（cad-database.sqlite / phoenix-cad.sqlite）与含旧表名的库也会被清除。\n"
-      + "CAD 索引、BOM 引用与改名历史需重新扫描。\n\n确定继续？",
+      + "CAD 索引、BOM 引用与改名历史将清空；之后需在 KT Auto CAD 重新扫描。\n\n确定继续？",
   );
   if (!ok) return;
   legacyDbRecreating.value = true;

@@ -10,6 +10,8 @@ Owner：Desk Tools maintainers
 
 本文汇总 2026-07-20 累积的启动、端口、异步 View、VS Code 四区布局、Primary、KT Codegen、TypeScript FCStd 和 Tauri 点检步骤。每次大改、打包或 CAD 能力恢复后复制本文记录结果；不要在真实生产工作区直接执行写盘项。
 
+> 2026-09-04 更新：CAD 扫描/BOM 列表已迁至 KT Auto CAD；Desk 只保留写事务。第 8 节关键写操作优先执行 `pnpm verify:cad-pointcheck`，详细评分见 [CAD 关键写操作点检与评分](../cad/CAD关键写操作点检与评分.md)。本轮不考 Windows，未打勾项只表示仍需当前安装版 UI/Host 人工旅程。
+
 ## 1. 记录环境
 
 - [ ] 日期、操作系统、CPU 架构：`________________`
@@ -175,6 +177,7 @@ pnpm verify:tauri-release:macos
 
 ```bash
 pnpm verify:real-fcstd
+pnpm verify:cad-pointcheck
 pnpm test:local-wing
 pnpm build:local-wing
 pnpm verify:architecture
@@ -183,6 +186,7 @@ pnpm docs:check
 ```
 
 - [ ] TypeScript ZIP/XML 读写测试通过，Local Wing 日志为 `[Wing][LOCAL]`。
+- [ ] 真实 FCStd 点检输出 `CAD_POINTCHECK_STATUS=passed`，回执绑定当前提交、Auto CAD 提交、FreeCAD 版本与源 SHA。
 - [ ] Registry 依赖仍为精确版本，无 link/file/workspace/override。
 - [ ] 使用尚未发布的 Wing API 时，先要求 Wing typecheck 与 Desk `build:local-wing` 通过；发布后再恢复 Registry 普通 typecheck。
 - [ ] 若全量测试仅因当前 Node 不提供 `node:sqlite` 失败，记录 Node 版本和失败项；其它测试不得被掩盖。

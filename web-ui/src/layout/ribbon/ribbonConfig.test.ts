@@ -32,10 +32,15 @@ describe("Ribbon navigation contract", () => {
       tab.id,
       tab.groups.flatMap((group) => group.items.map((item) => item.pageId)),
     ]));
-    expect(pages.system).toEqual(["home", "config", "git", "test_fixtures", "unit_tests"]);
+    expect(pages.system).toEqual([
+      "home",
+      "audio_extract",
+      "config",
+      "git",
+      "test_fixtures",
+      "unit_tests",
+    ]);
     expect(pages.cad).toEqual([
-      "fcstd_map",
-      "bom_export",
       "part_catalog",
       "file_rename",
       "xlink_fix",

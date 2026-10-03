@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import type { BomXrefEdge, BomXrefHost, FileDetailXrefsPayload } from "../../api";
-import { cancelBomXrefRebuild, fetchBomXrefRebuildProgress, fetchFileDetailXrefs, startBomXrefRebuild } from "../../api";
+import {
+  cancelBomXrefHostRefresh,
+  fetchBomXrefHostRefreshProgress,
+  fetchFileDetailXrefs,
+  startBomXrefHostRefresh,
+} from "../../api";
 import { useAsyncProgress } from "../../composables/useAsyncProgress";
 import { useFileDetailContext } from "../../composables/useFileDetailContext";
 import { useReferenceLabelSync } from "../../composables/useReferenceLabelSync";
@@ -16,13 +21,13 @@ import XlinkReplaceDialog from "../XlinkReplaceDialog.vue";
 
 const ctx = useFileDetailContext();
 const shell = useAppShell();
-const rebuildUI = useAsyncProgress("xref-rebuild");
+const refreshUI = useAsyncProgress("xref-rebuild");
 const loading = ref(false);
-const rebuilding = ref(false);
+const refreshing = ref(false);
 const indexSummary = ref("");
 const includeTransitive = ref(false);
 const loadingIncoming = ref(false);
-const rebuildSubtree = ref(true);
+const refreshSubtree = ref(true);
 const incomingHosts = ref<BomXrefHost[]>([]);
 const selectedIncoming = ref<Set<string>>(new Set());
 const outgoingRefs = ref<BomXrefEdge[]>([]);
@@ -251,50 +256,50 @@ watch(includeTransitive, () => {
   void loadTables(true);
 });
 
-async function onRebuildIndex() {
-  if (!ctx.rel.value.trim() || rebuilding.value) return;
-  rebuilding.value = true;
+async function onRefreshIndex() {
+  if (!ctx.rel.value.trim() || refreshing.value) return;
+  refreshing.value = true;
   indexSummary.value = "";
-  shell.appendLog(`[文件详情] 重建引用索引 ${ctx.rel.value}…`, { source: "file_detail", open: true });
+  shell.appendLog(`[文件详情] 局部刷新引用 ${ctx.rel.value}…`, { source: "file_detail", open: true });
 
   // watch 终态 → 刷新页面数据
   const unwatch = watch(
-    () => rebuildUI.state.value?.status,
+    () => refreshUI.state.value?.status,
     async (status) => {
       if (status === "done") {
         await loadTables(false, false);
         const missing = outgoingRefs.value.filter(r => r.resolve_status === "missing").length;
         const ambiguous = outgoingRefs.value.filter(r => r.resolve_status === "ambiguous").length;
         const resolved = outgoingRefs.value.filter(r => r.resolve_status === "resolved" || r.resolve_status === "self").length;
-        indexSummary.value = `已重建 · 出向 ${outgoingRefs.value.length} 条（已解析 ${resolved} · 缺失 ${missing} · 歧义 ${ambiguous}）`;
+        indexSummary.value = `已刷新 · 出向 ${outgoingRefs.value.length} 条（已解析 ${resolved} · 缺失 ${missing} · 歧义 ${ambiguous}）`;
         shell.setStatus(indexSummary.value);
         shell.appendLog(indexSummary.value, { source: "file_detail" });
         ctx.notifyXrefMutation(ctx.rel.value);
-        rebuilding.value = false;
+        refreshing.value = false;
         unwatch();
       } else if (status === "error" || status === "cancelled") {
-        const msg = rebuildUI.state.value?.error || "任务已取消";
+        const msg = refreshUI.state.value?.error || "任务已取消";
         shell.setStatus(msg);
         shell.appendLog(msg, { source: "file_detail" });
-        rebuilding.value = false;
+        refreshing.value = false;
         unwatch();
       }
     },
   );
 
   try {
-    await rebuildUI.startPolling(
-      () => startBomXrefRebuild({
+    await refreshUI.startPolling(
+      () => startBomXrefHostRefresh({
         host_repo_rel: ctx.rel.value,
-        recursive: rebuildSubtree.value,
+        recursive: refreshSubtree.value,
       }),
-      (scanId) => fetchBomXrefRebuildProgress(scanId),
-      (scanId) => cancelBomXrefRebuild(scanId),
-      { taskName: `重建引用索引 · ${ctx.rel.value.split('/').pop() || ctx.rel.value}`, singleton: true },
+      (scanId) => fetchBomXrefHostRefreshProgress(scanId),
+      (scanId) => cancelBomXrefHostRefresh(scanId),
+      { taskName: `局部刷新引用 · ${ctx.rel.value.split('/').pop() || ctx.rel.value}`, singleton: true },
     );
   } catch (e) {
     unwatch();
-    rebuilding.value = false;
+    refreshing.value = false;
     const msg = String(e);
     ctx.pageError.value = msg;
     shell.appendLog(msg, { source: "file_detail" });
@@ -367,22 +372,22 @@ async function onSyncIncomingLabels() {
     <h3 class="panel-title">引用关系</h3>
     <p v-if="loading && !outgoingRefs.length" class="empty muted">载入出向引用…</p>
     <p v-else-if="indexPending" class="banner warn">
-      引用表尚未构建。请先在「CAD 索引」页执行工程内搜索，或点下方「重建本文件引用索引」。
+      引用表尚未构建。请先在 VS Code 的 KT Auto CAD 扫描工作空间，再回到本页局部刷新当前文件。
     </p>
     <div class="toolbar">
       <el-button
         type="primary"
         size="small"
-        :loading="rebuilding"
+        :loading="refreshing"
         :disabled="loading"
         title="从磁盘重读本文件 XLink 并写入引用表；勾选下级时一并索引子装配 FCStd"
-        @click="onRebuildIndex"
+        @click="onRefreshIndex"
       >
-        重建本文件引用索引
+        局部刷新本文件引用
       </el-button>
-      <el-checkbox v-model="rebuildSubtree" :disabled="rebuilding">含下级 FCStd</el-checkbox>
+      <el-checkbox v-model="refreshSubtree" :disabled="refreshing">含下级 FCStd</el-checkbox>
       <el-checkbox v-model="includeTransitive">入向含间接宿主</el-checkbox>
-      <el-button size="small" :loading="loading" :disabled="rebuilding" @click="loadTables(true, true)">
+      <el-button size="small" :loading="loading" :disabled="refreshing" @click="loadTables(true, true)">
         刷新列表
       </el-button>
       <el-button size="small" @click="ctx.triggerRename()">改名后修正 XLink…</el-button>
@@ -568,9 +573,9 @@ async function onSyncIncomingLabels() {
     />
 
     <p class="hint muted">
-      本页展示 CAD 索引中的入向/出向关系。「重建本文件引用索引」从磁盘写入引用边；
+      本页只读取 KT Auto CAD 索引中的入向/出向关系。「局部刷新本文件引用」仅更新当前文件及所选子装配的引用边；
       <strong>缺失</strong>表示索引中无目标或路径无法解析。单条 XLink 写回用出向表「改链接」；
-      批量改名写回请用「改名」Tab，再重建索引。
+      批量改名写回请用「改名」Tab；整库扫描与正式 BOM 推送请使用 KT Auto CAD。
     </p>
   </div>
 </template>

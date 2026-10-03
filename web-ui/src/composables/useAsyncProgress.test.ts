@@ -3,18 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ScanProgressPayload } from "../api";
 import { useAsyncProgress } from "./useAsyncProgress";
 
-const apiMocks = vi.hoisted(() => ({
-  fetchProgress: vi.fn(),
-  cancelScan: vi.fn(),
-  fetchResume: vi.fn(),
-}));
-
-vi.mock("../api", () => ({
-  fetchFcstdMapScanProgress: apiMocks.fetchProgress,
-  cancelFcstdMapScan: apiMocks.cancelScan,
-  fetchFcstdMapScanResume: apiMocks.fetchResume,
-}));
-
 function terminalPayload(status: "done" | "cancelled" | "error" = "done"): ScanProgressPayload {
   return {
     scan_id: "scan-1",
@@ -35,9 +23,6 @@ describe("useAsyncProgress polling contract", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     vi.useFakeTimers();
-    apiMocks.fetchProgress.mockReset();
-    apiMocks.cancelScan.mockReset();
-    apiMocks.fetchResume.mockReset();
   });
 
   afterEach(() => {
@@ -45,7 +30,7 @@ describe("useAsyncProgress polling contract", () => {
   });
 
   it("returns after starting and keeps running until a terminal poll arrives", async () => {
-    const progress = useAsyncProgress("fcstd-scan");
+    const progress = useAsyncProgress("xref-rebuild");
     const poll = vi.fn().mockResolvedValue(terminalPayload());
 
     await progress.startPolling(
@@ -64,7 +49,7 @@ describe("useAsyncProgress polling contract", () => {
   });
 
   it("cancel marks the active task terminal and stops later polls", async () => {
-    const progress = useAsyncProgress("fcstd-scan");
+    const progress = useAsyncProgress("xref-rebuild");
     const poll = vi.fn().mockResolvedValue(terminalPayload());
     const cancel = vi.fn().mockResolvedValue({ cancelled: true });
     await progress.startPolling(
@@ -80,25 +65,6 @@ describe("useAsyncProgress polling contract", () => {
     expect(poll).not.toHaveBeenCalled();
     expect(progress.state.value?.status).toBe("cancelled");
     expect(progress.isRunning.value).toBe(false);
-  });
-
-  it("restores the shared poller and re-registers server cancellation", async () => {
-    apiMocks.fetchResume.mockResolvedValue({
-      active: true,
-      scan_id: "scan-1",
-      source: "memory",
-      progress: { ...terminalPayload(), status: "running", phase: "bom" },
-    });
-    apiMocks.fetchProgress.mockResolvedValue(terminalPayload());
-    apiMocks.cancelScan.mockResolvedValue({ cancelled: true });
-    const progress = useAsyncProgress("fcstd-scan");
-
-    await expect(progress.resume()).resolves.toBe(true);
-    expect(progress.isRunning.value).toBe(true);
-    await progress.store.cancelTask("scan-1");
-
-    expect(apiMocks.cancelScan).toHaveBeenCalledWith("scan-1");
-    expect(progress.store.tasks["scan-1"]?.status).toBe("cancelled");
   });
 
   it("unregisters stream cancellation when the task reaches a terminal event", async () => {

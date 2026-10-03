@@ -150,7 +150,7 @@ function onApplyRuleLabelsPreview() {
   }
   shell.setStatus(
     stats.noRule > 0
-      ? "无法推算规则名（缺零件标识或索引），请先重建引用索引"
+      ? "无法推算规则名（缺零件标识或索引），请先局部刷新当前文件引用"
       : "当前树无子件可填",
   );
 }

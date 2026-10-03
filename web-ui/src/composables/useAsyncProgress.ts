@@ -20,9 +20,6 @@ import {
   type ScanProgressPayload,
   type UnitTestStreamEvent,
   type UnitTestRunResult,
-  fetchFcstdMapScanProgress,
-  cancelFcstdMapScan,
-  fetchFcstdMapScanResume,
 } from "../api";
 
 interface PollOptions {
@@ -362,43 +359,6 @@ export function useAsyncProgress(kind: PnwTaskKind) {
 
   async function resume(): Promise<boolean> {
     store.hydrate();
-
-    if (kind === "fcstd-scan") {
-      try {
-        const result = await fetchFcstdMapScanResume();
-        if (result.active && result.scan_id) {
-          taskId.value = result.scan_id;
-          isRunning.value = true;
-          _cancelFn = cancelFcstdMapScan;
-          store.registerCancel(result.scan_id, () => cancelFcstdMapScan(result.scan_id!));
-
-          // 如果有 progress 快照，直接恢复
-          if (result.progress) {
-            const current = store.tasks[result.scan_id];
-            const base = current || pnwCreateScanTaskState(result.scan_id);
-            const updated = pnwUpdateTaskFromPoll(base, result.progress as ScanProgressPayload);
-            store.upsertTask(updated);
-          }
-
-          // 服务重启后标记为 orphaned
-          if (result.source === "db") {
-            const current = store.tasks[result.scan_id];
-            if (current) {
-              store.upsertTask({ ...current, status: "orphaned" });
-            }
-            store.unregisterCancel(result.scan_id);
-            isRunning.value = false;
-            return true;
-          }
-
-          _schedulePolling(result.scan_id, fetchFcstdMapScanProgress, 1000);
-
-          return true;
-        }
-      } catch {
-        /* resume not available */
-      }
-    }
     return false;
   }
 

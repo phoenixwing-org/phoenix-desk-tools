@@ -42,8 +42,13 @@ function fakeRunner(root: string) {
       '  last: process.env.FCD_BATCH_VIEW_FIT_LAST,',
       '  all: process.env.FCD_BATCH_VIEW_FIT_ALL,',
       '  recursive: process.env.FCD_BATCH_STEP_RECURSIVE,',
+      '  apiKey: process.env.EXAMPLE_API_KEY || null,',
+      '  authToken: process.env.EXAMPLE_AUTH_TOKEN || null,',
+      '  nodeOptions: process.env.NODE_OPTIONS || null,',
       '}), "utf8");',
       'fs.writeFileSync(path.join(out, "batch_step_convert_report.md"), "- statistics fixture\\n", "utf8");',
+      'process.stdout.write("EXAMPLE_API_KEY=unit-test-sensitive-value\\n");',
+      'process.stderr.write("Authorization: Bearer unit-test-bearer-value\\n");',
       'process.stderr.write("[phoenix] OK=2 skip=1 fail=0 total=3\\n");',
     ].join("\n"),
   );
@@ -63,10 +68,15 @@ describe("pnwStepBatchService", () => {
     const resources = path.join(contents, "Resources");
     const command = writeFile(root, "FreeCAD.app/Contents/Resources/bin/freecadcmd", "fixture\n");
 
-    expect(resolveFreecadCommand(app)).toBe(command);
-    expect(resolveFreecadCommand(contents)).toBe(command);
-    expect(resolveFreecadCommand(resources)).toBe(command);
-    expect(resolveFreecadCommand("", command)).toBe(command);
+    const canonicalCommand = fs.realpathSync.native(command);
+    expect(resolveFreecadCommand(app)).toBe(canonicalCommand);
+    expect(resolveFreecadCommand(contents)).toBe(canonicalCommand);
+    expect(resolveFreecadCommand(resources)).toBe(canonicalCommand);
+    expect(resolveFreecadCommand("", command)).toBe(canonicalCommand);
+
+    const gui = writeFile(root, "FreeCAD.app/Contents/MacOS/FreeCAD", "fixture\n");
+    expect(() => resolveFreecadCommand("", gui)).toThrow(/GUI launcher/i);
+    expect(() => resolveFreecadCommand(gui)).toThrow(/GUI launcher/i);
   });
 
   it("persists Python-compatible prefs and previews shallow/recursive STEP counts", () => {
@@ -121,7 +131,7 @@ describe("pnwStepBatchService", () => {
     });
   });
 
-  it("runs a configured command with the complete FreeCAD batch environment and parses its summary", async () => {
+  it("runs with an allowlisted FreeCAD environment, redacts output, and parses its summary", async () => {
     const workspace = makeTempRoot();
     writeFile(workspace, "step/a.stp");
     const runner = fakeRunner(workspace);
@@ -136,7 +146,19 @@ describe("pnwStepBatchService", () => {
         use_inbox_bridge: false,
         step_recursive: true,
       },
-      { freecadCmd: process.execPath, runnerPath: runner, env: { ...process.env } },
+      {
+        freecadCmd: process.execPath,
+        runnerPath: runner,
+        env: {
+          HOME: workspace,
+          PATH: "/usr/bin:/bin",
+          TMPDIR: os.tmpdir(),
+          LANG: "C.UTF-8",
+          NODE_OPTIONS: "--unit-test-only",
+          EXAMPLE_API_KEY: "unit-test-sensitive-value",
+          EXAMPLE_AUTH_TOKEN: "unit-test-auth-value",
+        },
+      },
     );
 
     expect(result).toMatchObject({
@@ -151,6 +173,9 @@ describe("pnwStepBatchService", () => {
       engine: "freecadcmd",
     });
     expect(result.log).toContain("[phoenix] OK=2 skip=1 fail=0 total=3");
+    expect(result.log).toContain("[REDACTED]");
+    expect(result.log).not.toContain("unit-test-sensitive-value");
+    expect(result.log).not.toContain("unit-test-bearer-value");
 
     const captured = JSON.parse(fs.readFileSync(path.join(workspace, "FreeCAD", "captured-env.json"), "utf8"));
     expect(captured).toEqual({
@@ -160,6 +185,9 @@ describe("pnwStepBatchService", () => {
       last: "0",
       all: "1",
       recursive: "1",
+      apiKey: null,
+      authToken: null,
+      nodeOptions: null,
     });
   });
 

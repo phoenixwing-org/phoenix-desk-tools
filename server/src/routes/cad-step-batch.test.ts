@@ -39,6 +39,8 @@ function fakeRunner(root: string) {
     [
       'const fs = require("node:fs");',
       'fs.mkdirSync(process.env.FCD_BATCH_OUT_DIR, { recursive: true });',
+      'process.stdout.write("EXAMPLE_API_KEY=unit-test-route-secret\\n");',
+      'process.stderr.write("Authorization: Bearer unit-test-route-bearer\\n");',
       'process.stderr.write("[phoenix] OK=1 skip=0 fail=0 total=1\\n");',
     ].join("\n"),
   );
@@ -122,6 +124,33 @@ describe("cad STEP Batch routes", () => {
     });
     expect(run).not.toHaveProperty("_stub");
     expect(run).not.toHaveProperty("_proxy");
+    expect(run.log).toContain("[REDACTED]");
+    expect(run.log).not.toContain("unit-test-route-secret");
+    expect(run.log).not.toContain("unit-test-route-bearer");
+  });
+
+  it("rejects an explicit macOS FreeCAD GUI launcher before it can run", async () => {
+    const home = makeTempRoot("cad-step-gui-home-");
+    const workspace = makeTempRoot("cad-step-gui-ws-");
+    writeFile(workspace, "part.stp");
+    const gui = writeFile(workspace, "FreeCAD.app/Contents/MacOS/FreeCAD", "not executable\n");
+    configurePrefs(home, workspace);
+    process.env.HOME = home;
+    process.env.USERPROFILE = home;
+    process.env.PHOENIX_FREECAD_CMD = gui;
+    process.env.PHOENIX_STEP_BATCH_RUNNER = fakeRunner(workspace);
+    vi.resetModules();
+    const { cadRoutes } = await import("./cad.js");
+
+    const response = await cadRoutes.request("/step-batch/run", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      detail: expect.stringMatching(/GUI launcher/i),
+    });
   });
 
   it("returns a validation response for a missing STEP directory", async () => {
@@ -142,4 +171,3 @@ describe("cad STEP Batch routes", () => {
     await expect(res.json()).resolves.toMatchObject({ detail: expect.stringMatching(/STEP directory does not exist/i) });
   });
 });
-

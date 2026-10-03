@@ -12,7 +12,7 @@ Phoenix「属性回写」将可编辑 BOM 字段写入 **`.FCStd` ZIP** 内的 *
 | 主存储 | **`Document.xml`**：**挂载对象**（见上文顺序）上的自定义字符串 **``PartNumber``** … **``PartName``** …（组 **CustomDefine**），以及表单 **``label``** ↔ **Label** |
 | UI 字段 `label` | 写入 FreeCAD **`Label`**（`App::PropertyString`） |
 | 旧版侧车 | 根路径 **`FcdeskBomAttrs.xml`**：**保存时会删除并完成迁移**；读取时若在 Document 尚无对应字段，则临时沿用侧车值 |
-| 写回 | 整包原子替换，`phoenix/fcstd_document_bom_props.py` / **`write_embedded_bom_attrs()`** |
+| 写回 | Node/TypeScript ZIP adapter 调用 Wing cad-core 选择根对象和修改字段，再整包原子替换；不以旧 Python 为运行时真源 |
 | 占用 | 文档被占用时重写常失败 |
 
 若文档中 **既没有 Body、也没有 type 中含 assembly 的对象、也没有 ``App::Part``**，则当前实现无法挂载（会报错并列出部分 ``Object.type`` 供排查）。
@@ -45,7 +45,7 @@ Phoenix「属性回写」将可编辑 BOM 字段写入 **`.FCStd` ZIP** 内的 *
 
 ## 2′. 与 FreeCAD Document 序列化对齐
 
-Phoenix **不自定义**并行格式：可编辑 BOM 五项（不含原生 ``Label``）为 **`App::PropertyString`** + 子结点 **`String/@value`**，与 FC **「添加属性」**及 **`PropertyString::Restore`**（[FreeCAD `PropertyStandard.cpp`](https://github.com/FreeCAD/FreeCAD/blob/master/src/App/PropertyStandard.cpp)）可读形态一致。五项的 **`group`** 默认为 **`CustomDefine`**（常量 **`PHOENIX_EMBEDDED_BOM_PROPERTY_GROUP`**）；**`doc`** 为工具提示。**`status` / `attr` …** Bitmask 新建时尽量从参照复制；空串则从挂载对象移除该自定义属性结点；**`Label`** 始终存在于挂载对象。
+Phoenix **不自定义**并行格式：可编辑 BOM 五项（不含原生 ``Label``）为 **`App::PropertyString`** + 子结点 **`String/@value`**，与 FC **「添加属性」**及 **`PropertyString::Restore`**（[FreeCAD `PropertyStandard.cpp`](https://github.com/FreeCAD/FreeCAD/blob/master/src/App/PropertyStandard.cpp)）可读形态一致。五项的 **`group`** 默认为 **`CustomDefine`**，**`doc`** 为工具提示。更新既有字段必须保留原 `group/doc/attr/ro/hide/status`；新增字段必须写入等价动态属性元数据（当前默认 `status=2097152`），否则 Desk 自读虽能看到值，FreeCAD 保存时会删除未注册字段。**`Label`** 始终存在于挂载对象并保留其原生属性元数据。
 ## 3. 与索引的先后
 
 **`fcstd_map.json`** 命中 → 初值；否则 **`preview_from_workspace_relative`**；再从 **`Document.xml`**（以及尚未迁移的包内 **`FcdeskBomAttrs.xml`**，仅兜底）叠加可写字段。
@@ -56,4 +56,4 @@ Phoenix **不自定义**并行格式：可编辑 BOM 五项（不含原生 ``Lab
 
 ## 5. 改代码时请同步
 
-`FcstdMapEntry`、`compose_fcstd_body_label_display`、`EDITABLE_ENTRY_ATTRS` / **`EDITABLE_DOCUMENT_ATTRS`**、`PHOENIX_EMBEDDED_BOM_PROPERTY_GROUP`（及别名 `PHOENIX_EMBEDDED_BOM_PROPERTY_GROUP`、`PHOENIX_BOM_PROPERTY_GROUP`）、`_BOM_STRING_PROPERTY_DOC`、`TYPE_CODE_OPTIONS` / `ComboTextInput`、`bom_apply_page._ATTR_ROWS`、`phoenix/fcstd_document_bom_props.py`。
+Wing cad-core 的字段选择/投影、Desk `fcstdDocumentXmlService.ts` 的 ZIP/FreeCAD 元数据与原子替换、`bomAttributeService.ts` 的可编辑字段、Auto CAD Schema v13 映射，以及 Web 的 `TYPE_CODE_OPTIONS`/字段标签。旧 Python 只在具体回归需要差分时查看，不再要求同步开发。

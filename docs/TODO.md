@@ -4,13 +4,16 @@
 
 Owner：Desk Tools maintainers
 
-适用版本：0.4.x / 联合成熟度 84.75 → 92.00（本轮已接受）
+适用范围：develop；历史发布线和评分不作为当前验收结论
 
-最后核验：2026-07-20
+最后整理：2026-10-03（分支拣选；本轮门禁结果另记）
 
 本文件是唯一维护的产品/技术债入口。旧总清单、Git 与 CAA 的逐项完成记录分别保存在 [`archive/TODO-2026-07-17.md`](archive/TODO-2026-07-17.md)、`TODO-GIT.md`、`TODO-CAA.md`，只读不再更新。
 
 ## P0：联合治理
+
+- [x] 拣选 FreeCAD 外部进程安全边界：realpath 拒绝 GUI launcher、子进程环境白名单、日志/异常/回执脱敏与输出限长。
+- [ ] 来源分支记录的旧 GUI launcher 凭据撤销/轮换待责任方确认完成；不复制旧值或输出，未确认前保留其发布阻断状态。
 
 - [x] 删除 Desk Codegen Apply 的纯投影副本，统一调用 Wing 公共入口；Desk 只保留权限、原子写、文件模式、备份与 rollback adapter。
 - [x] 用 AST/import graph 固化 pure core、server host、Vue view 的依赖方向，并为例外记录 owner 和到期条件。
@@ -40,6 +43,10 @@ Owner：Desk Tools maintainers
 
 ## CAD 与运行可靠性
 
+- [x] 拣选 CAD 去重复实现：退役 FCStd 全量扫描、索引管理和 BOM 导出页面；保留索引只读查询、本地文件写事务与外部引擎适配。
+- [x] 拣选 FreeCAD 写回修复：保留动态属性元数据，更新既有索引的字段与 XRef 投影，并提供真实样本隔离点检脚本。来源点检方法与历史回执见 [CAD 关键写操作点检与评分](cad/CAD关键写操作点检与评分.md)。
+- [ ] develop 当前安装版仍需 UI/Host 写事务、FreeCAD 保存/重开与进程生命周期复验；来源分支历史评分不自动继承。
+
 - [x] 用 release profile Wing Rust 二进制和真实 `Document.xml` 构造 FCStd archive，自动验收协议读、XLink 修改、修改后复读与精确字节回滚。
 - [x] 曾从 0.2.0 源码构建 macOS arm64 Tauri `.app`，自动验收真实启动、隔离用户数据、Codegen Apply、FCStd 读取和 sidecar 正常回收；该回执作为历史基线保留。
 - [x] `fcstd_map` 已通过分页 API 与页码/页大小状态避免全表加载；大型 UI 目标进一步把查询、分页和 session 规则移入纯 ViewModel。
@@ -55,7 +62,7 @@ Owner：Desk Tools maintainers
 
 ## 后期：大型 UI 拆分
 
-用户已于 2026-07-18 接受联合成熟度 **92.00** 作为本轮停止线，并决定另立大型 UI 拆分目标。优先 `UnitTestsPage.vue`、`CaaDialogEditorPage.vue`、`AssemblyTreeTable.vue`、`FcstdMapPage.vue`；拆分前继续禁止向这些文件加入新的领域算法或数据库真相。
+2026-07-18 的联合成熟度记录只作为历史基线。当前优先 `UnitTestsPage.vue`、`CaaDialogEditorPage.vue`、`AssemblyTreeTable.vue`；`FcstdMapPage.vue` 已退役，以下拆分记录仅作历史参考。拆分前继续禁止向这些文件加入新的领域算法或数据库真相。
 
 - [x] `FcstdMapPage.vue` 第一切口：资产行投影、查询/分页规则和 v2–v4 session 迁移进入 UI-neutral `fcstdMapViewModel.ts`，页面从 1,208 行降到 1,161 行；纯测试与页面边界测试已建立。
 - [x] `FcstdMapPage.vue` 第二切口：entries 加载、loading/error、filter/pager 与单一 debounce 已进入可注入 fetch port 的 `useFcstdMapEntries`；扫描任务、purge、export、Shell 和 localStorage 未进入列表 controller。页面现为 1,111 行。

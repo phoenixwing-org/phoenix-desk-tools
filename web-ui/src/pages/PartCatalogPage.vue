@@ -56,7 +56,7 @@ const filteredEntries = computed(() => {
 const emptyDescription = computed(() => {
   if (loading.value) return "加载中…";
   if (listData.value?.exists) return "当前筛选无条目";
-  return "尚无数据，请先在 CAD 索引页执行工程内搜索";
+  return "尚无数据，请先在 VS Code 的 KT Auto CAD 扫描工作空间";
 });
 
 function setStatus(msg: string) {

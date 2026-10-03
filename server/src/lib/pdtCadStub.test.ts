@@ -3,7 +3,7 @@
 import { describe, it, expect } from "vitest";
 import { analyzeRenameReferences, applyRenameCorrections, loadRenameAnalysis, listRenameLogs } from "./pnwRenameService.js";
 import { analyzeXlinkFix, runXlinkFix, applyXlinkFixOverride, listXlinkFixCandidates } from "./pnwXlinkFixService.js";
-import { rebuildBomXrefs, ensureBomXrefBuilt, refreshBomXrefForHost } from "./pnwBomXrefService.js";
+import { refreshBomXrefForHost } from "./pnwBomXrefService.js";
 
 describe("native CAD empty-workspace behavior", () => {
   it("returns an empty rename analysis and rejects an empty apply selection", () => {
@@ -32,13 +32,10 @@ describe("native CAD empty-workspace behavior", () => {
   });
 
   it("returns index-pending BOM XRef results for an absent workspace", () => {
-    const r1 = rebuildBomXrefs("");
-    expect(r1.index_pending).toBe(true);
-    expect(r1.edge_count).toBe(0);
-    ensureBomXrefBuilt(""); // no throw
-    const r2 = refreshBomXrefForHost("", "");
-    expect(r2.hosts_refreshed).toBe(0);
-    expect(r2.updated_hosts).toBe(0);
-    expect(r2.edge_count).toBe(0);
+    expect(refreshBomXrefForHost("", "")).toMatchObject({
+      hosts_refreshed: 0,
+      updated_hosts: 0,
+      edge_count: 0,
+    });
   });
 });

@@ -23,21 +23,13 @@
             "description": "简介与功能入口"
         },
         {
-            "id": "fcstd_map",
-            "label": "CAD 索引",
-            "page": "fcstd_map",
-            "module": "cad",
-            "ribbonGroup": "索引",
-            "description": "扫描 FCStd、MD、PDF、图片、DXF/DWG 等写入索引库"
+            "id": "audio_extract",
+            "label": "视频音频提取",
+            "page": "audio_extract",
+            "ribbonLabel": "音频提取",
+            "description": "在浏览器或 Tauri 本地从视频中提取 128 kbps MP3，不上传文件"
         },
         {
-            "id": "bom_export",
-            "label": "BOM 列表",
-            "page": "bom_export",
-            "module": "cad",
-            "ribbonGroup": "索引",
-            "description": "按装配列出 XLink 子件 BOM 表（属性来自 CAD 索引）"
-        }, {
             "id": "bom_apply",
             "label": "文件详情",
             "page": "file_detail",
@@ -187,9 +179,6 @@
                 "max_tabs": 8,
                 "tab_enabled": true
             },
-            "fcstd_map": {
-                "max_tabs": 1
-            },
             "part_catalog": {
                 "max_tabs": 1
             },
@@ -231,13 +220,13 @@
             "code_uuid": {
                 "max_tabs": 1
             },
-            "bom_export": {
-                "max_tabs": 1
-            },
             "welcome": {
                 "max_tabs": 1
             },
             "home": {
+                "max_tabs": 1
+            },
+            "audio_extract": {
                 "max_tabs": 1
             },
             "config": {

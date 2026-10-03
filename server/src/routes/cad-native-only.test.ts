@@ -1,18 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { cadScanRoutes } from "./cad-scan.js";
 import { cadRoutes } from "./cad.js";
 
 describe("CAD native-only route invariant", () => {
   it("contains no Python API proxy or stub marker in the CAD route modules", () => {
     const cadSource = fs.readFileSync(path.resolve("src/routes/cad.ts"), "utf8");
-    const scanSource = fs.readFileSync(path.resolve("src/routes/cad-scan.ts"), "utf8");
     const serverSource = fs.readFileSync(path.resolve("src/server.ts"), "utf8");
 
     for (const marker of ["PYTHON_API", "proxyToPython", "_proxy", "_stub", "checkPythonSidecar"]) {
       expect(cadSource, `cad.ts must not contain ${marker}`).not.toContain(marker);
-      expect(scanSource, `cad-scan.ts must not contain ${marker}`).not.toContain(marker);
       expect(serverSource, `server.ts must not contain ${marker}`).not.toContain(marker);
     }
   });
@@ -21,7 +18,7 @@ describe("CAD native-only route invariant", () => {
     for (const route of ["/scan/progress", "/scan/recent", "/worksets", "/bom/batch"]) {
       expect((await cadRoutes.request(route)).status, route).toBe(404);
     }
-    expect((await cadScanRoutes.request("/worksets")).status).toBe(404);
+    expect((await cadRoutes.request("/fcstd-map/scan/start", { method: "POST" })).status).toBe(404);
   });
 
   it("reports only the active native CAD backend", async () => {

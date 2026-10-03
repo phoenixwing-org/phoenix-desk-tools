@@ -113,6 +113,48 @@ describe("launcher config routes", () => {
     });
   });
 
+  it("accepts a FreeCAD.app directory and rejects GUI launchers or unrelated directories", async () => {
+    const home = makeTempRoot();
+    const app = path.join(makeTempRoot(), "FreeCAD.app");
+    const command = path.join(app, "Contents", "Resources", "bin", "freecadcmd");
+    const gui = path.join(app, "Contents", "MacOS", "FreeCAD");
+    fs.mkdirSync(path.dirname(command), { recursive: true });
+    fs.mkdirSync(path.dirname(gui), { recursive: true });
+    fs.writeFileSync(command, "fixture\n", "utf8");
+    fs.writeFileSync(gui, "fixture\n", "utf8");
+    process.env.HOME = home;
+    process.env.USERPROFILE = home;
+    vi.resetModules();
+    const { shellRoutes } = await import("./shell.js");
+
+    const saved = await shellRoutes.request("/api/config/launcher/freecad", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: app }),
+    });
+    expect(saved.status).toBe(200);
+    await expect(saved.json()).resolves.toEqual({ freecad_dir: app });
+    await expect((await shellRoutes.request("/api/onboarding/status")).json()).resolves.toMatchObject({
+      freecad_ok: true,
+    });
+
+    const guiResponse = await shellRoutes.request("/api/config/launcher/freecad", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: gui }),
+    });
+    expect(guiResponse.status).toBe(400);
+    await expect(guiResponse.json()).resolves.toMatchObject({ detail: expect.stringMatching(/GUI launcher/i) });
+
+    const unrelated = await shellRoutes.request("/api/config/launcher/freecad", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: home }),
+    });
+    expect(unrelated.status).toBe(400);
+    await expect(unrelated.json()).resolves.toMatchObject({ detail: expect.stringMatching(/FreeCADCmd was not found/i) });
+  });
+
   it("keeps recent-list changes separate from workspace activation", async () => {
     const home = makeTempRoot();
     const workspace = makeWorkspaceRoot();

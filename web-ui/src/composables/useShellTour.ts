@@ -45,7 +45,7 @@ const TOUR_STEPS: DriveStep[] = [
     element: "[data-tour='main-content']",
     popover: {
       title: "主内容区",
-      description: "当前 Tab 对应的功能页面显示在这里，例如 CAD 索引、BOM 列表、文件详情等。",
+      description: "当前 Tab 对应的功能页面显示在这里，例如零件目录、文件详情与局部修复工具。",
       side: "top",
       align: "center",
     },

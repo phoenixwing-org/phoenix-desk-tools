@@ -11,8 +11,13 @@ const dependencySections = [
   "peerDependencies",
 ];
 const expectedWingVersions = {
-  "phoenix-wing": "0.7.0",
-  scoped: "0.6.3",
+  "phoenix-wing": "0.7.5",
+  "@phoenix-wing/code-core": "0.6.6",
+  "@phoenix-wing/git-node": "0.6.5",
+  "@phoenix-wing/kt-codegen": "0.6.6",
+  "@phoenix-wing/cad-core": "0.6.3",
+  "@phoenix-wing/db-node": "0.6.3",
+  "@phoenix-wing/workspace-schema": "0.6.3",
 };
 const wingDependencies = new Map();
 
@@ -24,9 +29,10 @@ for (const relative of manifestFiles) {
       if (!/^\d+\.\d+\.\d+$/u.test(specifier)) {
         throw new Error(`${relative} ${section}.${name} must use an exact Registry version, got ${specifier}`);
       }
-      const expectedVersion = name === "phoenix-wing"
-        ? expectedWingVersions["phoenix-wing"]
-        : expectedWingVersions.scoped;
+      const expectedVersion = expectedWingVersions[name];
+      if (!expectedVersion) {
+        throw new Error(`${relative} declares Wing package without a release-matrix version: ${name}`);
+      }
       if (specifier !== expectedVersion) {
         throw new Error(
           `${relative} ${section}.${name} must use Registry ${expectedVersion}, got ${specifier}`,
@@ -60,5 +66,5 @@ for (const { name, specifier } of wingDependencies.values()) {
 }
 
 process.stdout.write(
-  `[verify] ${wingDependencies.size} Wing packages use Registry root ${expectedWingVersions["phoenix-wing"]} / scoped ${expectedWingVersions.scoped} with no local overrides\n`,
+  `[verify] ${wingDependencies.size} Wing packages use their exact Registry release-matrix versions with no local overrides\n`,
 );

@@ -343,6 +343,13 @@
       "reason": "旧迁移、旧 schema、旧桌面或完成态实现记录"
     },
     {
+      "path": "docs/cad/CAD关键写操作点检与评分.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.4.x",
+      "lastVerified": "2026-08-17"
+    },
+    {
       "path": "docs/cad/CAD数据库表结构-重命名规划.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
@@ -383,6 +390,13 @@
     },
     {
       "path": "docs/cad/CAD索引设置页面壳验收.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.4.x",
+      "lastVerified": "2026-08-17"
+    },
+    {
+      "path": "docs/cad/Desk-CAD减法与保留边界.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.4.x",
@@ -572,6 +586,13 @@
     },
     {
       "path": "docs/platform/2026-07-20-Desk-Web-Tauri-CAD手动点检表.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.4.x",
+      "lastVerified": "2026-08-17"
+    },
+    {
+      "path": "docs/platform/2026-10-03-分支拣选审计.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.4.x",
@@ -1180,6 +1201,13 @@
       "reason": "fixture 说明与预期输出证据"
     },
     {
+      "path": "THIRD_PARTY_NOTICES.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.4.x",
+      "lastVerified": "2026-08-17"
+    },
+    {
       "path": "web-ui/README.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
@@ -1188,6 +1216,13 @@
     },
     {
       "path": "web-ui/src/assets/icons/widget/README.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.4.x",
+      "lastVerified": "2026-08-17"
+    },
+    {
+      "path": "web-ui/src/features/audio-extractor/README.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.4.x",

@@ -329,7 +329,14 @@ function normalizeShellLayout(partial?: Partial<ShellLayout>): ShellLayout {
   return merged;
 }
 
-const NAV_ALWAYS_VISIBLE = new Set(["welcome", "home", "config", "unit_tests", "test_fixtures"]);
+const NAV_ALWAYS_VISIBLE = new Set([
+  "welcome",
+  "home",
+  "audio_extract",
+  "config",
+  "unit_tests",
+  "test_fixtures",
+]);
 
 /** 不在 navigation 中、但属于某模块的 Tab 页 */
 const PAGE_MODULE_FALLBACK: Record<string, string> = {

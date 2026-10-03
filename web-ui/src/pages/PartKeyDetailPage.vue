@@ -142,7 +142,7 @@ async function switchToPartKey(
   const src = opts?.source ?? "manual";
   const srcLabel =
     src === "index"
-      ? "CAD 索引"
+      ? "KT Auto CAD 索引"
       : src === "filename+index"
         ? "文件名+索引"
         : src === "filename"
@@ -161,12 +161,12 @@ async function switchToPartKey(
   await loadDetail();
   if (!detail.value) {
     shell.appendLog(
-      `[零件] 未找到 ${targetKey}；请确认 CAD 索引已扫描且 Part Key 正确。`,
+      `[零件] 未找到 ${targetKey}；请确认 KT Auto CAD 已扫描且 Part Key 正确。`,
       { source: "part_key" },
     );
   } else if (opts?.in_catalog === false) {
     shell.appendLog(
-      `[零件] 已解析 ${targetKey}，但零件目录中尚无该键；请先执行 CAD 索引扫描。`,
+      `[零件] 已解析 ${targetKey}，但零件目录中尚无该键；请先在 KT Auto CAD 扫描工作空间。`,
       { source: "part_key" },
     );
   }

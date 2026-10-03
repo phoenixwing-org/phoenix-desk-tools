@@ -15,7 +15,7 @@ export type RibbonTabDef = PnwRibbonTabDef;
 export const RIBBON_SHELL_TAB_ID = "system";
 
 const SHELL_GROUPS: Array<{ id: string; label: string; pages: string[] }> = [
-  { id: "system-common", label: "常用", pages: ["home", "config"] },
+  { id: "system-common", label: "常用", pages: ["home", "audio_extract", "config"] },
   { id: "system-dev", label: "开发", pages: ["git", "test_fixtures", "unit_tests"] },
 ];
 

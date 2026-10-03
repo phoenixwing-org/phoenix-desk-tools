@@ -193,7 +193,7 @@ watch(
 
         <p v-if="errorText" class="err">{{ errorText }}</p>
         <p v-else-if="loadingCandidates" class="muted">加载候选…</p>
-        <p v-else-if="!candidates.length" class="muted">无 present 的 FCStd，请调整零件标识或先在 CAD 索引搜索工程。</p>
+        <p v-else-if="!candidates.length" class="muted">无 present 的 FCStd，请调整零件标识或先在 KT Auto CAD 扫描工作空间。</p>
 
         <ul v-else class="candidate-list">
           <li v-for="file in candidates" :key="file.id">

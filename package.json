@@ -8,6 +8,8 @@
   "scripts": {
     "build:tauri-runtime": "pnpm -C server build:tauri-runtime",
     "verify:real-fcstd": "pnpm -C server exec vitest run src/lib/fcstdDocumentXmlService.test.ts src/lib/fcstdReferenceLabelService.test.ts",
+    "verify:cad-pointcheck": "pnpm -C server exec tsx scripts/verify-cad-pointcheck.ts",
+    "verify:freecad-security": "pnpm -C server exec vitest run src/lib/freecadProcessSecurity.test.ts src/lib/pnwStepBatchService.test.ts src/routes/cad-step-batch.test.ts src/routes/shell-launcher-config.test.ts",
     "brand:sync": "node scripts/sync-phoenix-wing-brand-assets.mjs",
     "brand:check": "node scripts/sync-phoenix-wing-brand-assets.mjs --check",
     "dev": "node scripts/run-with-phoenix-wing.mjs registry -- pnpm run dev:services",

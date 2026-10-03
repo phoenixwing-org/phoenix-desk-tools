@@ -4,7 +4,7 @@ import path from "node:path";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { afterEach, describe, expect, it } from "vitest";
 import { pnwCreateDb } from "@phoenix-wing/db-node";
-import { rebuildBomXrefsFromLastScan } from "./pnwBomXrefService.js";
+import { refreshBomXrefForHost } from "./pnwBomXrefService.js";
 import {
   analyzeRenameReferences,
   applyRenameCorrections,
@@ -54,6 +54,9 @@ function createRenameFixture(workspace: string) {
 
   const db = pnwCreateDb(path.join(workspace, ".phoenix", "phoenix-workspace.sqlite"));
   db.exec(`
+    CREATE TABLE phoenix_cad_scan (id INTEGER PRIMARY KEY);
+    INSERT INTO phoenix_cad_scan(id) VALUES (1);
+
     CREATE TABLE phoenix_cad_file_asset (
       id INTEGER PRIMARY KEY,
       repo_rel_path TEXT NOT NULL UNIQUE,
@@ -78,7 +81,7 @@ function createRenameFixture(workspace: string) {
   db.run(sql, [2, "./asm/Assembly.FCStd", "Assembly.FCStd", "100002", "001", "Assembly", "Assembly"]);
   db.run(sql, [3, "./upper/Top.FCStd", "Top.FCStd", "100003", "001", "Top", "Top"]);
   db.close();
-  rebuildBomXrefsFromLastScan(workspace);
+  refreshBomXrefForHost(workspace, "upper/Top.FCStd", { recursive: true, maxHosts: 10 });
 }
 
 afterEach(() => {

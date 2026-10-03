@@ -9,15 +9,10 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   loadAssemblyTreeFromXrefs,
-  loadAssemblyBomCatalog,
-  loadBomXrefPayload,
-  loadTargetUsageStats,
   patchBomLinkLabels,
   queryXrefCountsForRel,
-  rebuildBomXrefsFromLastScan,
   refreshBomXrefForHost,
   refreshBomXrefForHostAsync,
-  searchBomXrefEdges,
   searchIncomingRefs,
   searchOutgoingRefs,
 } from "../lib/pnwBomXrefService.js";
@@ -273,14 +268,6 @@ cadRoutes.patch("/parts/:pn/:pv/files/:fileId", async (c) => {
   }
 });
 
-// ── BOM XRef（TypeScript / SQLite）─────────────────────
-
-cadRoutes.get("/bom/xref/meta", (c) => {
-  const ws = getWorkspace(c);
-  if (!ws) return c.json({ error: "workspace is required" }, 400);
-  return c.json(loadBomXrefPayload(ws));
-});
-
 // ── BOM XRef 详情（TypeScript / SQLite）───────────────
 
 cadRoutes.get("/bom/xref/incoming", (c) => {
@@ -319,41 +306,6 @@ cadRoutes.get("/bom/xref/assembly-tree", async (c) => {
   return c.json(loadAssemblyTreeFromXrefs(ws, rel, { full }));
 });
 
-cadRoutes.get("/bom/xref/usage-stats", async (c) => {
-  const ws = getWorkspace(c);
-  const rel = c.req.query("rel") || "";
-  if (!ws) return c.json({ error: "workspace is required" }, 400);
-  if (!rel) return c.json({ error: "rel is required" }, 400);
-  return c.json(loadTargetUsageStats(ws, rel));
-});
-
-cadRoutes.get("/bom/xref/edges", (c) => {
-  const ws = getWorkspace(c);
-  if (!ws) return c.json({
-    offset: Number(c.req.query("offset")) || 0,
-    limit: Number(c.req.query("limit")) || 100,
-    total: 0,
-    count: 0,
-    refs: [],
-    index_pending: true,
-  }, 400);
-  return c.json(searchBomXrefEdges(ws, {
-    offset: Number(c.req.query("offset") || 0),
-    limit: Number(c.req.query("limit") || 100),
-    search: c.req.query("search") || undefined,
-  }));
-});
-
-cadRoutes.post("/bom/xref/rebuild", (c) => {
-  const ws = getWorkspace(c);
-  if (!ws) return c.json({ error: "workspace is required" }, 400);
-  try {
-    return c.json(rebuildBomXrefsFromLastScan(ws));
-  } catch (error: any) {
-    return c.json({ error: error?.message || String(error) }, 400);
-  }
-});
-
 cadRoutes.post("/bom/xref/patch-labels", async (c) => {
   const ws = getWorkspace(c);
   if (!ws) return c.json({ error: "workspace is required" }, 400);
@@ -361,12 +313,6 @@ cadRoutes.post("/bom/xref/patch-labels", async (c) => {
   return c.json(patchBomLinkLabels(ws, Array.isArray(body?.patches) ? body.patches : []));
 });
 
-// Additional BOM xref compatibility routes.
-cadRoutes.get("/bom/xref/assembly-hosts", (c) => {
-  const ws = getWorkspace(c);
-  if (!ws) return c.json({ error: "workspace is required" }, 400);
-  return c.json(loadAssemblyBomCatalog(ws, c.req.query("search") || undefined));
-});
 cadRoutes.post("/bom/xref/refresh-host-index", async (c) => {
   const ws = getWorkspace(c);
   if (!ws) return c.json({ error: "workspace is required" }, 400);

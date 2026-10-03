@@ -107,8 +107,7 @@ async function importRoutes(home: string, workspace: string) {
   configurePrefs(home, workspace);
   vi.resetModules();
   const cad = await import("./cad.js");
-  const scan = await import("./cad-scan.js");
-  return { cadRoutes: cad.cadRoutes, cadScanRoutes: scan.cadScanRoutes };
+  return { cadRoutes: cad.cadRoutes };
 }
 
 afterEach(() => {
@@ -170,15 +169,14 @@ describe("cad XLink fix routes", () => {
     await expect(overrideRes.json()).resolves.toMatchObject({ patches: 0, unchanged: true, _native: "node" });
   });
 
-  it("keeps XLink routes single-owned while the earlier CAD scan mount passes through", async () => {
+  it("keeps XLink routes available without the retired Desk scanner", async () => {
     const home = makeTempRoot("cad-xlink-shadow-home-");
     const workspace = makeTempRoot("cad-xlink-shadow-ws-");
     createXlinkFixture(workspace);
-    const { cadRoutes, cadScanRoutes } = await importRoutes(home, workspace);
+    const { cadRoutes } = await importRoutes(home, workspace);
     const app = new Hono();
-    app.route("/api/cad", cadScanRoutes);
     app.route("/api/cad", cadRoutes);
-    expect(cadScanRoutes.routes.some((route) => route.path.startsWith("/xlink-fix/"))).toBe(false);
+    expect(cadRoutes.routes.some((route) => route.path.startsWith("/xlink-fix/"))).toBe(true);
 
     for (const endpoint of ["analyze", "run"]) {
       const res = await app.request(`/api/cad/xlink-fix/${endpoint}`, {
