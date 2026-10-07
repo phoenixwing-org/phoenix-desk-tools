@@ -4,9 +4,9 @@
 
 Owner：Desk Tools maintainers
 
-适用版本：Desk Tools 0.3.x / Wing 0.5.x
+适用版本：Desk Tools 0.5.x / Wing 0.8.0
 
-最后核验：2026-07-22
+最后核验：2026-10-07
 
 ## 目标
 
@@ -79,3 +79,27 @@ PHOENIX_WING_ROOT=/absolute/path/to/phoenix-wing pnpm wing
 - `verify:wing-dependencies` 同时冻结期望版本与 lockfile Registry 解析，继续拒绝 `link:`、`file:`、`workspace:` 和本地 override。
 - 本地并列 Wing 仍只通过现有 alias、loader 和 bundle resolver 消费；正式 Registry 构建不写入兄弟仓库路径。
 - Node 22.14.0 验收通过：Registry 与本地 Wing 两套 Server 65 文件/251 项、CAA Core 11/67、Web 70/399 测试；两套 Web/Server bundle、双端 typecheck、345 源文件架构门禁，以及 Registry Tauri runtime health/shutdown smoke 均通过。
+
+## 2026-10-07 Registry 0.8.0 消费升级
+
+Desk 已适配 Wing 0.8.0 正式 Registry 包。依赖清单、锁文件与版本门禁保持精确锁定；本次不发布 Desk，也不执行 Auto CAD 退役。
+
+| 发布包 | Desk 精确版本 | 消费端 |
+|---|---|---|
+| `phoenix-wing` | `0.8.0` | Web |
+| `@phoenix-wing/cad-core` | `0.7.0` | Server |
+| `@phoenix-wing/cad-contracts` | `0.7.0` | Server |
+| `@phoenix-wing/code-core` | `0.6.7` | Server |
+
+四个包的 lockfile integrity 已与 Wing `docs/releases/0.8.0发布候选.md` 中的正式发布回执核对一致。发布输入为 `e97157e2dc1b222ef12dcc3768cda29ba23cc06d`；发布后回执提交为 `717ed543fc30692b8d5ab7180eb20d336e663498`。未升级其他依赖，未引入本地链接或 override。
+
+Node 22.23.1、pnpm 9.15.9 下完成以下点检：
+
+- Registry 完整测试、双端 typecheck 通过；补充 11 项标签操作回归后再次运行 Web 全量测试，最终 Server 79 文件 / 488 项、CAA Core 11 / 67、Web 110 / 761，共 1,316 项通过。
+- 新回归覆盖指定标签目标与顺序、未保存刷新取消、等待确认后的忙碌状态复核、批量关闭中止、新开标签不进入已有批次，以及异常后的操作锁释放。
+- `pnpm build:registry` 的 Web 与 Server bundle、`pnpm verify:architecture`（410 个源文件）、`pnpm verify:wing-dependencies` 通过。
+- 隔离临时配置、服务注册目录和空工作空间，带无效 `PHOENIX_WING_ROOT` 启动根目录 `pnpm dev`：Server 与 Web 均输出 `[Wing][REGISTRY]`，页面显示 Wing 0.8.0，CAD 索引诊断与零件目录正常加载。
+- 浏览器验证非当前标签的「关闭右侧」目标、Esc 焦点返回及最后标签关闭；控制台未发现警告或错误。仅使用临时空工作空间，不含个人工程材料。
+- `pnpm wing:check-local` 与模式解析回归通过。本轮未重建或改写并列 Wing；本地完整构建与 Windows、Tauri 发行制品、真实 FreeCAD 写入验收不在本次 Registry 适配范围内。
+
+保留的非阻断警告：发布包部分 sourcemap 源文件缺失、既有 Vitest UI peer 版本提示，以及构建时 VueUse PURE 注释和大 chunk 提示。未通过修改 `node_modules` 或扩大依赖升级范围掩盖这些提示。
