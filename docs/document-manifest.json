@@ -13,49 +13,49 @@
       "path": ".claude/rules/no-better-sqlite3.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "AGENTS.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "CHANGELOG.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "CONTRIBUTING.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/产品功能归属矩阵.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/路径与目录显示约定.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/文档索引.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
@@ -80,7 +80,7 @@
       "path": "docs/caa/CAA-工具箱-折叠ribbon-规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -89,28 +89,28 @@
       "path": "docs/caa/CAA-VSCode交接-人工点检清单.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/caa/CAA单元测试-多后端规则.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/caa/CAA当前架构与契约.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/caa/CAA对话框-撤销重做-规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -119,21 +119,21 @@
       "path": "docs/caa/CAA对话框-画布命令责任与提炼点检.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/caa/CAA对话框-控件组件化设计.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/caa/CAA对话框-NLS多语言模型-讨论.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -142,7 +142,7 @@
       "path": "docs/caa/CAA对话框-NLS会话ViewModel验收.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
@@ -158,7 +158,7 @@
       "path": "docs/caa/CAA对话框-Web编辑器-规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -167,7 +167,7 @@
       "path": "docs/caa/CAA对话框索引与多Tab-规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -176,7 +176,7 @@
       "path": "docs/caa/CAA模块-概览.md",
       "status": "superseded",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/caa/CAA当前架构与契约.md",
       "reason": "旧 Python/原型概览已由当前 Node/Hono 契约替代"
@@ -185,7 +185,7 @@
       "path": "docs/cad/出向引用-N+1查库-研究.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -194,7 +194,7 @@
       "path": "docs/cad/调试输出配置-设计讨论.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -212,7 +212,7 @@
       "path": "docs/cad/改名引用写回-装配Label同步-需求.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -221,7 +221,7 @@
       "path": "docs/cad/改名与XLink引用修正-规划讨论.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -239,8 +239,17 @@
       "path": "docs/cad/链接路径修正-未找到手选.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
+    },
+    {
+      "path": "docs/cad/零件图册需求.md",
+      "status": "draft",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.5.x",
+      "lastVerified": "2026-08-17",
+      "sourceOfTruth": "docs/TODO.md",
+      "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
       "path": "docs/cad/内部装配-BOM挂载-结构感知-归档.md",
@@ -255,7 +264,7 @@
       "path": "docs/cad/图纸档-BOM属性规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -264,7 +273,7 @@
       "path": "docs/cad/文件变更历史与引用证据-待办讨论.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -282,7 +291,7 @@
       "path": "docs/cad/文件详情页-整改规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -291,14 +300,14 @@
       "path": "docs/cad/已知UI-bug.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/cad/装配树行组件-页面壳验收.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
@@ -314,14 +323,14 @@
       "path": "docs/cad/BOM工具说明.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/cad/BOM列表页设计.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
@@ -343,10 +352,33 @@
       "reason": "旧迁移、旧 schema、旧桌面或完成态实现记录"
     },
     {
+      "path": "docs/cad/CAD改名与装配标签-点检隐私审查-归档.md",
+      "status": "archived",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "historical",
+      "lastVerified": "2026-08-17",
+      "sourceOfTruth": "docs/文档索引.md",
+      "reason": "完成态会话、迁移或发布证据"
+    },
+    {
       "path": "docs/cad/CAD关键写操作点检与评分.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
+      "lastVerified": "2026-08-17"
+    },
+    {
+      "path": "docs/cad/CAD目录与索引职责拆分.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.5.x",
+      "lastVerified": "2026-08-17"
+    },
+    {
+      "path": "docs/cad/CAD批量工具.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
@@ -371,49 +403,49 @@
       "path": "docs/cad/CAD数据与API真源.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/cad/CAD索引-缺失条目.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/cad/CAD索引面板-人工点检清单.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/cad/CAD索引设置页面壳验收.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/cad/Desk-CAD减法与保留边界.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/cad/FCStd真实制品验收.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/cad/FreeCAD-BOM概念与数据模型-研究.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -422,21 +454,28 @@
       "path": "docs/cad/FreeCAD-BOM宏-轻量Python界面计划.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/cad/FreeCAD-Phoenix桥接.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
+      "lastVerified": "2026-08-17"
+    },
+    {
+      "path": "docs/cad/KT-Auto-CAD下线计划.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/cad/Phoenix嵌入式BOM属性约定.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
@@ -461,7 +500,7 @@
       "path": "docs/cad/Ribbon-actions-modules分离设计.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
@@ -477,14 +516,14 @@
       "path": "docs/cad/SolidWorks批量STEP导出.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/cad/STEP批量转FCStd.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
@@ -500,80 +539,105 @@
       "path": "docs/code/测试工程外链-fixture.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/code/成员变量字母序-规则与待实现.md",
-      "status": "current",
+      "status": "superseded",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
-      "lastVerified": "2026-08-17"
+      "appliesTo": "0.5.x",
+      "lastVerified": "2026-08-17",
+      "sourceOfTruth": "docs/code/Desk-Code功能退役.md",
+      "reason": "2026-10-04 Desk 收敛 Code 产品范围，只保留忽略设定与 CAA；旧实现与复刻计划不再推进"
     },
     {
       "path": "docs/code/成员函数排序-reorder_members.md",
-      "status": "current",
+      "status": "superseded",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
-      "lastVerified": "2026-08-17"
+      "appliesTo": "0.5.x",
+      "lastVerified": "2026-08-17",
+      "sourceOfTruth": "docs/code/Desk-Code功能退役.md",
+      "reason": "2026-10-04 Desk 收敛 Code 产品范围，只保留忽略设定与 CAA；旧实现与复刻计划不再推进"
     },
     {
       "path": "docs/code/成员排序-锁定段与回归用例.md",
-      "status": "current",
+      "status": "superseded",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
-      "lastVerified": "2026-08-17"
+      "appliesTo": "0.5.x",
+      "lastVerified": "2026-08-17",
+      "sourceOfTruth": "docs/code/Desk-Code功能退役.md",
+      "reason": "2026-10-04 Desk 收敛 Code 产品范围，只保留忽略设定与 CAA；旧实现与复刻计划不再推进"
     },
     {
       "path": "docs/code/跨产品共享整改执行计划.md",
-      "status": "current",
+      "status": "superseded",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
-      "lastVerified": "2026-08-17"
+      "appliesTo": "0.5.x",
+      "lastVerified": "2026-08-17",
+      "sourceOfTruth": "docs/code/Desk-Code功能退役.md",
+      "reason": "2026-10-04 Desk 收敛 Code 产品范围，只保留忽略设定与 CAA；旧实现与复刻计划不再推进"
     },
     {
       "path": "docs/code/Code模块-工作空间索引.md",
-      "status": "current",
+      "status": "superseded",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
-      "lastVerified": "2026-08-17"
+      "appliesTo": "0.5.x",
+      "lastVerified": "2026-08-17",
+      "sourceOfTruth": "docs/code/Desk-Code功能退役.md",
+      "reason": "2026-10-04 Desk 收敛 Code 产品范围，只保留忽略设定与 CAA；旧实现与复刻计划不再推进"
     },
     {
       "path": "docs/code/Code模块-批量改名-规划.md",
-      "status": "draft",
+      "status": "superseded",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
-      "sourceOfTruth": "docs/TODO.md",
-      "reason": "尚未晋升为当前操作契约的方案或研究"
+      "sourceOfTruth": "docs/code/Desk-Code功能退役.md",
+      "reason": "2026-10-04 Desk 收敛 Code 产品范围，只保留忽略设定与 CAA；旧实现与复刻计划不再推进"
     },
     {
       "path": "docs/code/Code三端共用算法与UI内核-执行计划.md",
+      "status": "superseded",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.5.x",
+      "lastVerified": "2026-08-17",
+      "sourceOfTruth": "docs/code/Desk-Code功能退役.md",
+      "reason": "2026-10-04 Desk 收敛 Code 产品范围，只保留忽略设定与 CAA；旧实现与复刻计划不再推进"
+    },
+    {
+      "path": "docs/code/Desk-Code功能退役.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/code/KT-Codegen-人工点检清单.md",
-      "status": "current",
+      "status": "superseded",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
-      "lastVerified": "2026-08-17"
+      "appliesTo": "0.5.x",
+      "lastVerified": "2026-08-17",
+      "sourceOfTruth": "docs/code/Desk-Code功能退役.md",
+      "reason": "2026-10-04 Desk 收敛 Code 产品范围，只保留忽略设定与 CAA；旧实现与复刻计划不再推进"
     },
     {
       "path": "docs/code/KT-Codegen-桌面工作台.md",
-      "status": "current",
+      "status": "superseded",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
-      "lastVerified": "2026-08-17"
+      "appliesTo": "0.5.x",
+      "lastVerified": "2026-08-17",
+      "sourceOfTruth": "docs/code/Desk-Code功能退役.md",
+      "reason": "2026-10-04 Desk 收敛 Code 产品范围，只保留忽略设定与 CAA；旧实现与复刻计划不再推进"
     },
     {
       "path": "docs/code/KT-Codegen-Wing0.4.3-VSCode收敛执行计划.md",
-      "status": "current",
+      "status": "superseded",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
-      "lastVerified": "2026-08-17"
+      "appliesTo": "0.5.x",
+      "lastVerified": "2026-08-17",
+      "sourceOfTruth": "docs/code/Desk-Code功能退役.md",
+      "reason": "2026-10-04 Desk 收敛 Code 产品范围，只保留忽略设定与 CAA；旧实现与复刻计划不再推进"
     },
     {
       "path": "docs/phoenix-wing升级计划.md",
@@ -585,33 +649,42 @@
       "reason": "旧迁移、旧 schema、旧桌面或完成态实现记录"
     },
     {
+      "path": "docs/platform/0.5.0本地代码归档与隐私审查.md",
+      "status": "archived",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "historical",
+      "lastVerified": "2026-08-17",
+      "sourceOfTruth": "docs/文档索引.md",
+      "reason": "完成态会话、迁移或发布证据"
+    },
+    {
       "path": "docs/platform/2026-07-20-Desk-Web-Tauri-CAD手动点检表.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/platform/2026-10-03-分支拣选审计.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/platform/成员排序-变更Diff预览-待研究.md",
-      "status": "draft",
+      "status": "superseded",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
-      "sourceOfTruth": "docs/TODO.md",
-      "reason": "尚未晋升为当前操作契约的方案或研究"
+      "sourceOfTruth": "docs/code/Desk-Code功能退役.md",
+      "reason": "2026-10-04 Desk 收敛 Code 产品范围，只保留忽略设定与 CAA；旧实现与复刻计划不再推进"
     },
     {
       "path": "docs/platform/启动器配置路径-规划讨论.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -620,7 +693,7 @@
       "path": "docs/platform/统一运行日志窗口-规划讨论.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -638,14 +711,14 @@
       "path": "docs/platform/Desk-API单实例与多宿主发现.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/platform/FileWorkset-规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -654,14 +727,14 @@
       "path": "docs/platform/Git插件-isomorphic-git-介绍与选型对比.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/platform/Phoenix工作空间存储-规划讨论.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -670,7 +743,7 @@
       "path": "docs/platform/Phoenix平台-多应用壳层-规划讨论.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -679,7 +752,7 @@
       "path": "docs/platform/SQL查询与递归点检-todo.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -688,14 +761,14 @@
       "path": "docs/platform/UnitTests-失败关注页面壳验收.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/platform/UnitTests-运行范围页面壳验收.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
@@ -711,7 +784,7 @@
       "path": "docs/platform/Web壳层-侧栏高度调节-规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -720,7 +793,7 @@
       "path": "docs/platform/Web壳层-侧栏左右Dock-规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -729,7 +802,7 @@
       "path": "docs/platform/Web壳层-侧栏Block布局模式-规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -765,24 +838,25 @@
       "path": "docs/platform/Web壳层-业务页Element化-梳理.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
       "path": "docs/platform/Web壳层-页面参数与属性-MVC研讨.md",
-      "status": "current",
-      "owner": "Desk Tools web architecture maintainers",
-      "appliesTo": "0.4.x",
+      "status": "superseded",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
-      "reason": "KT Codegen Page Param/PropertySchema 试点的当前架构契约"
+      "sourceOfTruth": "docs/code/Desk-Code功能退役.md",
+      "reason": "2026-10-04 Desk 收敛 Code 产品范围，只保留忽略设定与 CAA；旧实现与复刻计划不再推进"
     },
     {
       "path": "docs/platform/Web壳层-页面属性面板-规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -818,21 +892,21 @@
       "path": "docs/platform/Web壳层-页面属性面板.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/platform/Web壳层-异步View首开闪烁整改计划.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/platform/Web壳层-Git变更分区批量预览-规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -841,7 +915,7 @@
       "path": "docs/platform/Web壳层-Git工作区插件-规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -850,7 +924,7 @@
       "path": "docs/platform/Web壳层-Git工作区插件-G1点检清单.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
@@ -866,7 +940,7 @@
       "path": "docs/platform/Web壳层-Pnw工作台0.6接入.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
@@ -891,7 +965,7 @@
       "path": "docs/platform/Web壳层-Ribbon改型-规划.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -909,7 +983,7 @@
       "path": "docs/platform/Web壳层-Tab与状态持久化-规划讨论.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -918,7 +992,7 @@
       "path": "docs/platform/Web与桌面迁移-待办.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -927,21 +1001,21 @@
       "path": "docs/platform/Welcome-Wing消费与去重复审计-2026-08-17.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/platform/Wing并列仓库联调.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/releases/0.4.0-发布候选.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
@@ -975,14 +1049,14 @@
       "path": "docs/tauri-构建启动与验收指南.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/tauri-逐页功能二验矩阵.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
@@ -998,7 +1072,7 @@
       "path": "docs/tauri-Windows发布态门禁-待办.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -1007,7 +1081,7 @@
       "path": "docs/TODO-CAA.md",
       "status": "superseded",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "域待办已合并到唯一总入口"
@@ -1016,7 +1090,7 @@
       "path": "docs/TODO-GIT.md",
       "status": "superseded",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "域待办已合并到唯一总入口"
@@ -1025,21 +1099,21 @@
       "path": "docs/TODO.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/user/快速开始.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "docs/user/新手指引-规划讨论.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "sourceOfTruth": "docs/TODO.md",
       "reason": "尚未晋升为当前操作契约的方案或研究"
@@ -1057,7 +1131,7 @@
       "path": "docs/user/新手指引.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
@@ -1091,56 +1165,56 @@
       "path": "docs/user/Web壳层-使用说明.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "phoenix/config/README-launcher.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "README.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "scripts/README.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "server/README.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "server/scripts/README.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "src-tauri/README.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "tests/fixtures/caa/expected/PNXBomAnalysisDlg/add-PushButton-to-FrameBom/README.md",
       "status": "current",
       "owner": "Desk Tools test maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "reason": "fixture 说明与预期输出证据"
     },
@@ -1148,7 +1222,7 @@
       "path": "tests/fixtures/caa/expected/PNXBomAnalysisDlg/delete-FrameBom-container/README.md",
       "status": "current",
       "owner": "Desk Tools test maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "reason": "fixture 说明与预期输出证据"
     },
@@ -1156,7 +1230,7 @@
       "path": "tests/fixtures/caa/expected/PNXBomAnalysisDlg/delete-LabelFirstProduct/README.md",
       "status": "current",
       "owner": "Desk Tools test maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "reason": "fixture 说明与预期输出证据"
     },
@@ -1164,7 +1238,7 @@
       "path": "tests/fixtures/caa/expected/PNXBomAnalysisDlg/move-PushButtonJson-to-FrameParams/README.md",
       "status": "current",
       "owner": "Desk Tools test maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "reason": "fixture 说明与预期输出证据"
     },
@@ -1172,7 +1246,7 @@
       "path": "tests/fixtures/caa/README.md",
       "status": "current",
       "owner": "Desk Tools test maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "reason": "fixture 说明与预期输出证据"
     },
@@ -1180,7 +1254,7 @@
       "path": "tests/fixtures/README.md",
       "status": "current",
       "owner": "Desk Tools test maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "reason": "fixture 说明与预期输出证据"
     },
@@ -1188,7 +1262,7 @@
       "path": "tests/fixtures/uuid/README.md",
       "status": "current",
       "owner": "Desk Tools test maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "reason": "fixture 说明与预期输出证据"
     },
@@ -1196,7 +1270,7 @@
       "path": "tests/fixtures/workspaces/minimal/README.md",
       "status": "current",
       "owner": "Desk Tools test maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17",
       "reason": "fixture 说明与预期输出证据"
     },
@@ -1204,28 +1278,28 @@
       "path": "THIRD_PARTY_NOTICES.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "web-ui/README.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "web-ui/src/assets/icons/widget/README.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     },
     {
       "path": "web-ui/src/features/audio-extractor/README.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
-      "appliesTo": "0.4.x",
+      "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
     }
   ]

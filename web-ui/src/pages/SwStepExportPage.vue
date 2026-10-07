@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import {
   fetchSwStepPrefs,
   previewSwStepExport,
@@ -8,7 +8,10 @@ import {
   type SwStepPrefs,
 } from "../api";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
+import PageLayout from "phoenix-wing/layout/PnwPageLayout.vue";
+import { useCadBatchDirectory } from "../composables/useCadBatchDirectory";
 import { useAppShell } from "../composables/useAppShell";
+import { cadBatchToolsSection } from "../composables/cadBatchTools";
 import { useSwStepExportPropertySheet } from "../composables/useSwStepExportPropertySheet";
 import {
   usePagePrimaryContribution,
@@ -20,8 +23,9 @@ const props = defineProps<{
 }>();
 
 const shell = useAppShell();
+const shared = useCadBatchDirectory(shell.workspacePath);
 
-const sourceDir = ref("");
+const sourceDir = shared.directory;
 const outStepDir = ref("");
 const recursiveScan = ref(false);
 
@@ -52,6 +56,13 @@ const saving = ref(false);
 const previewing = ref(false);
 const running = ref(false);
 const modelCount = ref<number | null>(null);
+shared.bindBusy(computed(() => saving.value || previewing.value || running.value));
+let scopeEpoch = 0;
+watch(shared.scopeKey, () => {
+  scopeEpoch++;
+  modelCount.value = null;
+  if (prefsSaveTimer) clearTimeout(prefsSaveTimer);
+}, { flush: "sync" });
 
 function prefsPayload() {
   return {
@@ -82,22 +93,26 @@ function unavailableMessage(meta: SwStepMeta): string {
 }
 
 async function loadPrefs() {
+  const epoch = scopeEpoch;
   const prefs = await fetchSwStepPrefs();
-  sourceDir.value = prefs.source_dir;
+  if (epoch !== scopeEpoch) return;
   outStepDir.value = prefs.out_step_dir;
   recursiveScan.value = prefs.recursive_scan;
   updatePrefsMeta(prefs);
 }
 
 async function onSave() {
+  if (saving.value || previewing.value || running.value || shared.disabled.value) return;
+  const epoch = scopeEpoch;
   saving.value = true;
   try {
     const prefs = await saveSwStepPrefs(prefsPayload());
-    sourceDir.value = prefs.source_dir;
+    if (epoch !== scopeEpoch) return;
     outStepDir.value = prefs.out_step_dir;
     updatePrefsMeta(prefs);
     shell.setStatus("已保存 SW→STEP 偏好");
   } catch (e) {
+    if (epoch !== scopeEpoch) return;
     shell.setStatus(String(e));
   } finally {
     saving.value = false;
@@ -105,16 +120,20 @@ async function onSave() {
 }
 
 async function onPreview() {
+  if (!await shared.validate()) return;
+  const epoch = scopeEpoch;
   previewing.value = true;
   shell.appendLog("SW→STEP 预览模型数量…", { source: "sw_step_export", open: true });
   try {
     const data = await previewSwStepExport(prefsPayload());
+    if (epoch !== scopeEpoch) return;
     updatePrefsMeta(data.prefs);
     modelCount.value = data.model_count;
     const msg = `${data.source_display} · ${data.model_count} 个模型`;
     shell.appendLog(msg, { source: "sw_step_export" });
     shell.setStatus(msg);
   } catch (e) {
+    if (epoch !== scopeEpoch) return;
     shell.appendLog(String(e), { source: "sw_step_export" });
     shell.setStatus(String(e));
   } finally {
@@ -123,14 +142,18 @@ async function onPreview() {
 }
 
 async function onRun() {
+  if (!prefsMeta.value?.com_available || !await shared.validate()) return;
+  const epoch = scopeEpoch;
   running.value = true;
   shell.appendLog("SolidWorks COM 导出…", { source: "sw_step_export", open: true });
   try {
     const data = await runSwStepExport(prefsPayload());
+    if (epoch !== scopeEpoch) return;
     updatePrefsMeta(data.prefs);
     shell.appendLog(data.log, { source: "sw_step_export" });
     shell.setStatus(`成功 ${data.ok_count} · 失败 ${data.failed_count} · 输出 ${data.out_display}`);
   } catch (e) {
+    if (epoch !== scopeEpoch) return;
     shell.appendLog(String(e), { source: "sw_step_export" });
     shell.setStatus(String(e));
   } finally {
@@ -139,29 +162,20 @@ async function onRun() {
 }
 
 usePagePrimaryContribution("sw_step_export", props.workbenchTabId, {
+  title: "批量工具",
   summary: computed(() => {
     if (prefsMeta.value && !prefsMeta.value.com_available) return unavailableMessage(prefsMeta.value);
     if (modelCount.value == null) return "尚未预览 SolidWorks 模型";
     return `发现 ${modelCount.value} 个 SolidWorks 模型`;
   }),
   sections: computed<PagePrimarySection[]>(() => [
+    cadBatchToolsSection(shell, "sw_step_export"),
+    shared.section,
     {
       id: "export",
       title: "导出范围",
       description: "通过 Windows SolidWorks COM 将三维模型批量导出为 STEP。",
       controls: [
-        {
-          id: "source",
-          kind: "text",
-          label: "SolidWorks 模型",
-          modelValue: sourceDir,
-          placeholder: "相对工作空间",
-          mono: true,
-          onUpdate: (value) => {
-            sourceDir.value = value;
-            schedulePrefsSave();
-          },
-        },
         {
           id: "output",
           kind: "text",
@@ -209,34 +223,42 @@ usePagePrimaryContribution("sw_step_export", props.workbenchTabId, {
   ]),
 });
 
+onUnmounted(() => {
+  scopeEpoch++;
+  if (prefsSaveTimer) clearTimeout(prefsSaveTimer);
+});
+
 onMounted(async () => {
+  const epoch = scopeEpoch;
   try {
     await loadPrefs();
   } catch (e) {
-    shell.setStatus(String(e));
+    if (epoch === scopeEpoch) shell.setStatus(String(e));
   }
 });
 </script>
 
 <template>
-  <div class="page tool-page">
-    <PageHeader title="SW→STEP" page-id="sw_step_export">
-      <template #actions>
-        <div data-tour-page-sw-run class="head-actions-inner">
-          <el-button size="small" :loading="saving" @click="onSave">保存偏好</el-button>
-          <el-button size="small" :loading="previewing" @click="onPreview">预览数量</el-button>
-          <el-button
-            type="primary"
-            size="small"
-            :loading="running"
-            :disabled="!prefsMeta?.com_available"
-            @click="onRun"
-          >
-            开始导出
-          </el-button>
-        </div>
-      </template>
-    </PageHeader>
+  <PageLayout class="desk-page-layout" title="SW→STEP">
+    <template #header>
+      <PageHeader title="SW→STEP">
+        <template #right>
+          <div data-tour-page-sw-run class="head-actions-inner">
+            <el-button size="small" :loading="saving" @click="onSave">保存偏好</el-button>
+            <el-button size="small" :loading="previewing" @click="onPreview">预览数量</el-button>
+            <el-button
+              type="primary"
+              size="small"
+              :loading="running"
+              :disabled="!prefsMeta?.com_available"
+              @click="onRun"
+            >
+              开始导出
+            </el-button>
+          </div>
+        </template>
+      </PageHeader>
+    </template>
 
     <el-alert
       v-if="prefsMeta && !prefsMeta.com_available"
@@ -250,7 +272,7 @@ onMounted(async () => {
     <section v-if="modelCount !== null" class="controls card" data-tour-page-sw-form>
       <p class="meta-line">发现 {{ modelCount }} 个 .sldprt / .sldasm</p>
     </section>
-  </div>
+  </PageLayout>
 </template>
 
 <style scoped>

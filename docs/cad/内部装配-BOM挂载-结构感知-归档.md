@@ -9,7 +9,7 @@
 
 ## 问题
 
-纯内部装配（无 XLink）多层 `App::Part` 时，旧规则按 `<Objects>` 声明顺序取**第一个** Part，误挂 `_6222656233` 等几何包装容器，而非树顶 `PCB`。
+纯内部装配（无 XLink）多层 `App::Part` 时，旧规则按 `<Objects>` 声明顺序取**第一个** Part，可能误挂子容器。2026-10-07 已以独立构造的 `RootPart → NestedPart` 场景替换历史工程样本。
 
 ---
 
@@ -27,7 +27,7 @@
 
 | 项 | 状态 |
 | --- | --- |
-| 样例 XML → `_first_bom_target_object_name` = `PCB` | ✅ |
+| 合成 XML → `_first_bom_target_object_name` = `RootPart` | 由当前测试复核；不继承真实工程验收 |
 | 图纸-primary 仍挂 `App::Link` | ✅ |
 | 读写 BOM / 索引 / Label 同步走同一挂载函数 | ✅ |
 

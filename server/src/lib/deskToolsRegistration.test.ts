@@ -47,7 +47,7 @@ describe("Desk Tools registration", () => {
       schema_version: 1,
       service: "phoenix-desk-tools",
       protocol_version: 1,
-      app_version: "0.4.0",
+      app_version: "0.5.0",
       host: "127.0.0.1",
       port: 48_377,
       started_at: "2026-07-20T12:00:00.000Z",

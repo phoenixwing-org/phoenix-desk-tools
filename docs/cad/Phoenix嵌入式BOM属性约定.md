@@ -25,7 +25,7 @@ Phoenix「属性回写」将可编辑 BOM 字段写入 **`.FCStd` ZIP** 内的 *
 | `extra` | 扩展 dict，不写 `Document.xml` |
 
 **`EDITABLE_ENTRY_ATTRS`**：**`PartNumber`、`PartVersion`、`TypeCode`、`ModelSeries`、`PartName`、`label`**。  
-不写 Document：`repo_rel_path`、`filename`。属性回写：若 **`PartName`** 为空保存，则用当前 **`label`** 写入 Document；载入时 **`PartName`** 为空则界面用 **`label`** 预填。
+不写 Document：`repo_rel_path`、`filename`。详情页读取到真实对象时，缺失的 **`PartName`** 显示为空，不把索引或文件名推断冒充已有属性。推荐时已有 PartName 优先；为空才按「标签名（默认）/文件名」补全，空标签回退文件名。PartName 使用纯名称，不包含末尾 `.ASSY`；装配 Label 和文件名分别保留一个 `.ASSY`、`.ASSY.FCStd`。推荐只填草稿，确认写入才修改 Document，详见 [CAD 批量工具](CAD批量工具.md#名称统一)。
 
 ### 2.1 `TypeCode`（类型码）
 

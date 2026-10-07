@@ -113,10 +113,5 @@ export const DEFAULT_PAGE_ICONS: Record<string, string> = {
   part_catalog: "◉",
   part_key_detail: "◎",
   part_dedup: "≡",
-  reorder_members: "{ }",
-  kt_codegen: "⚙",
-  code_index: "⌗",
   code_ignore: "⊘",
-  code_rename: "↦",
-  code_uuid: "⧉",
 };

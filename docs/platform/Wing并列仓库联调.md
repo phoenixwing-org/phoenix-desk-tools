@@ -46,13 +46,13 @@ PHOENIX_WING_ROOT=/absolute/path/to/phoenix-wing pnpm wing
 
 本地模式不是安装模式，不修改依赖图：
 
-1. 启动包装器验证根 aggregate 与 Server 使用的六个 TypeScript 包，然后构建其 `dist`。
-2. Web 通过 Vite alias 直接消费 aggregate 与包源码，包含 `.vue` 子路径和 `@phoenix-wing/kt-codegen/table`，并把 Wing 根加入 Vite 文件系统白名单；Vue、Pinia 保持 Desk singleton。
+1. 启动包装器验证根 aggregate 与保留的七个 TypeScript 包（含传递依赖），然后构建其 `dist`。
+2. Web 通过 Vite alias 直接消费 aggregate 与包源码，包含 `.vue` 子路径，并把 Wing 根加入 Vite 文件系统白名单；Vue、Pinia 保持 Desk singleton。
 3. Server 的 `tsx` 子进程通过仅在 `PHOENIX_WING_MODE=local` 注册的 ESM resolver，按每个包的 `exports` 指向本地 `dist`；fixture 子路径同样遵循包导出。
 4. Server Vitest 和 esbuild sidecar 使用同一 exports resolver，避免开发、测试、bundle 三套解析规则漂移。
 5. Registry 模式不安装、不 alias，严格使用现有清单与锁文件；日志以 `[Wing][LOCAL]` 或 `[Wing][REGISTRY]` 醒目标明真源。
 
-覆盖范围为 `phoenix-wing` aggregate、`@phoenix-wing/kt-codegen`，以及 Server 的 `code-core`、`cad-contracts`、`cad-core`、`db-node`、`kt-codegen`、`workspace-schema`。Desk 当前不再消费 `cad-rust-source`；Tauri 壳与发布制品仍属于独立构建/发布门禁，不由普通 `pnpm dev` 改写。
+覆盖范围为 `phoenix-wing` aggregate，以及 `code-core`、`cad-contracts`、`cad-core`、`db-node`、`git-core`、`git-node`、`workspace-schema`。Desk 当前不再消费 `kt-codegen`、`cad-rust-source`；下面的旧 Codegen 联调回执只作历史证据。Tauri 壳与发布制品仍属于独立构建/发布门禁，不由普通 `pnpm dev` 改写。
 
 ## 禁止事项与点检
 

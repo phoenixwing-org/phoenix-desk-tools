@@ -132,7 +132,7 @@ defineExpose({ reload: loadPrefs });
         </summary>
         <div class="ignore-body">
           <p v-if="!compact" class="ignore-lead">
-            工作空间偏好 <span class="mono">code_ignore.custom_ignore</span>；CAA / Qt 等与 code.ignore 合并后生效。
+            工作空间偏好 <span class="mono">code_ignore.custom_ignore</span>；当前独立保留设定，保存不会触发源码扫描。
           </p>
           <p v-else class="ignore-lead muted small">工作空间偏好，与上方 Git 式 code.ignore 分开。</p>
           <div class="preset-row">
@@ -170,7 +170,7 @@ defineExpose({ reload: loadPrefs });
         </summary>
         <ul class="help-list">
           <li>隐藏项（<code>.</code> 开头）始终忽略。</li>
-          <li>支持 fnmatch 通配；索引 / 排序 / 改名共用。</li>
+          <li>支持 fnmatch 通配；当前仅保留独立设定。</li>
         </ul>
       </details>
     </div>
@@ -181,7 +181,7 @@ defineExpose({ reload: loadPrefs });
         <li>以 <code>.</code> 开头的隐藏项始终忽略。</li>
         <li>精确名称匹配 basename；含 <code>*?[]</code> 时按 fnmatch 通配。</li>
         <li>递归扫描在每一级目录 basename 上应用相同规则。</li>
-        <li>成员排序仅作用于工作空间一级条目，但使用同一套合并规则。</li>
+        <li>目前无消费工具；保存设定不会扫描或修改源码。</li>
       </ul>
     </details>
   </div>

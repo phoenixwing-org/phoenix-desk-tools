@@ -41,13 +41,13 @@ class TestBomApplyPrefs(unittest.TestCase):
                 part_number="100346",
                 part_version="002",
                 type_code="s",
-                model_series="5TA",
+                model_series="ALT",
             )
             prefs = load_bom_apply_field_defaults(td)
             self.assertEqual(prefs["last_part_number"], "100346")
             self.assertEqual(prefs["last_part_version"], "002")
             self.assertEqual(prefs["last_type_code"], "S")
-            self.assertEqual(prefs["last_model_series"], "5TA")
+            self.assertEqual(prefs["last_model_series"], "ALT")
             db = td / ".phoenix" / WORKSPACE_DATABASE_FILENAME
             self.assertTrue(db.is_file())
             self.assertFalse(workspace_dotfile_path(td).is_file())

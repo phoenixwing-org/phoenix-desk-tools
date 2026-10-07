@@ -6,17 +6,9 @@ import {
 } from "../api";
 import { useAppShell } from "./useAppShell";
 
-export const CONSUMER_LABELS: Record<string, string> = {
-  code_index: "Code 索引",
-  reorder_members: "C++ 成员排序",
-  kt_codegen: "KT Codegen",
-  code_rename: "批量改名",
-  code_uuid: "UUID 替换",
-};
-
 export function formatConsumerScope(ids: string[]): string {
-  if (!ids.length) return "—";
-  return ids.map((id) => CONSUMER_LABELS[id] || id).join(" · ");
+  if (!ids.length) return "目前无消费工具，仅保留独立设定";
+  return ids.join(" · ");
 }
 
 function parseCustomLines(text: string): string[] {

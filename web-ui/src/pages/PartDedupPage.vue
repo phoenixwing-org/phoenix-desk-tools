@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import {
   exportPartDedupCsv,
   fetchPartDedupPrefs,
@@ -9,7 +9,10 @@ import {
   type PartDedupScanResult,
 } from "../api";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
+import PageLayout from "phoenix-wing/layout/PnwPageLayout.vue";
+import { useCadBatchDirectory } from "../composables/useCadBatchDirectory";
 import { useAppShell } from "../composables/useAppShell";
+import { cadBatchToolsSection } from "../composables/cadBatchTools";
 import {
   PART_DEDUP_EXTENSION_OPTIONS,
   usePartDedupPropertySheet,
@@ -24,6 +27,7 @@ const props = defineProps<{
 }>();
 
 const shell = useAppShell();
+const shared = useCadBatchDirectory(shell.workspacePath);
 
 const extension = ref(".SLDPRT");
 const codeLen = ref(6);
@@ -31,13 +35,20 @@ const verLen = ref(3);
 const checkCode = ref(true);
 const checkVersion = ref(true);
 const codeMustBeDigit = ref(true);
-const scanDir = ref(".");
+const scanDir = shared.directory;
 const tab = ref<"name_dup" | "code_dup" | "ver_dup">("name_dup");
 
 const saving = ref(false);
 const scanning = ref(false);
 const exporting = ref(false);
 const scanResult = ref<PartDedupScanResult | null>(null);
+shared.bindBusy(computed(() => saving.value || scanning.value || exporting.value));
+let scopeEpoch = 0;
+watch(shared.scopeKey, () => {
+  scopeEpoch++;
+  scanResult.value = null;
+  if (prefsSaveTimer) clearTimeout(prefsSaveTimer);
+}, { flush: "sync" });
 
 const activeGroups = computed(() => scanResult.value?.results[tab.value] ?? []);
 const stats = computed(() => scanResult.value?.stats);
@@ -60,23 +71,27 @@ function prefsPayload() {
 }
 
 async function loadPrefs() {
+  const epoch = scopeEpoch;
   const prefs = await fetchPartDedupPrefs();
+  if (epoch !== scopeEpoch) return;
   extension.value = prefs.extension;
   codeLen.value = prefs.code_len;
   verLen.value = prefs.ver_len;
   checkCode.value = prefs.check_code;
   checkVersion.value = prefs.check_version;
   codeMustBeDigit.value = prefs.code_must_be_digit;
-  scanDir.value = prefs.scan_dir || ".";
 }
 
 async function onSave() {
+  if (saving.value || scanning.value || exporting.value || shared.disabled.value) return;
+  const epoch = scopeEpoch;
   saving.value = true;
   try {
-    const prefs = await savePartDedupPrefs(prefsPayload());
-    scanDir.value = prefs.scan_dir || ".";
+    await savePartDedupPrefs(prefsPayload());
+    if (epoch !== scopeEpoch) return;
     shell.setStatus("已保存查重偏好");
   } catch (e) {
+    if (epoch !== scopeEpoch) return;
     shell.setStatus(String(e));
   } finally {
     saving.value = false;
@@ -84,13 +99,18 @@ async function onSave() {
 }
 
 async function onScan() {
+  if (!await shared.validate()) return;
+  const epoch = scopeEpoch;
   scanning.value = true;
   shell.appendLog(`[零件查重] 扫描 ${scanDir.value.trim()}…`, { source: "part_dedup", open: true });
   try {
-    scanResult.value = await scanPartDedup(prefsPayload());
+    const data = await scanPartDedup(prefsPayload());
+    if (epoch !== scopeEpoch) return;
+    scanResult.value = data;
     shell.appendLog(scanResult.value.summary, { source: "part_dedup" });
     shell.setStatus(scanResult.value.summary);
   } catch (e) {
+    if (epoch !== scopeEpoch) return;
     shell.appendLog(String(e), { source: "part_dedup" });
     shell.setStatus(String(e));
   } finally {
@@ -99,13 +119,17 @@ async function onScan() {
 }
 
 async function onExport() {
+  if (!scanResult.value || !await shared.validate() || !scanResult.value) return;
+  const epoch = scopeEpoch;
   exporting.value = true;
   shell.appendLog("[零件查重] 导出 CSV…", { source: "part_dedup", open: true });
   try {
     const data = await exportPartDedupCsv(scanResult.value?.results);
+    if (epoch !== scopeEpoch) return;
     shell.appendLog(`已导出 ${data.path_display}`, { source: "part_dedup" });
     shell.setStatus(`已导出 ${data.path_display}`);
   } catch (e) {
+    if (epoch !== scopeEpoch) return;
     shell.appendLog(String(e), { source: "part_dedup" });
     shell.setStatus(String(e));
   } finally {
@@ -138,24 +162,15 @@ usePartDedupPropertySheet("part_dedup", {
 });
 
 usePagePrimaryContribution("part_dedup", props.workbenchTabId, {
+  title: "批量工具",
   summary: computed(() => scanResult.value?.summary || "尚未执行编号查重"),
   sections: computed<PagePrimarySection[]>(() => [
+    cadBatchToolsSection(shell, "part_dedup"),
+    shared.section,
     {
       id: "scan",
       title: "扫描规则",
       controls: [
-        {
-          id: "dir",
-          kind: "text",
-          label: "扫描目录",
-          modelValue: scanDir,
-          placeholder: "相对工作空间，如 .",
-          mono: true,
-          onUpdate: (value) => {
-            scanDir.value = value;
-            schedulePrefsSave();
-          },
-        },
         {
           id: "extension",
           kind: "select",
@@ -261,26 +276,34 @@ usePagePrimaryContribution("part_dedup", props.workbenchTabId, {
   ]),
 });
 
+onUnmounted(() => {
+  scopeEpoch++;
+  if (prefsSaveTimer) clearTimeout(prefsSaveTimer);
+});
+
 onMounted(async () => {
+  const epoch = scopeEpoch;
   try {
     await loadPrefs();
   } catch (e) {
-    shell.setStatus(String(e));
+    if (epoch === scopeEpoch) shell.setStatus(String(e));
   }
 });
 </script>
 
 <template>
-  <div class="page tool-page dedup-page">
-    <PageHeader title="编号查重" page-id="part_dedup">
-      <template #actions>
-        <div data-tour-page-dedup-scan class="head-actions-inner">
-          <el-button size="small" :loading="saving" @click="onSave">保存偏好</el-button>
-          <el-button type="primary" size="small" :loading="scanning" @click="onScan">开始扫描</el-button>
-          <el-button size="small" :loading="exporting" :disabled="!scanResult" @click="onExport">导出 CSV</el-button>
-        </div>
-      </template>
-    </PageHeader>
+  <PageLayout class="desk-page-layout dedup-page" title="编号查重">
+    <template #header>
+      <PageHeader title="编号查重">
+        <template #right>
+          <div data-tour-page-dedup-scan class="head-actions-inner">
+            <el-button size="small" :loading="saving" @click="onSave">保存偏好</el-button>
+            <el-button type="primary" size="small" :loading="scanning" @click="onScan">开始扫描</el-button>
+            <el-button size="small" :loading="exporting" :disabled="!scanResult" @click="onExport">导出 CSV</el-button>
+          </div>
+        </template>
+      </PageHeader>
+    </template>
 
     <section class="card results-card">
       <header class="results-head">
@@ -346,7 +369,7 @@ onMounted(async () => {
         />
       </div>
     </section>
-  </div>
+  </PageLayout>
 </template>
 
 <style scoped>

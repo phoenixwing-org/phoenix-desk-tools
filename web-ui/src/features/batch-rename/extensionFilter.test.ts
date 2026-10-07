@@ -1,0 +1,60 @@
+import { createPinia, setActivePinia } from "pinia";
+import { effectScope, ref } from "vue";
+import { beforeEach, afterEach, expect, it, vi } from "vitest";
+import type { RenamePreview, RenameRow } from "./api";
+import { useRenameExtensionFilter } from "./extensionFilter";
+let cache = new Map<string, string>();
+beforeEach(() => { cache = new Map(); setActivePinia(createPinia()); vi.stubGlobal("localStorage", { getItem: (key: string) => cache.get(key), setItem: (key: string, value: string) => cache.set(key, value) }); });
+afterEach(() => vi.unstubAllGlobals());
+const row = (rel: string, root = "/docs"): RenameRow => ({ id: `${root}/${rel}`, rel, root, target: rel, binary: false, eligible: true, diffs: [], truncated: false, occurrences: 1, message: "ready" });
+const plan = (rows: RenameRow[]): RenamePreview => ({ plan_id: "ephemeral", rows, roots: [...new Set(rows.map(item => item.root))], mappings: [], conflicts: [], expires_at: "", scanned: rows.length, skipped: 0, warnings: [] });
+it("lists suffixes case-insensitively and deselects hidden files immediately", () => {
+  const scope = effectScope(), preview = ref<RenamePreview | null>(plan([row("a.CATPart"), row("b.catpart"), row("c.stp"), row("README")]));
+  const selected = ref(preview.value!.rows.map(item => item.id));
+  const filters = scope.run(() => useRenameExtensionFilter(ref("/workspace"), preview, selected))!;
+  expect(filters.filters.value.map(item => [item.extension, item.count])).toEqual([["", 1], [".catpart", 2], [".stp", 1]]);
+  filters.toggle(".catpart", false);
+  expect(filters.visibleRows.value.map(item => item.rel)).toEqual(["c.stp", "README"]);
+  expect(selected.value).toEqual(["/docs/c.stp", "/docs/README"]);
+  filters.toggle(".catpart", true); expect(selected.value).toHaveLength(2); // Displaying is not write consent.
+  scope.stop();
+});
+it("restores per-directory choices after reload and marks only newly discovered suffixes", () => {
+  const scope = effectScope(), workspace = ref("/workspace"), selected = ref<string[]>([]);
+  const preview = ref<RenamePreview | null>(plan([row("a.CATPart"), row("b.stp")]));
+  const filters = scope.run(() => useRenameExtensionFilter(workspace, preview, selected))!;
+  filters.toggle(".catpart", false); scope.stop(); setActivePinia(createPinia());
+  const next = effectScope();
+  preview.value = plan([row("a.catpart"), row("new.md"), row("b.stp")]);
+  const restored = next.run(() => useRenameExtensionFilter(workspace, preview, selected))!;
+  expect(restored.filters.value.find(item => item.extension === ".catpart")).toMatchObject({ checked: false, isNew: false });
+  expect(restored.filters.value.find(item => item.extension === ".md")).toMatchObject({ checked: true, isNew: true });
+  expect(selected.value).toEqual([]);
+  preview.value = plan([row("a.CATPart", "/other-docs")]);
+  expect(restored.filters.value[0].checked).toBe(true);
+  preview.value = plan([row("a.CATPart")]); workspace.value = "/other-workspace";
+  expect(restored.filters.value[0].checked).toBe(true);
+  next.stop();
+});
+it("shows mixed choices across roots and blocks restoring selections for a hidden suffix", () => {
+  const scope = effectScope(), preview = ref<RenamePreview | null>(plan([row("a.txt")])), selected = ref<string[]>([]);
+  const filter = scope.run(() => useRenameExtensionFilter(ref("/workspace"), preview, selected))!;
+  filter.toggle(".txt", false);
+  preview.value = plan([row("a.txt"), row("b.txt", "/more")]);
+  expect(filter.filters.value[0]).toMatchObject({ checked: false, mixed: true });
+  selected.value = preview.value.rows.map(item => item.id);
+  expect(selected.value).toEqual(["/more/b.txt"]);
+  filter.toggle(".txt", true); expect(filter.visibleRows.value).toHaveLength(2);
+  filter.toggle(".txt", false); expect(filter.visibleRows.value).toHaveLength(0); expect(selected.value).toEqual([]);
+  scope.stop();
+});
+it("removes ineligible, hidden and duplicate selections even during initial hydration", () => {
+  const scope = effectScope(), eligible = row("a.md"), blocked = { ...row("model.FCStd"), eligible: false };
+  const preview = ref<RenamePreview | null>(plan([eligible, blocked]));
+  const selected = ref([eligible.id, blocked.id, eligible.id, "stale-row"]);
+  scope.run(() => useRenameExtensionFilter(ref("/workspace"), preview, selected));
+  expect(selected.value).toEqual([eligible.id]);
+  preview.value = { ...preview.value!, rows: [{ ...eligible, eligible: false }] };
+  expect(selected.value).toEqual([]);
+  scope.stop();
+});

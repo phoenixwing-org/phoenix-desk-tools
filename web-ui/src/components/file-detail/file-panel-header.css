@@ -1,0 +1,33 @@
+/* Sub-tab toolbars: a compact row inside Main, not a second View Header. */
+.file-panel-header {
+  display: flex;
+  align-items: center;
+  gap: var(--pnw-page-header-gap, 8px);
+  min-width: 0;
+  min-height: 28px;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+.file-panel-header .panel-title {
+  flex: 0 0 auto;
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.file-panel-actions {
+  display: flex;
+  align-items: center;
+  justify-content: safe flex-end;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: var(--pnw-page-header-gap, 8px);
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  scrollbar-width: thin;
+}
+.file-panel-header .file-panel-actions > * {
+  flex: 0 0 auto;
+  margin-inline: 0;
+}

@@ -1,6 +1,7 @@
 import { computed, ref, type Ref } from "vue";
 import type { AppConfig } from "../types/config";
 import { CAA_EDITOR_PAGE_ID, CAA_HOME_PAGE_ID } from "../constants/caaPages";
+import { CODE_PAGE_FALLBACK, RETIRED_CODE_PAGE_IDS } from "../constants/retiredCodePages";
 import type { OpenTabOptions, PageTabPolicy, WorkbenchSessionSnapshot, WorkbenchTab, WorkbenchTabPayload } from "../types/workbench";
 import { getPageSession } from "./usePageSession";
 import { confirmCloseAllTabs, confirmDirtyTabClose } from "./tabCloseConfirm";
@@ -9,6 +10,7 @@ let tabSeq = 0;
 
 /** 不落盘、不参与 session 恢复的 Tab 页（欢迎页另有全屏层） */
 const EPHEMERAL_TAB_PAGES = new Set(["welcome", "home", "config"]);
+const PREVIEW_TAB_PAGES = new Set(["file_detail", "part_key_detail"]);
 
 function newTabId(): string {
   tabSeq += 1;
@@ -20,7 +22,10 @@ function basename(path: string): string {
   return s.split("/").pop() ?? s;
 }
 
-export function createWorkbench(appConfig: Ref<AppConfig | null>) {
+export function createWorkbench(
+  appConfig: Ref<AppConfig | null>,
+  options: { onTabLimit?: (message: string) => void } = {},
+) {
   const tabs = ref<WorkbenchTab[]>([]);
   const activeTabId = ref("");
 
@@ -73,14 +78,39 @@ export function createWorkbench(appConfig: Ref<AppConfig | null>) {
   }
 
   function openTab(opts: OpenTabOptions): string {
-    const { pageId, title, subtitle, contextKey, payload, forceNew } = opts;
+    const { pageId, title, subtitle, contextKey, payload, forceNew, preview: requestedPreview } = RETIRED_CODE_PAGE_IDS.has(opts.pageId)
+      ? { pageId: CODE_PAGE_FALLBACK }
+      : opts;
     if (pageId === "welcome") {
       throw new Error("欢迎页不在 Tab 工作台中");
     }
     const { maxTabs } = pagePolicy(pageId);
     const existing = findTabsForPage(pageId);
+    const preview = requestedPreview === true && PREVIEW_TAB_PAGES.has(pageId);
+    // Preview navigation must never retarget an existing permanent detail tab.
+    if (requestedPreview !== undefined && contextKey) {
+      const same = existing.find(tab => tab.contextKey === contextKey);
+      if (same) {
+        if (!preview) keepTab(same.id);
+        activeTabId.value = same.id;
+        return same.id;
+      }
+    }
+    let replaced: WorkbenchTab | undefined;
+    if (preview) {
+      for (const candidate of tabs.value.filter(tab => tab.preview)) {
+        const api = getPageSession(candidate.id);
+        // Restored snapshots and in-flight writes are never silently discarded.
+        if (candidate.dirty || candidate.pageState || api?.isDirty() || api?.isBusy?.()) {
+          keepTab(candidate.id);
+        } else {
+          replaced = candidate;
+          break;
+        }
+      }
+    }
 
-    if (!forceNew && maxTabs === 1 && existing.length) {
+    if (requestedPreview === undefined && !forceNew && maxTabs === 1 && existing.length) {
       const tab = existing[0];
       if (title) tab.title = title;
       if (subtitle !== undefined) tab.subtitle = subtitle;
@@ -90,15 +120,17 @@ export function createWorkbench(appConfig: Ref<AppConfig | null>) {
       return tab.id;
     }
 
-    if (!forceNew && existing.length) {
+    if (requestedPreview === undefined && !forceNew && existing.length) {
       const tab = existing[existing.length - 1];
       if (payload) applyPayload(tab, payload);
       activeTabId.value = tab.id;
       return tab.id;
     }
 
-    if (existing.length >= maxTabs) {
-      throw new Error(`${navLabel(pageId)} 最多 ${maxTabs} 个 Tab，请先关闭部分 Tab`);
+    if (existing.length - (replaced?.pageId === pageId ? 1 : 0) >= maxTabs) {
+      const message = `${navLabel(pageId)}已打开 ${existing.length} / ${maxTabs} 个视图，无法打开新视图。请先关闭部分视图后重试。`;
+      options.onTabLimit?.(message);
+      throw new Error(message);
     }
 
     const tab: WorkbenchTab = {
@@ -108,10 +140,12 @@ export function createWorkbench(appConfig: Ref<AppConfig | null>) {
       subtitle,
       contextKey,
       dirty: false,
+      preview,
       payload,
       payloadConsumed: false,
     };
-    tabs.value.push(tab);
+    if (replaced) tabs.value.splice(tabs.value.indexOf(replaced), 1, tab);
+    else tabs.value.push(tab);
     activeTabId.value = tab.id;
     return tab.id;
   }
@@ -128,6 +162,11 @@ export function createWorkbench(appConfig: Ref<AppConfig | null>) {
     if (getTab(tabId)) activeTabId.value = tabId;
   }
 
+  function keepTab(tabId: string): void {
+    const tab = getTab(tabId);
+    if (tab) tab.preview = false;
+  }
+
   function updateTab(
     tabId: string,
     patch: Partial<Pick<WorkbenchTab, "title" | "subtitle" | "contextKey" | "dirty">>,
@@ -137,7 +176,10 @@ export function createWorkbench(appConfig: Ref<AppConfig | null>) {
     if (patch.title !== undefined) tab.title = patch.title;
     if (patch.subtitle !== undefined) tab.subtitle = patch.subtitle;
     if (patch.contextKey !== undefined) tab.contextKey = patch.contextKey;
-    if (patch.dirty !== undefined) tab.dirty = patch.dirty;
+    if (patch.dirty !== undefined) {
+      tab.dirty = patch.dirty;
+      if (patch.dirty) keepTab(tabId);
+    }
   }
 
   function setTabDirty(tabId: string, dirty: boolean): void {
@@ -152,6 +194,7 @@ export function createWorkbench(appConfig: Ref<AppConfig | null>) {
   }
 
   function canOpenNewTab(pageId: string): boolean {
+    if (RETIRED_CODE_PAGE_IDS.has(pageId)) return false;
     const { maxTabs, tabEnabled } = pagePolicy(pageId);
     if (!tabEnabled || maxTabs <= 1) return false;
     return findTabsForPage(pageId).length < maxTabs;
@@ -235,34 +278,46 @@ export function createWorkbench(appConfig: Ref<AppConfig | null>) {
     const sourceTabs = hasCurrentPartCatalog
       ? snapshot.tabs.filter((tab) => !retiredCadPage(tab.pageId))
       : snapshot.tabs;
+    const hasCodeFallback = sourceTabs.some((tab) => tab.pageId === CODE_PAGE_FALLBACK);
     const mapped = sourceTabs
+      .filter((tab) => !hasCodeFallback || !RETIRED_CODE_PAGE_IDS.has(tab.pageId))
       .map((t) => ({
         id: t.id,
         pageId:
-          t.pageId === "rename_analysis"
-            ? "file_rename"
-            : t.pageId === "bom_apply"
-              ? "file_detail"
-              : retiredCadPage(t.pageId)
-                ? "part_catalog"
-              : t.pageId === "home" && t.title === "配置"
-                ? "config"
-                : t.pageId,
-        title: retiredCadPage(t.pageId) ? "零件目录" : t.title,
-        subtitle: t.subtitle,
-        contextKey: t.contextKey,
+          RETIRED_CODE_PAGE_IDS.has(t.pageId)
+            ? CODE_PAGE_FALLBACK
+            : t.pageId === "rename_analysis"
+              ? "file_rename"
+              : t.pageId === "bom_apply"
+                ? "file_detail"
+                : retiredCadPage(t.pageId)
+                  ? "part_catalog"
+                  : t.pageId === "home" && t.title === "配置"
+                    ? "config"
+                    : t.pageId,
+        title: RETIRED_CODE_PAGE_IDS.has(t.pageId)
+          ? navLabel(CODE_PAGE_FALLBACK)
+          : retiredCadPage(t.pageId) ? "零件目录" : t.title,
+        subtitle: RETIRED_CODE_PAGE_IDS.has(t.pageId) ? undefined : t.subtitle,
+        contextKey: RETIRED_CODE_PAGE_IDS.has(t.pageId) ? undefined : t.contextKey,
         dirty: false,
         payloadConsumed: true,
-        pageState: retiredCadPage(t.pageId) ? undefined : t.pageState,
+        pageState: retiredCadPage(t.pageId) || RETIRED_CODE_PAGE_IDS.has(t.pageId) ? undefined : t.pageState,
       }))
       .filter((t) => !EPHEMERAL_TAB_PAGES.has(t.pageId))
       .filter((tab, index, all) =>
         tab.pageId !== "part_catalog" || all.findIndex((candidate) => candidate.pageId === "part_catalog") === index,
+      )
+      .filter((tab, index, all) =>
+        tab.pageId !== CODE_PAGE_FALLBACK || all.findIndex((candidate) => candidate.pageId === CODE_PAGE_FALLBACK) === index,
       );
     if (!mapped.length) return false;
     tabs.value = mapped;
-    const active = snapshot.activeTabId && getTab(snapshot.activeTabId);
-    activeTabId.value = active ? snapshot.activeTabId : tabs.value[0].id;
+    const active = snapshot.activeTabId ? getTab(snapshot.activeTabId) : undefined;
+    const activeWasRetired = snapshot.tabs.some((tab) => tab.id === snapshot.activeTabId && RETIRED_CODE_PAGE_IDS.has(tab.pageId));
+    activeTabId.value = active?.id
+      ?? (activeWasRetired ? tabs.value.find((tab) => tab.pageId === CODE_PAGE_FALLBACK)?.id : undefined)
+      ?? tabs.value[0].id;
     return true;
   }
 
@@ -283,7 +338,9 @@ export function createWorkbench(appConfig: Ref<AppConfig | null>) {
         title: t.title,
         subtitle: t.subtitle,
         contextKey: t.contextKey,
-        pageState: pageStates[t.id],
+        // An unmounted restored page has no serializer yet. Keep its unconsumed
+        // snapshot unless the caller explicitly supplies a new value (including undefined).
+        pageState: Object.prototype.hasOwnProperty.call(pageStates, t.id) ? pageStates[t.id] : t.pageState,
       })),
     };
   }
@@ -301,6 +358,7 @@ export function createWorkbench(appConfig: Ref<AppConfig | null>) {
     navigateToPage,
     openNewTabForPage,
     activateTab,
+    keepTab,
     updateTab,
     setTabDirty,
     consumeTabPayload,

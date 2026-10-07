@@ -5,11 +5,6 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  KtCodegenController,
-  KtCodegenItem,
-  KtCodegenParam,
-} from "@phoenix-wing/kt-codegen";
 import { zipSync } from "fflate";
 
 if (!["darwin", "win32"].includes(process.platform)) {
@@ -59,7 +54,6 @@ try {
   for (const required of [executable, fixtureXml, ...(infoPlist ? [infoPlist] : [])]) assertFile(required);
   fs.mkdirSync(home, { recursive: true });
   fs.mkdirSync(workspace, { recursive: true });
-  writeCodegenFixture();
   writeFcstdFixture();
 
   child = spawn(executable, [], {
@@ -105,38 +99,9 @@ try {
   assert(!fs.existsSync(path.join(runtimeDirectory, "bin")), "release runtime still contains a CAD native bin directory");
   assert(!fs.existsSync(path.join(runtimeDirectory, "native-provider.json")), "release runtime still contains native-provider.json");
 
-  const documents = await api("/api/code/codegen/documents");
-  assert(documents.documents?.length === 1, "release app did not discover the Codegen fixture");
-  const opened = await api("/api/code/codegen/open", {
-    method: "POST",
-    body: { path: "route.codegen.json" },
-  });
-  const preflight = await api("/api/code/codegen/preflight", {
-    method: "POST",
-    body: {
-      param: opened.param,
-      table: opened.table,
-      block_keys: ["PARAM DECLARATION"],
-    },
-  });
-  assert(preflight.safe_to_apply === true, "release Codegen preflight was not safe to apply");
-  assert(preflight.plan?.markerRegions?.length === 1, "release Codegen preflight did not find one marker region");
-  const apply = await api("/api/code/codegen/apply", {
-    method: "POST",
-    body: {
-      param: opened.param,
-      table: opened.table,
-      block_keys: ["PARAM DECLARATION"],
-      expected_plan_fingerprint: preflight.plan_fingerprint,
-    },
-  });
-  assert(apply.verified === true && apply.region_count === 1, "release Codegen Apply was not verified");
-  assert(
-    fs.readFileSync(path.join(workspace, "Route.h"), "utf8").includes("int value;"),
-    "release Codegen Apply did not update the source marker",
-  );
+  const retiredCodeRoutes = await verifyRetiredCodeRoutes();
 
-  const bom = await api(`/api/cad/bom/file?rel=${encodeURIComponent("8003.001-H-PHOENIX-滑轨.FCStd")}`);
+  const bom = await api(`/api/cad/bom/file?rel=${encodeURIComponent("730201.001-H-DEMO-TestBlock.FCStd")}`);
   assert(bom.is_fcstd === true && bom.file_size_bytes > 0, "release CAD route did not read the real FCStd archive");
   assert(
     String(bom.source_note || "").includes("TypeScript FCStd reader"),
@@ -156,7 +121,7 @@ try {
 
   const receipt = {
     kind: "phoenix.desk.tauri-release-app-smoke",
-    schemaVersion: 1,
+    schemaVersion: 2,
     platform: `${process.platform}-${process.arch}`,
     appVersion: version,
     executable: displayPath(executable),
@@ -165,10 +130,12 @@ try {
     health,
     userDataIsolated: true,
     cadRuntime: "typescript",
+    retiredCodeRoutes,
     flows: {
       launch: true,
-      codegenPreflight: true,
-      codegenApply: true,
+      workspaceActivation: true,
+      runtimeResources: true,
+      retiredCodeRoutes404: true,
       realFcstdRead: true,
       gracefulExit: true,
       sidecarReleased: true,
@@ -186,34 +153,58 @@ try {
   await cleanup();
 }
 
-function writeCodegenFixture() {
-  const controller = new KtCodegenController({
-    param: new KtCodegenParam({
-      namePrefix: "Kt",
-      nameMiddle: "Route",
-      items: [new KtCodegenItem({
-        nameSuffix: "Base",
-        id: 1,
-        name: "Value",
-        paramString: "value",
-        dataType: "int",
-        defaultValue: "1",
-      })],
-    }),
-  });
-  const result = controller.writeJson();
-  assert(result.ok && result.value !== null, "cannot generate the Codegen fixture");
-  fs.writeFileSync(path.join(workspace, "route.codegen.json"), result.value, "utf8");
-  fs.writeFileSync(path.join(workspace, "Route.h"), [
-    "// START KEVIN CAA WIZARD SECTION KtRouteBase PARAM DECLARATION",
-    "int oldValue;",
-    "// END KEVIN CAA WIZARD SECTION KtRouteBase PARAM DECLARATION",
-    "",
-  ].join("\n"), "utf8");
+async function verifyRetiredCodeRoutes() {
+  // Check the original methods as well as paths: a GET-only check can miss a
+  // still-active write endpoint. A redirect or SPA fallback must not pass.
+  const routes = [
+    ["GET", "/api/code/index"],
+    ["GET", "/api/code/index/catdlg"],
+    ["POST", "/api/code/index/scan"],
+    ["GET", "/api/code/index/entries"],
+    ["GET", "/api/code/index/extension-discovery"],
+    ["GET", "/api/code/index/extra-extensions"],
+    ["PUT", "/api/code/index/extra-extensions"],
+    ["POST", "/api/code/index/purge-missing"],
+    ["POST", "/api/code/index/export-json"],
+    ["GET", "/api/code/codegen/documents"],
+    ["POST", "/api/code/codegen/open"],
+    ["POST", "/api/code/codegen/document-state"],
+    ["PUT", "/api/code/codegen/document"],
+    ["POST", "/api/code/codegen/preflight"],
+    ["POST", "/api/code/codegen/apply"],
+    ["POST", "/api/code/codegen/source-preview"],
+    ["POST", "/api/code/codegen/source-states"],
+    ["GET", "/api/code/rename/prefs"],
+    ["PUT", "/api/code/rename/prefs"],
+    ["POST", "/api/code/rename/preview"],
+    ["POST", "/api/code/rename/apply"],
+    ["POST", "/api/code/uuid/scan"],
+    ["POST", "/api/code/uuid/apply"],
+    ["GET", "/api/code/reorder-members/prefs"],
+    ["PUT", "/api/code/reorder-members/prefs"],
+    ["POST", "/api/code/reorder-members/resolve"],
+    ["POST", "/api/code/reorder-members/run"],
+    ["POST", "/api/code/reorder-members/self-test"],
+    ["GET", "/api/code/reorder-members/top-level"],
+    ["GET", "/api/code/reorder-members/top-dirs"],
+  ];
+  const checks = [];
+  for (const [method, route] of routes) {
+    const response = await fetch(`${origin}${route}`, {
+      method,
+      redirect: "error",
+      headers: method === "GET" ? undefined : { "content-type": "application/json" },
+      body: method === "GET" ? undefined : "{}",
+    });
+    const text = await response.text();
+    assert(response.status === 404, `retired ${method} ${route} returned HTTP ${response.status}, expected 404: ${text}`);
+    checks.push({ method, path: route, status: response.status });
+  }
+  return checks;
 }
 
 function writeFcstdFixture() {
-  fs.writeFileSync(path.join(workspace, "8003.001-H-PHOENIX-滑轨.FCStd"), zipSync({
+  fs.writeFileSync(path.join(workspace, "730201.001-H-DEMO-TestBlock.FCStd"), zipSync({
     "Document.xml": fs.readFileSync(fixtureXml),
     "GuiDocument.xml": new TextEncoder().encode("<?xml version=\"1.0\"?><GuiDocument/>"),
   }, { level: 6 }));

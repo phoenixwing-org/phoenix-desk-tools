@@ -36,7 +36,7 @@ export function encodeSourceText(payload: SourceTextPayload, text: string): Buff
   if (payload.encoding === "gbk") {
     const encoded = iconv.encode(text, "gbk");
     if (iconv.decode(encoded, "gbk") !== text) {
-      throw new Error("The reordered source contains characters that cannot be represented in GBK");
+      throw new Error("The source text contains characters that cannot be represented in GBK");
     }
     return encoded;
   }

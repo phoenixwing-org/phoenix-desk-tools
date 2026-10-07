@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onUnmounted, ref, watch } from "vue";
 import { fetchPartKeys, type PartKeyEntry, type PartKeysPayload } from "../api";
 import { BOM_FIELD_LABELS as L } from "../utils/bomFieldLabels";
 import { useAppShell } from "../composables/useAppShell";
+import { usePageSession } from "../composables/usePageSession";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
+import PageLayout from "phoenix-wing/layout/PnwPageLayout.vue";
+import PageMainBlock from "phoenix-wing/layout/PnwPageMainBlock.vue";
 import ResizableDataTable from "../components/ResizableDataTable.vue";
-import type { PnwTableColumnDef } from "phoenix-wing";
+import { PnwSelect, type PnwTableColumnDef } from "phoenix-wing";
 import {
   usePagePrimaryContribution,
   type PagePrimarySection,
@@ -31,7 +34,14 @@ const catalogColumns = computed<PnwTableColumnDef[]>(() => [
 const loading = ref(false);
 const listData = ref<PartKeysPayload | null>(null);
 const statusFilter = ref<"all" | "active" | "obsolete">("all");
+const statusOptions = [
+  { value: "all", label: "全部" },
+  { value: "active", label: "有效" },
+  { value: "obsolete", label: "失效" },
+];
 const search = ref("");
+const loadError = ref("");
+let requestId = 0;
 
 const filteredEntries = computed(() => {
   const rows = listData.value?.entries ?? [];
@@ -56,7 +66,7 @@ const filteredEntries = computed(() => {
 const emptyDescription = computed(() => {
   if (loading.value) return "加载中…";
   if (listData.value?.exists) return "当前筛选无条目";
-  return "尚无数据，请先在 VS Code 的 KT Auto CAD 扫描工作空间";
+  return "尚无数据，请先在 CAD 索引中更新工作空间索引";
 });
 
 function setStatus(msg: string) {
@@ -64,10 +74,15 @@ function setStatus(msg: string) {
 }
 
 async function refreshList() {
+  const request = ++requestId;
+  listData.value = null;
+  loadError.value = "";
   loading.value = true;
   shell.appendLog("[零件目录] 刷新列表…", { source: "part_catalog", open: true });
   try {
-    const data = await fetchPartKeys();
+    if (!shell.workspacePath.value) throw new Error("请先打开工作空间");
+    const data = await fetchPartKeys(shell.workspacePath.value);
+    if (request !== requestId) return;
     const items: PartKeyEntry[] = data.entries || [];
     listData.value = data;
     const engine = data._native === "node" ? "Node / SQLite" : "本地服务";
@@ -75,10 +90,12 @@ async function refreshList() {
     shell.appendLog(msg, { source: "part_catalog" });
     setStatus(msg);
   } catch (e) {
+    if (request !== requestId) return;
+    loadError.value = String(e);
     shell.appendLog(String(e), { source: "part_catalog" });
     setStatus(String(e));
   } finally {
-    loading.value = false;
+    if (request === requestId) loading.value = false;
   }
 }
 
@@ -88,6 +105,11 @@ function openDetail(row: PartKeyEntry) {
     label: row.label,
   });
 }
+
+usePageSession(props.workbenchTabId, {
+  serialize: () => ({}), hydrate: () => false, isDirty: () => false,
+  isBusy: () => loading.value, refresh: refreshList,
+});
 
 usePagePrimaryContribution("part_catalog", props.workbenchTabId, {
   summary: computed(() => listData.value?.exists
@@ -145,107 +167,106 @@ usePagePrimaryContribution("part_catalog", props.workbenchTabId, {
   ]),
 });
 
-onMounted(() => refreshList());
+watch(shell.workspacePath, refreshList, { immediate: true });
+onUnmounted(() => { requestId++; });
 </script>
 
 <template>
-  <div class="page part-catalog-page">
-    <PageHeader title="零件目录" page-id="part_catalog">
-      <template #actions>
-        <el-button size="small" :loading="loading" @click="refreshList">刷新</el-button>
-      </template>
-    </PageHeader>
-
-    <section class="controls" data-tour-page-partcat-search>
-      <el-input
-        v-model="search"
-        size="small"
-        clearable
-        placeholder="搜索零件号、名称、备注…"
-        spellcheck="false"
-        class="search-input"
-      />
-    </section>
-
-    <section class="filters">
-      <el-radio-group v-model="statusFilter" size="small">
-        <el-radio-button value="all">全部</el-radio-button>
-        <el-radio-button value="active">有效</el-radio-button>
-        <el-radio-button value="obsolete">失效</el-radio-button>
-      </el-radio-group>
-      <span class="count">{{ filteredEntries.length }} 键</span>
-    </section>
-
-    <div v-if="filteredEntries.length" data-tour-page-partcat-table>
-      <ResizableDataTable :columns="catalogColumns" wrap-class="table-grow">
-        <tbody>
-          <tr v-for="row in filteredEntries" :key="row.part_key">
-            <td>
-              <button
-                v-if="row.label?.trim()"
-                type="button"
-                class="link-key"
-                @click="openDetail(row)"
-              >
-                {{ row.label }}
-              </button>
-              <span v-else class="muted">—</span>
-            </td>
-            <td class="mono">
-              <button type="button" class="link-key" @click="openDetail(row)">{{ row.part_key }}</button>
-            </td>
-            <td>{{ row.TypeCode }}</td>
-            <td>{{ row.ModelSeries }}</td>
-            <td>{{ row.PartName }}</td>
-            <td>
-              <el-tag size="small" :type="row.status === 'obsolete' ? 'info' : 'success'" effect="plain">
-                {{ row.status === "obsolete" ? "失效" : "有效" }}
-              </el-tag>
-            </td>
-            <td>{{ row.file_count }}</td>
-            <td>{{ row.present_count }}/{{ row.missing_count }}</td>
-          </tr>
-        </tbody>
-      </ResizableDataTable>
-    </div>
-    <el-empty v-else class="empty-wrap table-grow" :description="emptyDescription" :image-size="72" />
-  </div>
+  <PageLayout title="零件目录" class="desk-page-layout" :body-inset="false" :body-scroll="false">
+    <template #header>
+      <PageHeader title="零件目录">
+        <template #center>
+          <div class="catalog-filter-container" data-tour-page-partcat-search>
+          <div class="catalog-filters">
+            <el-input
+              v-model="search"
+              size="small"
+              clearable
+              aria-label="搜索零件目录"
+              placeholder="搜索零件号、名称、备注…"
+              spellcheck="false"
+              class="search-input"
+            />
+            <el-radio-group v-model="statusFilter" size="small" aria-label="零件状态" class="catalog-status-full">
+              <el-radio-button v-for="option in statusOptions" :key="option.value" :value="option.value">{{ option.label }}</el-radio-button>
+            </el-radio-group>
+            <PnwSelect v-model="statusFilter" :options="statusOptions" size="compact" aria-label="零件状态" class="catalog-status-compact" />
+            <span class="count">{{ filteredEntries.length }} 键</span>
+          </div>
+          </div>
+        </template>
+        <template #right>
+          <el-button size="small" @click="shell.openTab({ pageId: 'cad_index' })">CAD 索引</el-button>
+          <el-button size="small" :loading="loading" @click="refreshList">刷新</el-button>
+        </template>
+      </PageHeader>
+    </template>
+    <PageMainBlock class="part-catalog-page desk-page-body--fill">
+      <el-alert v-if="loadError" :title="loadError" type="error" :closable="false" />
+      <div v-if="filteredEntries.length" class="catalog-table" data-tour-page-partcat-table>
+        <ResizableDataTable :columns="catalogColumns" wrap-class="table-grow">
+          <tbody>
+            <tr v-for="row in filteredEntries" :key="row.part_key">
+              <td>
+                <button
+                  v-if="row.label?.trim()"
+                  type="button"
+                  class="link-key"
+                  @click="openDetail(row)"
+                >
+                  {{ row.label }}
+                </button>
+                <span v-else class="muted">—</span>
+              </td>
+              <td class="mono">
+                <button type="button" class="link-key" @click="openDetail(row)">{{ row.part_key }}</button>
+              </td>
+              <td>{{ row.TypeCode }}</td>
+              <td>{{ row.ModelSeries }}</td>
+              <td>{{ row.PartName }}</td>
+              <td>
+                <el-tag size="small" :type="row.status === 'obsolete' ? 'info' : 'success'" effect="plain">
+                  {{ row.status === "obsolete" ? "失效" : "有效" }}
+                </el-tag>
+              </td>
+              <td>{{ row.file_count }}</td>
+              <td>{{ row.present_count }}/{{ row.missing_count }}</td>
+            </tr>
+          </tbody>
+        </ResizableDataTable>
+      </div>
+      <el-empty v-else class="empty-wrap table-grow" :description="emptyDescription" :image-size="72" />
+    </PageMainBlock>
+  </PageLayout>
 </template>
 
 <style scoped>
 @import "./page-shared.css";
 
-.part-catalog-page {
+.catalog-table {
   display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  padding: 20px 22px 16px;
-}
-
-.controls {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
-  flex-shrink: 0;
-  align-items: center;
-}
-
-.search-input {
   flex: 1;
-  min-width: 180px;
+  min-height: 0;
 }
 
-.filters {
-  display: flex;
-  gap: 14px;
-  align-items: center;
-  margin-bottom: 8px;
-  flex-shrink: 0;
+.catalog-filter-container { container: pdt-catalog-filters / inline-size; width: 100%; min-width: 0; }
+.catalog-filters { display: flex; align-items: center; gap: var(--pnw-page-header-gap, 8px); min-width: 0; }
+.catalog-filters .search-input { flex: 1 1 240px; width: 240px; min-width: 96px; }
+.catalog-status-full, .catalog-filters .count { flex: none; white-space: nowrap; }
+.catalog-status-compact { display: none; }
+@container pdt-catalog-filters (max-width: 400px) {
+  .catalog-status-full { display: none; }
+  .catalog-status-compact { display: inline-flex; flex: 0 0 76px; width: 76px; }
+  .catalog-filters .count { display: none; }
+}
+@container pdt-catalog-filters (max-width: 190px) {
+  .catalog-status-compact { display: none; }
+  /* The full status filter stays available in Primary at very narrow widths. */
+  .catalog-filters .search-input { min-width: 0; }
 }
 
 .count {
   color: var(--muted);
-  margin-left: auto;
   font-size: 0.85rem;
 }
 

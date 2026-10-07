@@ -2,8 +2,6 @@
 import { computed, onBeforeUnmount, ref } from "vue";
 import {
   CircleCheck,
-  Close,
-  Download,
   Headset,
   Loading,
   UploadFilled,
@@ -12,6 +10,8 @@ import {
 } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
+import PageLayout from "phoenix-wing/layout/PnwPageLayout.vue";
+import PageMainBlock from "phoenix-wing/layout/PnwPageMainBlock.vue";
 import { useAppShell } from "../../composables/useAppShell";
 import {
   usePagePrimaryContribution,
@@ -253,96 +253,99 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="page tool-page audio-extract-page">
-    <PageHeader title="视频音频提取" page-id="audio_extract">
-      <template #actions>
-        <div class="head-actions-inner">
-          <el-button size="small" :icon="UploadFilled" :disabled="busy" @click="openFilePicker">
-            选择视频
-          </el-button>
-          <el-button type="primary" size="small" :icon="Headset" :loading="busy" :disabled="!canExtract" @click="extractAudio">
-            提取 MP3
-          </el-button>
-          <el-button size="small" :icon="Download" :disabled="!canDownload" @click="downloadMp3">
-            下载 MP3
-          </el-button>
-        </div>
-      </template>
-    </PageHeader>
-
-    <input
-      ref="fileInput"
-      class="visually-hidden"
-      type="file"
-      accept="video/mp4,video/webm,video/quicktime,audio/*,.mp4,.m4v,.mov,.webm,.m4a,.mp3,.wav,.ogg,.aac,.flac"
-      @change="onInputChange"
-    />
-
-    <main class="extract-workspace">
-      <button
-        type="button"
-        class="drop-zone"
-        :class="{ 'is-drag-active': dragActive, 'has-file': selectedFile }"
-        :disabled="busy"
-        aria-label="选择或拖入视频文件"
-        @click="openFilePicker"
-        @dragover="onDragOver"
-        @dragleave="onDragLeave"
-        @drop="onDrop"
-      >
-        <el-icon class="drop-icon" aria-hidden="true"><UploadFilled /></el-icon>
-        <strong>{{ selectedFile ? selectedFile.name : "拖入视频，或点击选择文件" }}</strong>
-        <span v-if="selectedFile">{{ formatMediaBytes(selectedFile.size) }} · 点击可更换文件</span>
-        <span v-else>支持浏览器可解码的 MP4、WebM、MOV 及常见音频格式</span>
-      </button>
-
-      <section class="status-card" aria-live="polite">
-        <div class="status-heading">
-          <span class="status-icon" :class="`is-${phase}`">
-            <el-icon :class="{ 'is-loading': busy }"><component :is="phaseIcon" /></el-icon>
-          </span>
-          <div>
-            <strong>{{ phaseLabel }}</strong>
-            <p>{{ statusDetail }}</p>
+  <PageLayout title="视频音频提取" class="desk-page-layout" :body-inset="false">
+    <template #header>
+      <PageHeader title="视频音频提取">
+        <template #right>
+          <div class="head-actions-inner">
+            <el-button size="small" :disabled="busy" @click="openFilePicker">
+              选择视频
+            </el-button>
+            <el-button type="primary" size="small" :loading="busy" :disabled="!canExtract" @click="extractAudio">
+              提取 MP3
+            </el-button>
+            <el-button size="small" :disabled="!canDownload" @click="downloadMp3">
+              下载 MP3
+            </el-button>
           </div>
-          <span v-if="busy" class="progress-label">{{ progressLabel }}</span>
+        </template>
+      </PageHeader>
+    </template>
+    <PageMainBlock class="tool-page audio-extract-page">
+      <input
+        ref="fileInput"
+        class="visually-hidden"
+        type="file"
+        accept="video/mp4,video/webm,video/quicktime,audio/*,.mp4,.m4v,.mov,.webm,.m4a,.mp3,.wav,.ogg,.aac,.flac"
+        @change="onInputChange"
+      />
+
+      <main class="extract-workspace">
+        <button
+          type="button"
+          class="drop-zone"
+          :class="{ 'is-drag-active': dragActive, 'has-file': selectedFile }"
+          :disabled="busy"
+          aria-label="选择或拖入视频文件"
+          @click="openFilePicker"
+          @dragover="onDragOver"
+          @dragleave="onDragLeave"
+          @drop="onDrop"
+        >
+          <el-icon class="drop-icon" aria-hidden="true"><UploadFilled /></el-icon>
+          <strong>{{ selectedFile ? selectedFile.name : "拖入视频，或点击选择文件" }}</strong>
+          <span v-if="selectedFile">{{ formatMediaBytes(selectedFile.size) }} · 点击可更换文件</span>
+          <span v-else>支持浏览器可解码的 MP4、WebM、MOV 及常见音频格式</span>
+        </button>
+
+        <section class="status-card" aria-live="polite">
+          <div class="status-heading">
+            <span class="status-icon" :class="`is-${phase}`">
+              <el-icon :class="{ 'is-loading': busy }"><component :is="phaseIcon" /></el-icon>
+            </span>
+            <div>
+              <strong>{{ phaseLabel }}</strong>
+              <p>{{ statusDetail }}</p>
+            </div>
+            <span v-if="busy" class="progress-label">{{ progressLabel }}</span>
+          </div>
+          <el-progress
+            v-if="busy || phase === 'done'"
+            :percentage="Math.round(progress)"
+            :status="phase === 'done' ? 'success' : undefined"
+            :show-text="false"
+          />
+
+          <dl v-if="decodedDuration" class="audio-meta">
+            <div><dt>时长</dt><dd>{{ formatAudioDuration(decodedDuration) }}</dd></div>
+            <div><dt>源采样率</dt><dd>{{ (decodedSampleRate / 1000).toFixed(1) }} kHz</dd></div>
+            <div><dt>源声道</dt><dd>{{ decodedChannels }}</dd></div>
+            <div><dt>输出</dt><dd>MP3 · 128 kbps</dd></div>
+          </dl>
+
+          <audio v-if="outputUrl" class="audio-preview" :src="outputUrl" controls preload="metadata">
+            当前环境不支持音频预览。
+          </audio>
+        </section>
+
+        <div class="view-actions">
+          <el-button v-if="busy" @click="cancelExtraction">取消</el-button>
+          <el-button v-else :disabled="!selectedFile" @click="clearSelection">清除</el-button>
+          <el-button type="primary" :loading="busy" :disabled="!canExtract" @click="extractAudio">
+            提取音频
+          </el-button>
+          <el-button type="success" :disabled="!canDownload" @click="downloadMp3">
+            下载 {{ outputName }}
+          </el-button>
         </div>
-        <el-progress
-          v-if="busy || phase === 'done'"
-          :percentage="Math.round(progress)"
-          :status="phase === 'done' ? 'success' : undefined"
-          :show-text="false"
-        />
 
-        <dl v-if="decodedDuration" class="audio-meta">
-          <div><dt>时长</dt><dd>{{ formatAudioDuration(decodedDuration) }}</dd></div>
-          <div><dt>源采样率</dt><dd>{{ (decodedSampleRate / 1000).toFixed(1) }} kHz</dd></div>
-          <div><dt>源声道</dt><dd>{{ decodedChannels }}</dd></div>
-          <div><dt>输出</dt><dd>MP3 · 128 kbps</dd></div>
-        </dl>
-
-        <audio v-if="outputUrl" class="audio-preview" :src="outputUrl" controls preload="metadata">
-          当前环境不支持音频预览。
-        </audio>
-      </section>
-
-      <div class="view-actions">
-        <el-button v-if="busy" :icon="Close" @click="cancelExtraction">取消</el-button>
-        <el-button v-else :disabled="!selectedFile" :icon="Close" @click="clearSelection">清除</el-button>
-        <el-button type="primary" :icon="Headset" :loading="busy" :disabled="!canExtract" @click="extractAudio">
-          提取音频
-        </el-button>
-        <el-button type="success" :icon="Download" :disabled="!canDownload" @click="downloadMp3">
-          下载 {{ outputName }}
-        </el-button>
-      </div>
-
-      <aside class="privacy-note">
-        <el-icon aria-hidden="true"><CircleCheck /></el-icon>
-        <span>文件只在本机内存中处理，不经过 Desk API，也不会上传。AVI、MKV 等容器需先转换为浏览器可解码格式。</span>
-      </aside>
-    </main>
-  </div>
+        <aside class="privacy-note">
+          <el-icon aria-hidden="true"><CircleCheck /></el-icon>
+          <span>文件只在本机内存中处理，不经过 Desk API，也不会上传。AVI、MKV 等容器需先转换为浏览器可解码格式。</span>
+        </aside>
+      </main>
+    </PageMainBlock>
+  </PageLayout>
 </template>
 
 <style scoped>
@@ -528,10 +531,6 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 640px) {
-  .tool-page {
-    padding: 14px 12px 24px;
-  }
-
   .drop-zone {
     min-height: 175px;
     padding: 24px 14px;

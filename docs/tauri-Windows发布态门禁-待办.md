@@ -37,7 +37,7 @@ GitHub mirror：手工运行 `Desk Tools Windows 0.4.0 release gate`，或推送
 2. 从当前源码构建唯一的 0.4.0 NSIS；明确拒绝历史 0.1.0 setup。
 3. 静默安装到一次性目录，验证 EXE ProductVersion、卸载登记和开始菜单快捷方式。
 4. 从安装树启动真实 Tauri EXE；用户数据通过 Tauri 专用绝对路径覆盖隔离。
-5. 包内 Node sidecar 跑通健康、KT Codegen preflight/Apply/复读，并由打包后的 TypeScript reader 读取有效 FCStd。
+5. 包内 Node sidecar 跑通健康、隔离工作空间/runtime 资源、30 条退役 Code API 404，并由打包后的 TypeScript reader 读取有效 FCStd；使用 schemaVersion 2 回执，不再运行 Codegen Apply。
 6. 通过窗口关闭完成正常退出，确认主进程与 sidecar 退出、5180 释放。
 7. 静默卸载，确认安装目录、卸载登记和开始菜单快捷方式全部清理。
 8. 输出 `phoenix-desk-tools-0.4.0-windows-release-receipt.json`；用户回传该回执和最终成功日志后再关闭本项。

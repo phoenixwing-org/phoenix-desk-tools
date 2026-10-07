@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import SidebarBlock from "phoenix-wing/layout/PnwSidebarBlock.vue";
+import PrimarySection from "phoenix-wing/layout/PnwPrimarySection.vue";
 import { useCaaDialogPageStore } from "../../stores/caaDialogPage";
 import { toCaaElTreeRoots, type CaaElTreeNode } from "../../utils/caaDialogTree";
 import { CONTROL_ICONS } from "../../assets/caa/controlIcons";
@@ -25,16 +25,16 @@ function iconSrc(name?: string) {
 </script>
 
 <template>
-  <SidebarBlock
+  <PrimarySection
     v-model:expanded="expanded"
     class="caa-dialog-tree-panel"
     title="控件树"
-    variant="strip"
-    body-scroll
     aria-label="CAA 对话框控件树"
   >
-    <template v-if="store.ir" #default>
+    <div class="caa-tree-body">
       <el-tree
+        v-if="store.ir"
+        class="caa-tree"
         :data="treeData"
         node-key="id"
         default-expand-all
@@ -49,27 +49,26 @@ function iconSrc(name?: string) {
           </span>
         </template>
       </el-tree>
-    </template>
-    <template v-else #default>
-      <p class="muted small caa-tree-empty">加载对话框后显示控件层次</p>
-    </template>
-  </SidebarBlock>
+      <p v-else class="muted small caa-tree-empty">加载对话框后显示控件层次</p>
+    </div>
+  </PrimarySection>
 </template>
 
 <style scoped>
-.caa-dialog-tree-panel:not(.sidebar-block--collapsed) {
-  flex: 1 1 auto;
-  min-height: 0;
-  width: 100%;
+.caa-tree-body {
+  min-width: 0;
+  padding: 8px;
+  box-sizing: border-box;
+  overflow: auto;
 }
 
-.caa-dialog-tree-panel :deep(.el-tree) {
+.caa-tree {
   font-size: 0.78rem;
   background: transparent;
 }
 
 .caa-tree-empty {
-  margin: 8px 10px;
+  margin: 0;
 }
 
 .caa-tree-node {

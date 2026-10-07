@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { type AssemblyTreeNode, type BomXrefEdge } from "../api";
+import { type AssemblyTreeNode, type BomXrefEdge, type LinkLabelPatch } from "../api";
 import { useAppShell } from "../composables/useAppShell";
 import { useAssemblyTreeController } from "../composables/useAssemblyTreeController";
 import AssemblyTreeRowGroup from "./assembly-tree/AssemblyTreeRowGroup.vue";
 import XlinkReplaceDialog from "./XlinkReplaceDialog.vue";
 import {
   assemblyTreeApplyRuleLabels,
+  assemblyTreeEditKey,
   assemblyTreeCanEditLabel,
   assemblyTreeIsUnresolved as isUnresolved,
   assemblyTreePendingChanges,
@@ -36,16 +37,18 @@ const emit = defineEmits<{
   "need-full-depth": [];
   "xref-replaced": [];
   "discard-label-edits": [];
-  "apply-label-edits": [];
+  "apply-label-edits": [patches?: LinkLabelPatch[]];
+  "operation-change": [busy: boolean];
 }>();
 
 const shell = useAppShell();
 
 const replaceOpen = ref(false);
+watch(replaceOpen, busy => emit("operation-change", busy), { flush: "sync" });
 const replaceHostRel = ref("");
 const replaceEdge = ref<BomXrefEdge | null>(null);
 
-/** key: host\\0xlink_attr → edited label */
+/** key: host + file attribute + host object + target object → edited label */
 const edits = ref<Map<string, string>>(new Map());
 
 const treeController = useAssemblyTreeController({ onStatus: (message) => shell.setStatus(message) });
@@ -66,10 +69,22 @@ function canEditLinkLabel(node: AssemblyTreeNode) {
 }
 
 function setLabel(node: AssemblyTreeNode, instance: AssemblyTreeInstanceViewInput, value: string) {
-  if (!canEditLinkLabel(node)) return;
+  if (props.savingLabels || !canEditLinkLabel(node)) return;
   const host = node.host_repo_rel?.trim();
   if (!host) return;
   edits.value = assemblyTreeWithLabelEdit(edits.value, host, instance, value);
+  emit("edits-change", hasPendingLabelEdits());
+}
+
+function applyLabelInstance(node: AssemblyTreeNode, instance: AssemblyTreeInstanceViewInput) {
+  if (props.savingLabels) return;
+  const key = assemblyTreeEditKey(node.host_repo_rel, instance.xlink_file_attr, instance);
+  const patches = getPendingPatches().filter(patch => assemblyTreeEditKey(patch.host_repo_rel, patch.xlink_file_attr, patch) === key);
+  if (patches.length) emit("apply-label-edits", patches);
+}
+
+function restorePendingPatches(patches: LinkLabelPatch[]) {
+  edits.value = new Map(patches.map(patch => [assemblyTreeEditKey(patch.host_repo_rel, patch.xlink_file_attr, patch), patch.link_label]));
   emit("edits-change", hasPendingLabelEdits());
 }
 
@@ -170,6 +185,7 @@ defineExpose({
   resetEdits,
   expandAllTree,
   applyRuleLabelsPreview,
+  restorePendingPatches,
 });
 
 watch(
@@ -177,6 +193,7 @@ watch(
   (nodes) => {
     edits.value = new Map();
     treeController.reset(nodes);
+    if (props.treeDepth === "first") treeController.collapseAll();
     emit("edits-change", false);
   },
   { immediate: true, deep: true },
@@ -185,45 +202,9 @@ watch(
 
 <template>
   <div class="asm-tree-wrap">
-    <div v-if="loading" class="empty">加载装配树…</div>
-    <div v-else-if="!nodes.length" class="empty">无下级引用（或引用表未构建）</div>
-    <div v-else class="table-scroll">
-      <table class="asm-tree-table">
-        <thead>
-          <tr>
-            <th class="col-tree">链接标签</th>
-            <th class="col-file">目标文件</th>
-            <th class="col-qty">数量</th>
-            <th class="col-status">状态</th>
-            <th v-if="showXlinkActionCol" class="col-action">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <AssemblyTreeRowGroup
-            v-for="{ node, depth } in flatRows"
-            :key="node.id"
-            :node="node"
-            :depth="depth"
-            :edits="edits"
-            :tree-expanded="expanded.has(node.id)"
-            :instance-expanded="expandedLabels.has(node.id)"
-            :has-subtree="hasSubtree(node)"
-            :subtree-loading="loadingSubtree.has(node.id)"
-            :editable="editable"
-            :xlink-replace="xlinkReplace"
-            :show-xlink-action-col="showXlinkActionCol"
-            @toggle="toggle"
-            @toggle-instances="toggleLabelExpand"
-            @label-input="setLabel"
-            @open-file="openFileDetail"
-            @replace-xlink="openReplaceDialog"
-          />
-        </tbody>
-      </table>
-    </div>
-
-    <div v-if="nodes.length || loading" class="asm-tree-toolbar">
+    <div v-if="nodes.length || loading || $slots['toolbar-title']" class="asm-tree-toolbar">
       <div class="toolbar-start">
+        <slot name="toolbar-title" />
         <button
           type="button"
           class="btn mini"
@@ -238,12 +219,12 @@ watch(
         </button>
       </div>
       <div v-if="labelEdits" class="label-save-bar">
-        <span class="label-save-hint">标签已修改，点「应用」后写回 FCStd</span>
+        <span class="label-save-hint" title="草稿仅在应用后写回 FCStd">有待应用标签</span>
         <button type="button" class="btn mini" :disabled="savingLabels" @click="emit('discard-label-edits')">
           放弃
         </button>
         <button type="button" class="btn mini primary" :disabled="savingLabels" @click="emit('apply-label-edits')">
-          {{ savingLabels ? "应用中…" : "应用" }}
+          {{ savingLabels ? "应用中…" : "应用全部" }}
         </button>
       </div>
       <div class="toolbar-end" :class="{ 'push-end': !labelEdits }">
@@ -254,7 +235,48 @@ watch(
           </template>
         </span>
       </div>
+      <slot name="toolbar-actions" />
     </div>
+
+    <div v-if="loading" class="empty">加载装配树…</div>
+    <div v-else-if="!nodes.length" class="empty">无下级引用（或引用表未构建）</div>
+    <div v-else class="table-scroll">
+      <table class="asm-tree-table">
+        <thead>
+          <tr>
+            <th class="col-position">#</th>
+            <th class="col-tree">链接标签</th>
+            <th class="col-qty">数量</th>
+            <th class="col-status">状态</th>
+            <th class="col-file">目标文件</th>
+          </tr>
+        </thead>
+        <tbody>
+          <AssemblyTreeRowGroup
+            v-for="{ node, depth, position } in flatRows"
+            :key="node.id"
+            :node="node"
+            :depth="depth"
+            :position="position"
+            :edits="edits"
+            :tree-expanded="expanded.has(node.id)"
+            :instance-expanded="expandedLabels.has(node.id)"
+            :has-subtree="hasSubtree(node)"
+            :subtree-loading="loadingSubtree.has(node.id)"
+            :editable="editable && !savingLabels"
+            :xlink-replace="xlinkReplace"
+            :show-xlink-action-col="showXlinkActionCol"
+            @toggle="toggle"
+            @toggle-instances="toggleLabelExpand"
+            @label-input="setLabel"
+            @apply-label-instance="applyLabelInstance"
+            @open-file="openFileDetail"
+            @replace-xlink="openReplaceDialog"
+          />
+        </tbody>
+      </table>
+    </div>
+
 
     <XlinkReplaceDialog
       :open="replaceOpen"
@@ -272,18 +294,22 @@ watch(
   flex-direction: column;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--phoenix-bg-page);
+  color: var(--phoenix-text);
   overflow: hidden;
-  min-height: 200px;
+  flex: 1;
+  min-height: 0;
 }
 
 .asm-tree-toolbar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border-top: 1px solid var(--border);
-  background: #f8fafc;
+  gap: 8px;
+  padding: 6px 8px;
+  overflow-x: auto;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+  background: var(--phoenix-bg-panel-head);
   flex-shrink: 0;
 }
 
@@ -311,20 +337,20 @@ watch(
   gap: 8px;
   min-width: 0;
   padding: 4px 10px;
-  border: 1px solid #fcd34d;
+  border: 1px solid var(--phoenix-warning-border);
   border-radius: 6px;
-  background: #fffbeb;
+  background: var(--phoenix-warning-bg);
 }
 
 .label-save-hint {
   font-size: 0.76rem;
-  color: #92400e;
+  color: var(--phoenix-warning-text);
   white-space: nowrap;
 }
 
 .label-save-bar .btn.mini.primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--phoenix-text-on-accent);
   border-color: var(--accent);
 }
 
@@ -334,6 +360,7 @@ watch(
   border: 1px solid var(--border-strong);
   border-radius: 6px;
   background: var(--btn-bg);
+  color: var(--phoenix-text);
   cursor: pointer;
 }
 
@@ -352,7 +379,6 @@ watch(
   flex: 1;
   min-height: 0;
   overflow: auto;
-  max-height: 420px;
 }
 
 .asm-tree-table {
@@ -360,7 +386,6 @@ watch(
   --asm-tree-file-max-width: 280px;
   --asm-tree-qty-width: 52px;
   --asm-tree-status-width: 56px;
-  --asm-tree-action-width: 72px;
   width: 100%;
   border-collapse: collapse;
   font-size: 0.82rem;
@@ -373,15 +398,17 @@ watch(
   vertical-align: middle;
   position: sticky;
   top: 0;
-  background: #f1f5f9;
+  background: var(--phoenix-bg-panel-head);
   z-index: 1;
   font-weight: 600;
-  color: #475569;
+  color: var(--phoenix-text-secondary);
 }
 
 .col-tree {
   min-width: 280px;
 }
+
+.col-position { width: 1%; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 .col-file {
   min-width: var(--asm-tree-file-min-width);
@@ -404,13 +431,8 @@ watch(
 }
 
 .issue-count {
-  color: #b45309;
+  color: var(--phoenix-warning-text);
   font-weight: 500;
-}
-
-.col-action {
-  width: var(--asm-tree-action-width);
-  white-space: nowrap;
 }
 
 .empty {

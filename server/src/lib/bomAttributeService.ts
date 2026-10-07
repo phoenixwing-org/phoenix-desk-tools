@@ -6,11 +6,14 @@ import {
   pnwInferBomDocumentKinds,
   pnwInferBomFieldsFromFilename,
   pnwInferFcstdSuffix,
+  pnwNormalizeBomPartNameSuffix,
   pnwNormalizeCadRelativePath,
   type PnwCadBomFields,
   type PnwCadDocumentKinds,
 } from "@phoenix-wing/cad-core";
 import { pnwCreateDb } from "@phoenix-wing/db-node";
+import { assertValidPartName, bomNameSource, bomRecommendationSuffix, recommendPartName } from "./bomNameRecommendation.js";
+import { isStandaloneDrawing, proposeDrawingName } from "./fcstdDrawing.js";
 import {
   updateCadIndexEntryAfterBomWrite,
   updateCadIndexEntryAfterRename,
@@ -22,6 +25,8 @@ import {
 } from "./workspacePrefsService.js";
 import {
   readFcstdEmbeddedBomFields,
+  readFcstdDocumentXml,
+  extractFcstdEmbeddedBomSnapshot,
   writeFcstdEmbeddedBomFields,
 } from "./fcstdDocumentXmlService.js";
 
@@ -50,6 +55,7 @@ export type BomPreview = {
   file_size_display: string | null;
   bom_readonly?: boolean;
   bom_source_rel?: string | null;
+  bom_readonly_reason?: string | null;
 };
 
 type BomPrefsStored = {
@@ -167,12 +173,12 @@ function bodyToFields(rel: string, body: any = {}): BomFields {
   return mergeFields(emptyFields(rel), {
     repo_rel_path: clean(src.repo_rel_path || rel),
     filename: clean(src.filename || path.posix.basename(normalizeRelPath(rel))),
-    PartNumber: clean(src.PartNumber || src.part_number),
-    PartVersion: clean(src.PartVersion || src.part_version),
-    TypeCode: clean(src.TypeCode || src.type_code),
-    ModelSeries: clean(src.ModelSeries || src.model_series),
-    PartName: clean(src.PartName || src.part_name),
-    label: clean(src.label || src.Label),
+    PartNumber: clean(src.PartNumber ?? src.part_number),
+    PartVersion: clean(src.PartVersion ?? src.part_version),
+    TypeCode: clean(src.TypeCode ?? src.type_code),
+    ModelSeries: clean(src.ModelSeries ?? src.model_series),
+    PartName: clean(src.PartName ?? src.part_name),
+    label: clean(src.label ?? src.Label),
   });
 }
 
@@ -194,7 +200,7 @@ function dbPath(workspaceRoot: string): string {
   return path.join(workspaceRoot, ".phoenix", "phoenix-workspace.sqlite");
 }
 
-function readAssetFromDb(workspaceRoot: string, rel: string): BomAssetRow | null {
+function readAssetFromDb(workspaceRoot: string, rel: string, strict = false): BomAssetRow | null {
   const dbFile = dbPath(workspaceRoot);
   if (!fs.existsSync(dbFile)) return null;
   try {
@@ -211,13 +217,29 @@ function readAssetFromDb(workspaceRoot: string, rel: string): BomAssetRow | null
     } finally {
       db.close?.();
     }
-  } catch {
+  } catch (error) {
+    if (strict) throw new Error(`索引提示读取失败：${String(error)}`);
     return null;
   }
 }
 
 function readFcstdEmbeddedBom(absPath: string): Partial<BomFields> {
   return fs.existsSync(absPath) ? readFcstdEmbeddedBomFields(absPath) ?? {} : {};
+}
+
+function drawingState(workspaceRoot: string, rel: string) {
+  const { abs } = resolveUnderWorkspace(workspaceRoot, rel);
+  const xml = isFcstdFilename(rel) ? readFcstdDocumentXml(abs) : null;
+  return { xml, readonly: isStandaloneDrawing(rel, xml) };
+}
+
+function requireModelBom(workspaceRoot: string, rel: string) {
+  if (drawingState(workspaceRoot, rel).readonly) throw new Error("独立图纸不编辑或推荐 BOM 属性，请打开源模型；图纸可单独改名");
+}
+
+/** Separate source snapshots for a batch preview; no workspace-memory defaults. */
+export function readBomBatchHints(workspaceRoot: string, rel: string) {
+  return { index: assetToFields(rel, readAssetFromDb(workspaceRoot, rel, true)), filename: inferBomFieldsFromFilename(rel) };
 }
 
 export const inferBomDocumentKinds = pnwInferBomDocumentKinds;
@@ -276,9 +298,20 @@ export function loadBomPreview(workspaceRoot: string, rel: string): BomPreview {
   const isFcstd = isFcstdFilename(safeRel);
   const base = inferBomFieldsFromFilename(safeRel);
   const dbFields = assetToFields(safeRel, readAssetFromDb(workspaceRoot, safeRel));
-  const embedded = isFcstd ? readFcstdEmbeddedBom(abs) : {};
+  const drawing = drawingState(workspaceRoot, safeRel);
+  const snapshot = drawing.xml ? extractFcstdEmbeddedBomSnapshot(drawing.xml) : null;
+  const embedded: Partial<BomFields> = snapshot?.fields ?? {};
+  let sourceRel: string | null = null;
+  let readonlyReason: string | null = null;
+  if (drawing.readonly) {
+    try { sourceRel = proposeDrawingName(workspaceRoot, safeRel, drawing.xml || "").sourceRel; }
+    catch (error) { readonlyReason = error instanceof Error ? error.message : String(error); }
+  }
   const fields = mergeNonEmptyFields(mergeNonEmptyFields(base, dbFields), embedded);
-  if (!fields.PartName && fields.label) fields.PartName = fields.label;
+  // Disk intent wins over stale index/filename guesses, including deliberate empty strings.
+  for (const key of snapshot?.present ?? []) fields[key] = clean(snapshot?.fields?.[key]);
+  // A filename/index projection must not masquerade as an existing PartName.
+  if (Object.keys(embedded).length) fields.PartName = clean(embedded.PartName);
   const stat = fs.existsSync(abs) ? fs.statSync(abs) : null;
   return {
     rel_path: safeRel,
@@ -288,12 +321,13 @@ export function loadBomPreview(workspaceRoot: string, rel: string): BomPreview {
       : "Loaded from filename/database hints.",
     abs_path_display: pathDisplay(abs, workspaceRoot),
     is_fcstd: isFcstd,
-    document_kinds: isFcstd ? inferBomDocumentKinds(safeRel) : null,
+    document_kinds: isFcstd ? inferBomDocumentKinds(drawing.readonly ? "model.Drawing.FCStd" : `model${bomRecommendationSuffix(safeRel, embedded)}`) : null,
     embedded_warning: null,
     file_size_bytes: stat?.size ?? null,
     file_size_display: stat ? formatSize(stat.size) : null,
-    bom_readonly: false,
-    bom_source_rel: null,
+    bom_readonly: drawing.readonly,
+    bom_source_rel: sourceRel,
+    bom_readonly_reason: readonlyReason,
   };
 }
 
@@ -310,9 +344,15 @@ export function fillRecommendedValues(workspaceRoot: string, rel: string, values
   return { fields, filled_keys };
 }
 
-export const composeBomLabel = pnwComposeBomLabel;
+export function composeBomLabel(fields: Partial<BomFields>, rel = fields.repo_rel_path || fields.filename || "") {
+  if (bomRecommendationSuffix(rel, fields) !== ".ASSY.FCStd") return pnwComposeBomLabel(fields);
+  const name = pnwNormalizeBomPartNameSuffix(clean(fields.PartName) || clean(fields.label), ".ASSY.FCStd");
+  // PartName remains a plain name; only the assembly's display label carries the marker.
+  return pnwComposeBomLabel({ ...fields, PartName: name ? `${name}.ASSY` : "", label: "" });
+}
 
 export function applyBomLabelFormula(workspaceRoot: string, rel: string, values: any = {}, fillEmptyFromPrefs = true) {
+  requireModelBom(workspaceRoot, rel);
   let fields = bodyToFields(rel, values);
   let filled_keys: string[] = [];
   if (fillEmptyFromPrefs) {
@@ -320,34 +360,52 @@ export function applyBomLabelFormula(workspaceRoot: string, rel: string, values:
     fields = filled.fields;
     filled_keys = filled.filled_keys;
   }
-  const label = composeBomLabel(fields);
+  assertValidPartName(fields.PartName);
+  const label = composeBomLabel(fields, rel);
   if (!label) throw new Error("PartNumber and PartVersion are required to compose label");
   fields.label = label;
   return { fields, label, filled_keys };
 }
 
 function composeRecommendedFilename(fields: Partial<BomFields>, suffix: string): string {
+  assertValidPartName(fields.PartName);
   return pnwComposeRecommendedBomFilename(fields, suffix);
 }
 
-function recommendValueFromHints(workspaceRoot: string, rel: string, field: string, values: any = {}) {
+function recommendValueFromHints(workspaceRoot: string, rel: string, field: string, values: any = {}): { value: string; source_note: string; forceFilled?: boolean } {
+  const drawing = drawingState(workspaceRoot, rel);
+  if (drawing.readonly) {
+    if (field !== "filename") throw new Error("独立图纸不推荐 BOM 属性，请打开源模型");
+    return { value: path.posix.basename(proposeDrawingName(workspaceRoot, rel, drawing.xml || "").targetRel), source_note: "源模型当前文件名" };
+  }
   const current = bodyToFields(rel, values);
+  const nameSource = bomNameSource(values.name_source);
   const preview = loadBomPreview(workspaceRoot, rel).fields;
   const filenameHints = inferBomFieldsFromFilename(rel);
   const prefs = loadBomApplyPrefs(workspaceRoot).recommended_fill as any;
-  if (field === "label") return { value: composeBomLabel(current), source_note: "Label formula" };
+  if (["PartName", "label", "filename"].includes(field)) {
+    const { abs } = resolveUnderWorkspace(workspaceRoot, rel);
+    const embedded = isFcstdFilename(rel) ? readFcstdEmbeddedBom(abs) : {};
+    if (!current.label) current.label = clean(embedded.label);
+    const recommended = recommendPartName(rel, { ...preview, ...embedded, PartName: field === "PartName" ? embedded.PartName : current.PartName || embedded.PartName, label: current.label || embedded.label || "" }, nameSource);
+    if (field === "PartName") return recommended;
+    current.PartName = recommended.value;
+  }
+  if (field === "label") return { value: composeBomLabel(current, rel), source_note: "Label formula" };
   if (field === "filename") {
-    const suffix = pnwInferFcstdSuffix(path.posix.basename(rel));
+    const suffix = bomRecommendationSuffix(rel, current);
     const value = composeRecommendedFilename(current, suffix);
     return { value, source_note: "Filename formula" };
   }
   if (field === "ModelSeries" && cleanUpper(current.TypeCode) === "S") {
     return { value: "", source_note: "Standard part TypeCode=S uses empty ModelSeries", forceFilled: true };
   }
-  const value =
+  const rawValue =
     clean((preview as any)[field]) ||
     clean((filenameHints as any)[field]) ||
     clean(prefs[field]);
+  const value = field === "PartName"
+    ? pnwNormalizeBomPartNameSuffix(rawValue, pnwInferFcstdSuffix(rel)) : rawValue;
   const source_note = clean((preview as any)[field])
     ? "Index or embedded BOM"
     : clean((filenameHints as any)[field])
@@ -364,7 +422,7 @@ export function recommendBomField(workspaceRoot: string, rel: string, field: str
 }
 
 export function recommendBomFieldsAll(workspaceRoot: string, rel: string, values: any = {}) {
-  const working: any = bodyToFields(rel, values);
+  const working: any = { ...bodyToFields(rel, values), name_source: bomNameSource(values.name_source) };
   const results: Record<string, any> = {};
   const filled_keys: string[] = [];
   for (const field of RECOMMEND_ORDER) {
@@ -389,14 +447,19 @@ export function fillBomFromEmbedded(workspaceRoot: string, rel: string, values: 
   return { fields, document_kinds: preview.document_kinds };
 }
 
-export function readBomDocumentKinds(_workspaceRoot: string, rel: string) {
-  return { document_kinds: inferBomDocumentKinds(rel) };
+export function readBomDocumentKinds(workspaceRoot: string, rel: string) {
+  return { document_kinds: loadBomPreview(workspaceRoot, rel).document_kinds ?? inferBomDocumentKinds(rel) };
 }
 
 export function recommendBomFilename(workspaceRoot: string, rel: string, values: any = {}) {
+  if (drawingState(workspaceRoot, rel).readonly) {
+    const recommendation = recommendValueFromHints(workspaceRoot, rel, "filename", values);
+    return { recommended_filename: recommendation.value, fields: bodyToFields(rel, values), suffix: ".Drawing.FCStd", filled_keys: [], hint_text: recommendation.source_note,
+      matches_disk_name: recommendation.value === path.posix.basename(rel), document_kinds: inferBomDocumentKinds("model.Drawing.FCStd") };
+  }
   const filled = fillRecommendedValues(workspaceRoot, rel, values);
   const fields = filled.fields;
-  const document_kinds = inferBomDocumentKinds(rel);
+  const document_kinds = inferBomDocumentKinds(`model${bomRecommendationSuffix(rel, fields)}`);
   const suffix = document_kinds.recommended_suffix || pnwInferFcstdSuffix(rel);
   const recommended_filename = composeRecommendedFilename(fields, suffix);
   if (!recommended_filename) throw new Error("PartNumber and PartVersion are required to recommend filename");
@@ -412,6 +475,7 @@ export function recommendBomFilename(workspaceRoot: string, rel: string, values:
 }
 
 export async function writeBomToFcstd(workspaceRoot: string, rel: string, values: any = {}): Promise<any> {
+  requireModelBom(workspaceRoot, rel);
   const { rel: safeRel, abs } = resolveUnderWorkspace(workspaceRoot, rel);
   if (!isFcstdFilename(safeRel)) throw new Error("Only .FCStd files can be written");
   const fields = bodyToFields(safeRel, values);
@@ -444,7 +508,9 @@ export async function renameBomFcstdFile(workspaceRoot: string, rel: string, bod
   const targetFilename = validateBomTargetFilename(current.filename || current.new_filename);
   requireFcstdFilename(path.posix.basename(rel.replace(/\\/g, "/")));
 
-  const unsaved = hasUnsavedBomDocumentAttrs(baseline, current);
+  const bomReadonly = drawingState(workspaceRoot, rel).readonly;
+  // A stale drawing form must never trigger model-attribute writes during a disk rename.
+  const unsaved = !bomReadonly && hasUnsavedBomDocumentAttrs(baseline, current);
   const writeAttrsFirst = Boolean(current.write_attrs_first || current.writeAttrsFirst);
   if (unsaved && !writeAttrsFirst) {
     throw new Error("BOM attributes have unsaved changes; write them first or set write_attrs_first.");
@@ -462,5 +528,6 @@ export async function renameBomFcstdFile(workspaceRoot: string, rel: string, bod
     ...renamed,
     map_updated: mapUpdated,
     attrs_saved: attrsSaved,
+    bom_readonly: bomReadonly,
   };
 }

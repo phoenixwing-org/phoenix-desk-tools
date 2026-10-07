@@ -174,13 +174,13 @@ class TestRecommendBomField(unittest.TestCase):
                     "PartVersion": "001",
                     "TypeCode": "H",
                     "ModelSeries": "ABC",
-                    "PartName": "磁芯",
+                    "PartName": "示例插块",
                     "label": "",
                     "filename": fcstd.name,
                 },
             )
             self.assertTrue(out["filled"])
-            self.assertEqual(out["value"], "100002.001-磁芯")
+            self.assertEqual(out["value"], "100002.001-示例插块")
             self.assertIn("编号公式", str(out["source_note"]))
 
     def test_recommend_from_filename_without_reading_fcstd(self) -> None:

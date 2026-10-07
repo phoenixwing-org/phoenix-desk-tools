@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   LOCAL_WING_PACKAGE_NAMES,
   createPhoenixWingSourceAliases,
+  createPhoenixWingTypePaths,
   resolveLocalWingExport,
   resolvePhoenixWingContext,
 } from "../../scripts/phoenix-wing-mode.mjs";
@@ -29,11 +30,11 @@ function createWingFixture() {
     fs.mkdirSync(path.join(packageRoot, "dist"), { recursive: true });
     fs.writeFileSync(path.join(packageRoot, "src", "index.ts"), "export {};\n");
     fs.writeFileSync(path.join(packageRoot, "dist", "index.js"), "export {};\n");
-    const isKtCodegen = packageName === "@phoenix-wing/kt-codegen";
-    if (isKtCodegen) {
+    const hasUi = packageName === "@phoenix-wing/code-core";
+    if (hasUi) {
       fs.mkdirSync(path.join(packageRoot, "src", "ui"), { recursive: true });
       fs.writeFileSync(path.join(packageRoot, "src", "ui", "index.ts"), "export {};\n");
-      fs.writeFileSync(path.join(packageRoot, "src", "ui", "KtCodegenApplyReportModel.ts"), "export {};\n");
+      fs.writeFileSync(path.join(packageRoot, "src", "ui", "fixture-model.ts"), "export {};\n");
     }
     fs.writeFileSync(
       path.join(packageRoot, "package.json"),
@@ -41,10 +42,10 @@ function createWingFixture() {
         name: packageName,
         exports: {
           ".": { import: "./dist/index.js" },
-          ...(isKtCodegen
+          ...(hasUi
             ? {
                 "./ui": { import: "./dist/ui/index.js" },
-                "./ui/report-model": { import: "./dist/ui/KtCodegenApplyReportModel.js" },
+                "./ui/fixture-model": { import: "./dist/ui/fixture-model.js" },
               }
             : {}),
         },
@@ -105,7 +106,7 @@ describe("Phoenix Wing 并列仓库模式", () => {
       .toThrow(/pnpm dev/u);
   });
 
-  it("Web alias 覆盖 aggregate、八个包及 kt-codegen 子路径", () => {
+  it("Web alias 覆盖 aggregate、保留的七个包和长子路径优先，不再要求 Codegen", () => {
     const { wingRoot } = createWingFixture();
     const aliases = createPhoenixWingSourceAliases(wingRoot);
     expect(aliases).toEqual(expect.arrayContaining([
@@ -115,29 +116,52 @@ describe("Phoenix Wing 并列仓库模式", () => {
         replacement: path.join(wingRoot, "packages/git-node/src"),
       }),
       expect.objectContaining({
-        find: "@phoenix-wing/kt-codegen",
-        replacement: path.join(wingRoot, "packages/kt-codegen/src"),
+        find: "@phoenix-wing/code-core",
+        replacement: path.join(wingRoot, "packages/code-core/src"),
       }),
     ]));
-    expect(aliases.some(({ find }) => find instanceof RegExp && find.test("@phoenix-wing/kt-codegen/fixtures/a.json")))
+    expect(aliases.some(({ find }) => find instanceof RegExp && find.test("@phoenix-wing/code-core/fixtures/a.json")))
       .toBe(true);
     expect(aliases).toContainEqual({
-      find: "@phoenix-wing/kt-codegen/ui/report-model",
+      find: "@phoenix-wing/code-core/ui/fixture-model",
       replacement: path.join(
         wingRoot,
-        "packages/kt-codegen/src/ui/KtCodegenApplyReportModel.ts",
+        "packages/code-core/src/ui/fixture-model.ts",
       ),
     });
-    expect(aliases.findIndex(({ find }) => find === "@phoenix-wing/kt-codegen/ui/report-model"))
-      .toBeLessThan(aliases.findIndex(({ find }) => find === "@phoenix-wing/kt-codegen/ui"));
+    expect(aliases.findIndex(({ find }) => find === "@phoenix-wing/code-core/ui/fixture-model"))
+      .toBeLessThan(aliases.findIndex(({ find }) => find === "@phoenix-wing/code-core/ui"));
+    expect(LOCAL_WING_PACKAGE_NAMES).toHaveLength(7);
+    expect(LOCAL_WING_PACKAGE_NAMES).not.toContain("@phoenix-wing/kt-codegen");
   });
 
   it("Node resolver 按本地 package exports 命中 dist", () => {
     const { wingRoot } = createWingFixture();
-    expect(resolveLocalWingExport(wingRoot, "@phoenix-wing/kt-codegen"))
-      .toBe(path.join(wingRoot, "packages/kt-codegen/dist/index.js"));
+    expect(resolveLocalWingExport(wingRoot, "@phoenix-wing/code-core"))
+      .toBe(path.join(wingRoot, "packages/code-core/dist/index.js"));
+    expect(resolveLocalWingExport(wingRoot, "@phoenix-wing/kt-codegen")).toBeNull();
     expect(resolveLocalWingExport(wingRoot, "@phoenix-wing/git-node"))
       .toBe(path.join(wingRoot, "packages/git-node/dist/index.js"));
     expect(resolveLocalWingExport(wingRoot, "element-plus")).toBeNull();
   });
+});
+
+it("local typecheck resolves aggregate and Vue declarations from public exports, never the Registry install", () => {
+  const { wingRoot } = createWingFixture();
+  for (const relative of [".", ...LOCAL_WING_PACKAGE_NAMES.map(name => `packages/${name.slice("@phoenix-wing/".length)}`)]) {
+    const root = path.join(wingRoot, relative), manifestPath = path.join(root, "package.json");
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    manifest.exports["."].types = "./dist/index.d.ts";
+    if (relative === ".") manifest.exports["./layout/*.vue"] = { types: "./dist/layout/*.vue.d.ts", import: "./dist/layout/*.js" };
+    fs.mkdirSync(path.join(root, "dist"), { recursive: true });
+    fs.writeFileSync(path.join(root, "dist/index.d.ts"), "export {};\n");
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+  }
+  const paths = createPhoenixWingTypePaths(wingRoot);
+  expect(paths["phoenix-wing"]).toEqual([path.join(wingRoot, "dist/index.d.ts")]);
+  expect(paths["phoenix-wing/layout/*.vue"]).toEqual([path.join(wingRoot, "dist/layout/*.vue.d.ts")]);
+  expect(paths["@phoenix-wing/cad-core"]).toEqual([path.join(wingRoot, "packages/cad-core/dist/index.d.ts")]);
+  expect(paths).not.toHaveProperty("phoenix-wing/*"); // Do not expose private internals through a catch-all.
+  fs.unlinkSync(path.join(wingRoot, "dist/index.d.ts"));
+  expect(() => createPhoenixWingTypePaths(wingRoot)).toThrow("公开类型缺失");
 });

@@ -4,6 +4,7 @@ import type { ModuleScope } from "../../constants/moduleScope";
 import { ribbonTabIdForModuleScope } from "../../utils/moduleScopeNavigation";
 import { buildRibbonTabs, RIBBON_SHELL_TAB_ID, type RibbonTabDef } from "./ribbonConfig";
 import { WORKBENCH_IDLE_PAGE } from "../../constants/workbench";
+import { CAA_EDITOR_PAGE_ID, CAA_HOME_PAGE_ID } from "../../constants/caaPages";
 
 export function useRibbonTabs(options: {
   navigation: Ref<NavItem[]>;
@@ -13,14 +14,11 @@ export function useRibbonTabs(options: {
 }) {
   const activeTab = ref(RIBBON_SHELL_TAB_ID);
 
-  const ribbonTabs = computed(() => buildRibbonTabs(options.navigation.value));
-
-  const visibleTabs = computed(() =>
-    ribbonTabs.value.filter((tab) => {
-      if (!tab.module) return true;
-      return options.enabledModules.value.includes(tab.module);
-    }),
-  );
+  // Domain preferences stay independent even though both domains share one
+  // presentation tab. Filter before grouping so code-only workspaces keep it.
+  const visibleTabs = computed(() => buildRibbonTabs(options.navigation.value.filter((nav) =>
+    !nav.module || options.enabledModules.value.includes(nav.module),
+  )));
 
   watch(
     visibleTabs,
@@ -36,13 +34,26 @@ export function useRibbonTabs(options: {
     () => visibleTabs.value.find((t) => t.id === activeTab.value) ?? visibleTabs.value[0],
   );
 
-  function tabForModule(module: string): RibbonTabDef | undefined {
-    return visibleTabs.value.find((t) => t.module === module);
+  function tabForPage(page: string): RibbonTabDef | undefined {
+    const navPage = page === CAA_EDITOR_PAGE_ID ? CAA_HOME_PAGE_ID : page;
+    const directlyListed = visibleTabs.value.find((tab) =>
+      tab.groups.some((group) => group.items.some((item) => item.pageId === navPage)),
+    );
+    if (directlyListed) return directlyListed;
+
+    // Context-only CAD documents have no Ribbon button but retain their domain.
+    const module = options.navigation.value.find((nav) => nav.page === page)?.module;
+    if (!module) return undefined;
+    if (module !== "cad" && module !== "code") {
+      return visibleTabs.value.find((tab) => tab.module === module);
+    }
+    const tabId = ribbonTabIdForModuleScope(module, options.enabledModules.value);
+    return visibleTabs.value.find((tab) => tab.id === tabId);
   }
 
   watch(
-    options.currentPage,
-    (page) => {
+    [options.currentPage, visibleTabs],
+    ([page]) => {
       if (page === WORKBENCH_IDLE_PAGE && options.workbenchFocusScope) {
         const tabId = ribbonTabIdForModuleScope(
           options.workbenchFocusScope.value,
@@ -53,11 +64,9 @@ export function useRibbonTabs(options: {
         }
         return;
       }
-      const nav = options.navigation.value.find((n) => n.page === page);
-      const mod = nav?.module;
-      if (mod) {
-        const tab = tabForModule(mod);
-        if (tab) activeTab.value = tab.id;
+      const tab = tabForPage(page);
+      if (tab) {
+        activeTab.value = tab.id;
       } else if (
         page === "welcome" ||
         page === "home" ||

@@ -7,13 +7,13 @@ export function useCodeIgnorePropertySheet(pageId: string, form: CodeIgnoreForm)
   usePnwPagePropertySheet(pageId, () =>
     pnwPropSheet(
       [
-        pnwPropGroup("scope", "生效范围", [
-          pnwPropReadonly("consumers", "适用功能", {
+        pnwPropGroup("scope", "使用范围", [
+          pnwPropReadonly("consumers", "消费工具", {
             value: computed(() => form.consumerScope.value),
           }),
         ]),
         pnwPropGroup("stats", "规则统计", [
-          pnwPropReadonly("merged", "合并生效", {
+          pnwPropReadonly("merged", "合并规则", {
             value: computed(() => `${form.mergedIgnoreCount.value} 条`),
           }),
           pnwPropReadonly("builtin", "内置", {

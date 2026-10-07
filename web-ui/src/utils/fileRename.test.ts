@@ -103,18 +103,18 @@ describe("resolveRenameOptions", () => {
     expect(xref!.default).toBe(true);
   });
 
-  it("has syncLabels with default false", () => {
+  it("has syncLabels with default true", () => {
     const opts = resolveRenameOptions(true);
     const labels = opts.find((o) => o.id === "syncLabels");
     expect(labels).toBeDefined();
-    expect(labels!.default).toBe(false);
+    expect(labels!.default).toBe(true);
   });
 
-  it("has fixBasename with default false", () => {
+  it("has fixBasename with default true", () => {
     const opts = resolveRenameOptions(true);
     const bn = opts.find((o) => o.id === "fixBasename");
     expect(bn).toBeDefined();
-    expect(bn!.default).toBe(false);
+    expect(bn!.default).toBe(true);
   });
 });
 

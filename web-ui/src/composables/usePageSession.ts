@@ -1,4 +1,4 @@
-import { onMounted, onUnmounted } from "vue";
+import { onMounted, onUnmounted, shallowReactive } from "vue";
 
 export type PageSessionApi = {
   serialize(): Record<string, unknown>;
@@ -6,9 +6,13 @@ export type PageSessionApi = {
   isDirty(): boolean;
   /** 关闭 Tab 前尝试落盘（如属性回写 → saveBom） */
   flush?(): Promise<boolean>;
+  /** Guard navigation commands while a page owns an operation. */
+  isBusy?(): boolean;
+  /** Read-only refresh/reset, never an implicit scan or write. */
+  refresh?(): void | boolean | Promise<void | boolean>;
 };
 
-const registry = new Map<string, PageSessionApi>();
+const registry = shallowReactive(new Map<string, PageSessionApi>());
 
 export function getPageSession(tabId: string): PageSessionApi | undefined {
   return registry.get(tabId);
@@ -45,6 +49,6 @@ export function usePageSession(tabId: string | undefined, api: PageSessionApi): 
   });
 
   onUnmounted(() => {
-    unregisterPageSession(tabId);
+    if (registry.get(tabId) === api) unregisterPageSession(tabId);
   });
 }

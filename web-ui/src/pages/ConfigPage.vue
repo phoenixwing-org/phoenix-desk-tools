@@ -12,6 +12,8 @@ import {
 import { useAppShell } from "../composables/useAppShell";
 import { useWorkspaceDirectoryPicker } from "../composables/useWorkspaceDirectoryPicker";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
+import PageLayout from "phoenix-wing/layout/PnwPageLayout.vue";
+import PageMainBlock from "phoenix-wing/layout/PnwPageMainBlock.vue";
 import { useShellTour } from "../composables/useShellTour";
 import { useOnboardingStore } from "../stores/onboarding";
 import { useUiPrefsStore } from "../stores/uiPrefs";
@@ -96,10 +98,8 @@ onMounted(async () => {
   await Promise.all([refreshWebStatus(), onboarding.refreshStatus()]);
 });
 
-function showAutoCadScanGuide() {
-  const message = "请在 VS Code 中运行“KT Auto CAD：扫描并更新 SQLite 索引”；Desk 会继续读取同一工作区的 Schema v13 数据库。";
-  shell.setStatus(message);
-  shell.appendLog(`[CAD] ${message}`, { source: "cad", open: true });
+function showCadIndex() {
+  shell.openTab({ pageId: "cad_index" });
 }
 
 onUnmounted(() => {});
@@ -398,7 +398,7 @@ usePagePrimaryContribution("config", props.workbenchTabId, {
           run: fillDefaultFreecad,
         },
         { id: "refresh-server", label: "刷新服务状态", run: refreshWebStatus },
-        { id: "auto-cad-index", label: "KT Auto CAD 扫描说明", run: showAutoCadScanGuide },
+        { id: "cad-index", label: "CAD 索引", run: showCadIndex },
         { id: "tour", label: "界面指引", run: startShellTour },
       ],
     },
@@ -412,189 +412,183 @@ const navItems = () =>
 </script>
 
 <template>
-  <div class="page config-page">
-    <PageHeader title="配置" page-id="config" />
+  <PageLayout title="配置" class="desk-page-layout" :body-inset="false">
+    <template #header>
+      <PageHeader title="配置" />
+    </template>
+    <PageMainBlock class="config-page">
+      <section class="section" data-tour-page-config-workspace>
+        <label class="field-label">当前工作空间</label>
+        <p class="current-path">{{ workspacePath || "（未打开）" }}</p>
 
-    <section class="section" data-tour-page-config-workspace>
-      <label class="field-label">当前工作空间</label>
-      <p class="current-path">{{ workspacePath || "（未打开）" }}</p>
+        <div class="btn-row compact">
+          <el-button :disabled="!workspacePath" @click="closeWorkspaceAction">关闭工作空间</el-button>
+        </div>
 
-      <div class="btn-row compact">
-        <el-button :disabled="!workspacePath" @click="closeWorkspaceAction">关闭工作空间</el-button>
-      </div>
-
-      <label class="field-label" for="repo">工作空间根</label>
-      <div class="row">
-        <el-input id="repo" v-model="repoInput" spellcheck="false" />
-        <el-button :loading="pickingWorkspace" title="在本机弹出选文件夹对话框" @click="onBrowseWorkspace">
-          浏览…
-        </el-button>
-      </div>
-      <el-alert
-        v-if="workspaceSwitchHint"
-        class="hint-alert"
-        type="warning"
-        :closable="false"
-        show-icon
-        :title="workspaceSwitchHint"
-      />
-
-      <label class="field-label" for="fc" data-tour-page-config-freecad>FreeCAD 目录</label>
-      <div class="row">
-        <el-input id="fc" v-model="fcInput" spellcheck="false" placeholder="可选" />
-        <el-button v-if="defaultFreecadDir" title="填入本机常用安装路径" @click="fillDefaultFreecad">
-          默认位置
-        </el-button>
-      </div>
-
-      <div class="btn-row">
-        <el-button type="primary" @click="savePrefs">保存偏好</el-button>
-        <el-button @click="refreshFields">刷新</el-button>
-      </div>
-      <el-alert
-        v-if="onboarding.workspaceOk && !onboarding.indexScanned"
-        class="hint-alert"
-        type="info"
-        :closable="false"
-        show-icon
-      >
-        <template #title>
-          该工作空间尚未由 KT Auto CAD 完成索引扫描，Desk 的 BOM/引用工具可能不完整。
-          <el-button link type="primary" @click="showAutoCadScanGuide">查看扫描方式</el-button>
-        </template>
-      </el-alert>
-    </section>
-
-    <section class="section">
-      <h2 class="section-title">界面</h2>
-      <SideDockPrefsPanel />
-      <p class="hint">
-        Ribbon 与底栏都使用左、下、右三个经典布局图标；下方图标控制全局预检、问题与运行日志。
-      </p>
-      <label class="field-label" for="expand-icon-size">
-        展开/折叠图标大小（{{ uiPrefs.expandControlSizePx }}px，三角约
-        {{ expandGlyphSizePx(uiPrefs.expandControlSizePx) }}px）
-      </label>
-      <div class="row expand-size-row">
-        <el-slider
-          id="expand-icon-size"
-          v-model="uiPrefs.expandControlSizePx"
-          :min="EXPAND_ICON_SIZE_MIN"
-          :max="EXPAND_ICON_SIZE_MAX"
-          :step="1"
-          show-stops
-          @change="uiPrefs.setExpandControlSizePx(uiPrefs.expandControlSizePx)"
-        />
-        <span class="expand-size-hint muted">{{ EXPAND_ICON_SIZE_MIN }}–{{ EXPAND_ICON_SIZE_MAX }} px</span>
-      </div>
-      <p class="hint">
-        作用于工作区树、BOM 按宿主分组、装配结构树、链接路径修正等展开三角；写入本机浏览器 localStorage。
-      </p>
-      <div class="btn-row compact">
-        <el-button :disabled="!onboarding.workspaceOk" @click="startShellTour(true)">重新观看界面巡游</el-button>
-      </div>
-    </section>
-
-    <section class="section">
-      <h2 class="section-title">{{ desktopRuntime ? "桌面运行状态" : "本地后端服务" }}</h2>
-      <p class="hint">
-        {{ webRunning ? `运行中 · ${webUrl}` : "未检测到本页面对应的服务（可能已在其它端口运行）" }}
-      </p>
-      <div class="btn-row">
-        <el-button type="danger" plain :disabled="!webRunning || !canStopApi" @click="stopWebServer">
-          {{ desktopRuntime ? "退出 Phoenix" : "关闭后端服务" }}
-        </el-button>
-        <el-button @click="refreshWebStatus">刷新状态</el-button>
-      </div>
-      <p class="hint">
-        {{ reusedApi
-          ? (desktopRuntime ? "当前窗口复用其他宿主的 API；退出窗口不会关闭后台。" : "当前 Web 界面复用其他宿主的 API，因此不能从这里关闭后台。")
-          : (desktopRuntime ? "退出时会同步回收桌面壳启动的后端进程。" : "关闭后释放当前本地 API 端口；Vite 开发页面仍会保留。") }}
-      </p>
-    </section>
-
-    <section class="section">
-      <h2 class="section-title">最近打开</h2>
-      <p class="hint">
-        仅记录你主动切换/保存的工作空间根目录（写入本机 launcher-prefs.json）。系统临时目录不会再加入列表。
-      </p>
-      <div class="btn-row compact">
-        <el-button @click="pruneRecentList">清理临时/无效项</el-button>
-      </div>
-      <p class="hint">点击路径可切换；右侧 × 可单条移除（不删除磁盘目录）</p>
-      <div v-if="recentEntries.length" class="recent-list">
-        <div
-          v-for="entry in recentEntries"
-          :key="entry.path"
-          class="recent-row"
-          :class="{ missing: !entry.exists, current: entry.path === workspacePath }"
-        >
-          <el-button
-            class="recent-btn"
-            :type="entry.path === workspacePath ? 'primary' : 'default'"
-            text
-            @click="switchRecent(entry.path)"
-          >
-            <el-tag v-if="!entry.exists" size="small" type="warning" effect="plain" class="missing-tag">已失效</el-tag>
-            {{ entry.path === workspacePath ? "● 当前 · " : "" }}{{ entry.path }}
-          </el-button>
-          <el-button
-            type="danger"
-            link
-            class="recent-remove"
-            title="从最近列表移除"
-            @click="removeRecent(entry.path, $event)"
-          >
-            ×
+        <label class="field-label" for="repo">工作空间根</label>
+        <div class="row">
+          <el-input id="repo" v-model="repoInput" spellcheck="false" />
+          <el-button :loading="pickingWorkspace" title="在本机弹出选文件夹对话框" @click="onBrowseWorkspace">
+            浏览…
           </el-button>
         </div>
-      </div>
-      <el-empty v-else description="尚无记录" :image-size="64" />
-    </section>
+        <el-alert
+          v-if="workspaceSwitchHint"
+          class="hint-alert"
+          type="warning"
+          :closable="false"
+          show-icon
+          :title="workspaceSwitchHint"
+        />
 
-    <section class="section">
-      <h2 class="section-title">高级</h2>
-      <p class="hint">
-        恢复初始状态会清空本机 launcher（最近工作空间、FreeCAD、壳层布局）与浏览器缓存（新手指引、Tab 等），效果类似初次安装。
-        <strong>不会删除</strong> CAD 项目目录或其中的 <code>.phoenix</code> 数据。操作前请先关闭工作空间与所有工具 Tab。
+        <label class="field-label" for="fc" data-tour-page-config-freecad>FreeCAD 目录</label>
+        <div class="row">
+          <el-input id="fc" v-model="fcInput" spellcheck="false" placeholder="可选" />
+          <el-button v-if="defaultFreecadDir" title="填入本机常用安装路径" @click="fillDefaultFreecad">
+            默认位置
+          </el-button>
+        </div>
+
+        <div class="btn-row">
+          <el-button type="primary" @click="savePrefs">保存偏好</el-button>
+          <el-button @click="refreshFields">刷新</el-button>
+        </div>
+        <el-alert
+          v-if="onboarding.workspaceOk && !onboarding.indexScanned"
+          class="hint-alert"
+          type="info"
+          :closable="false"
+          show-icon
+        >
+          <template #title>
+            该工作空间尚未完成 CAD 索引扫描，BOM/引用工具可能不完整。
+            <el-button link type="primary" @click="showCadIndex">CAD 索引</el-button>
+          </template>
+        </el-alert>
+      </section>
+
+      <section class="section">
+        <h2 class="section-title">界面</h2>
+        <SideDockPrefsPanel />
+        <p class="hint">
+          Ribbon 与底栏都使用左、下、右三个经典布局图标；下方图标控制全局预检、问题与运行日志。
+        </p>
+        <label class="field-label" for="expand-icon-size">
+          展开/折叠图标大小（{{ uiPrefs.expandControlSizePx }}px，三角约
+          {{ expandGlyphSizePx(uiPrefs.expandControlSizePx) }}px）
+        </label>
+        <div class="row expand-size-row">
+          <el-slider
+            id="expand-icon-size"
+            v-model="uiPrefs.expandControlSizePx"
+            :min="EXPAND_ICON_SIZE_MIN"
+            :max="EXPAND_ICON_SIZE_MAX"
+            :step="1"
+            show-stops
+            @change="uiPrefs.setExpandControlSizePx(uiPrefs.expandControlSizePx)"
+          />
+          <span class="expand-size-hint muted">{{ EXPAND_ICON_SIZE_MIN }}–{{ EXPAND_ICON_SIZE_MAX }} px</span>
+        </div>
+        <p class="hint">
+          作用于工作区树、BOM 按宿主分组、装配结构树、链接路径修正等展开三角；写入本机浏览器 localStorage。
+        </p>
+        <div class="btn-row compact">
+          <el-button :disabled="!onboarding.workspaceOk" @click="startShellTour(true)">重新观看界面巡游</el-button>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2 class="section-title">{{ desktopRuntime ? "桌面运行状态" : "本地后端服务" }}</h2>
+        <p class="hint">
+          {{ webRunning ? `运行中 · ${webUrl}` : "未检测到本页面对应的服务（可能已在其它端口运行）" }}
+        </p>
+        <div class="btn-row">
+          <el-button type="danger" plain :disabled="!webRunning || !canStopApi" @click="stopWebServer">
+            {{ desktopRuntime ? "退出 Phoenix" : "关闭后端服务" }}
+          </el-button>
+          <el-button @click="refreshWebStatus">刷新状态</el-button>
+        </div>
+        <p class="hint">
+          {{ reusedApi
+            ? (desktopRuntime ? "当前窗口复用其他宿主的 API；退出窗口不会关闭后台。" : "当前 Web 界面复用其他宿主的 API，因此不能从这里关闭后台。")
+            : (desktopRuntime ? "退出时会同步回收桌面壳启动的后端进程。" : "关闭后释放当前本地 API 端口；Vite 开发页面仍会保留。") }}
+        </p>
+      </section>
+
+      <section class="section">
+        <h2 class="section-title">最近打开</h2>
+        <p class="hint">
+          仅记录你主动切换/保存的工作空间根目录（写入本机 launcher-prefs.json）。系统临时目录不会再加入列表。
+        </p>
+        <div class="btn-row compact">
+          <el-button @click="pruneRecentList">清理临时/无效项</el-button>
+        </div>
+        <p class="hint">点击路径可切换；右侧 × 可单条移除（不删除磁盘目录）</p>
+        <div v-if="recentEntries.length" class="recent-list">
+          <div
+            v-for="entry in recentEntries"
+            :key="entry.path"
+            class="recent-row"
+            :class="{ missing: !entry.exists, current: entry.path === workspacePath }"
+          >
+            <el-button
+              class="recent-btn"
+              :type="entry.path === workspacePath ? 'primary' : 'default'"
+              text
+              @click="switchRecent(entry.path)"
+            >
+              <el-tag v-if="!entry.exists" size="small" type="warning" effect="plain" class="missing-tag">已失效</el-tag>
+              {{ entry.path === workspacePath ? "● 当前 · " : "" }}{{ entry.path }}
+            </el-button>
+            <el-button
+              type="danger"
+              link
+              class="recent-remove"
+              title="从最近列表移除"
+              @click="removeRecent(entry.path, $event)"
+            >
+              ×
+            </el-button>
+          </div>
+        </div>
+        <el-empty v-else description="尚无记录" :image-size="64" />
+      </section>
+
+      <section class="section">
+        <h2 class="section-title">高级</h2>
+        <p class="hint">
+          恢复初始状态会清空本机 launcher（最近工作空间、FreeCAD、壳层布局）与浏览器缓存（新手指引、Tab 等），效果类似初次安装。
+          <strong>不会删除</strong> CAD 项目目录或其中的 <code>.phoenix</code> 数据。操作前请先关闭工作空间与所有工具 Tab。
+        </p>
+        <div class="btn-row">
+          <el-button type="danger" plain @click="resetFactory">恢复初始状态…</el-button>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2 class="section-title">功能一览</h2>
+        <ul class="feature-list">
+          <li v-for="item in navItems()" :key="item.page">
+            · {{ item.label }} — {{ item.description }}
+          </li>
+        </ul>
+      </section>
+
+      <p class="footer-hint">
+        各功能页路径与选项写入当前工作空间根下的
+        {{ appConfig?.workspace_dotfile }}；最近打开与 FreeCAD 目录保存在
+        {{ launcher?.launcher_config_path ?? appConfig?.launcher_config_path }}。
       </p>
-      <div class="btn-row">
-        <el-button type="danger" plain @click="resetFactory">恢复初始状态…</el-button>
-      </div>
-    </section>
-
-    <section class="section">
-      <h2 class="section-title">功能一览</h2>
-      <ul class="feature-list">
-        <li v-for="item in navItems()" :key="item.page">
-          · {{ item.label }} — {{ item.description }}
-        </li>
-      </ul>
-    </section>
-
-    <p class="footer-hint">
-      各功能页路径与选项写入当前工作空间根下的
-      {{ appConfig?.workspace_dotfile }}；最近打开与 FreeCAD 目录保存在
-      {{ launcher?.launcher_config_path ?? appConfig?.launcher_config_path }}。
-    </p>
-  </div>
+    </PageMainBlock>
+  </PageLayout>
 </template>
 
 <style scoped>
 @import "./page-shared.css";
 
-.config-page {
-  padding: 0;
-}
-
 .close-frame {
   padding: 5px 12px;
   font-size: 0.82rem;
-}
-
-.page-title {
-  margin: 0;
-  font-size: 1.25rem;
 }
 
 .section {

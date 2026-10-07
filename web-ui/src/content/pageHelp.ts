@@ -79,15 +79,28 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
     ],
   },
   xlink_fix: {
-    title: "链接路径修正",
+    title: "错误修正",
     bullets: [
       "先分析再写回；未找到行可展开并手选目标 FCStd。",
+      "链接与属性计数可一起分析；属性只修 Count，不覆盖业务值。",
     ],
-    docPath: "docs/cad/链接路径修正-未找到手选.md",
+    docPath: "docs/cad/CAD批量工具.md",
     tourSteps: [
       tour("[data-tour-page-xlink-analyze]", "分析", "扫描问题列表，区分可自动修正与未找到。"),
       tour("[data-tour-page-xlink-table]", "问题表", "勾选后执行写回；展开行可选手动目标文件。"),
     ],
+  },
+  cad_batch_tools: {
+    title: "CAD 批量工具",
+    bullets: ["在 Primary 功能 Block 打开独立 View；此入口不执行任何写操作。"],
+    docPath: "docs/cad/CAD批量工具.md",
+    tourSteps: [],
+  },
+  batch_attributes: {
+    title: "批量属性写入",
+    bullets: ["目录内预览后勾选文件/字段，默认只补缺失或空值。", "来源冲突、图纸或多个独立根对象需到单文件确认。写入前关闭 FreeCAD 文档并备份。"],
+    docPath: "docs/cad/CAD批量工具.md",
+    tourSteps: [],
   },
   step_batch: {
     title: "STEP 批量",
@@ -121,6 +134,12 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
       tour("[data-tour-page-partcat-table]", "目录表", "点击行打开零件详情 Tab。"),
     ],
   },
+  cad_index: {
+    title: "CAD 索引",
+    bullets: ["只读检查当前工作空间已有索引与最近扫描状态，不扫描磁盘或重建数据库。", "全量扫描在 KT Auto CAD；局部引用刷新在文件详情。"],
+    docPath: "docs/cad/CAD目录与索引职责拆分.md",
+    tourSteps: [],
+  },
   part_key_detail: {
     title: "零件详情",
     bullets: [
@@ -152,68 +171,13 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
       tour("[data-tour-page-dedup-scan]", "开始扫描", "结果按三类重复分组展示。"),
     ],
   },
-  reorder_members: {
-    title: "C++ 成员排序",
-    bullets: [
-      "勾选一级目录或源文件；运行选项与 KEVIN_SYSTEM_CODE 在侧栏「属性」面板（随工作空间保存）。",
-      "建议先预检再写盘；变更列表与运行日志见下方。",
-      "忽略：内置 .phoenix / build / node_modules 等；可选 .phoenix/code.ignore；CAA 差异在侧栏「忽略设定」。",
-      "锁定段（P0）：clang-format off/on、KEVIN/CAA Wizard、#pragma region 等成对标记内整段不重排。",
-      "排序摘要：.cpp/.h 各访问段内特殊成员优先，其余字母序；.cpp 补 //--- 分隔符。",
-    ],
-    docPath: "docs/code/成员函数排序-reorder_members.md",
-  },
-  kt_codegen: {
-    title: "KT Codegen",
-    bullets: [
-      "左侧 Block 发现并打开旧 v4 JSON / 17 列 CSV，编辑 Prefix/Middle/Namespace/Append，并选择 32 个 Kevin 自动代码控制符。",
-      "主 View 直接使用 Phoenix Wing 参数表格（含列宽自适应），下方可收缩工作区统一显示预检、问题与输出，不会打开并列 View。",
-      "问题行带源码位置时可点击定位并以黄色整行高亮；没有预检时点 Apply 会先自动预检。",
-      "Apply 会真实写回 Git 工作空间源码：服务端复核计划/源码指纹，保留 UTF-8/GBK、BOM、换行与权限，并用临时文件复读后原子替换。",
-      "源码扫描达到 5000 文件或 64 MiB 快照上限时仍可看部分预览，但 Apply 安全门禁关闭；请先在 Code Ignore 排除无关目录。",
-      "保存配置有磁盘指纹并发保护；文件在外部变化时需先还原或重新打开。",
-    ],
-    docPath: "docs/code/KT-Codegen-桌面工作台.md",
-  },
   code_ignore: {
     title: "Code 忽略设定",
     bullets: [
-      "所有 Code 工具共用：内置规则 + code.ignore 文件 + 工作空间自定义行。",
+      "独立管理工作空间忽略规则：内置规则 + code.ignore 文件 + 工作空间自定义行；保存不会触发源码扫描。",
       "Code 模块页可在侧栏「忽略设定」Tab 编辑；本页为全屏编辑入口。",
       "文件级 / 进程目录 / 自定义区可折叠；Git 式 code.ignore 在上方，自定义在下方。",
     ],
-    docPath: "docs/code/Code模块-批量改名-规划.md",
-  },
-  code_index: {
-    title: "Code 索引",
-    bullets: [
-      "「工程内搜索」递归扫描源文件、配置、文档与资源，写入 phoenix_code_* 表（与 CAD 索引同库）。",
-      "跳过 build、node_modules、.git 等目录；再次扫描会将磁盘上已删除的文件标为「缺失」。",
-      "上次扫描时间与分类统计（源文件 / 配置 / 文档 / 资源）见侧栏「属性」。",
-    ],
-    docPath: "docs/code/Code模块-工作空间索引.md",
-    tourSteps: [
-      tour("[data-tour-page-code-scan]", "工程内搜索", "首次使用 Code 工具前建议先建立索引。"),
-      tour("[data-tour-page-code-table]", "索引表", "按类型与路径筛选浏览。"),
-    ],
-  },
-  code_rename: {
-    title: "Code 批量改名",
-    bullets: [
-      "旧名→新名精确匹配；勾选文件夹 / 文件 / 文本三个级别后预览再执行。",
-      "扫描范围见表单内工作集选择器；忽略规则在侧栏「忽略设定」统一配置。",
-      "「包含忽略目录」慎用；完成后可勾选重扫 Code 索引。",
-    ],
-    docPath: "docs/code/Code模块-批量改名-规划.md",
-  },
-  code_uuid: {
-    title: "Code UUID 替换",
-    bullets: [
-      "扫描文本中的 UUID 形态字符串，勾选后预检或写盘替换。",
-      "替换策略：同值一组共用一个新 UUID，或每条命中独立新 UUID。",
-      "忽略规则在侧栏「忽略设定」；可按 UUID 组全选。",
-    ],
-    docPath: "docs/code/Code模块-批量改名-规划.md",
   },
   git: {
     title: "Git",

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { pnwCreateDb, type PnwDbAdapter } from "@phoenix-wing/db-node";
 import { loadAssemblyTreeFromXrefs } from "./pnwBomXrefService.js";
 
@@ -165,6 +166,7 @@ function pickScanAttr(rows: any[], field: string): string {
 
 function syncPartKeysFromFileAssets(db: PnwDbAdapter): void {
   if (!tableExists(db, "phoenix_cad_file_asset")) return;
+  const projectionExists = tableExists(db, "phoenix_cad_part_key") && tableExists(db, "phoenix_cad_part_file_link");
   ensurePartKeySchema(db);
   const now = utcNowIso();
   const rows = db.all<any>(
@@ -175,6 +177,16 @@ function syncPartKeysFromFileAssets(db: PnwDbAdapter): void {
        AND part_version IS NOT NULL AND TRIM(part_version) != ''
      ORDER BY CASE file_status WHEN 'present' THEN 0 ELSE 1 END, repo_rel_path`,
   );
+
+  // The file-asset table is the cached source, not the FCStd files or recursive
+  // assembly tree. Rebuild this projection only when relevant indexed data
+  // changes, and persist the marker so a server restart does not re-sync it.
+  const fingerprint = createHash("sha256").update(JSON.stringify(rows)).digest("hex");
+  db.exec("CREATE TABLE IF NOT EXISTS phoenix_meta (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL)");
+  const cacheKey = "desk_part_key_projection_v1";
+  if (projectionExists && db.get<{ value: string }>("SELECT value FROM phoenix_meta WHERE key=?", [cacheKey])?.value === fingerprint) return;
+  db.exec("SAVEPOINT desk_part_key_sync");
+  try {
 
   const groups = new Map<string, any[]>();
   for (const row of rows) {
@@ -214,14 +226,12 @@ function syncPartKeysFromFileAssets(db: PnwDbAdapter): void {
   }
 
   const touchedIds: number[] = [];
+  const keyIds = new Map(db.all<{ id: number; part_number: string; part_version: string }>("SELECT id, part_number, part_version FROM phoenix_cad_part_key")
+    .map(row => [`${row.part_number}\u0000${row.part_version}`, row.id]));
   for (const [key, files] of groups) {
-    const [pn, pv] = key.split("\u0000");
-    const pk = db.get<{ id: number }>(
-      "SELECT id FROM phoenix_cad_part_key WHERE part_number = ? AND part_version = ?",
-      [pn, pv],
-    );
-    if (!pk) continue;
-    touchedIds.push(Number(pk.id));
+    const id = keyIds.get(key);
+    if (!id) continue;
+    touchedIds.push(Number(id));
     for (const file of files) {
       db.run(
         `INSERT INTO phoenix_cad_part_file_link (
@@ -229,7 +239,7 @@ function syncPartKeysFromFileAssets(db: PnwDbAdapter): void {
          ) VALUES (?, ?, ?, NULL, ?, ?)
          ON CONFLICT(file_asset_id) DO UPDATE SET
            part_key_id = excluded.part_key_id`,
-        [pk.id, file.id, inferPartFileRole(file.filename || ""), LINK_STATUS_ACTIVE, now],
+        [id, file.id, inferPartFileRole(file.filename || ""), LINK_STATUS_ACTIVE, now],
       );
     }
   }
@@ -248,6 +258,11 @@ function syncPartKeysFromFileAssets(db: PnwDbAdapter): void {
          AND part_version IS NOT NULL AND TRIM(part_version) != ''
      )`,
   );
+  db.run("INSERT INTO phoenix_meta(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [cacheKey, fingerprint]);
+  db.exec("RELEASE desk_part_key_sync");
+  } catch (error) {
+    db.exec("ROLLBACK TO desk_part_key_sync"); db.exec("RELEASE desk_part_key_sync"); throw error;
+  }
 }
 
 function entryFromRow(row: any): any {
@@ -347,15 +362,7 @@ export function loadPartKeysPayload(ws: string, opts: { search?: string } = {}):
               COUNT(pfl.id) AS file_count,
               SUM(CASE WHEN fa.file_status = ? THEN 1 ELSE 0 END) AS present_count,
               SUM(CASE WHEN fa.file_status = ? THEN 1 ELSE 0 END) AS missing_count,
-              (
-                SELECT fa2.repo_rel_path
-                FROM phoenix_cad_part_file_link pfl2
-                JOIN phoenix_cad_file_asset fa2 ON fa2.id = pfl2.file_asset_id
-                WHERE pfl2.part_key_id = pk.id
-                  AND fa2.file_status = ?
-                ORDER BY fa2.repo_rel_path
-                LIMIT 1
-              ) AS primary_repo_rel
+              MIN(CASE WHEN fa.file_status = ? THEN fa.repo_rel_path END) AS primary_repo_rel
        FROM phoenix_cad_part_key pk
        LEFT JOIN phoenix_cad_part_file_link pfl ON pfl.part_key_id = pk.id
        LEFT JOIN phoenix_cad_file_asset fa ON fa.id = pfl.file_asset_id

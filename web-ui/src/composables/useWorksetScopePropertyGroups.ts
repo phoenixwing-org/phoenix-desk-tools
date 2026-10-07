@@ -7,21 +7,16 @@ import type { PnwPagePropertyGroup } from "phoenix-wing";
 const SCOPE_MODE_OPTIONS = [
   { value: "all", label: "全工作空间" },
   { value: "scope", label: "子目录" },
-  { value: "index", label: "Code 索引 present" },
   { value: "workset", label: "工作集" },
 ] as const;
 
 /** 工作集扫描范围 → 属性面板 1:1 字段（仅值；按钮走 Ribbon/页脚/主区） */
-export function useWorksetScopePropertyGroups(
-  pageId: string,
-  opts?: { showIndexScope?: boolean },
-) {
-  const showIndexScope = opts?.showIndexScope ?? true;
+export function useWorksetScopePropertyGroups(pageId: string) {
   const store = useFileWorksetsStore();
   const pageScope = useWorksetPageScope(pageId);
 
   const scopeModeOptions = computed(() =>
-    SCOPE_MODE_OPTIONS.filter((o) => showIndexScope || o.value !== "index").map((o) => ({
+    SCOPE_MODE_OPTIONS.map((o) => ({
       value: o.value,
       label: o.label,
     })),

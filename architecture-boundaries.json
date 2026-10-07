@@ -5,9 +5,6 @@
   "exclude": ["\\.test\\.", "\\.spec\\.", "(?:^|/)dist/"],
   "pureEntrypoints": [
     "packages/catdlg-core/src/index.ts",
-    "server/src/lib/reorderHeaderEngine.ts",
-    "server/src/lib/reorderCppEngine.ts",
-    "web-ui/src/models/ktCodegenPagePropertySchema.ts",
     "web-ui/src/models/assemblyTreeViewModel.ts",
     "web-ui/src/models/unitTestsViewModel.ts",
     "web-ui/src/models/caaDialogSessionViewModel.ts",

@@ -38,6 +38,8 @@ export function isFcstdFile(rel: string): boolean {
 
 // ---------- 改名选项 ----------
 
+export const DEFAULT_RENAME_OPTIONS = { fixXref: true, syncLabels: true, fixBasename: true };
+
 export interface RenameOption {
   id: string;
   label: string;
@@ -52,19 +54,19 @@ export function resolveRenameOptions(fcstd: boolean): RenameOption[] {
     {
       id: "fixXref",
       label: "修改引用 (XLink path)",
-      default: true,
+      default: DEFAULT_RENAME_OPTIONS.fixXref,
       hint: "扫描并修正宿主文档中的 XLink 文件路径",
     },
     {
       id: "syncLabels",
       label: "同步引用标签 (Label)",
-      default: false,
+      default: DEFAULT_RENAME_OPTIONS.syncLabels,
       hint: "同步宿主文档中引用实例的显示标签为 CAD 索引规则名",
     },
     {
       id: "fixBasename",
       label: "引用名字 (basename)",
-      default: false,
+      default: DEFAULT_RENAME_OPTIONS.fixBasename,
       hint: "修正仅按 basename 匹配的引用",
     },
   ];

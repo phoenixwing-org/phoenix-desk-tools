@@ -2,14 +2,18 @@
 import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { CircleCloseFilled, Loading, Plus } from "@element-plus/icons-vue";
 import { useAppShell } from "../composables/useAppShell";
-import { ribbonIconFor } from "./ribbon/ribbonIcons";
+import { PnwIcon, type PnwWorkbenchTabAction, type PnwColorScheme } from "phoenix-wing";
+import PnwWorkbenchTabContextMenu from "phoenix-wing/layout/PnwWorkbenchTabContextMenu.vue";
 
 withDefaults(
   defineProps<{
     inHeader?: boolean;
+    colorScheme?: PnwColorScheme;
+    editorMaximized?: boolean;
   }>(),
   { inHeader: false },
 );
+const emit = defineEmits<{ "update:editorMaximized": [value: boolean] }>();
 
 const shell = useAppShell();
 
@@ -18,6 +22,30 @@ const activeId = computed(() => shell.activeTabId.value);
 
 const scrollEl = ref<HTMLElement | null>(null);
 const tabEls = new Map<string, HTMLElement>();
+const menu = ref<{ tabId: string; x: number; y: number }>();
+const menuLabels: Record<PnwWorkbenchTabAction, string> = {
+  refresh: "刷新此页", close: "关闭", "close-others": "关闭其他", "close-right": "关闭右侧", "close-all": "关闭全部",
+};
+const menuItems = computed(() => (Object.keys(menuLabels) as PnwWorkbenchTabAction[]).map(action => ({
+  action, label: menuLabels[action], disabled: !menu.value || shell.tabActionDisabled({ action, tabId: menu.value.tabId }),
+})));
+function openMenu(event: MouseEvent | KeyboardEvent, tabId: string) {
+  event.preventDefault();
+  const rect = tabEls.get(tabId)?.getBoundingClientRect();
+  menu.value = { tabId, x: event instanceof MouseEvent ? event.clientX : rect?.left ?? 0,
+    y: event instanceof MouseEvent ? event.clientY : rect?.bottom ?? 0 };
+}
+function closeMenu(restoreFocus = false) {
+  const id = menu.value?.tabId;
+  menu.value = undefined;
+  if (restoreFocus && id) tabEls.get(id)?.focus();
+}
+function runMenuAction(action: PnwWorkbenchTabAction) {
+  const tabId = menu.value?.tabId;
+  if (!tabId || menuItems.value.find(item => item.action === action)?.disabled) return;
+  closeMenu(true);
+  void shell.runTabAction({ action, tabId });
+}
 
 function setTabRef(tabId: string, el: Element | null) {
   if (el instanceof HTMLElement) tabEls.set(tabId, el);
@@ -72,7 +100,7 @@ const canAdd = computed(() => {
   return shell.canOpenNewTab(tab.pageId);
 });
 
-const canCloseAll = computed(() => tabs.value.length > 1);
+const canCloseAll = computed(() => tabs.value.length > 0);
 const closingAll = ref(false);
 
 async function onCloseAll() {
@@ -82,7 +110,7 @@ async function onCloseAll() {
   try {
     const ok = await shell.closeAllTabs();
     if (ok) {
-      const msg = `已关闭 ${count} 个 Tab，已回到欢迎页`;
+      const msg = `已关闭 ${count} 个 Tab`;
       shell.setStatus(msg);
       shell.appendLog(`[Tab] ${msg}`, { source: "workbench" });
     } else {
@@ -102,6 +130,7 @@ watch(activeId, () => {
 watch(
   tabs,
   () => {
+    if (menu.value && !tabs.value.some(tab => tab.id === menu.value!.tabId)) closeMenu();
     void nextTick(() => scrollActiveIntoView("auto"));
   },
   { deep: true },
@@ -122,21 +151,33 @@ onMounted(() => {
         :ref="(el) => setTabRef(tab.id, el as Element | null)"
         type="button"
         class="tab-item"
-        :class="{ active: tab.id === activeId, dirty: tab.dirty }"
+        :class="{ active: tab.id === activeId, dirty: tab.dirty, 'is-preview': tab.preview }"
         role="tab"
         :aria-selected="tab.id === activeId"
-        :title="tab.subtitle || tab.title"
+        :title="`${tab.subtitle || tab.title}${tab.preview ? '\n预览：双击标签固定；修改后自动固定' : ''}`"
+        :data-tab-id="tab.id"
+        :data-preview="tab.preview ? 'true' : undefined"
         @click="onSelect(tab.id)"
+        @dblclick="shell.keepTab(tab.id)"
+        @keydown.enter.prevent="shell.keepTab(tab.id); onSelect(tab.id)"
+        aria-haspopup="menu"
+        @contextmenu="openMenu($event, tab.id)"
+        @keydown.shift.f10="openMenu($event, tab.id)"
       >
-        <span class="tab-icon" aria-hidden="true">
-          <component :is="ribbonIconFor(tab.pageId)" />
-        </span>
         <span class="tab-title">{{ tab.title }}</span>
         <span v-if="tab.dirty" class="tab-dot" aria-label="未保存">●</span>
         <span class="tab-close" title="关闭 Tab" @click="onClose(tab.id, $event)">×</span>
       </button>
       <span v-if="inHeader" class="tab-scroll-edge" aria-hidden="true" />
     </div>
+    <button v-if="shell.activeTab()?.preview" type="button" class="tab-add tab-keep"
+      title="固定预览标签（也可双击标签）" aria-label="固定预览标签" @click="shell.keepTab(activeId)">
+      <span aria-hidden="true">固定</span>
+    </button>
+    <button type="button" class="tab-add" :title="editorMaximized ? '还原工作台' : '最大化工作区'"
+      :aria-label="editorMaximized ? '还原工作台' : '最大化工作区'" @click="emit('update:editorMaximized', !editorMaximized)">
+      <PnwIcon :name="editorMaximized ? 'editor-restore' : 'editor-maximize'" :size="16" />
+    </button>
     <button
       v-if="canCloseAll"
       type="button"
@@ -149,6 +190,9 @@ onMounted(() => {
       <Loading v-if="closingAll" class="tab-action-icon is-loading" />
       <CircleCloseFilled v-else class="tab-action-icon" />
     </button>
+    <PnwWorkbenchTabContextMenu v-if="menu" :key="`${menu.tabId}:${menu.x}:${menu.y}`"
+      :x="menu.x" :y="menu.y" :items="menuItems" :color-scheme="colorScheme" label="标签操作"
+      @close="closeMenu" @action="runMenuAction" />
     <button
       v-if="canAdd"
       type="button"
@@ -231,6 +275,8 @@ onMounted(() => {
   text-overflow: ellipsis;
   min-width: 0;
 }
+.tab-item.is-preview .tab-title { font-style: italic; }
+.tab-keep { min-width: 38px; white-space: nowrap; font-size: 12px; }
 
 .tab-icon {
   display: inline-flex;

@@ -38,13 +38,7 @@ export default defineConfig({
     exclude: localWingOptimizeExcludes,
   },
   plugins: [
-    vue({
-      template: {
-        compilerOptions: {
-          isCustomElement: (tag) => tag.startsWith("kt-codegen-") || tag.startsWith("pnw-code-"),
-        },
-      },
-    }),
+    vue(),
     AutoImport({
       resolvers: [ElementPlusResolver()],
       dts: "auto-imports.d.ts",
@@ -61,9 +55,7 @@ export default defineConfig({
       "pinia",
       "element-plus",
       "phoenix-wing",
-      "@phoenix-wing/code-core",
       "@phoenix-wing/db-node",
-      "@phoenix-wing/kt-codegen",
     ],
   },
   test: {

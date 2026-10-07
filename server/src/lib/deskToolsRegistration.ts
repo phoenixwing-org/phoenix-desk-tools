@@ -5,7 +5,7 @@ import { runtimeHomeDirectory } from "./appRuntimePaths.js";
 
 export const DESK_TOOLS_SERVICE_SCHEMA_VERSION = 1;
 export const DESK_TOOLS_SERVICE_PROTOCOL_VERSION = 1;
-export const DESK_TOOLS_APP_VERSION = "0.4.0";
+export const DESK_TOOLS_APP_VERSION = "0.5.0";
 export const DESK_TOOLS_PREFERRED_PORT = 48_375;
 export const DESK_TOOLS_PORT_ATTEMPTS = 32;
 

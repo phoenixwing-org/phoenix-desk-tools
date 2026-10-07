@@ -5,8 +5,16 @@ import {
 } from "../utils/fcstdRuleLabel";
 
 export interface AssemblyTreeInstanceViewInput {
+  readonly resolved_target_repo_rel?: string;
+  readonly resolved_target_object_name?: string;
+  readonly direct_target_repo_rel?: string;
   readonly xlink_file_attr: string;
   readonly link_label?: string;
+  readonly host_object_name?: string;
+  readonly target_object_name?: string;
+  readonly rule_label?: string;
+  readonly rule_error?: string;
+  readonly document_hash?: string;
 }
 
 export interface AssemblyTreeNodeViewInput extends RuleLabelNodeFields {
@@ -19,11 +27,14 @@ export interface AssemblyTreeNodeViewInput extends RuleLabelNodeFields {
   readonly xref_instances?: readonly AssemblyTreeInstanceViewInput[];
   readonly ref_count?: number;
   readonly file_role?: string;
+  readonly structure_source?: "host_objects";
+  readonly label_editable?: boolean;
 }
 
 export interface AssemblyTreeFlatRow<T extends AssemblyTreeNodeViewInput> {
   readonly node: T;
   readonly depth: number;
+  readonly position: string;
 }
 
 export interface AssemblyTreeInstanceRow<T extends AssemblyTreeNodeViewInput> {
@@ -37,6 +48,10 @@ export interface AssemblyTreeLabelPatch {
   readonly host_repo_rel: string;
   readonly xlink_file_attr: string;
   readonly link_label: string;
+  readonly host_object_name?: string;
+  readonly target_object_name?: string;
+  readonly old_label?: string;
+  readonly document_hash?: string;
 }
 
 export interface AssemblyTreeLabelChange {
@@ -44,6 +59,9 @@ export interface AssemblyTreeLabelChange {
   readonly xlink_file_attr: string;
   readonly old_label: string;
   readonly new_label: string;
+  readonly host_object_name?: string;
+  readonly target_object_name?: string;
+  readonly document_hash?: string;
 }
 
 export interface AssemblyTreeRulePreview {
@@ -55,8 +73,8 @@ export interface AssemblyTreeRulePreview {
 
 export type AssemblyTreeChildren<T extends AssemblyTreeNodeViewInput> = (node: T) => readonly T[];
 
-export function assemblyTreeEditKey(host: string, attr: string): string {
-  return `${host}\x00${attr}`;
+export function assemblyTreeEditKey(host: string, attr: string, instance?: Pick<AssemblyTreeInstanceViewInput, "host_object_name" | "target_object_name">): string {
+  return `${host}\x00${attr}` + (instance?.host_object_name ? `\x00${instance.host_object_name}\x00${instance.target_object_name ?? ""}` : "");
 }
 
 export function assemblyTreeInstancesOf(
@@ -77,7 +95,7 @@ export function assemblyTreeDisplayLabel(
   host: string,
   instance: AssemblyTreeInstanceViewInput,
 ): string {
-  const key = assemblyTreeEditKey(host, instance.xlink_file_attr);
+  const key = assemblyTreeEditKey(host, instance.xlink_file_attr, instance);
   return edits.get(key) ?? assemblyTreeBaselineLabel(instance);
 }
 
@@ -86,7 +104,7 @@ export function assemblyTreeIsLabelEdited(
   host: string,
   instance: AssemblyTreeInstanceViewInput,
 ): boolean {
-  const key = assemblyTreeEditKey(host, instance.xlink_file_attr);
+  const key = assemblyTreeEditKey(host, instance.xlink_file_attr, instance);
   const value = edits.get(key);
   return value !== undefined && !linkLabelsEqual(value, assemblyTreeBaselineLabel(instance));
 }
@@ -98,7 +116,7 @@ export function assemblyTreeWithLabelEdit(
   value: string,
 ): Map<string, string> {
   const next = new Map(edits);
-  const key = assemblyTreeEditKey(host, instance.xlink_file_attr);
+  const key = assemblyTreeEditKey(host, instance.xlink_file_attr, instance);
   if (linkLabelsEqual(value, assemblyTreeBaselineLabel(instance))) next.delete(key);
   else next.set(key, value);
   return next;
@@ -118,6 +136,7 @@ export function assemblyTreeIsUnresolved(node: AssemblyTreeNodeViewInput): boole
 }
 
 export function assemblyTreeIsAssembly(node: AssemblyTreeNodeViewInput): boolean {
+  if (node.structure_source === "host_objects" && node.file_role) return node.file_role === "assembly";
   if (node.file_role === "assembly") return true;
   return /\.assy\.fcstd$/iu.test(node.basename || node.repo_rel_path || "");
 }
@@ -126,7 +145,39 @@ export function assemblyTreeCanEditLabel(
   node: AssemblyTreeNodeViewInput,
   editable: boolean,
 ): boolean {
-  return editable && !assemblyTreeIsMissing(node);
+  return editable && node.label_editable !== false && !assemblyTreeIsUnresolved(node);
+}
+
+export function assemblyTreeCanLoadSourceChildren(node: AssemblyTreeNodeViewInput): boolean {
+  return node.structure_source !== "host_objects" && assemblyTreeIsAssembly(node);
+}
+
+/** The same already-loaded recommendation drives both passive hints and explicit fill. */
+export function assemblyTreeLabelRecommendation(
+  node: AssemblyTreeNodeViewInput, instance: AssemblyTreeInstanceViewInput,
+): string {
+  if (instance.rule_error || !assemblyTreeCanEditLabel(node, true)) return "";
+  // Never substitute the file root for a named target that has no safe rule.
+  return instance.host_object_name ? instance.rule_label?.trim() ?? "" : resolveRuleLabelForNode(node);
+}
+
+export function assemblyTreeLabelDiffersFromRule(
+  node: AssemblyTreeNodeViewInput, instance: AssemblyTreeInstanceViewInput,
+  current = assemblyTreeBaselineLabel(instance),
+): boolean {
+  const recommendation = assemblyTreeLabelRecommendation(node, instance);
+  return Boolean(recommendation && !linkLabelsEqual(current, recommendation));
+}
+
+/** Display/open the actual part while keeping direct XLink data for writes. */
+export function assemblyTreeTargetFile(node: AssemblyTreeNodeViewInput, instance = assemblyTreeInstancesOf(node)[0]) {
+  const normalize = (rel: string) => rel.replace(/\\/g, "/").replace(/^\.\//, "");
+  const direct = instance?.direct_target_repo_rel || node.repo_rel_path || "";
+  const resolved = instance?.resolved_target_repo_rel;
+  const repoRelPath = resolved || direct;
+  const basename = resolved ? normalize(resolved).split("/").at(-1) ?? "" : node.basename ?? "";
+  const viaRepoRelPath = resolved && direct && normalize(resolved) !== normalize(direct) ? direct : "";
+  return { repoRelPath, basename, viaRepoRelPath, viaBasename: normalize(viaRepoRelPath).split("/").at(-1) ?? "" };
 }
 
 export function assemblyTreeFlatten<T extends AssemblyTreeNodeViewInput>(
@@ -135,12 +186,14 @@ export function assemblyTreeFlatten<T extends AssemblyTreeNodeViewInput>(
   childrenOf: AssemblyTreeChildren<T>,
   depth = 0,
   out: AssemblyTreeFlatRow<T>[] = [],
+  prefix = "",
 ): AssemblyTreeFlatRow<T>[] {
-  for (const node of nodes) {
-    out.push({ node, depth });
+  for (const [index, node] of nodes.entries()) {
+    const position = prefix ? `${prefix}.${index + 1}` : `${index + 1}`;
+    out.push({ node, depth, position });
     const children = childrenOf(node);
     if (expanded.has(node.id) && children.length) {
-      assemblyTreeFlatten(children, expanded, childrenOf, depth + 1, out);
+      assemblyTreeFlatten(children, expanded, childrenOf, depth + 1, out, position);
     }
   }
   return out;
@@ -215,7 +268,7 @@ export function assemblyTreeToggleVisualState(
 ): "loading" | "expanded" | "collapsed" | "lazy" | "leaf" {
   if (loading.has(node.id)) return "loading";
   if (hasSubtree) return expanded.has(node.id) ? "expanded" : "collapsed";
-  if (assemblyTreeIsAssembly(node)) return "lazy";
+  if (assemblyTreeCanLoadSourceChildren(node)) return "lazy";
   return "leaf";
 }
 
@@ -227,7 +280,7 @@ export function assemblyTreeToggleAriaLabel(
 ): string {
   if (loading.has(node.id)) return "加载子件";
   if (hasSubtree) return expanded.has(node.id) ? "折叠子件" : "展开子件";
-  return assemblyTreeIsAssembly(node) ? "加载并展开该装配的下级子件" : "无子件";
+  return assemblyTreeCanLoadSourceChildren(node) ? "加载并展开该装配的下级子件" : "无子件";
 }
 
 export function assemblyTreePendingChanges<T extends AssemblyTreeNodeViewInput>(
@@ -236,20 +289,25 @@ export function assemblyTreePendingChanges<T extends AssemblyTreeNodeViewInput>(
   childrenOf: AssemblyTreeChildren<T>,
 ): AssemblyTreeLabelChange[] {
   const changes: AssemblyTreeLabelChange[] = [];
+  const seen = new Set<string>();
   walkAssemblyTree(nodes, childrenOf, (node) => {
-    if (assemblyTreeIsMissing(node)) return;
+    if (!assemblyTreeCanEditLabel(node, true)) return;
     const host = node.host_repo_rel?.trim();
     if (!host) return;
     for (const instance of assemblyTreeInstancesOf(node)) {
       const attr = instance.xlink_file_attr?.trim();
       if (!attr) continue;
-      const value = edits.get(assemblyTreeEditKey(host, attr));
+      const key = assemblyTreeEditKey(host, attr, instance);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const value = edits.get(key);
       if (value === undefined) continue;
       changes.push({
         host_repo_rel: host,
         xlink_file_attr: attr,
         old_label: assemblyTreeBaselineLabel(instance),
         new_label: value.trim(),
+        ...(instance.host_object_name ? { host_object_name: instance.host_object_name, target_object_name: instance.target_object_name ?? "", document_hash: instance.document_hash } : {}),
       });
     }
   });
@@ -263,10 +321,11 @@ export function assemblyTreePendingPatches<T extends AssemblyTreeNodeViewInput>(
 ): AssemblyTreeLabelPatch[] {
   return assemblyTreePendingChanges(nodes, edits, childrenOf)
     .filter((change) => !linkLabelsEqual(change.new_label, change.old_label))
-    .map(({ host_repo_rel, xlink_file_attr, new_label }) => ({
+    .map(({ host_repo_rel, xlink_file_attr, new_label, old_label, host_object_name, target_object_name, document_hash }) => ({
       host_repo_rel,
       xlink_file_attr,
       link_label: new_label,
+      ...(host_object_name ? { host_object_name, target_object_name, old_label, document_hash } : {}),
     }));
 }
 
@@ -279,26 +338,30 @@ export function assemblyTreeApplyRuleLabels<T extends AssemblyTreeNodeViewInput>
   let filled = 0;
   let unchanged = 0;
   let noRule = 0;
+  const seen = new Set<string>();
   walkAssemblyTree(nodes, childrenOf, (node) => {
-    if (assemblyTreeIsMissing(node)) return;
-    const host = node.host_repo_rel?.trim();
-    if (!host) return;
-    const rule = resolveRuleLabelForNode(node);
-    if (!rule) {
-      noRule += 1;
+    if (!assemblyTreeCanEditLabel(node, true)) {
+      noRule += assemblyTreeInstancesOf(node).filter(instance => instance.rule_error).length;
       return;
     }
+    const host = node.host_repo_rel?.trim();
+    if (!host) return;
     for (const instance of assemblyTreeInstancesOf(node)) {
       const attr = instance.xlink_file_attr?.trim();
       if (!attr) continue;
-      const key = assemblyTreeEditKey(host, attr);
+      const key = assemblyTreeEditKey(host, attr, instance);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      // Empty object-specific rules deliberately prohibit file-root fallback.
+      const rule = assemblyTreeLabelRecommendation(node, instance);
+      if (!rule || instance.rule_error) { noRule++; continue; }
       const current = assemblyTreeDisplayLabel(edits, host, instance);
-      if (
-        linkLabelsEqual(rule, current)
-        || linkLabelsEqual(rule, assemblyTreeBaselineLabel(instance))
-      ) {
+      if (linkLabelsEqual(rule, assemblyTreeBaselineLabel(instance))) {
         unchanged += 1;
         next.delete(key);
+      } else if (linkLabelsEqual(rule, current)) {
+        // Repeated preview must keep the unsaved recommendation, not undo it.
+        unchanged += 1;
       } else {
         next.set(key, rule);
         filled += 1;
@@ -306,4 +369,16 @@ export function assemblyTreeApplyRuleLabels<T extends AssemblyTreeNodeViewInput>
     }
   });
   return { edits: next, filled, unchanged, noRule };
+}
+
+/** Keep other rows and failed requests when a single row is applied/reloaded. */
+export function assemblyTreeRemainingPatches(
+  all: readonly AssemblyTreeLabelPatch[], submitted: readonly AssemblyTreeLabelPatch[],
+  failed: readonly { host_repo_rel: string }[],
+): AssemblyTreeLabelPatch[] {
+  if (failed.some(item => !item.host_repo_rel)) return [...all];
+  const failedHosts = new Set(failed.map(item => item.host_repo_rel.replace(/^\.\//, "")));
+  const saved = new Set(submitted.filter(patch => !failedHosts.has(patch.host_repo_rel.replace(/^\.\//, "")))
+    .map(patch => assemblyTreeEditKey(patch.host_repo_rel, patch.xlink_file_attr, patch)));
+  return all.filter(patch => !saved.has(assemblyTreeEditKey(patch.host_repo_rel, patch.xlink_file_attr, patch)));
 }

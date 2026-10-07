@@ -8,7 +8,6 @@ export const LOCAL_WING_PACKAGE_NAMES = Object.freeze([
   "@phoenix-wing/db-node",
   "@phoenix-wing/git-core",
   "@phoenix-wing/git-node",
-  "@phoenix-wing/kt-codegen",
   "@phoenix-wing/workspace-schema",
 ]);
 
@@ -20,7 +19,6 @@ const PACKAGE_DIRS = Object.freeze({
   "@phoenix-wing/db-node": "packages/db-node",
   "@phoenix-wing/git-core": "packages/git-core",
   "@phoenix-wing/git-node": "packages/git-node",
-  "@phoenix-wing/kt-codegen": "packages/kt-codegen",
   "@phoenix-wing/workspace-schema": "packages/workspace-schema",
 });
 
@@ -165,10 +163,6 @@ export function createPhoenixWingSourceAliases(wingRoot) {
       replacement: path.join(wingRoot, "fixtures", "$1"),
     },
     {
-      find: /^@phoenix-wing\/kt-codegen\/fixtures\/(.+)$/u,
-      replacement: path.join(wingRoot, "packages/kt-codegen/tests/fixtures/contracts", "$1"),
-    },
-    {
       find: /^@phoenix-wing\/code-core\/fixtures\/(.+)$/u,
       replacement: path.join(wingRoot, "packages/code-core/src/fixtures", "$1"),
     },
@@ -209,4 +203,23 @@ export function resolveLocalWingExport(wingRoot, specifier) {
     throw new Error(`本地 Wing 构建制品不存在：${resolved}；请通过 Desk 的 local-wing 命令启动`);
   }
   return resolved;
+}
+
+/** Type checking must consume the same public local exports as the running app. */
+export function createPhoenixWingTypePaths(wingRoot) {
+  const paths = {};
+  for (const [name, relativeRoot] of Object.entries(PACKAGE_DIRS)) {
+    const packageRoot = path.join(wingRoot, relativeRoot);
+    const manifest = readJson(path.join(packageRoot, "package.json"));
+    for (const [subpath, value] of Object.entries(manifest.exports ?? {})) {
+      const declaration = typeof value === "object" && value !== null ? value.types : null;
+      if (typeof declaration !== "string") continue;
+      const target = path.resolve(packageRoot, declaration);
+      if (!target.startsWith(`${packageRoot}${path.sep}`)) throw new Error(`本地 Wing 类型导出越界：${name}`);
+      if (!target.includes("*") && !fs.existsSync(target)) throw new Error(`本地 Wing 公开类型缺失：${name}${subpath.slice(1)}`);
+      paths[subpath === "." ? name : `${name}/${subpath.slice(2)}`] = [target];
+    }
+    if (!paths[name]) throw new Error(`本地 Wing 公开类型缺失：${name}`);
+  }
+  return paths;
 }

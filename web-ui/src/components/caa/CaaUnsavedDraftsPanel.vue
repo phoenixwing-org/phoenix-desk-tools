@@ -70,7 +70,7 @@ onMounted(() => { void loadDrafts(); });
           </span>
         </el-button>
         <el-button class="recent-remove" text title="删除草稿" @click="removeDraft(draft, $event)">
-          ×
+          删除
         </el-button>
       </li>
     </ul>
@@ -98,8 +98,8 @@ onMounted(() => { void loadDrafts(); });
 .recent-path { font-size: 0.78rem; color: #64748b; word-break: break-all; text-align: left; }
 
 .recent-remove {
-  flex-shrink: 0; width: 36px; min-width: 36px; height: auto; margin: 0;
-  border: 1px solid #e2e8f0; border-radius: 8px; font-size: 1.1rem; color: #94a3b8;
+  flex-shrink: 0; min-width: 48px; height: auto; margin: 0; padding-inline: 8px;
+  border: 1px solid #e2e8f0; border-radius: 8px; font-size: .8rem; color: var(--muted);
 }
 .recent-remove:hover { border-color: #fecaca; color: #b91c1c; background: #fef2f2; }
 

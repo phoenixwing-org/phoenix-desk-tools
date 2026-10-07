@@ -21,11 +21,16 @@ function errorMessage(error: unknown): string {
 /**
  * 复用同一个模块加载 Promise；失败后清空缓存，允许下一次导航重试。
  */
-export function createRetryableSharedLoader<T>(loader: () => Promise<T>): () => Promise<T> {
+export function createRetryableSharedLoader<T>(loader: () => Promise<T>, timeoutMs = 30_000): () => Promise<T> {
   let shared: Promise<T> | undefined;
   return () => {
     if (!shared) {
-      shared = loader().catch((error: unknown) => {
+      // Preload runs before defineAsyncComponent mounts, so its timeout cannot protect this wait.
+      const loading = new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("页面模块加载超时，请重试；尚未开始文件处理")), timeoutMs);
+        Promise.resolve().then(loader).then(resolve, reject).finally(() => clearTimeout(timer));
+      });
+      shared = loading.catch((error: unknown) => {
         shared = undefined;
         throw error;
       });

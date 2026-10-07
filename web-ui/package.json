@@ -1,24 +1,22 @@
 {
   "name": "phoenix-phoenix-web-ui",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "vue-tsc --noEmit --pretty false"
+    "typecheck": "node scripts/typecheck.mjs"
   },
   "dependencies": {
     "@desk-tools/catdlg-core": "workspace:*",
     "@element-plus/icons-vue": "^2.3.2",
-    "@phoenix-wing/code-core": "0.6.6",
-    "@phoenix-wing/kt-codegen": "0.6.6",
     "diff2html": "^3.4.56",
     "driver.js": "^1.4.0",
     "element-plus": "^2.14.2",
-    "phoenix-wing": "0.7.5",
+    "phoenix-wing": "0.7.6",
     "pinia": "^3.0.4",
     "vue": "^3.5.13",
     "wasm-media-encoders": "0.7.0"

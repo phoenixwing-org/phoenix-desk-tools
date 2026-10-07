@@ -2,6 +2,8 @@ import type { BomFields } from "../api";
 import type { FileDetailSubTab } from "./fileDetail";
 
 export type WorkbenchTabPayload = {
+  renameImport?: import("../features/batch-rename/handoff").RenameHandoff;
+  partGallery?: { rel: string };
   bomRel?: string;
   fileDetail?: {
     rel: string;
@@ -40,6 +42,8 @@ export type WorkbenchTab = {
   subtitle?: string;
   contextKey?: string;
   dirty: boolean;
+  /** Clean detail browsing tab; replaced by the next preview until kept or edited. */
+  preview?: boolean;
   payload?: WorkbenchTabPayload;
   payloadConsumed: boolean;
   /** 从 DB / sessionStorage 恢复的页内快照，hydrate 后清除 */
@@ -69,6 +73,8 @@ export type OpenTabOptions = {
   payload?: WorkbenchTabPayload;
   /** 强制新建（如从树打开第二个同名文件 Tab） */
   forceNew?: boolean;
+  /** Opt-in for detail browsing only. Explicit new tabs remain permanent. */
+  preview?: boolean;
 };
 
 export type PageTabPolicy = {

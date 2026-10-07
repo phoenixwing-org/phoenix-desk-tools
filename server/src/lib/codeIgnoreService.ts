@@ -310,7 +310,9 @@ export function getCodeIgnorePrefs(
     ignore_file_patterns: fileInfo.patterns,
     ignore_custom_patterns: custom,
     ignore_patterns: ignorePatterns,
-    consumers: ["code_index", "reorder_members", "kt_codegen", "code_rename", "code_uuid"],
+    // The former Code scan/write tools are retired. Retain settings without
+    // advertising an active consumer or starting a source scan.
+    consumers: [] as string[],
     process_dir_suggestions: suggestions,
     process_dirs_auto_seeded: autoSeeded,
     process_dirs_seeded: pref.process_dirs_seeded,

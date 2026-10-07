@@ -1,5 +1,7 @@
 # C++ 类成员排序（reorder_members）
 
+> 已退役（2026-10-04）：Desk 成员排序入口和专属实现已移除，以 KT Auto Code 为主。见 [当前边界](Desk-Code功能退役.md)。下文保留历史。
+
 > [文档索引](../文档索引.md) · Web：`/api/code/reorder-members/*` · 页面 **C++ 成员排序**<br>
 > 算法唯一规范：[phoenix-wing · C++成员排序算法规范](../../../phoenix-wing/docs/C++成员排序算法规范.md)。本文件只维护 DeskTools 的 Web/CLI、工作集与历史 Python 兼容入口。
 

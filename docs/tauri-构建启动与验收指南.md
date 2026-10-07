@@ -37,7 +37,7 @@ macOS 0.4.0 当前门禁：
 pnpm verify:tauri-release:macos
 ```
 
-该命令重建未签名 `.app`，再用隔离用户目录启动真实 Tauri 进程，完成健康、Codegen、真实 FCStd 和退出回收验收。已有产物可用 `pnpm -C server smoke:tauri-release-app` 复验。
+该命令重建未签名 `.app`，再用隔离用户目录启动真实 Tauri 进程，完成健康、工作空间/runtime 资源、30 条退役 Code API 404、真实 FCStd 和退出回收验收。已有产物可用 `pnpm -C server smoke:tauri-release-app` 复验。当前回执为 `schemaVersion=2`，不再运行 Codegen Apply；下方旧回执仅为历史证据。
 
 2026-07-20 的 0.2.0 TypeScript runtime 历史回执：
 
@@ -56,7 +56,7 @@ Windows 0.4.0 当前目标：
 pnpm verify:tauri-release:windows
 ```
 
-该入口会执行当前 NSIS 的构建、一次性安装、卸载登记/快捷方式检查、安装态 Codegen 与 FCStd 代表链、正常退出和静默卸载，并写机器可读回执。详细成功条件见 [Windows 发布态门禁待办](tauri-Windows发布态门禁-待办.md)；必须以真实 runner 回执为准。
+该入口会执行当前 NSIS 的构建、一次性安装、卸载登记/快捷方式检查、安装态退役 Code API 404 与 FCStd 代表链、正常退出和静默卸载，并写机器可读回执。详细成功条件见 [Windows 发布态门禁待办](tauri-Windows发布态门禁-待办.md)；必须以真实 runner 回执为准。
 
 构建可执行文件及相邻运行时：
 

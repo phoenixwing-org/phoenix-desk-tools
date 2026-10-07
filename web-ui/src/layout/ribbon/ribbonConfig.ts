@@ -1,4 +1,5 @@
 import type { NavItem } from "../../types/config";
+import { SHARED_TOOL_PAGE_IDS, TOOL_NAV_MODULE_IDS } from "../../constants/navModules";
 import {
   pnwCheckRibbonContributionCompatibility,
   type PnwRibbonGroupDef,
@@ -13,16 +14,13 @@ export type RibbonGroupDef = PnwRibbonGroupDef;
 export type RibbonTabDef = PnwRibbonTabDef;
 
 export const RIBBON_SHELL_TAB_ID = "system";
+/** 保留已持久化的 CAD Ribbon ID，只合并显示，不重写领域 module。 */
+export const RIBBON_TOOLS_TAB_ID = "cad";
 
 const SHELL_GROUPS: Array<{ id: string; label: string; pages: string[] }> = [
-  { id: "system-common", label: "常用", pages: ["home", "audio_extract", "config"] },
+  { id: "system-common", label: "常用", pages: ["home", "config"] },
   { id: "system-dev", label: "开发", pages: ["git", "test_fixtures", "unit_tests"] },
 ];
-
-const MODULE_LABELS: Record<string, string> = {
-  cad: "CAD",
-  code: "Code",
-};
 
 function ribbonItem(nav: NavItem): RibbonItemDef {
   return {
@@ -46,25 +44,30 @@ export function buildRibbonTabs(navigation: NavItem[]): RibbonTabDef[] {
   for (const nav of navigation) {
     const module = String(nav.module || "").trim();
     const groupLabel = String(nav.ribbonGroup || "").trim();
-    if (!module || !groupLabel) continue;
+    if (!groupLabel) continue;
+    const isToolsTab = TOOL_NAV_MODULE_IDS.includes(module) || SHARED_TOOL_PAGE_IDS.includes(nav.page);
+    const tabId = isToolsTab ? RIBBON_TOOLS_TAB_ID : module;
+    if (!tabId) continue;
 
-    let tab = moduleTabs.get(module);
+    let tab = moduleTabs.get(tabId);
     if (!tab) {
       tab = {
-        id: module,
-        label: MODULE_LABELS[module] || module,
-        module,
+        id: tabId,
+        label: isToolsTab ? "工具" : module,
+        // The aggregate has several domains and shared tools. Visibility must
+        // be filtered per navigation item before grouping, not by this tab.
+        ...(isToolsTab ? {} : { module }),
         groups: [],
       };
-      moduleTabs.set(module, tab);
-      moduleGroups.set(module, new Map());
+      moduleTabs.set(tabId, tab);
+      moduleGroups.set(tabId, new Map());
     }
 
-    const groups = moduleGroups.get(module)!;
+    const groups = moduleGroups.get(tabId)!;
     let group = groups.get(groupLabel);
     if (!group) {
       group = {
-        id: `${module}-group-${groups.size + 1}`,
+        id: `${tabId}-group-${groups.size + 1}`,
         label: groupLabel,
         items: [],
       };

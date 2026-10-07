@@ -1,12 +1,6 @@
 import type { AppConfig, LauncherPrefs, ShellLayout, WorkspaceNavModules } from "./types/config";
 import type { ModuleScope } from "./constants/moduleScope";
 import type { GitChangesPayload, GitCommitResult, GitFileDiff, GitWorkspaceInfo } from "./types/gitWorkspace";
-import type {
-  KtCodegenParam,
-  KtCodegenPlan,
-  KtCodegenDiagnostic,
-  KtCodegenTableData,
-} from "@phoenix-wing/kt-codegen";
 import { apiUrl, invokeTauri, isTauriRuntime } from "./utils/runtimeBridge";
 
 export type TreeNode = {
@@ -79,6 +73,7 @@ export type BomPreview = {
   file_size_display: string | null;
   bom_readonly?: boolean;
   bom_source_rel?: string | null;
+  bom_readonly_reason?: string | null;
   /** 打开文件时附带：出向 + 直接入向计数（单条 SQL） */
   xref_counts?: BomXrefCounts;
   /** 引用表尚未构建（不会在打开文件时自动全量重建） */
@@ -122,7 +117,7 @@ export class ApiError extends Error {
   }
 }
 
-async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
+export async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   if (init?.body != null && init.body !== "" && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
@@ -146,6 +141,77 @@ async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
     throw new ApiError(detail || `HTTP ${res.status}`, res.status, data);
   }
   return data as T;
+}
+
+export type CadIndexDiagnostics = {
+  scanSupported?: boolean;
+  state: "missing" | "incompatible" | "unreadable" | "empty" | "attention" | "ready";
+  message: string;
+  schemaVersion: number | null;
+  expectedSchemaVersion: number;
+  totalEntries: number;
+  missingEntries: number;
+  lastScanAt: string;
+  latestScan: { status: string; root: string; at: string } | null;
+};
+
+export type BatchBomField = "PartNumber" | "PartVersion" | "TypeCode" | "ModelSeries" | "PartName";
+export type CadBatchDirectories = {
+  workspace: string;
+  directories: Array<{ name: string; path: string }>;
+};
+export type CadBatchDirectory = { workspace: string; directory: string };
+
+export function fetchCadBatchDirectories(workspace: string) {
+  return jsonFetch<CadBatchDirectories>(`/api/cad/batch-directories?workspace=${encodeURIComponent(workspace)}`);
+}
+
+export function validateCadBatchDirectory(workspace: string, directory: string) {
+  return jsonFetch<CadBatchDirectory>(`/api/cad/batch-directory?workspace=${encodeURIComponent(workspace)}&directory=${encodeURIComponent(directory)}`);
+}
+
+export type BatchAttributePreview = {
+  plan_id: string; batch_dir: string; scanned: number; overwrite: boolean;
+  errors: Array<{ rel: string; message: string }>;
+  skipped: Array<{ rel: string; message: string }>;
+  rows: Array<{ rel: string; object_name: string; name_editable?: boolean; changes: Array<{ field: BatchBomField; current: string; proposed: string; source: string; eligible: boolean; reason?: "ready" | "unchanged" | "type_conflict" | "source_conflict" | "missing_source" | "invalid_name" | "overwrite_blocked"; note: string }> }>;
+};
+export type BatchAttributeResult = { results: Array<{ rel: string; status: "written" | "failed"; message: string }> };
+export function previewBatchAttributes(workspace: string, batch_dir: string, overwrite: boolean, name_source: import("./utils/bomNameSource").BomNameSource = "label", include_drawings = false) {
+  return jsonFetch<BatchAttributePreview>(`/api/cad/batch-attributes/preview?workspace=${encodeURIComponent(workspace)}`, { method: "POST", body: JSON.stringify({ batch_dir, overwrite, name_source, include_drawings }) });
+}
+export function applyBatchAttributes(workspace: string, plan_id: string, selections: Array<{ rel: string; fields: string[]; values?: { PartName: string } }>, confirm_overwrite: boolean, single?: boolean) {
+  return jsonFetch<BatchAttributeResult>(`/api/cad/batch-attributes/apply?workspace=${encodeURIComponent(workspace)}`, { method: "POST", body: JSON.stringify({ plan_id, selections, confirm_overwrite, single }) });
+}
+
+export function fetchCadIndexDiagnostics(workspace: string): Promise<CadIndexDiagnostics> {
+  return jsonFetch(`/api/cad/index/status?workspace=${encodeURIComponent(workspace)}`);
+}
+
+export type CadIndexScanJob = {
+  id: string; workspace: string; state: "running" | "done" | "failed" | "cancelled";
+  phase: string; scanned: number; message: string;
+  result?: { scanId: number; files: number; parsedFiles: number; references: number; bomLines: number };
+};
+export function startCadIndexScan(workspace: string) {
+  return jsonFetch<CadIndexScanJob>(`/api/cad/index/scan/start?workspace=${encodeURIComponent(workspace)}`, {
+    method: "POST", body: JSON.stringify({ scope: "workspace", confirm: true }),
+  });
+}
+export function fetchCadIndexScan(workspace: string, id: string) {
+  return jsonFetch<CadIndexScanJob>(`/api/cad/index/scan/progress?workspace=${encodeURIComponent(workspace)}&id=${encodeURIComponent(id)}`);
+}
+export function cancelCadIndexScan(workspace: string, id: string) {
+  return jsonFetch<{ ok: boolean }>(`/api/cad/index/scan/cancel?workspace=${encodeURIComponent(workspace)}&id=${encodeURIComponent(id)}`, { method: "POST" });
+}
+export type CadIndexResetPreview = { revision: number; files: number; fileLinks: number; references: number; bomLines: number };
+export function previewCadIndexReset(workspace: string) {
+  return jsonFetch<CadIndexResetPreview>(`/api/cad/index/reset/preview?workspace=${encodeURIComponent(workspace)}`);
+}
+export function resetCadIndex(workspace: string, expected: CadIndexResetPreview) {
+  return jsonFetch<{ backup: string; message: string }>(`/api/cad/index/reset?workspace=${encodeURIComponent(workspace)}`, {
+    method: "POST", body: JSON.stringify({ expected, confirm_remove_file_links: true }),
+  });
 }
 
 export type OnboardingStatus = {
@@ -473,13 +539,14 @@ export function recommendBomField(
   field: string,
   fields: Partial<BomFields>,
   kindFilters: BomKindFilters,
+  name_source: import("./utils/bomNameSource").BomNameSource = "label",
 ) {
   return jsonFetch<BomFieldRecommendResult>(
     `/api/cad/bom/recommend-field?rel=${encodeURIComponent(rel)}&field=${encodeURIComponent(field)}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...bomBody(fields), kind_filters: kindFilters }),
+      body: JSON.stringify({ ...bomBody(fields), kind_filters: kindFilters, name_source }),
     },
   );
 }
@@ -488,6 +555,7 @@ export function recommendBomFieldsAll(
   rel: string,
   fields: Partial<BomFields>,
   kindFilters: BomKindFilters,
+  name_source: import("./utils/bomNameSource").BomNameSource = "label",
 ) {
   return jsonFetch<{
     results: Record<string, BomFieldRecommendResult>;
@@ -495,7 +563,7 @@ export function recommendBomFieldsAll(
   }>(`/api/cad/bom/recommend-all-fields?rel=${encodeURIComponent(rel)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...bomBody(fields), kind_filters: kindFilters }),
+    body: JSON.stringify({ ...bomBody(fields), kind_filters: kindFilters, name_source }),
   });
 }
 
@@ -593,6 +661,7 @@ export function renameBomFile(
     filename: string;
     map_updated: boolean;
     attrs_saved?: boolean;
+    bom_readonly?: boolean;
   }>(`/api/cad/bom/rename?rel=${encodeURIComponent(rel)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -665,6 +734,7 @@ export function executeFileRename(
     filename: string;
     map_updated: boolean;
     attrs_saved?: boolean;
+    bom_readonly?: boolean;
     rename_log_id?: number;
     rename_log?: RenameLog;
   }>(`/api/file-rename/rename?rel=${encodeURIComponent(rel)}`, {
@@ -759,6 +829,7 @@ export function applyRenameAnalysisCorrections(
     xlink_patches: number;
     label_patches?: number;
     label_changes?: ReferenceLabelChange[];
+    skipped?: Array<{ host_repo_rel_path: string; xlink_file_attr: string; reason: string }>;
     scan: RefScanPayload;
   }>("/api/cad/rename/apply", {
     method: "POST",
@@ -1051,8 +1122,8 @@ export type PartKeyDetail = PartKeyEntry & {
   files: PartKeyFile[];
 };
 
-export function fetchPartKeys() {
-  return jsonFetch<PartKeysPayload>("/api/cad/parts");
+export function fetchPartKeys(workspace?: string) {
+  return jsonFetch<PartKeysPayload>(`/api/cad/parts${workspace ? `?workspace=${encodeURIComponent(workspace)}` : ""}`);
 }
 
 export type PartKeyInfer = {
@@ -1076,12 +1147,24 @@ export function fetchPartKeyDetail(partNumber: string, partVersion: string) {
 }
 
 export type AssemblyXrefInstance = {
+  resolved_target_repo_rel?: string;
+  resolved_target_object_name?: string;
+  direct_target_repo_rel?: string;
   xlink_file_attr: string;
   link_label: string;
+  host_object_name?: string;
+  target_object_name?: string;
+  rule_label?: string;
+  rule_error?: string;
+  parent_object_name?: string;
+  document_hash?: string;
 };
 
 export type AssemblyTreeNode = {
   id: string;
+  structure_source?: "host_objects";
+  label_editable?: boolean;
+  label_edit_reason?: string;
   host_repo_rel: string;
   repo_rel_path: string;
   basename: string;
@@ -1109,6 +1192,10 @@ export type LinkLabelPatch = {
   host_repo_rel: string;
   xlink_file_attr: string;
   link_label: string;
+  host_object_name?: string;
+  target_object_name?: string;
+  old_label?: string;
+  document_hash?: string;
 };
 
 export function patchLinkLabels(patches: LinkLabelPatch[]) {
@@ -1190,6 +1277,27 @@ export function patchPartFileLink(
   );
 }
 
+export type FcstdPropertyAnalysis = {
+  plan_id: string;
+  batch_dir: string;
+  scanned: number;
+  files: Array<{ rel: string; issues: Array<{ object_name: string; declared_count: string | null; actual_count: number }> }>;
+  errors: Array<{ rel: string; message: string }>;
+};
+export type FcstdPropertyRepairResult = {
+  results: Array<{ rel: string; status: "fixed" | "failed"; message: string }>;
+};
+export function analyzeFcstdProperties(batch_dir: string) {
+  return jsonFetch<FcstdPropertyAnalysis>("/api/cad/error-fix/properties/analyze", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ batch_dir }),
+  });
+}
+export function applyFcstdPropertyRepairs(plan_id: string, files: string[]) {
+  return jsonFetch<FcstdPropertyRepairResult>("/api/cad/error-fix/properties/apply", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan_id, files }),
+  });
+}
+
 export type XlinkFixPrefs = {
   batch_dir: string;
   dry_run: boolean;
@@ -1235,6 +1343,7 @@ export type XlinkFixStats = {
 };
 
 export type XlinkFixResult = {
+  index_pending?: boolean;
   exit_code: number;
   log: string;
   prefs: XlinkFixPrefs;
@@ -1380,461 +1489,6 @@ export function exportPartDedupCsv(results?: PartDedupScanResult["results"]) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(results ? { results } : {}),
-  });
-}
-
-export type KtCodegenDocumentFormat = "legacy-v4-json" | "legacy-17-column-csv";
-
-export type KtCodegenDocumentSummary = {
-  path: string;
-  file_name: string;
-  format: KtCodegenDocumentFormat;
-  class_name: string;
-  item_count: number;
-  diagnostic_count: number;
-};
-
-export type KtCodegenHostDocument = KtCodegenDocumentSummary & {
-  kind: "kt.codegen.host-document";
-  schema_version: 1;
-  fingerprint: string;
-  file_signature: string;
-  document_revision: number;
-  encoding: "utf8" | "utf8-bom" | "gbk";
-  param: KtCodegenParam;
-  table: KtCodegenTableData;
-  diagnostics: KtCodegenDiagnostic[];
-};
-
-export type KtCodegenDocumentsPayload = {
-  workspace: string;
-  documents: KtCodegenDocumentSummary[];
-  scanned_file_count: number;
-  truncated: boolean;
-  cache_hit_count: number;
-  files_read: number;
-  config_snapshot_bytes: number;
-  config_scan_byte_limit_reached: boolean;
-};
-
-export type KtCodegenPreflightPayload = {
-  plan: KtCodegenPlan;
-  plan_fingerprint: string;
-  safe_to_apply: boolean;
-  reused: boolean;
-  created_at: string;
-  indexed_file_count: number;
-  candidate_file_count: number;
-  source_scan_truncated: boolean;
-  source_scan_byte_limit_reached: boolean;
-  source_snapshot_bytes: number;
-  source_cache_hits: number;
-  source_files_read: number;
-  source_file_signatures: Record<string, string>;
-  source_file_fingerprints: Record<string, string>;
-  source_candidates: KtCodegenSourceCandidateSummary[];
-  source_candidates_truncated: boolean;
-};
-
-export type KtCodegenAppliedFile = {
-  path: string;
-  encoding: "utf8" | "utf8-bom" | "gbk";
-  eol: "lf" | "crlf";
-  region_count: number;
-  bytes_before: number;
-  bytes_after: number;
-  fingerprint_before: string;
-  fingerprint_after: string;
-};
-
-export type KtCodegenApplyPayload = {
-  kind: "kt.codegen.apply-result";
-  schema_version: 1;
-  applied_at: string;
-  plan_fingerprint: string;
-  region_count: number;
-  /** 逐区域真实写回结果；旧 Server 可能暂未提供。 */
-  region_outcomes?: Array<{
-    region_id: string;
-    change: "updated" | "unchanged" | "not-applied";
-  }>;
-  files: KtCodegenAppliedFile[];
-  diagnostics: KtCodegenDiagnostic[];
-  verified: true;
-};
-
-export type KtCodegenSourceCandidateSummary = {
-  path: string;
-  fingerprint: string;
-  encoding: "utf8" | "utf8-bom" | "gbk";
-  eol: "lf" | "crlf";
-  marker_line: number;
-};
-
-export type KtCodegenSourcePreviewPayload = {
-  path: string;
-  fingerprint: string;
-  file_signature: string;
-  expected_fingerprint: string;
-  stale: boolean;
-  encoding: "utf8" | "utf8-bom" | "gbk";
-  eol: "lf" | "crlf";
-  focus_start_line: number;
-  focus_end_line: number;
-  from_line: number;
-  to_line: number;
-  lines: Array<{ number: number; text: string; focus: boolean }>;
-};
-
-export type KtCodegenFileStatePayload = {
-  path: string;
-  exists: boolean;
-  file_signature: string;
-  fingerprint: string;
-  changed: boolean;
-};
-
-export type KtCodegenFileStatesPayload = {
-  files: KtCodegenFileStatePayload[];
-  changed_count: number;
-};
-
-export function fetchKtCodegenDocuments(options?: { signal?: AbortSignal }) {
-  return jsonFetch<KtCodegenDocumentsPayload>("/api/code/codegen/documents", {
-    signal: options?.signal,
-  });
-}
-
-export function openKtCodegenDocument(path: string) {
-  return jsonFetch<KtCodegenHostDocument>("/api/code/codegen/open", {
-    method: "POST",
-    body: JSON.stringify({ path }),
-  });
-}
-
-export function fetchKtCodegenDocumentState(body: {
-  path: string;
-  expected_file_signature: string;
-  expected_fingerprint: string;
-}, options?: { signal?: AbortSignal }) {
-  return jsonFetch<KtCodegenFileStatePayload>("/api/code/codegen/document-state", {
-    method: "POST",
-    body: JSON.stringify(body),
-    signal: options?.signal,
-  });
-}
-
-export function fetchKtCodegenSourceStates(files: Array<{
-  path: string;
-  expected_file_signature: string;
-  expected_fingerprint: string;
-}>, options?: { signal?: AbortSignal }) {
-  return jsonFetch<KtCodegenFileStatesPayload>("/api/code/codegen/source-states", {
-    method: "POST",
-    body: JSON.stringify({ files }),
-    signal: options?.signal,
-  });
-}
-
-export function saveKtCodegenDocument(body: {
-  path: string;
-  fingerprint: string;
-  param: KtCodegenParam;
-  table: KtCodegenTableData;
-}) {
-  return jsonFetch<KtCodegenHostDocument>("/api/code/codegen/document", {
-    method: "PUT",
-    body: JSON.stringify(body),
-  });
-}
-
-export function runKtCodegenPreflight(body: {
-  param: KtCodegenParam;
-  table: KtCodegenTableData;
-  block_keys: string[];
-}, options?: { signal?: AbortSignal }) {
-  return jsonFetch<KtCodegenPreflightPayload>("/api/code/codegen/preflight", {
-    method: "POST",
-    body: JSON.stringify(body),
-    signal: options?.signal,
-  });
-}
-
-export function applyKtCodegenPlan(body: {
-  param: KtCodegenParam;
-  table: KtCodegenTableData;
-  block_keys: string[];
-  expected_plan_fingerprint: string;
-}) {
-  return jsonFetch<KtCodegenApplyPayload>("/api/code/codegen/apply", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
-}
-
-export function fetchKtCodegenSourcePreview(body: {
-  path: string;
-  start_line: number;
-  end_line: number;
-  expected_fingerprint: string;
-  context_lines?: number;
-}, options?: { signal?: AbortSignal }) {
-  return jsonFetch<KtCodegenSourcePreviewPayload>("/api/code/codegen/source-preview", {
-    method: "POST",
-    body: JSON.stringify(body),
-    signal: options?.signal,
-  });
-}
-
-export type CodeIndexStats = {
-  source?: number;
-  config?: number;
-  doc?: number;
-  resource?: number;
-  total?: number;
-};
-
-export type CodeIndexEntry = {
-  repo_rel_path: string;
-  filename: string;
-  asset_kind: string;
-  file_ext: string;
-  file_status: "present" | "missing" | string;
-  size_bytes: number;
-  text_encoding: string;
-  last_seen_at?: string | null;
-};
-
-export type CodeIndexPayload = {
-  workspace_path: string;
-  workspace_path_display: string;
-  last_scan_at?: string | null;
-  stats?: CodeIndexStats | null;
-  file_count: number;
-  present_count: number;
-  kind_labels: Record<string, string>;
-  kinds: string[];
-  builtin_extensions?: string[];
-  extra_extensions?: string[];
-  summary?: string;
-  scan_id?: number;
-};
-
-export type CodeIndexExtensionCandidate = {
-  ext: string;
-  count: number;
-};
-
-export type CodeIndexExtensionDiscovery = {
-  builtin_extensions: string[];
-  extra_extensions: string[];
-  candidates: CodeIndexExtensionCandidate[];
-};
-
-export type CodeIndexEntriesPayload = {
-  entries: CodeIndexEntry[];
-  total: number;
-  limit: number;
-  offset: number;
-};
-
-export type CodeIndexCatDlgEntry = {
-  repo_rel_path: string;
-  filename: string;
-  size_bytes: number;
-  last_seen_at?: string | null;
-};
-
-export type CodeIndexCatDlgPayload = {
-  workspace_path: string;
-  workspace_path_display: string;
-  last_scan_at?: string | null;
-  indexed: boolean;
-  count: number;
-  entries: CodeIndexCatDlgEntry[];
-};
-
-export function fetchCodeIndex() {
-  return jsonFetch<CodeIndexPayload>("/api/code/index");
-}
-
-export function fetchCodeIndexCatDlg() {
-  return jsonFetch<CodeIndexCatDlgPayload>("/api/code/index/catdlg");
-}
-
-export type CodeIndexSearchMode = "contains" | "filename";
-
-export function fetchCodeIndexEntries(opts?: {
-  offset?: number;
-  limit?: number;
-  status?: "all" | "present" | "missing";
-  kind?: string;
-  q?: string;
-  searchMode?: CodeIndexSearchMode;
-}) {
-  const params = new URLSearchParams();
-  if (opts?.offset != null) params.set("offset", String(opts.offset));
-  if (opts?.limit != null) params.set("limit", String(opts.limit));
-  if (opts?.status && opts.status !== "all") params.set("status", opts.status);
-  if (opts?.kind && opts.kind !== "all") params.set("kind", opts.kind);
-  if (opts?.q?.trim()) params.set("q", opts.q.trim());
-  if (opts?.searchMode && opts.searchMode !== "contains") {
-    params.set("search_mode", opts.searchMode);
-  }
-  const qs = params.toString();
-  return jsonFetch<CodeIndexEntriesPayload>(`/api/code/index/entries${qs ? `?${qs}` : ""}`);
-}
-
-export function scanCodeIndex(opts?: { adoptExtensions?: string[] }) {
-  const body =
-    opts?.adoptExtensions?.length
-      ? { adopt_extensions: opts.adoptExtensions }
-      : {};
-  return jsonFetch<CodeIndexPayload>("/api/code/index/scan", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
-}
-
-export function fetchCodeIndexExtensionDiscovery() {
-  return jsonFetch<CodeIndexExtensionDiscovery>("/api/code/index/extension-discovery");
-}
-
-export function saveCodeIndexExtraExtensions(extensions: string[]) {
-  return jsonFetch<{ extra_extensions: string[] }>("/api/code/index/extra-extensions", {
-    method: "PUT",
-    body: JSON.stringify({ extensions }),
-  });
-}
-
-export function purgeMissingCodeIndex() {
-  return jsonFetch<CodeIndexPayload & { purge_deleted?: number }>("/api/code/index/purge-missing", {
-    method: "POST",
-  });
-}
-
-export function exportCodeIndexJson() {
-  return jsonFetch<{ path: string; path_display: string }>("/api/code/index/export-json", {
-    method: "POST",
-  });
-}
-
-export type ReorderMembersSelfTestCase = {
-  id: string;
-  pass: boolean;
-  message: string;
-  skipped?: boolean;
-};
-
-export type ReorderMembersSelfTestPayload = {
-  ok: boolean;
-  ran: number;
-  passed: number;
-  failed: number;
-  skipped: number;
-  summary: string;
-  cases: ReorderMembersSelfTestCase[];
-};
-
-export function runReorderMembersSelfTest() {
-  return jsonFetch<ReorderMembersSelfTestPayload>("/api/code/reorder-members/self-test", {
-    method: "POST",
-  });
-}
-
-export type ReorderMembersPrefs = {
-  workspace_path: string;
-  workspace_path_display: string;
-  include_cpp: boolean;
-  include_header: boolean;
-  sort_members: boolean;
-  verbose: boolean;
-  kevin_system_code_mode: "merge_strip" | "keep_markers" | "off";
-  last_selected: string[];
-  ignore_file: string;
-  ignore_file_display: string;
-  ignore_file_exists: boolean;
-  ignore_patterns: string[];
-};
-
-export type ReorderMembersEntry = {
-  name: string;
-  kind: "dir" | "file";
-  source_file_count: number;
-};
-
-export type ReorderMembersTopLevelResponse = {
-  workspace_path: string;
-  workspace_path_display: string;
-  entries: ReorderMembersEntry[];
-  ignored: Array<{ name: string; kind: string; reason: string }>;
-  ignore_file: string;
-  ignore_file_display: string;
-  ignore_file_exists: boolean;
-  ignore_patterns: string[];
-};
-
-export type ReorderMembersRunResult = {
-  ok: boolean;
-  log: string;
-  lines: string[];
-  summary?: string;
-  dry_run: boolean;
-  cpp_changed?: number;
-  hdr_changed?: number;
-  files_scanned?: number;
-  changed_files?: string[];
-  item_results?: Array<{
-    name: string;
-    kind: string;
-    cpp_changed: number;
-    hdr_changed: number;
-    files_scanned: number;
-    changed_files?: string[];
-  }>;
-};
-
-export function fetchReorderMembersPrefs() {
-  return jsonFetch<ReorderMembersPrefs>("/api/code/reorder-members/prefs");
-}
-
-export function saveReorderMembersPrefs(prefs: Partial<ReorderMembersPrefs>) {
-  return jsonFetch<ReorderMembersPrefs>("/api/code/reorder-members/prefs", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(prefs),
-  });
-}
-
-export function fetchReorderMembersTopLevel() {
-  return jsonFetch<ReorderMembersTopLevelResponse>("/api/code/reorder-members/top-level");
-}
-
-export type ReorderMembersResolveResult = {
-  workspace_path: string;
-  resolved_files: string[];
-  total: number;
-};
-
-export function resolveReorderMembersScope(body: { repo_rel_paths: string[] }) {
-  return jsonFetch<ReorderMembersResolveResult>("/api/code/reorder-members/resolve", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
-export function runReorderMembers(
-  body: Partial<ReorderMembersPrefs> & {
-    targets?: string[];
-    repo_rel_paths?: string[];
-    dry_run?: boolean;
-  },
-) {
-  return jsonFetch<ReorderMembersRunResult>("/api/code/reorder-members/run", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
   });
 }
 
@@ -2043,90 +1697,6 @@ export function saveCodeIgnorePrefs(prefs: Partial<CodeIgnorePrefs>) {
   });
 }
 
-export type RenameLevel = "dir" | "file" | "text";
-
-export type CodeRenamePrefs = {
-  workspace_path: string;
-  workspace_path_display: string;
-  old: string;
-  new: string;
-  levels: RenameLevel[];
-  scope: string;
-  target_encoding: "utf-8" | "gbk";
-  include_ignored: boolean;
-  rescan_index: boolean;
-  implemented: boolean;
-};
-
-export type CodeRenameHit = {
-  hit_id: string;
-  repo_rel_path: string;
-  level: RenameLevel;
-  hits: number;
-  lines?: number[];
-  encoding_in?: string;
-  encoding_out?: string;
-  status?: string;
-  detail?: string;
-  new_path?: string;
-};
-
-export type CodeRenameSummary = {
-  dirs: number;
-  files: number;
-  text_files: number;
-  total_hits: number;
-  skipped: number;
-};
-
-export type CodeRenameResult = {
-  ok: boolean;
-  implemented: boolean;
-  dry_run: boolean;
-  message?: string;
-  old: string;
-  new: string;
-  levels: RenameLevel[];
-  scope: string;
-  target_encoding: string;
-  include_ignored: boolean;
-  rescan_index: boolean;
-  hits: CodeRenameHit[];
-  summary: CodeRenameSummary;
-  report_path?: string;
-  report_path_display?: string;
-  log?: string;
-  lines?: string[];
-};
-
-export function fetchCodeRenamePrefs() {
-  return jsonFetch<CodeRenamePrefs>("/api/code/rename/prefs");
-}
-
-export function saveCodeRenamePrefs(prefs: Partial<CodeRenamePrefs>) {
-  return jsonFetch<CodeRenamePrefs>("/api/code/rename/prefs", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(prefs),
-  });
-}
-
-export function previewCodeRename(body: Partial<CodeRenamePrefs>) {
-  return jsonFetch<CodeRenameResult>("/api/code/rename/preview", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
-export function applyCodeRename(body: Partial<CodeRenamePrefs> & { confirm_token?: string }) {
-  return jsonFetch<CodeRenameResult>("/api/code/rename/apply", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
 export type WorksetEntry = {
   path: string;
   type: "file" | "dir";
@@ -2175,85 +1745,6 @@ export function pruneMissingFileWorksetPaths(body?: { workset_id?: string }) {
       body: JSON.stringify(body ?? {}),
     },
   );
-}
-
-export type UuidKind = "uuid" | "guid32" | "suspicious";
-export type UuidApplyStrategy = "map_per_value" | "fresh_per_hit";
-
-export type CodeUuidHit = {
-  hit_id: string;
-  repo_rel_path: string;
-  line: number;
-  col: number;
-  matched_text: string;
-  uuid_normalized: string;
-  kind: UuidKind;
-  file_hits: number;
-};
-
-export type CodeUuidScanResult = {
-  ok: boolean;
-  implemented: boolean;
-  message?: string;
-  scan_id: string | null;
-  scope: string;
-  kinds: UuidKind[];
-  hits: CodeUuidHit[];
-  ignore_file_display?: string;
-  ignore_file_exists?: boolean;
-  ignore_file_patterns?: string[];
-  ignore_custom_patterns?: string[];
-  summary: {
-    files_scanned: number;
-    total_hits: number;
-    unique_uuids: number;
-  };
-};
-
-export type CodeUuidApplyResult = {
-  ok: boolean;
-  implemented: boolean;
-  dry_run: boolean;
-  message?: string;
-  hit_ids: string[];
-  strategy: UuidApplyStrategy;
-  mappings: Array<{ old: string; new: string; hit_id: string }>;
-  summary: {
-    files_scanned: number;
-    total_hits: number;
-    unique_uuids: number;
-    unique_new_uuids?: number;
-  };
-  report_path?: string;
-  report_path_display?: string;
-  log?: string;
-  lines?: string[];
-};
-
-export function scanCodeUuids(body: {
-  scope?: string;
-  kinds?: UuidKind[];
-  use_index_scope?: boolean;
-  repo_rel_paths?: string[];
-  include_ignored?: boolean;
-} = {}) {
-  return jsonFetch<CodeUuidScanResult>("/api/code/uuid/scan", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
-export function applyCodeUuids(body: {
-  hit_ids: string[];
-  strategy?: UuidApplyStrategy;
-  dry_run?: boolean;
-}) {
-  return jsonFetch<CodeUuidApplyResult>("/api/code/uuid/apply", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
 }
 
 export type UnitTestSuiteInfo = {
@@ -2355,7 +1846,7 @@ export function fetchUnitTestPlan(
 export type UnitTestRunOptions = {
   exclude_cases?: string[];
   include_cases?: string[];
-  /** Full module names (e.g. tests.test_code_index). Omit when all modules in selected suites should run. */
+  /** Full module names (e.g. tests.test_workspace). Omit when all modules in selected suites should run. */
   include_modules?: string[];
 };
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { pnwPromptChoice } from "phoenix-wing";
 import {
   analyzeXlinkFix,
@@ -15,8 +15,13 @@ import {
 } from "../api";
 import ExpandCaret from "phoenix-wing/components/PnwExpandCaret.vue";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
+import PageLayout from "phoenix-wing/layout/PnwPageLayout.vue";
+import { useCadBatchDirectory } from "../composables/useCadBatchDirectory";
 import { useAppShell } from "../composables/useAppShell";
 import { useXlinkFixPropertySheet } from "../composables/useXlinkFixPropertySheet";
+import { useFcstdPropertyRepair } from "../composables/useFcstdPropertyRepair";
+import { cadBatchToolsSection } from "../composables/cadBatchTools";
+import FcstdPropertyRepairResults from "../components/file-detail/FcstdPropertyRepairResults.vue";
 import {
   usePagePrimaryContribution,
   type PagePrimarySection,
@@ -30,7 +35,8 @@ const props = defineProps<{
 
 const shell = useAppShell();
 
-const batchDir = ref(".");
+const sharedDirectory = useCadBatchDirectory(shell.workspacePath);
+const batchDir = sharedDirectory.directory;
 const allInDir = ref(true);
 const saving = ref(false);
 const analyzing = ref(false);
@@ -45,6 +51,28 @@ const candidateMetaByKey = ref<Record<string, { part_key: string; part_number: s
 const candidatesLoading = ref<Record<string, boolean>>({});
 const selectedTargetRel = ref<Record<string, string>>({});
 const applyingKey = ref<string | null>(null);
+const checkLinks = ref(true);
+const checkProperties = ref(true);
+const linkError = ref("");
+const confirming = ref(false);
+const scopeKey = computed(() => JSON.stringify([shell.workspacePath.value, batchDir.value, allInDir.value, checkLinks.value, checkProperties.value]));
+const propertyRepair = reactive(useFcstdPropertyRepair(scopeKey, batchDir));
+const busy = computed(() => analyzing.value || applying.value || propertyRepair.analyzing || propertyRepair.applying || confirming.value || !!applyingKey.value);
+sharedDirectory.bindBusy(computed(() => busy.value || saving.value));
+const checking = computed(() => analyzing.value || propertyRepair.analyzing);
+let scopeRevision = 0;
+watch(scopeKey, () => {
+  scopeRevision += 1;
+  analysis.value = null;
+  applyResult.value = null;
+  linkError.value = "";
+  expandedKey.value = null;
+  candidatesByKey.value = {};
+  candidateMetaByKey.value = {};
+  candidatesLoading.value = {};
+  selectedTargetRel.value = {};
+  if (prefsSaveTimer) clearTimeout(prefsSaveTimer);
+}, { flush: "sync" });
 
 function prefsPayload() {
   return {
@@ -64,23 +92,66 @@ const filteredRows = computed(() => {
 
 const canApply = computed(() => {
   const s = stats.value;
-  return Boolean(s && s.fixable_count > 0 && !applying.value);
+  return Boolean(s && s.fixable_count > 0 && !applying.value && !applyResult.value);
 });
+const canApplySelected = computed(() => !busy.value && !sharedDirectory.disabled.value && ((checkLinks.value && canApply.value) || (checkProperties.value && propertyRepair.canApply)));
+const canAnalyze = computed(() => !busy.value && !sharedDirectory.disabled.value && (checkLinks.value || checkProperties.value));
+
+async function analyzeSelected() {
+  if (!canAnalyze.value) return;
+  if (!await sharedDirectory.validate()) return;
+  if (checkProperties.value && !allInDir.value) {
+    propertyRepair.error = "属性检查只支持 FCStd。请在 Primary 勾选“目录内全部 FCStd”，或取消属性检查。";
+    return;
+  }
+  await Promise.all([
+    checkLinks.value ? onAnalyze() : Promise.resolve(),
+    checkProperties.value ? propertyRepair.analyze() : Promise.resolve(),
+  ]);
+}
+
+async function applySelected() {
+  if (!canApplySelected.value) return;
+  const revision = scopeRevision;
+  const linkCount = checkLinks.value && canApply.value ? stats.value?.fixable_count ?? 0 : 0;
+  const propertyFiles = checkProperties.value && propertyRepair.canApply ? propertyRepair.selected.length : 0;
+  confirming.value = true;
+  try {
+    const answer = await pnwPromptChoice({
+      title: "执行错误修正",
+      message: `将修正 ${linkCount} 处 XLink 路径，以及 ${propertyFiles} 个文件的属性计数。属性修正不覆盖字段值。请先关闭 FreeCAD 中这些文件；建议先备份。各文件独立写入，部分失败会单独报告。`,
+      choices: [{ id: "write", label: "确认修正", variant: "primary" }, { id: "cancel", label: "取消" }],
+    });
+    if (answer.choiceId !== "write" || revision !== scopeRevision) return;
+    // Count plans fingerprint the original archive: execute these before XLinks.
+    if (propertyFiles) {
+      await propertyRepair.apply();
+      const fixed = propertyRepair.result?.results.filter(item => item.status === "fixed").length ?? 0;
+      shell.appendLog(`[属性计数] 已修正 ${fixed}/${propertyFiles} 个文件${propertyRepair.error ? `：${propertyRepair.error}` : ""}`, { source: "xlink_fix", open: true });
+    }
+    if (linkCount && revision === scopeRevision) await onApply();
+    shell.setStatus("本次修正已结束，请查看各组结果；继续操作前重新分析");
+  } finally { confirming.value = false; }
+}
 
 async function loadPrefs() {
+  const revision = scopeRevision;
   const prefs = await fetchXlinkPrefs();
-  batchDir.value = prefs.batch_dir || ".";
+  if (revision !== scopeRevision) return;
   allInDir.value = prefs.all_in_dir;
 }
 
 async function onSavePrefs() {
+  if (busy.value || saving.value) return;
+  const revision = scopeRevision;
   saving.value = true;
   try {
     const prefs = await saveXlinkPrefs({ ...prefsPayload(), dry_run: true });
-    batchDir.value = prefs.batch_dir || ".";
+    if (revision !== scopeRevision) return;
     allInDir.value = prefs.all_in_dir;
     shell.setStatus("已保存链接修正偏好");
   } catch (e) {
+    if (revision !== scopeRevision) return;
     shell.setStatus(String(e));
   } finally {
     saving.value = false;
@@ -155,6 +226,7 @@ async function toggleExpand(row: XlinkFixIssueRow) {
 }
 
 async function loadCandidates(row: XlinkFixIssueRow) {
+  const revision = scopeRevision;
   const key = issueRowKey(row);
   if (key in candidatesByKey.value) return;
   candidatesLoading.value = { ...candidatesLoading.value, [key]: true };
@@ -165,6 +237,7 @@ async function loadCandidates(row: XlinkFixIssueRow) {
       part_version: row.part_version,
       exclude_repo_rel: row.host_repo_rel,
     });
+    if (revision !== scopeRevision) return;
     if (!row.part_key && data.part_key) {
       row.part_number = data.part_number;
       row.part_version = data.part_version;
@@ -184,12 +257,15 @@ async function loadCandidates(row: XlinkFixIssueRow) {
       selectedTargetRel.value = { ...selectedTargetRel.value, [key]: files[0].repo_rel_path };
     }
   } catch (e) {
+    if (revision !== scopeRevision) return;
     shell.setStatus(String(e));
     candidatesByKey.value = { ...candidatesByKey.value, [key]: [] };
   } finally {
-    const next = { ...candidatesLoading.value };
-    delete next[key];
-    candidatesLoading.value = next;
+    if (revision === scopeRevision) {
+      const next = { ...candidatesLoading.value };
+      delete next[key];
+      candidatesLoading.value = next;
+    }
   }
 }
 
@@ -214,21 +290,25 @@ function markRowFixed(row: XlinkFixIssueRow, result: XlinkFixOverrideResult) {
 }
 
 async function onApplyOne(row: XlinkFixIssueRow) {
+  if (busy.value || sharedDirectory.disabled.value) return;
+  const revision = scopeRevision;
   const key = issueRowKey(row);
   const target = selectedTargetRel.value[key]?.trim();
   if (!target) {
     shell.setStatus("请先选择目标 FCStd");
     return;
   }
-  const result = await pnwPromptChoice({
+  confirming.value = true;
+  let result;
+  try { result = await pnwPromptChoice({
     title: "修正此项",
     message: "将宿主内该 XLink 指向所选文件，是否继续？",
     choices: [
       { id: "write", label: "写回", variant: "primary" },
       { id: "cancel", label: "取消" },
     ],
-  });
-  if (result.choiceId !== "write") return;
+  }); } finally { confirming.value = false; }
+  if (result.choiceId !== "write" || revision !== scopeRevision || sharedDirectory.disabled.value) return;
   applyingKey.value = key;
   try {
     const result = await applyXlinkFixOverride({
@@ -236,12 +316,14 @@ async function onApplyOne(row: XlinkFixIssueRow) {
       old_path: row.old_path,
       target_repo_rel: target,
     });
+    if (revision !== scopeRevision) return;
     markRowFixed(row, result);
     expandedKey.value = null;
     const msg = result.unchanged ? "路径未变（已与目标一致）" : `已写回 · ${result.new_path}`;
     shell.appendLog(`[链接路径修正] ${row.host_display} ${msg}`, { source: "xlink_fix" });
     shell.setStatus(msg);
   } catch (e) {
+    if (revision !== scopeRevision) return;
     shell.appendLog(String(e), { source: "xlink_fix" });
     shell.setStatus(String(e));
   } finally {
@@ -250,6 +332,9 @@ async function onApplyOne(row: XlinkFixIssueRow) {
 }
 
 async function onAnalyze() {
+  const revision = scopeRevision;
+  const payload = prefsPayload();
+  linkError.value = "";
   analyzing.value = true;
   applyResult.value = null;
   analysis.value = null;
@@ -259,8 +344,10 @@ async function onAnalyze() {
   selectedTargetRel.value = {};
   shell.appendLog("[链接路径修正] 开始分析…", { source: "xlink_fix", open: true });
   try {
-    await saveXlinkPrefs({ ...prefsPayload(), dry_run: true });
-    const data = await analyzeXlinkFix(prefsPayload());
+    await saveXlinkPrefs({ ...payload, dry_run: true });
+    if (revision !== scopeRevision) return;
+    const data = await analyzeXlinkFix(payload);
+    if (revision !== scopeRevision) return;
     analysis.value = data;
     const s = data.stats;
     const msg = s
@@ -270,6 +357,8 @@ async function onAnalyze() {
     if (data.log?.trim()) shell.appendLog(data.log.trim(), { source: "xlink_fix" });
     shell.setStatus(msg);
   } catch (e) {
+    if (revision !== scopeRevision) return;
+    linkError.value = String(e);
     shell.appendLog(String(e), { source: "xlink_fix" });
     shell.setStatus(String(e));
   } finally {
@@ -279,21 +368,12 @@ async function onAnalyze() {
 
 async function onApply() {
   if (!canApply.value) return;
-  const fixable = stats.value?.fixable_count ?? 0;
-  const result = await pnwPromptChoice({
-    title: "执行修正",
-    message: `将写回 ${fixable} 处 XLink 路径到 FCStd，是否继续？`,
-    choices: [
-      { id: "write", label: "写回", variant: "primary" },
-      { id: "cancel", label: "取消" },
-    ],
-  });
-  if (result.choiceId !== "write") return;
-
+  const revision = scopeRevision;
   applying.value = true;
   shell.appendLog("[链接路径修正] 执行写回…", { source: "xlink_fix", open: true });
   try {
     const data = await runXlinkFix({ ...prefsPayload(), dry_run: false });
+    if (revision !== scopeRevision) return;
     applyResult.value = data;
     analysis.value = data;
     const n = data.stats?.total_changes ?? data.total_changes ?? 0;
@@ -301,6 +381,8 @@ async function onApply() {
     if (data.log?.trim()) shell.appendLog(data.log.trim(), { source: "xlink_fix" });
     shell.setStatus(`修正完成 · 写回 ${n} 处`);
   } catch (e) {
+    if (revision !== scopeRevision) return;
+    linkError.value = String(e);
     shell.appendLog(String(e), { source: "xlink_fix" });
     shell.setStatus(String(e));
   } finally {
@@ -326,37 +408,31 @@ function statusTagType(row: XlinkFixIssueRow): "success" | "warning" | "info" {
 }
 
 usePagePrimaryContribution("xlink_fix", props.workbenchTabId, {
+  title: "批量工具",
   summary: computed(() => stats.value
     ? `问题 ${stats.value.issue_count} · 可修正 ${stats.value.fixable_count} · 未找到 ${stats.value.not_found_count}`
     : "尚未分析 XLink 路径"),
   sections: computed<PagePrimarySection[]>(() => [
+    cadBatchToolsSection(shell, "xlink_fix"),
+    sharedDirectory.section,
     {
       id: "scope",
       title: "分析范围",
       controls: [
         {
-          id: "dir",
-          kind: "text",
-          label: "修正目录",
-          modelValue: batchDir,
-          placeholder: "相对工作空间，如 .",
-          mono: true,
-          onUpdate: (value) => {
-            batchDir.value = value;
-            schedulePrefsSave();
-          },
-        },
-        {
           id: "all",
           kind: "boolean",
           label: "目录内全部 FCStd",
-          description: "扫描所选目录下全部 FCStd，而不只处理当前候选。",
+          description: "XLink 目录模式；取消时仅分析目录中的独立 Document.xml，不支持属性检查。",
+          disabled: busy,
           modelValue: allInDir,
           onUpdate: (checked) => {
             allInDir.value = checked;
             schedulePrefsSave();
           },
         },
+        { id: "check-links", kind: "boolean", label: "检查链接路径", modelValue: checkLinks, disabled: busy, onUpdate: (value) => { checkLinks.value = value; } },
+        { id: "check-properties", kind: "boolean", label: "检查属性计数", modelValue: checkProperties, disabled: busy, onUpdate: (value) => { checkProperties.value = value; } },
       ],
       actions: [
         { id: "save", label: "保存偏好", loading: saving, run: onSavePrefs },
@@ -364,17 +440,17 @@ usePagePrimaryContribution("xlink_fix", props.workbenchTabId, {
           id: "analyze",
           label: "分析",
           tone: "primary",
-          loading: analyzing,
-          disabled: applying,
-          run: onAnalyze,
+          loading: checking,
+          disabled: computed(() => !canAnalyze.value),
+          run: analyzeSelected,
         },
         {
           id: "apply",
-          label: computed(() => stats.value?.fixable_count ? `执行修正（${stats.value.fixable_count}）` : "执行修正"),
+          label: "执行修正",
           tone: "danger",
           loading: applying,
-          disabled: computed(() => !canApply.value || analyzing.value),
-          run: onApply,
+          disabled: computed(() => !canApplySelected.value),
+          run: applySelected,
         },
       ],
     },
@@ -417,32 +493,48 @@ onMounted(async () => {
     shell.setStatus(String(e));
   }
 });
+onUnmounted(() => {
+  scopeRevision++;
+  if (prefsSaveTimer) clearTimeout(prefsSaveTimer);
+});
 </script>
 
 <template>
-  <div class="page tool-page xlink-page">
-    <PageHeader title="链接路径修正" page-id="xlink_fix">
-      <template #actions>
+  <PageLayout title="错误修正" class="desk-page-layout tool-page xlink-page">
+    <template #header>
+    <PageHeader title="错误修正">
+      <template #right>
         <div data-tour-page-xlink-analyze class="head-actions-inner">
-          <el-button size="small" :loading="saving" @click="onSavePrefs">保存偏好</el-button>
-          <el-button type="primary" size="small" :loading="analyzing" :disabled="applying" @click="onAnalyze">
+          <el-button size="small" :loading="saving" :disabled="busy" @click="onSavePrefs">保存偏好</el-button>
+          <el-button type="primary" size="small" :loading="checking" :disabled="!canAnalyze" @click="analyzeSelected">
             分析
           </el-button>
           <el-button
             type="success"
             size="small"
-            :loading="applying"
-            :disabled="!canApply || analyzing"
-            :title="canApply ? '' : '请先分析，且存在可修正项'"
-            @click="onApply"
+            :loading="applying || propertyRepair.applying"
+            :disabled="!canApplySelected"
+            :title="canApplySelected ? '' : '请先分析并选择可修正项'"
+            @click="applySelected"
           >
             执行修正
           </el-button>
         </div>
       </template>
     </PageHeader>
+    </template>
 
-    <section v-if="analysis" class="card results-card">
+    <section class="check-options" aria-label="检查项">
+      <span>范围：<code>{{ batchDir || '.' }}</code></span>
+      <el-checkbox v-model="checkLinks" :disabled="busy">链接路径</el-checkbox>
+      <el-checkbox v-model="checkProperties" :disabled="busy">属性修正（计数）</el-checkbox>
+      <span class="muted">可同时分析；分析本身不修改 FCStd。</span>
+    </section>
+    <el-alert v-if="linkError && checkLinks" :title="`链接检查：${linkError}`" type="error" :closable="false" />
+    <FcstdPropertyRepairResults v-if="checkProperties" v-model:selected="propertyRepair.selected" :analysis="propertyRepair.analysis" :result="propertyRepair.result" :error="propertyRepair.error" :busy="busy" @open="shell.openFileDetailForRel($event)" />
+
+    <section v-if="analysis && checkLinks" class="card results-card">
+      <el-alert v-if="analysis.index_pending" title="链接检查尚未完成：请先在 KT Auto CAD 建立索引。属性检查可独立运行。" type="warning" :closable="false" />
       <header class="results-head">
         <div class="results-head-row">
           <h2 class="card-title">问题链接</h2>
@@ -573,7 +665,7 @@ onMounted(async () => {
                         type="success"
                         size="small"
                         :loading="applyingKey === issueRowKey(row)"
-                        :disabled="!selectedTargetRel[issueRowKey(row)]"
+                        :disabled="busy || !selectedTargetRel[issueRowKey(row)]"
                         @click="onApplyOne(row)"
                       >
                         修正此项
@@ -598,12 +690,14 @@ onMounted(async () => {
       <pre v-if="showLog && analysis.log" class="log mono">{{ analysis.log }}</pre>
     </section>
 
-    <el-empty v-else-if="!analyzing" description="设置扫描目录后点击「分析」" :image-size="64" class="empty-hint" />
-  </div>
+    <el-empty v-else-if="checkLinks && !checking" description="链接路径：设置目录后点击「分析」" :image-size="64" class="empty-hint" />
+  </PageLayout>
 </template>
 
 <style scoped>
 @import "./page-shared.css";
+
+.check-options { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 12px; font-size: .85rem; }
 
 .xlink-page strong {
   font-weight: 600;
@@ -613,7 +707,7 @@ onMounted(async () => {
   padding: 12px 16px 14px;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: #fff;
+  background: var(--panel-bg, var(--bg));
   margin-bottom: 14px;
 }
 

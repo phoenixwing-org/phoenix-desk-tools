@@ -13,6 +13,9 @@ import { useDrawingBomReadonly } from "../../composables/useDrawingBomReadonly";
 import { useAppShell } from "../../composables/useAppShell";
 import ComboTextInput from "phoenix-wing/components/PnwComboTextInput.vue";
 import { TYPE_CODE_OPTIONS } from "../../utils/typeCodeOptions";
+import { bomNameSourceOptions, bomNameSourceHint, type BomNameSource } from "../../utils/bomNameSource";
+
+const emit = defineEmits<{ "busy-change": [busy: boolean] }>();
 
 const EDITABLE_KEYS = [
   "PartNumber",
@@ -26,7 +29,6 @@ const EDITABLE_KEYS = [
 type EditableKey = (typeof EDITABLE_KEYS)[number];
 
 const FIELD_ROWS = [
-  { key: "repo_rel_path", cn: "仓库相对路径", en: "RepoRelativePath", editable: false, recommend: false },
   { key: "filename", cn: "文件名", en: "Filename", editable: true, recommend: true },
   { key: "PartNumber", cn: "零件号", en: "PartNumber", editable: true, recommend: true },
   { key: "PartVersion", cn: "版本", en: "PartVersion", editable: true, recommend: true },
@@ -43,7 +45,6 @@ const {
   baseline,
   pageError,
   reloadFile,
-  triggerRename,
   rememberFilenameDraft,
 } = useFileDetailContext();
 const shell = useAppShell();
@@ -52,7 +53,9 @@ const {
   attrsPanelTitle,
   canOpenSourceModel,
   openSourceModel,
+  readonlyDescription,
 } = useDrawingBomReadonly(preview);
+const visibleFieldRows = computed(() => bomReadonly.value ? FIELD_ROWS.filter(row => row.key === "filename") : FIELD_ROWS);
 const documentKindsDisplay = computed(
   () => preview.value?.document_kinds?.display?.trim() || "",
 );
@@ -90,6 +93,7 @@ const initialFields = ref<Partial<BomFields>>({});
 const busy = ref(false);
 const recommendingField = ref<string | null>(null);
 const recommendingAll = ref(false);
+const nameSource = ref<BomNameSource>("label");
 const kindFilters = ref<BomKindFilters>({
   part: true,
   assembly: true,
@@ -116,7 +120,7 @@ function displayInitial(key: string) {
 }
 
 function isDirty(key: string) {
-  if (bomReadonly.value) return false;
+  if (bomReadonly.value && key !== "filename") return false;
   return (
     String(form.value[key as keyof BomFields] ?? "").trim() !==
     String(baseline.value[key as keyof BomFields] ?? "").trim()
@@ -125,6 +129,11 @@ function isDirty(key: string) {
 
 function patchField(key: keyof BomFields, value: string) {
   form.value = { ...form.value, [key]: value };
+}
+
+function onRestoreField(key: EditableKey) {
+  if (busy.value || recommendingAll.value || recommendingField.value || (bomReadonly.value && key !== "filename")) return;
+  patchField(key as keyof BomFields, String(initialFields.value[key as keyof BomFields] ?? ""));
 }
 
 /** 类型码 S（标准件）：文件名不含型号系列，表单中型号系列置空 */
@@ -165,16 +174,17 @@ async function onReload() {
 
 async function onRecommendField(key: EditableKey) {
   if (!rel.value) return;
+  if (bomReadonly.value && key !== "filename") return;
   if (key === "filename" && !isFcstd.value) {
     shell.setStatus("仅 FCStd 可推荐文件名");
     return;
   }
   recommendingField.value = key;
   try {
-    const data = await recommendBomField(rel.value, key, form.value, kindFilters.value);
+    const data = await recommendBomField(rel.value, key, form.value, kindFilters.value, nameSource.value);
     if (data.filled && data.value) {
       patchField(key as keyof BomFields, data.value);
-      if (key === "TypeCode" || key === "filename") applyStandardPartModelSeriesRule();
+      if (!bomReadonly.value && (key === "TypeCode" || key === "filename")) applyStandardPartModelSeriesRule();
       shell.setStatus(`${key} ← ${data.source_note}`);
     } else if (key === "ModelSeries" && data.filled && !data.value) {
       patchField("ModelSeries", "");
@@ -190,11 +200,11 @@ async function onRecommendField(key: EditableKey) {
 }
 
 async function onRecommendAll() {
-  if (!rel.value) return;
+  if (!rel.value || bomReadonly.value) return;
   recommendingAll.value = true;
   shell.appendLog(`[文件详情] 全部推荐属性 ${rel.value}…`, { source: "file_detail", open: true });
   try {
-    const data = await recommendBomFieldsAll(rel.value, form.value, kindFilters.value);
+    const data = await recommendBomFieldsAll(rel.value, form.value, kindFilters.value, nameSource.value);
     const next: Partial<BomFields> = { ...form.value };
     for (const key of data.filled_keys) {
       const row = data.results[key];
@@ -255,14 +265,8 @@ async function onDetectKinds() {
   }
 }
 
-function onGoRename() {
-  const name = (form.value.filename ?? "").trim();
-  if (!name) {
-    pageError.value = "请先填写目标文件名，或点「推荐」生成";
-    return;
-  }
-  triggerRename(name);
-}
+watch(() => busy.value || recommendingAll.value || !!recommendingField.value,
+  value => emit("busy-change", value), { flush: "sync" });
 
 onMounted(() => {
   void loadPrefs();
@@ -271,34 +275,45 @@ onMounted(() => {
 
 <template>
   <div v-if="preview" class="attrs-panel">
-    <h3 class="panel-title">{{ attrsPanelTitle }}</h3>
-    <section class="toolbar">
-      <el-button v-if="canOpenSourceModel" type="primary" size="small" @click="openSourceModel">
-        打开模型
-      </el-button>
-      <el-button size="small" :disabled="busy" @click="onReload">重新读取</el-button>
-      <el-button
-        size="small"
-        :loading="recommendingAll"
-        :disabled="busy || !isFcstd || bomReadonly"
-        @click="onRecommendAll"
-      >
-        全部推荐
-      </el-button>
-      <el-button size="small" :disabled="busy || !isFcstd" @click="onDetectKinds">识别类型</el-button>
-      <el-button
-        type="primary"
-        size="small"
-        :loading="busy"
-        :disabled="!isFcstd || bomReadonly"
-        @click="onSave"
-      >
-        写入文件
-      </el-button>
-    </section>
+    <header class="file-panel-header">
+      <h3 class="panel-title">{{ attrsPanelTitle }}</h3>
+      <div class="file-panel-actions">
+        <el-button v-if="canOpenSourceModel" type="primary" size="small" @click="openSourceModel">
+          打开模型
+        </el-button>
+        <el-button size="small" :disabled="busy" @click="onReload">重新读取</el-button>
+        <el-button
+          v-if="!bomReadonly"
+          size="small"
+          :loading="recommendingAll"
+          :disabled="busy || !isFcstd || bomReadonly"
+          @click="onRecommendAll"
+        >
+          全部推荐
+        </el-button>
+        <el-button size="small" :disabled="busy || !isFcstd" @click="onDetectKinds">识别类型</el-button>
+        <el-button
+          v-if="!bomReadonly"
+          type="primary"
+          size="small"
+          :loading="busy"
+          :disabled="!isFcstd || bomReadonly"
+          @click="onSave"
+        >
+          写入文件
+        </el-button>
+      </div>
+    </header>
 
-    <section v-if="isFcstd" class="doc-kind-block">
-      <div class="doc-kind-row">
+    <section class="attribute-options" aria-label="文档类型与文件名推荐选项">
+      <div v-if="!bomReadonly" class="kind-row" :title="bomNameSourceHint">
+        <span class="kind-label">名称补全来源</span>
+        <el-radio-group v-model="nameSource" size="small" aria-label="名称补全来源" :disabled="busy || recommendingAll || !!recommendingField || bomReadonly">
+          <el-radio-button v-for="option in bomNameSourceOptions" :key="option.value" :value="option.value">{{ option.label }}</el-radio-button>
+        </el-radio-group>
+        <small class="muted">已有 PartName 优先</small>
+      </div>
+      <div v-if="isFcstd" class="doc-kind-row">
         <span class="doc-kind-label">文档类型</span>
         <div v-if="docKindTags.length || documentKindsSuffix" class="doc-kind-tags">
           <span
@@ -316,113 +331,123 @@ onMounted(() => {
         </div>
         <span v-else class="doc-kind-empty muted">未识别（点「识别类型」或打开文件时自动识别）</span>
       </div>
-    </section>
-
-    <section class="kind-row">
-      <span class="kind-label">推荐文件名时匹配：</span>
-      <el-checkbox v-model="kindFilters.part">零件</el-checkbox>
-      <el-checkbox v-model="kindFilters.assembly">装配</el-checkbox>
-      <el-checkbox v-model="kindFilters.drawing">图纸</el-checkbox>
-    </section>
-
-    <form class="form" @submit.prevent="onSave">
-      <div class="form-head">
-        <span class="col-mark" />
-        <span class="col-meta">字段</span>
-        <span class="col-val">值</span>
+      <div v-if="!bomReadonly" class="kind-row">
+        <span class="kind-label">文件名匹配</span>
+        <el-checkbox v-model="kindFilters.part" size="small">零件</el-checkbox>
+        <el-checkbox v-model="kindFilters.assembly" size="small">装配</el-checkbox>
+        <el-checkbox v-model="kindFilters.drawing" size="small">图纸</el-checkbox>
       </div>
-      <div v-for="row in FIELD_ROWS" :key="row.key" class="form-row">
-        <span class="col-mark" :class="{ dirty: isDirty(row.key) }">{{ isDirty(row.key) ? "●" : "" }}</span>
-        <div class="col-meta">
-          <span class="cn">{{ row.cn }}</span>
-          <span class="en">{{ row.en }}</span>
+    </section>
+
+    <p v-if="bomReadonly" class="hint muted" role="status">{{ readonlyDescription }}</p>
+    <form class="attribute-form" @submit.prevent="onSave">
+      <div class="attribute-columns" aria-hidden="true">
+        <span>名称</span>
+        <span>原值</span>
+        <span>编辑值</span>
+        <span>操作</span>
+      </div>
+      <div
+        v-for="row in visibleFieldRows"
+        :key="row.key"
+        class="attribute-field"
+        role="group"
+        :aria-label="row.cn"
+      >
+        <span class="field-label" :title="`${row.cn} · ${row.en}`">
+          {{ row.cn }}
+          <span v-if="isDirty(row.key)" class="dirty-mark" title="尚未写入" aria-label="尚未写入">●</span>
+        </span>
+        <span
+          class="field-original"
+          :title="row.editable ? displayInitial(row.key) : String(form[row.key as keyof BomFields] ?? '')"
+        >
+          {{ row.editable ? displayInitial(row.key) : form[row.key as keyof BomFields] }}
+        </span>
+        <div class="input-row" :title="`原值：${displayInitial(row.key)}`">
+          <ComboTextInput
+            v-if="row.key === 'TypeCode'"
+            v-model="form.TypeCode"
+            :options="TYPE_CODE_OPTIONS"
+            :readonly="!row.editable"
+          />
+          <input
+            v-else
+            v-model="form[row.key as keyof BomFields]"
+            :aria-label="row.cn"
+            :title="row.editable ? `原值：${displayInitial(row.key)}` : String(form[row.key as keyof BomFields] ?? '')"
+            :readonly="!row.editable"
+            :class="{ readonly: !row.editable }"
+          />
         </div>
-        <div class="col-val">
-          <p v-if="row.editable" class="initial-line">初始：{{ displayInitial(row.key) }}</p>
-          <div class="input-row">
-            <ComboTextInput
-              v-if="row.key === 'TypeCode'"
-              v-model="form.TypeCode"
-              :options="TYPE_CODE_OPTIONS"
-              :readonly="!row.editable || bomReadonly"
-            />
-            <input
-              v-else
-              v-model="form[row.key as keyof BomFields]"
-              :readonly="!row.editable || bomReadonly"
-              :class="{ readonly: !row.editable || bomReadonly }"
-            />
-            <el-button
-              v-if="row.recommend"
-              size="small"
-              :loading="recommendingField === row.key"
-              :disabled="busy || recommendingAll || bomReadonly"
-              @click="onRecommendField(row.key as EditableKey)"
-            >
-              推荐
-            </el-button>
-            <el-button
-              v-if="row.key === 'filename'"
-              size="small"
-              :disabled="busy || !isFcstd || bomReadonly"
-              @click="onGoRename"
-            >
-              去改名
-            </el-button>
-          </div>
+        <div class="field-actions">
+          <el-button
+            v-if="row.editable"
+            size="small"
+            :aria-label="`恢复${row.cn}`"
+            :disabled="busy || recommendingAll || !!recommendingField || !isDirty(row.key)"
+            @click="onRestoreField(row.key as EditableKey)"
+          >
+            恢复
+          </el-button>
+          <el-button
+            v-if="row.recommend"
+            size="small"
+            :loading="recommendingField === row.key"
+            :disabled="busy || recommendingAll || (bomReadonly && !canOpenSourceModel)"
+            @click="onRecommendField(row.key as EditableKey)"
+          >
+            推荐
+          </el-button>
         </div>
       </div>
     </form>
 
-    <p v-if="recommendedFillLine()" class="hint muted">{{ recommendedFillLine() }}</p>
+    <p v-if="!bomReadonly && recommendedFillLine()" class="hint muted">{{ recommendedFillLine() }}</p>
+    <p class="file-location">
+      <span>仓库相对路径</span>
+      <code :title="rel">{{ rel }}</code>
+    </p>
   </div>
 </template>
 
 <style scoped>
+@import "./file-panel-header.css";
 .attrs-panel {
   padding-top: 4px;
 }
-.panel-title {
-  margin: 0 0 10px;
-  font-size: 0.92rem;
-  font-weight: 600;
-}
-.toolbar {
+.attribute-options {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-.doc-kind-block {
-  margin-bottom: 12px;
-  padding: 10px 12px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: #f8fafc;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  white-space: nowrap;
 }
 .doc-kind-row {
   display: flex;
-  flex-wrap: wrap;
+  flex: 0 0 auto;
   align-items: center;
-  gap: 10px 12px;
-  font-size: 0.84rem;
+  gap: 8px;
+  font-size: 0.78rem;
 }
 .doc-kind-label {
   font-weight: 600;
-  color: #475569;
-  min-width: 4.5em;
-  flex-shrink: 0;
+  color: var(--muted);
 }
 .doc-kind-tags {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
 .doc-kind-tag {
   display: inline-flex;
   align-items: center;
-  padding: 3px 10px;
+  padding: 2px 8px;
   border-radius: 999px;
   font-size: 0.8rem;
   font-weight: 600;
@@ -430,19 +455,19 @@ onMounted(() => {
   border: 1px solid transparent;
 }
 .doc-kind-tag.tone-part {
-  color: #334155;
-  background: #f1f5f9;
-  border-color: #cbd5e1;
+  color: var(--phoenix-text-secondary);
+  background: var(--phoenix-bg-muted);
+  border-color: var(--phoenix-border);
 }
 .doc-kind-tag.tone-assembly {
-  color: #1d4ed8;
-  background: #dbeafe;
-  border-color: #93c5fd;
+  color: var(--phoenix-accent);
+  background: var(--phoenix-accent-soft);
+  border-color: var(--phoenix-accent-border);
 }
 .doc-kind-tag.tone-drawing {
-  color: #b45309;
-  background: #fef3c7;
-  border-color: #fcd34d;
+  color: var(--phoenix-warning-text);
+  background: var(--phoenix-warning-bg);
+  border-color: var(--phoenix-warning-border);
 }
 .doc-suffix-wrap {
   display: inline-flex;
@@ -452,7 +477,7 @@ onMounted(() => {
 }
 .doc-suffix-label {
   font-size: 0.76rem;
-  color: #64748b;
+  color: var(--phoenix-text-muted);
 }
 .doc-suffix-tag {
   display: inline-block;
@@ -461,79 +486,64 @@ onMounted(() => {
   font-family: var(--font-mono);
   font-size: 0.76rem;
   font-weight: 600;
-  color: #0f766e;
-  background: #ecfdf5;
-  border: 1px solid #6ee7b7;
+  color: var(--phoenix-success-text);
+  background: var(--phoenix-success-bg);
+  border: 1px solid var(--phoenix-success-border);
 }
 .doc-kind-empty {
   font-size: 0.82rem;
 }
 .kind-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  flex: 0 0 auto;
+  gap: 8px;
   align-items: center;
-  margin-bottom: 12px;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
+  margin-left: auto;
 }
 .kind-label {
   color: var(--muted);
 }
-.chk {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+.kind-row .el-checkbox {
+  margin: 0;
 }
-.btn {
-  padding: 6px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--border-strong);
-  background: var(--btn-bg);
-  font-size: 0.82rem;
+.attribute-form {
+  margin: 0;
 }
-.btn.mini {
-  padding: 4px 10px;
-  font-size: 0.78rem;
-}
-.btn.primary {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
-}
-.btn:disabled {
-  opacity: 0.5;
-}
-.form-head,
-.form-row {
+.attribute-columns,
+.attribute-field {
   display: grid;
-  grid-template-columns: 20px 140px 1fr;
-  gap: 10px;
-  align-items: start;
+  grid-template-columns: 100px minmax(0, 1fr) minmax(0, 1.3fr) 106px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 3px 0;
 }
-.form-head {
-  font-size: 0.78rem;
+.attribute-columns {
+  font-size: 0.75rem;
   font-weight: 600;
   color: var(--muted);
-  margin-bottom: 4px;
 }
-.col-mark.dirty {
-  color: #c2410c;
+.attribute-field + .attribute-field {
+  border-top: 1px solid var(--border);
 }
-.col-meta .cn {
-  font-size: 0.85rem;
+.field-label {
+  font-size: 0.8rem;
 }
-.col-meta .en {
-  font-size: 0.75rem;
+.dirty-mark {
+  color: var(--phoenix-warning-text);
+}
+.field-original {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--muted);
-}
-.initial-line {
-  margin: 0 0 4px;
-  font-size: 0.72rem;
-  color: var(--muted);
+  font-size: 0.8rem;
 }
 .input-row {
   display: flex;
-  gap: 6px;
+  min-width: 0;
   align-items: center;
 }
 .input-row input,
@@ -542,21 +552,52 @@ onMounted(() => {
   min-width: 0;
 }
 .input-row input {
-  padding: 6px 10px;
+  box-sizing: border-box;
+  height: 28px;
+  padding: 3px 8px;
   border: 1px solid var(--border-strong);
   border-radius: 6px;
   font-size: 0.85rem;
+  color: var(--phoenix-text);
+  background: var(--phoenix-bg-elevated);
 }
 .input-row input.readonly {
-  background: #f3f4f6;
+  background: var(--el-fill-color-light);
 }
 .input-row :deep(.pnw-combo-text-input) {
+  height: 28px;
   font-size: 0.85rem;
-  padding: 6px 10px;
+  padding: 3px 8px;
+}
+.field-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.field-actions > .el-button {
+  flex: 0 0 auto;
+  height: 28px;
+  margin: 0;
 }
 .hint {
-  margin-top: 12px;
+  margin: 8px 0 0;
   font-size: 0.78rem;
+}
+.file-location {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.file-location > span { flex: 0 0 auto; }
+.file-location > code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
 }
 .muted {
   color: var(--muted);

@@ -3,9 +3,7 @@
  */
 
 import { Hono } from "hono";
-import { bodyLimit } from "hono/body-limit";
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -15,7 +13,6 @@ import {
   normalizeFreecadDirectoryPreference,
 } from "../lib/freecadProcessSecurity.js";
 import {
-  effectiveCodeIgnorePatterns,
   getCodeIgnorePrefs,
   listCodeIgnoreSuggestions,
   saveCodeIgnorePrefs,
@@ -34,31 +31,6 @@ import {
   loadBomPreview,
   renameBomFcstdFile,
 } from "../lib/bomAttributeService.js";
-import {
-  getReorderMembersPrefs,
-  listReorderTopLevelEntries,
-  resolveReorderMembersScope,
-  runReorderMembersBatch,
-  runReorderMembersSelfTest,
-  saveReorderMembersPrefs,
-} from "../lib/reorderMembersService.js";
-import {
-  codeIndexCatDlg,
-  discoverCodeIndexExtensions,
-  exportCodeIndexJson,
-  getCodeRenamePrefs,
-  loadCodeIndex,
-  loadCodeIndexExtraExtensions,
-  applyRenameInWorkspace,
-  applyUuidsInWorkspace,
-  purgeMissingCodeIndex,
-  queryCodeIndexEntries,
-  previewRenameInWorkspace,
-  saveCodeIndexExtraExtensions,
-  saveCodeRenamePrefs,
-  scanCodeIndex,
-  scanUuidsInWorkspace,
-} from "../lib/pdtCodeService.js";
 import {
   buildUnitTestPlan,
   buildUnitTestSuites,
@@ -90,6 +62,7 @@ import {
   recreatePhoenixDatabase,
 } from "../lib/phoenixDatabaseService.js";
 import { loadCadIndexStatus } from "../lib/cadIndexStatusService.js";
+import { pickDirectoryNative } from "../lib/nativeDirectoryPicker.js";
 import { syncTestFixtureCheckouts } from "../lib/testFixtureService.js";
 import {
   runtimeAppConfigPath,
@@ -109,24 +82,12 @@ import {
   type GitDiffScope,
   type GitRestoreScope,
 } from "../lib/gitWorkspaceService.js";
-import {
-  applyKtCodegen,
-  discoverKtCodegenDocuments,
-  inspectKtCodegenDocumentState,
-  inspectKtCodegenSourceStates,
-  loadKtCodegenDocument,
-  previewKtCodegenSource,
-  preflightKtCodegen,
-  saveKtCodegenDocument,
-} from "../lib/ktCodegenService.js";
 
 const APP_CONFIG_PATH = runtimeAppConfigPath();
 const REPO_ROOT = runtimeRepoRoot();
 const TEST_FIXTURE_CATALOG_PATH = runtimeTestFixtureCatalogPath();
 const PREFS_DIR = runtimeUserDataDir();
 const PREFS_FILE = path.join(PREFS_DIR, "launcher-prefs.json");
-const CODE_INDEX_BASENAME = "code-index.json";
-const CODE_INDEX_EXTRA_EXTENSIONS_BASENAME = "code-index-extra-extensions.json";
 
 // ── 偏好持久化 ────────────────────────────────────────
 
@@ -642,62 +603,6 @@ function currentWorkspace(): string {
   return "";
 }
 
-function workspaceStorageKey(workspace: string): string {
-  return createHash("sha1").update(path.resolve(workspace).toLowerCase()).digest("hex").slice(0, 16);
-}
-
-function legacyCodeIndexMatchesWorkspace(workspace: string): boolean {
-  try {
-    const raw = JSON.parse(fs.readFileSync(path.join(PREFS_DIR, CODE_INDEX_BASENAME), "utf8"));
-    return raw?.workspace_path && path.resolve(String(raw.workspace_path)) === path.resolve(workspace);
-  } catch {
-    return false;
-  }
-}
-
-function migrateLegacyCodeIndexStorage(workspace: string, storageDir: string): void {
-  const legacyIndex = path.join(PREFS_DIR, CODE_INDEX_BASENAME);
-  const legacyExtra = path.join(PREFS_DIR, CODE_INDEX_EXTRA_EXTENSIONS_BASENAME);
-  const targetIndex = path.join(storageDir, CODE_INDEX_BASENAME);
-  const targetExtra = path.join(storageDir, CODE_INDEX_EXTRA_EXTENSIONS_BASENAME);
-  const legacyIndexExists = fs.existsSync(legacyIndex);
-  const legacyMatches = legacyIndexExists && legacyCodeIndexMatchesWorkspace(workspace);
-  if (!legacyMatches && legacyIndexExists) return;
-  fs.mkdirSync(storageDir, { recursive: true });
-  if (legacyMatches && !fs.existsSync(targetIndex)) {
-    fs.copyFileSync(legacyIndex, targetIndex);
-  }
-  if (legacyMatches && fs.existsSync(legacyExtra) && !fs.existsSync(targetExtra)) {
-    fs.copyFileSync(legacyExtra, targetExtra);
-  }
-}
-
-function codeIndexContext(): { workspace: string; storageDir: string } {
-  const workspace = currentWorkspace();
-  if (!workspace) return { workspace: "", storageDir: PREFS_DIR };
-  const storageDir = path.join(PREFS_DIR, "code-index", workspaceStorageKey(workspace));
-  migrateLegacyCodeIndexStorage(workspace, storageDir);
-  return { workspace, storageDir };
-}
-
-// ── 本机目录对话框 ────────────────────────────────────
-
-function pickDirectoryNative(): Promise<string | null> {
-  let cmd: string, args: string[];
-  if (process.platform === "darwin") {
-    cmd = "osascript"; args = ["-e", 'POSIX path of (choose folder with prompt "选择工作空间目录")'];
-  } else if (process.platform === "win32") {
-    cmd = "powershell"; args = ["-Command", `Add-Type -AssemblyName System.Windows.Forms; $f=New-Object System.Windows.Forms.FolderBrowserDialog; $f.ShowDialog(); $f.SelectedPath`];
-  } else {
-    cmd = "zenity"; args = ["--file-selection", "--directory", "--title=选择工作空间目录"];
-  }
-  return new Promise((resolve) => {
-    execFile(cmd, args, { timeout: 120_000 }, (err, stdout) => {
-      if (err) { resolve(null); return; }
-      const p = stdout.trim(); resolve(p || null);
-    });
-  });
-}
 
 interface TreeNode { name: string; path: string; type: "dir" | "file"; children?: TreeNode[]; }
 
@@ -866,7 +771,8 @@ shellRoutes.post("/api/test-fixtures/sync", async (c) => {
 });
 
 shellRoutes.post("/api/config/pick-workspace-directory", async (c) => {
-  const dir = await pickDirectoryNative();
+  const body = await c.req.json().catch(() => ({}));
+  const dir = await pickDirectoryNative(body?.path_hint, currentWorkspace());
   if (dir) return c.json({ cancelled: false, path: dir });
   return c.json({ cancelled: true, path: "" });
 });
@@ -1212,206 +1118,7 @@ shellRoutes.get("/api/runtime-catalog/test-cases", (c) => {
   }
 });
 
-// ── Code 模块（原生实现 / 迁移中）────────────────────
-
-
-// Code 索引 — 扫描工作空间源码文件
-function codeIgnorePatterns(workspace = currentWorkspace()): string[] {
-  return effectiveCodeIgnorePatterns(workspace, { prefsDir: PREFS_DIR });
-}
-
-function codeIndexRouteError(c: any, err: unknown) {
-  const detail = err instanceof Error ? err.message : String(err);
-  return c.json({ detail }, 500);
-}
-
-function codegenRouteError(c: any, err: unknown) {
-  const detail = err instanceof Error ? err.message : String(err);
-  const status = /已(?:再次)?变化/.test(detail) ? 409 : 400;
-  return c.json({ detail }, status);
-}
-
-shellRoutes.use("/api/code/codegen/*", bodyLimit({
-  maxSize: 16 * 1024 * 1024,
-  onError: (c) => c.json({ detail: "Codegen 请求体超过 16 MiB 限制" }, 413),
-}));
-
-shellRoutes.get("/api/code/index", (c) => {
-  try {
-    const ctx = codeIndexContext();
-    return c.json(loadCodeIndex(ctx.workspace, { storageDir: ctx.storageDir }));
-  } catch (err) {
-    return codeIndexRouteError(c, err);
-  }
-});
-
-shellRoutes.get("/api/code/codegen/documents", (c) => {
-  try {
-    return c.json(discoverKtCodegenDocuments(currentWorkspace(), PREFS_DIR));
-  } catch (err) {
-    return codegenRouteError(c, err);
-  }
-});
-
-shellRoutes.post("/api/code/codegen/open", async (c) => {
-  try {
-    const body = await c.req.json<Record<string, unknown>>();
-    return c.json(loadKtCodegenDocument(currentWorkspace(), body.path));
-  } catch (err) {
-    return codegenRouteError(c, err);
-  }
-});
-
-shellRoutes.post("/api/code/codegen/document-state", async (c) => {
-  try {
-    const body = await c.req.json<Record<string, unknown>>();
-    return c.json(inspectKtCodegenDocumentState(currentWorkspace(), body));
-  } catch (err) {
-    return codegenRouteError(c, err);
-  }
-});
-
-shellRoutes.put("/api/code/codegen/document", async (c) => {
-  try {
-    const body = await c.req.json<Record<string, unknown>>();
-    return c.json(saveKtCodegenDocument(currentWorkspace(), body));
-  } catch (err) {
-    return codegenRouteError(c, err);
-  }
-});
-
-shellRoutes.post("/api/code/codegen/preflight", async (c) => {
-  try {
-    const body = await c.req.json<Record<string, unknown>>();
-    return c.json(preflightKtCodegen(currentWorkspace(), body, PREFS_DIR));
-  } catch (err) {
-    return codegenRouteError(c, err);
-  }
-});
-
-shellRoutes.post("/api/code/codegen/apply", async (c) => {
-  try {
-    const body = await c.req.json<Record<string, unknown>>();
-    return c.json(await applyKtCodegen(currentWorkspace(), body, PREFS_DIR));
-  } catch (err) {
-    return codegenRouteError(c, err);
-  }
-});
-
-shellRoutes.post("/api/code/codegen/source-preview", async (c) => {
-  try {
-    const body = await c.req.json<Record<string, unknown>>();
-    return c.json(previewKtCodegenSource(currentWorkspace(), body));
-  } catch (err) {
-    return codegenRouteError(c, err);
-  }
-});
-
-shellRoutes.post("/api/code/codegen/source-states", async (c) => {
-  try {
-    const body = await c.req.json<Record<string, unknown>>();
-    return c.json(inspectKtCodegenSourceStates(currentWorkspace(), body));
-  } catch (err) {
-    return codegenRouteError(c, err);
-  }
-});
-shellRoutes.get("/api/code/index/catdlg", (c) => {
-  try {
-    const ctx = codeIndexContext();
-    return c.json(codeIndexCatDlg(ctx.workspace, { storageDir: ctx.storageDir }));
-  } catch (err) {
-    return codeIndexRouteError(c, err);
-  }
-});
-shellRoutes.post("/api/code/index/scan", async (c) => {
-  try {
-    const body = await c.req.json().catch(() => ({}));
-    const rawAdoptExtensions = Array.isArray(body?.adopt_extensions)
-      ? body.adopt_extensions
-      : Array.isArray(body?.adoptExtensions)
-        ? body.adoptExtensions
-        : [];
-    const ctx = codeIndexContext();
-    return c.json(scanCodeIndex(ctx.workspace, {
-      storageDir: ctx.storageDir,
-      adoptExtensions: rawAdoptExtensions.map(String),
-      ignorePatterns: codeIgnorePatterns(ctx.workspace),
-    }));
-  } catch (err) {
-    return codeIndexRouteError(c, err);
-  }
-});
-shellRoutes.get("/api/code/index/entries", (c) => {
-  try {
-    const ctx = codeIndexContext();
-    return c.json(queryCodeIndexEntries(ctx.workspace, {
-      storageDir: ctx.storageDir,
-      offset: Number(c.req.query("offset") || 0),
-      limit: Number(c.req.query("limit") || 100),
-      status: (c.req.query("status") as any) || "all",
-      kind: c.req.query("kind") || "all",
-      q: c.req.query("q") || "",
-      searchMode: (c.req.query("search_mode") as any) || (c.req.query("searchMode") as any) || "contains",
-    }));
-  } catch (err) {
-    return codeIndexRouteError(c, err);
-  }
-});
-shellRoutes.get("/api/code/index/extension-discovery", (c) => {
-  try {
-    const ctx = codeIndexContext();
-    return c.json(discoverCodeIndexExtensions(ctx.workspace, {
-      storageDir: ctx.storageDir,
-      ignorePatterns: codeIgnorePatterns(ctx.workspace),
-    }));
-  } catch (err) {
-    return codeIndexRouteError(c, err);
-  }
-});
-shellRoutes.get("/api/code/index/extra-extensions", (c) => {
-  try {
-    const ctx = codeIndexContext();
-    return c.json({ extra_extensions: loadCodeIndexExtraExtensions(ctx.workspace, { storageDir: ctx.storageDir }) });
-  } catch (err) {
-    return codeIndexRouteError(c, err);
-  }
-});
-shellRoutes.put("/api/code/index/extra-extensions", async (c) => {
-  try {
-    const body = await c.req.json().catch(() => ({}));
-    const rawExtensions = Array.isArray(body?.extensions)
-      ? body.extensions
-      : Array.isArray(body?.extra_extensions)
-        ? body.extra_extensions
-        : [];
-    const ctx = codeIndexContext();
-    return c.json({
-      extra_extensions: saveCodeIndexExtraExtensions(
-        ctx.workspace,
-        rawExtensions.map(String),
-        { storageDir: ctx.storageDir },
-      ),
-    });
-  } catch (err) {
-    return codeIndexRouteError(c, err);
-  }
-});
-shellRoutes.post("/api/code/index/purge-missing", (c) => {
-  try {
-    const ctx = codeIndexContext();
-    return c.json(purgeMissingCodeIndex(ctx.workspace, { storageDir: ctx.storageDir }));
-  } catch (err) {
-    return codeIndexRouteError(c, err);
-  }
-});
-shellRoutes.post("/api/code/index/export-json", (c) => {
-  try {
-    const ctx = codeIndexContext();
-    return c.json(exportCodeIndexJson(ctx.workspace, { storageDir: ctx.storageDir }));
-  } catch (err) {
-    return codeIndexRouteError(c, err);
-  }
-});
+// ── Code 忽略设定（保留）────────────────────────────
 
 // Code 忽略 — 配置读写
 shellRoutes.get("/api/code/ignore/prefs", (c) => c.json(getCodeIgnorePrefs(currentWorkspace(), { prefsDir: PREFS_DIR })));
@@ -1421,62 +1128,6 @@ shellRoutes.put("/api/code/ignore/prefs", async (c) => {
 });
 shellRoutes.get("/api/code/ignore/suggestions", (c) => c.json(listCodeIgnoreSuggestions(currentWorkspace(), { prefsDir: PREFS_DIR })));
 
-// Code rename / UUID
-shellRoutes.get("/api/code/rename/prefs", (c) => c.json(getCodeRenamePrefs(currentWorkspace())));
-shellRoutes.put("/api/code/rename/prefs", async (c) => {
-  try {
-    return c.json(saveCodeRenamePrefs(currentWorkspace(), await c.req.json().catch(() => ({}))));
-  } catch (error: any) {
-    return c.json({ ok: false, message: error?.message || String(error) }, 400);
-  }
-});
-shellRoutes.post("/api/code/rename/preview", async (c) => {
-  const body = await c.req.json().catch(() => ({}));
-  return c.json(previewRenameInWorkspace(currentWorkspace(), { ...body, ignorePatterns: codeIgnorePatterns() }));
-});
-shellRoutes.post("/api/code/rename/apply", async (c) => {
-  const body = await c.req.json().catch(() => ({}));
-  return c.json(applyRenameInWorkspace(currentWorkspace(), { ...body, ignorePatterns: codeIgnorePatterns() }));
-});
-
-shellRoutes.post("/api/code/uuid/scan", async (c) => {
-  const body = await c.req.json().catch(() => ({}));
-  const workspace = currentWorkspace();
-  const ignore = getCodeIgnorePrefs(workspace, { prefsDir: PREFS_DIR });
-  return c.json({
-    ...scanUuidsInWorkspace(workspace, { ...body, ignorePatterns: ignore.ignore_patterns }),
-    ignore_file_display: ignore.ignore_file_display,
-    ignore_file_exists: ignore.ignore_file_exists,
-    ignore_file_patterns: ignore.ignore_file_patterns,
-    ignore_custom_patterns: ignore.ignore_custom_patterns,
-    legacy_ignore_sources: ignore.legacy_ignore_sources,
-  });
-});
-shellRoutes.post("/api/code/uuid/apply", async (c) => {
-  const body = await c.req.json().catch(() => ({}));
-  return c.json(applyUuidsInWorkspace(currentWorkspace(), body));
-});
-
-function reorderContext() {
-  return { prefsDir: PREFS_DIR, ignorePatterns: codeIgnorePatterns() };
-}
-
-shellRoutes.get("/api/code/reorder-members/prefs", (c) => c.json(getReorderMembersPrefs(currentWorkspace(), reorderContext())));
-shellRoutes.put("/api/code/reorder-members/prefs", async (c) => {
-  const body = await c.req.json().catch(() => ({}));
-  return c.json(saveReorderMembersPrefs(currentWorkspace(), body, reorderContext()));
-});
-shellRoutes.post("/api/code/reorder-members/resolve", async (c) => {
-  const body = await c.req.json().catch(() => ({}));
-  return c.json(resolveReorderMembersScope(currentWorkspace(), body, reorderContext()));
-});
-shellRoutes.post("/api/code/reorder-members/run", async (c) => {
-  const body = await c.req.json().catch(() => ({}));
-  return c.json(runReorderMembersBatch(currentWorkspace(), body, reorderContext()));
-});
-shellRoutes.post("/api/code/reorder-members/self-test", (c) => c.json(runReorderMembersSelfTest()));
-shellRoutes.get("/api/code/reorder-members/top-level", (c) => c.json(listReorderTopLevelEntries(currentWorkspace(), reorderContext())));
-shellRoutes.get("/api/code/reorder-members/top-dirs", (c) => c.json(listReorderTopLevelEntries(currentWorkspace(), reorderContext())));
 
 // ── 工作空间文件树 ────────────────────────────────────
 

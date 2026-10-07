@@ -6,10 +6,13 @@ import FileWorksetPanel from "../components/FileWorksetPanel.vue";
 import PagePropertiesPanel from "../components/PagePropertiesPanel.vue";
 import GitCommitPanel from "../components/shell/GitCommitPanel.vue";
 import { usePnwPagePropertiesHost, pnwSetPropertiesActivePage } from "phoenix-wing";
-import { fetchTree, type TreeNode } from "../api";
+import type { TreeNode } from "../api";
 import { useAppShell } from "../composables/useAppShell";
+import { useWorkspaceTreeExpansion } from "../composables/useWorkspaceTreeExpansion";
+import { useWorkspaceTreeScan } from "../composables/useWorkspaceTreeScan";
 import { pageSideBlockComponent } from "./pageSideBlockRegistry";
 import { useFileWorksetsStore } from "../stores/fileWorksets";
+import { useWorkspaceTreeSearchStore } from "../stores/workspaceTreeSearch";
 import { countTreeFiles, filterTreeNode } from "../utils/workspaceTreeFilter";
 import { collectTreeFilePaths } from "../utils/treeFilePaths";
 import {
@@ -66,12 +69,20 @@ const filters = ref<WorkspaceTreeFilterState>({
   wantHeader: false,
 });
 
-const tree = ref<TreeNode | null>(null);
-const fileCount = ref(0);
+const treeScan = useWorkspaceTreeScan(shell.workspacePath, shell.setStatus);
+const { tree, fileCount, loading } = treeScan;
 const selectedRel = ref<string | null>(null);
-const treeFilterQuery = ref("");
+const treeSearch = useWorkspaceTreeSearchStore();
+const treeFilterQuery = computed({
+  get: () => treeSearch.queryFor(shell.workspacePath.value),
+  set: (value: string) => treeSearch.setQuery(shell.workspacePath.value, value),
+});
+const { expansion, searching, toggle: toggleTreeDir } = useWorkspaceTreeExpansion(shell.workspacePath, treeFilterQuery);
+function rememberTreeSearch() { treeSearch.remember(shell.workspacePath.value); }
+function searchSuggestions(_query: string, callback: (items: { value: string }[]) => void) {
+  callback(treeSearch.recentFor(shell.workspacePath.value).map(value => ({ value })));
+}
 const dirOnlyFilter = ref(false);
-const loading = ref(false);
 
 const filterProfile = computed(() =>
   resolveWorkspaceTreeFilterProfile(
@@ -232,23 +243,13 @@ function bindSidebarObserver(el: HTMLElement | null) {
 }
 
 async function scan() {
-  if (!props.showTree) return;
+  if (!props.showTree) return false;
   if (!ensureTreeFilterSelection(filters.value, filterProfile.value)) {
-    tree.value = null;
-    fileCount.value = 0;
+    treeScan.clear();
     shell.setStatus("请至少勾选一种文件类型");
-    return;
+    return false;
   }
-  loading.value = true;
-  try {
-    const data = await fetchTree(treeFetchOptions(filters.value));
-    tree.value = data.tree;
-    fileCount.value = data.file_count;
-  } catch (e) {
-    shell.setStatus(String(e));
-  } finally {
-    loading.value = false;
-  }
+  return treeScan.scan(treeFetchOptions(filters.value));
 }
 
 function onFilterChange() {
@@ -256,6 +257,7 @@ function onFilterChange() {
 }
 
 async function onSelect(rel: string) {
+  rememberTreeSearch();
   selectedRel.value = rel;
   await shell.dispatchTreeSelect(rel);
 }
@@ -352,7 +354,6 @@ watch(
 watch(workspacePath, () => {
   if (!props.showTree) return;
   selectedRel.value = null;
-  treeFilterQuery.value = "";
   void scan();
 });
 
@@ -360,7 +361,7 @@ watch(
   () => shell.treeRescanToken.value,
   async () => {
     if (!props.showTree) return;
-    await scan();
+    if (!await scan()) return;
     const pick = shell.treeSelectAfterRescan.value;
     if (pick) {
       selectedRel.value = pick;
@@ -478,24 +479,24 @@ onUnmounted(() => {
             </div>
           </div>
           <div class="ws-search-row">
-            <input
+            <el-autocomplete
               v-model="treeFilterQuery"
               class="ws-search-input"
-              type="search"
+              size="small"
+              clearable
+              :fetch-suggestions="searchSuggestions"
+              :debounce="0"
+              :maxlength="300"
+              aria-label="筛选工作空间树"
               spellcheck="false"
-              placeholder="筛选文件名 / 路径…"
+              placeholder="筛选路径，空格分隔多个词…"
+              title="多个词需全部匹配；下拉显示最近 5 条搜索"
+              @change="rememberTreeSearch"
+              @select="rememberTreeSearch"
+              @keydown.enter="rememberTreeSearch"
             />
             <button type="button" class="mini" :disabled="loading" title="重新扫描工作空间树" @click="scan">
               {{ loading ? "…" : "刷新" }}
-            </button>
-            <button
-              v-if="treeFilterQuery.trim()"
-              type="button"
-              class="mini"
-              title="清除筛选"
-              @click="treeFilterQuery = ''"
-            >
-              清除
             </button>
             <button
               type="button"
@@ -510,7 +511,8 @@ onUnmounted(() => {
         </div>
         <div class="ws-tree">
           <div v-if="displayTree" class="ws-tree-scroll">
-            <TreeBranch :node="displayTree" :selected="selectedRel" @select-file="onSelect" @pick-dir="(p) => onPickDir(p)" />
+            <TreeBranch :node="displayTree" :selected="selectedRel" :expansion="expansion" :searching="searching"
+              @toggle-dir="toggleTreeDir" @select-file="onSelect" @keep-file="shell.keepFileDetailForRel" @pick-dir="(p) => onPickDir(p)" />
           </div>
           <p v-else-if="tree && treeFilterQuery.trim()" class="muted">无匹配文件</p>
           <p v-else class="muted">{{ loading ? "扫描中…" : "无数据" }}</p>
@@ -802,6 +804,7 @@ onUnmounted(() => {
 
 .ws-search-row {
   display: flex;
+  flex-wrap: nowrap;
   gap: 6px;
   align-items: center;
   min-width: 0;
@@ -809,16 +812,17 @@ onUnmounted(() => {
 
 .ws-search-row .mini {
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .ws-search-input {
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
-  padding: 4px 8px;
-  border: 1px solid var(--border-strong);
-  border-radius: 4px;
+  width: 0;
   font-size: 0.78rem;
 }
+
+.ws-search-input :deep(.el-input) { min-width: 0; }
 
 .ws-filters {
   display: flex;

@@ -194,7 +194,7 @@ Phoenix 的 BOM 本质是 **「按 FCStd 文件 + XLink 图」的 EBOM**，不�
 | 图纸 Link 模型 | App::Link + TechDraw | 模型侧 ✅；图纸边 ❌ | — |
 | 同文件 Body + 图 | 混合文档 | 仅外部 XLink ✅ | — |
 | 装配内多个 Body 无 Link | 本地零件 / in-place | ❌ | 不支撑（除非扩展） |
-| 内部多层 `App::Part` 包装 | 见样例 [`samples/内部装配示例-挂载分析.md`](../cad/samples/内部装配示例-挂载分析.md) | 属性写第一个 Part，**常错节点** | 应挂树顶 `PCB` 类根组，非 `_6222656233` |
+| 内部多层 `App::Part` 包装 | 见样例 [`samples/内部装配示例-挂载分析.md`](../cad/samples/内部装配示例-挂载分析.md) | 属性写第一个 Part，**常错节点** | 应挂树顶结构根，非先声明的子容器 |
 
 ---
 

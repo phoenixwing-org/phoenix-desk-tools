@@ -63,32 +63,27 @@ Desk 不恢复第二套扫描器或 BOM 列表；Python 只在现行 TypeScript/
 
 ## 样本与安全边界
 
-样本仓库：`/Users/kathy/phoenix/phoenix-freecad-study`。
+2026-10-07 隐私整理后，仓库不再保存私人样本目录、零件文件名或清单。运行者须显式指定已获授权的本地样本根目录，并提供仓库外的 `--fixture-manifest` JSON；不再自动发现某个私人样本仓库。
 
-固定使用 `01-零件装配` 中五个稳定文件：
+清单格式为 `{ "subdir": "fixtures", "files": ["Root.ASSY.FCStd", "Block.FCStd", "Sheet.Drawing.FCStd", "A.FCStd", "B.FCStd"] }`。这里的名称为独立合成占位；实际本地清单按“总成、待改零件、引用图纸、两个冲突测试零件”的角色排序。文件须位于同一直接子目录，满足脚本的最小引用条件，不含额外外部引用；清单、原始回执与样本均不得进入提交。
 
-- `8002.001-H-PX-滑动装置.ASSY.FCStd`
-- `8003.001-H-PX-滑轨.FCStd`
-- `8003.001-H-PX-滑轨.Drawing.FCStd`
-- `8004.001-H-PX-滑块.FCStd`
-- `8005.001-H-PX-螺栓.FCStd`
-
-该仓库中用户正在处理的 `8001.001-H-PX-滑轨变形*.FCStd` 不属于样本，不得复制、恢复、暂存或修改。脚本先记录源文件 SHA-256，再用 `mkdtemp` 建隔离工作区和排他复制；全部写操作只发生在副本。默认完成或失败都清理工作区，只有显式 `--keep` 才保留诊断副本。
+脚本先记录源文件 SHA-256，再用 `mkdtemp` 建隔离工作区和排他复制；全部写操作只发生在副本。默认完成或失败都清理工作区，只有显式 `--keep` 才保留诊断副本。历史通过记录只适用于当时点检；新的清单入口不代表本次已重新验证真实工程。
 
 ## 执行方法
 
 标准命令：
 
 ```bash
-pnpm verify:cad-pointcheck
+pnpm verify:cad-pointcheck -- --source-root /path/to/authorized-fixtures --fixture-manifest /path/to/private/fixture-manifest.json
 ```
 
 可显式指定依赖和回执：
 
 ```bash
 pnpm verify:cad-pointcheck -- \
-  --source-root /Users/kathy/phoenix/phoenix-freecad-study \
-  --auto-cad-root /Users/kathy/phoenix/kt-auto-cad \
+  --source-root /path/to/authorized-fixtures \
+  --fixture-manifest /path/to/private/fixture-manifest.json \
+  --auto-cad-root /path/to/kt-auto-cad \
   --freecadcmd /Applications/FreeCAD.app/Contents/Resources/bin/freecadcmd \
   --receipt /tmp/phoenix-cad-pointcheck.json
 ```
@@ -121,9 +116,33 @@ pnpm verify:cad-pointcheck -- \
 
 FreeCAD 控制台仍报告三个环境/样本基线警告：未安装可选 3Dconnexion framework、Assembly console 模式的 `QtCore` NameError，以及样本中既有 Slider Joint 的无效 `Reference2`。这些警告未阻止 5/5 打开、保存和重开；只有警告集合或行为相对基线恶化时才判为回归。
 
+## 2026-10-03 属性计数修复
+
+### 原因与边界
+
+首次新增 BOM 属性时，Wing cad-core 0.6.3 追加了 `<Property>`，却未更新宿主对象的 `<Properties Count>`。真实文件出现声明 12 项、实际 17 项的状态：Desk 直接解析 XML 能看到五项值，FreeCAD 1.1 按声明计数加载却看不到。这不是选错节点或切错属性页。
+
+Desk 在既有序列化兼容层中按实际 Property 数重算目标对象的 Count，保留 TransientCount、原属性元数据、其他对象与 ZIP 条目；相同值重写也修复旧计数。定位现代格式时只匹配 ObjectData 内对象，不把 Objects 中的自闭合声明当作属性实体。根对象选择和字段值补丁仍复用 Wing，没有修改 Wing、依赖或用户原文件。
+
+### 验证
+
+- 修复前：新增的四项用例全部失败；修复后 ZIP adapter 8/8、相关服务/路由合计 18/18 通过。
+- Registry Server 全量 67 files / 268 tests、Server typecheck、生产 bundle 通过。
+- macOS FreeCAD 1.1 在用户样本的临时副本上验证两条路径：旧 Count 修复，以及先通过 FreeCAD 移除字段再首次新增。两条路径均为 Count 17 / 实际 17；五项属性在保存前及保存后重开均存在于 CustomDefine，值一致且非隐藏/只读。
+- 再写相同值不改变文件；非 Document.xml ZIP 条目保持；无原子写临时残留；源文件 SHA-256 不变。测试副本与本地诊断脚本不进入仓库。
+
+### 存量文件的手动修复
+
+1. 先在 FreeCAD 关闭目标文件；若有未保存建模修改，先保存并备份，再回 Desk 重新读取。不要让两个程序同时保存同一个文件。
+2. 使用已包含本修复的 Desk API，在「文件详情 → 编辑属性」核对值，点击「写入文件」。无需故意改动字段；此动作会按当前表单写入，并一并修复 Count，不是自动扫描或批量修复。
+3. 在 FreeCAD 重新打开文件，选中承载 BOM 的根 Body/Part，在「数据 → CustomDefine」查看五项属性。已在内存打开的文档不会因磁盘修改自动重载。
+4. 保存、关闭再重开一次，确认字段仍在。原本没有写入的文件不会因为升级代码自动改变。
+
+本轮不包含 Header 内部名或指定文件范围的 XLink 修正能力。
+
 ## 剩余 TODO
 
 - [ ] 用当前 v0.5.0 macOS `.app` 通过 UI/Host 执行同一副本流程，记录应用哈希、API 版本、权限、退出和 sidecar 回收，将 CAD 点检升到 E4。
 - [ ] 完成插件升级、停用、卸载保留数据和重装恢复的同轮生命周期矩阵，将发布就绪度从 85 提升到 100。
-- [ ] 在 Phoenix Wing 修复动态属性元数据保留并发布新版本；Desk 升级后删除临时兼容层，并重跑本门禁。
+- [ ] 在 Phoenix Wing 修复动态属性元数据保留及 Properties Count 同步并发布新版本；Desk 升级后删除临时兼容层，并重跑首次新增、存量计数修复和 FreeCAD 保存重开门禁。
 - [ ] 把 `missing/ambiguous/self/non-FCStd` 的真实样本组合纳入固定 fixture；当前这些分支由单元/路由契约覆盖。

@@ -13,6 +13,8 @@ import {
   type UnitTestSuiteInfo,
 } from "../api";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
+import PageLayout from "phoenix-wing/layout/PnwPageLayout.vue";
+import PageMainBlock from "phoenix-wing/layout/PnwPageMainBlock.vue";
 import UnitTestRunScopePane from "../components/unit-tests/UnitTestRunScopePane.vue";
 import UnitTestWatchlistPane from "../components/unit-tests/UnitTestWatchlistPane.vue";
 import UnitTestResultPane from "../components/unit-tests/UnitTestResultPane.vue";
@@ -758,138 +760,141 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="page tool-page unit-tests-page">
-    <PageHeader title="单元测试" page-id="unit_tests">
-      <template #actions>
-        <div class="toolbar-group">
-          <el-button-group size="small">
-            <el-button :disabled="running" @click="selectAllRun">全选</el-button>
-            <el-button :disabled="running" @click="clearAllRun">清空</el-button>
-            <el-button v-if="watchlistCount" :disabled="running" @click="onRun('watchlist')">
-              全部复测（{{ watchlistCount }}）
+  <PageLayout title="单元测试" class="desk-page-layout" :body-inset="false">
+    <template #header>
+      <PageHeader title="单元测试">
+        <template #right>
+          <div class="toolbar-group">
+            <el-button-group size="small">
+              <el-button :disabled="running" @click="selectAllRun">全选</el-button>
+              <el-button :disabled="running" @click="clearAllRun">清空</el-button>
+              <el-button v-if="watchlistCount" :disabled="running" @click="onRun('watchlist')">
+                全部复测（{{ watchlistCount }}）
+              </el-button>
+            </el-button-group>
+          </div>
+          <div class="toolbar-group toolbar-group-run">
+            <el-button
+              v-if="running"
+              type="danger"
+              plain
+              size="small"
+              data-tour-page-unit-tests-cancel
+              @click="cancelRun"
+            >
+              终止
             </el-button>
-          </el-button-group>
-        </div>
-        <span class="toolbar-divider" aria-hidden="true" />
-        <div class="toolbar-group toolbar-group-run">
-          <el-button
-            v-if="running"
-            type="danger"
-            plain
-            size="small"
-            data-tour-page-unit-tests-cancel
-            @click="cancelRun"
-          >
-            终止
-          </el-button>
-          <el-button
-            v-else
-            type="primary"
-            size="small"
-            data-tour-page-unit-tests-run
-            :disabled="!canRunFull"
-            @click="onRun('full')"
-          >
-            运行（{{ runCheckedCount }}<template v-if="showRunScopeList && runScopeSelectedSummary && runScopeSelectedSummary.modules < runScopeSelectedSummary.totalModules"> · {{ runScopeSelectedSummary.modules }} 模块</template>）
-          </el-button>
-        </div>
-      </template>
-    </PageHeader>
+            <el-button
+              v-else
+              type="primary"
+              size="small"
+              data-tour-page-unit-tests-run
+              :disabled="!canRunFull"
+              @click="onRun('full')"
+            >
+              运行（{{ runCheckedCount }}<template v-if="showRunScopeList && runScopeSelectedSummary && runScopeSelectedSummary.modules < runScopeSelectedSummary.totalModules"> · {{ runScopeSelectedSummary.modules }} 模块</template>）
+            </el-button>
+          </div>
+        </template>
+      </PageHeader>
+    </template>
+    <PageMainBlock class="tool-page unit-tests-page">
 
-    <p v-if="loadError" class="error-text">{{ loadError }}</p>
+      <p v-if="loadError" class="error-text">{{ loadError }}</p>
 
-    <UnitTestRunScopePane
-      v-model:show-module-list="showRunScopeList"
-      v-model:show-case-details="showRunScopeCases"
-      :module-sort-by="moduleSortBy"
-      :runnable-suites="runnableSuites"
-      :checked-suite-ids="runChecked"
-      :running="running"
-      :module-count-label="runScopeButtonModuleCount"
-      :plan="runPlan"
-      :plan-loading="runPlanLoading"
-      :plan-error="runPlanError"
-      :rows="runScopeRows"
-      :rerunning-module="rerunningModule"
-      @update:module-sort-by="onModuleSortChange"
-      @suite-change="toggleRunSuite"
-      @all-modules-change="toggleAllRunScopeModules"
-      @module-change="toggleRunScopeModule"
-      @run-module="onRunSingleModule"
-    >
-      <template #footer>
-        <p v-if="watchlistSkipCount || result" class="run-foot">
-          <span v-if="watchlistSkipCount && !running" class="run-foot-hint">
-            全量时将忽略 {{ watchlistSkipCount }} 条关注项
-          </span>
-          <span v-if="result" class="run-meta">
-            {{ result.suite_label }} · {{ result.duration_ms }} ms
-            <template v-if="lastIgnoredCount"> · 忽略 {{ lastIgnoredCount }}</template>
-          </span>
-        </p>
-      </template>
-    </UnitTestRunScopePane>
+      <UnitTestRunScopePane
+        v-model:show-module-list="showRunScopeList"
+        v-model:show-case-details="showRunScopeCases"
+        :module-sort-by="moduleSortBy"
+        :runnable-suites="runnableSuites"
+        :checked-suite-ids="runChecked"
+        :running="running"
+        :module-count-label="runScopeButtonModuleCount"
+        :plan="runPlan"
+        :plan-loading="runPlanLoading"
+        :plan-error="runPlanError"
+        :rows="runScopeRows"
+        :rerunning-module="rerunningModule"
+        @update:module-sort-by="onModuleSortChange"
+        @suite-change="toggleRunSuite"
+        @all-modules-change="toggleAllRunScopeModules"
+        @module-change="toggleRunScopeModule"
+        @run-module="onRunSingleModule"
+      >
+        <template #footer>
+          <p v-if="watchlistSkipCount || result" class="run-foot">
+            <span v-if="watchlistSkipCount && !running" class="run-foot-hint">
+              全量时将忽略 {{ watchlistSkipCount }} 条关注项
+            </span>
+            <span v-if="result" class="run-meta">
+              {{ result.suite_label }} · {{ result.duration_ms }} ms
+              <template v-if="lastIgnoredCount"> · 忽略 {{ lastIgnoredCount }}</template>
+            </span>
+          </p>
+        </template>
+      </UnitTestRunScopePane>
 
-    <el-radio-group
-      v-if="watchlistCount || result"
-      v-model="activeTab"
-      size="small"
-      class="page-tabs"
-    >
-      <el-radio-button value="results">运行结果</el-radio-button>
-      <el-radio-button value="watchlist">
-        失败关注
-        <span v-if="watchlistCount" class="tab-badge">{{ watchlistCount }}</span>
-      </el-radio-button>
-    </el-radio-group>
+      <el-radio-group
+        v-if="watchlistCount || result"
+        v-model="activeTab"
+        size="small"
+        class="page-tabs"
+      >
+        <el-radio-button value="results">运行结果</el-radio-button>
+        <el-radio-button value="watchlist">
+          失败关注
+          <span v-if="watchlistCount" class="tab-badge">{{ watchlistCount }}</span>
+        </el-radio-button>
+      </el-radio-group>
 
-    <UnitTestWatchlistPane
-      v-if="activeTab === 'watchlist'"
-      :rows="watchlistRows"
-      :running="running"
-      :sort-by="watchlistPrefs.sort_by"
-      :default-run-on-full="watchlistPrefs.default_run_on_full"
-      :rerunning-id="rerunningWatchlistId"
-      @sort="onWatchlistSortChange"
-      @default-run-on-full="onWatchlistDefaultRunOnFullChange"
-      @all-checked="toggleAllWatchlistChecked"
-      @checked="toggleWatchlistChecked"
-      @run-on-full="onWatchlistRunOnFullChange"
-      @run-selected="onRunWatchlistSelected"
-      @run-watchlist="onRun('watchlist')"
-      @rerun="onRerunWatchlistEntry"
-      @remove-request="removeFromWatchlist"
-      @clear-request="clearAllWatchlist"
-    />
+      <UnitTestWatchlistPane
+        v-if="activeTab === 'watchlist'"
+        :rows="watchlistRows"
+        :running="running"
+        :sort-by="watchlistPrefs.sort_by"
+        :default-run-on-full="watchlistPrefs.default_run_on_full"
+        :rerunning-id="rerunningWatchlistId"
+        @sort="onWatchlistSortChange"
+        @default-run-on-full="onWatchlistDefaultRunOnFullChange"
+        @all-checked="toggleAllWatchlistChecked"
+        @checked="toggleWatchlistChecked"
+        @run-on-full="onWatchlistRunOnFullChange"
+        @run-selected="onRunWatchlistSelected"
+        @run-watchlist="onRun('watchlist')"
+        @rerun="onRerunWatchlistEntry"
+        @remove-request="removeFromWatchlist"
+        @clear-request="clearAllWatchlist"
+      />
 
-    <UnitTestResultPane
-      v-if="activeTab === 'results' && result"
-      :result="result"
-      :pass-rate="passRate"
-      :last-run-suites="lastRunSuites"
-      :suite-label-by-id="suiteLabelById"
-      :result-suite-checked="resultSuiteChecked"
-      :result-status-checked="resultStatusChecked"
-      :filtered-cases="filteredCases"
-      :filtered-module-summaries="filteredModuleSummaries"
-      :module-catalog="moduleCatalog"
-      :watchlist-count="watchlistCount"
-      :re-tested-count="lastReTestedCaseIds.size"
-      :filter-watchlist-only="filterWatchlistOnly"
-      :filter-re-tested-only="filterReTestedOnly"
-      :last-ignored-count="lastIgnoredCount"
-      @suite-change="toggleResultSuite"
-      @status-change="toggleResultStatus"
-      @select-all-suites="selectAllResultSuites"
-      @select-only-failed="selectOnlyFailedResults"
-      @filter-watchlist="filterResultsToWatchlist"
-      @filter-re-tested="filterResultsToReTested"
-    />
+      <UnitTestResultPane
+        v-if="activeTab === 'results' && result"
+        :result="result"
+        :pass-rate="passRate"
+        :last-run-suites="lastRunSuites"
+        :suite-label-by-id="suiteLabelById"
+        :result-suite-checked="resultSuiteChecked"
+        :result-status-checked="resultStatusChecked"
+        :filtered-cases="filteredCases"
+        :filtered-module-summaries="filteredModuleSummaries"
+        :module-catalog="moduleCatalog"
+        :watchlist-count="watchlistCount"
+        :re-tested-count="lastReTestedCaseIds.size"
+        :filter-watchlist-only="filterWatchlistOnly"
+        :filter-re-tested-only="filterReTestedOnly"
+        :last-ignored-count="lastIgnoredCount"
+        @suite-change="toggleResultSuite"
+        @status-change="toggleResultStatus"
+        @select-all-suites="selectAllResultSuites"
+        @select-only-failed="selectOnlyFailedResults"
+        @filter-watchlist="filterResultsToWatchlist"
+        @filter-re-tested="filterResultsToReTested"
+      />
 
-    <p v-else-if="!running && activeTab === 'results'" class="muted hint compact-hint">
-      勾选套件后点「运行」；失败项会进入「失败关注」Tab。
-    </p>
-  </div>
+      <p v-else-if="!running && activeTab === 'results'" class="muted hint compact-hint">
+        勾选套件后点「运行」；失败项会进入「失败关注」Tab。
+      </p>
+    </PageMainBlock>
+  </PageLayout>
 </template>
 
 <style scoped>

@@ -1,14 +1,18 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import type { AssemblyTreeNode } from "../../api";
 import type { AssemblyTreeInstanceViewInput } from "../../models/assemblyTreeViewModel";
 import {
   assemblyTreeCanEditLabel,
+  assemblyTreeCanLoadSourceChildren,
   assemblyTreeDisplayLabel,
   assemblyTreeEditKey as editKey,
   assemblyTreeInstanceRows,
   assemblyTreeInstancesOf as instancesOf,
-  assemblyTreeIsAssembly as isAssemblyNode,
   assemblyTreeIsLabelEdited,
+  assemblyTreeLabelRecommendation,
+  assemblyTreeLabelDiffersFromRule,
+  assemblyTreeTargetFile,
   assemblyTreeIsMissing as isMissingNode,
   assemblyTreeIsResolved as isResolvedNode,
   assemblyTreeIsUnresolved as isUnresolved,
@@ -27,6 +31,7 @@ import ExpandCaret from "phoenix-wing/components/PnwExpandCaret.vue";
 const props = defineProps<{
   node: AssemblyTreeNode;
   depth: number;
+  position?: string;
   edits: ReadonlyMap<string, string>;
   treeExpanded: boolean;
   instanceExpanded: boolean;
@@ -43,6 +48,7 @@ const emit = defineEmits<{
   "label-input": [node: AssemblyTreeNode, instance: AssemblyTreeInstanceViewInput, value: string];
   "open-file": [node: AssemblyTreeNode];
   "replace-xlink": [node: AssemblyTreeNode];
+  "apply-label-instance": [node: AssemblyTreeNode, instance: AssemblyTreeInstanceViewInput];
 }>();
 
 function displayLabel(host: string, instance: AssemblyTreeInstanceViewInput): string {
@@ -53,12 +59,32 @@ function isLabelEdited(host: string, instance: AssemblyTreeInstanceViewInput): b
   return assemblyTreeIsLabelEdited(props.edits, host, instance);
 }
 
+function recommendation(instance?: AssemblyTreeInstanceViewInput): string {
+  if (!instance || !assemblyTreeLabelDiffersFromRule(props.node, instance, displayLabel(props.node.host_repo_rel, instance))) return "";
+  return assemblyTreeLabelRecommendation(props.node, instance);
+}
+
+const primaryRecommendation = computed(() => recommendation(instancesOf(props.node)[0]));
+const hasRecommendations = computed(() => instancesOf(props.node).some(instance => recommendation(instance)));
+const hasDrafts = computed(() => instancesOf(props.node).some(instance => isLabelEdited(props.node.host_repo_rel, instance)));
+const primaryTarget = computed(() => assemblyTreeTargetFile(props.node));
+
+function targetTitle(instance?: AssemblyTreeInstanceViewInput): string {
+  const target = assemblyTreeTargetFile(props.node, instance);
+  return target.repoRelPath + (target.viaRepoRelPath ? `\n经由：${target.viaRepoRelPath}` : "");
+}
+
+function openTargetFile(instance?: AssemblyTreeInstanceViewInput) {
+  const target = assemblyTreeTargetFile(props.node, instance);
+  if (target.repoRelPath) emit("open-file", { ...props.node, repo_rel_path: target.repoRelPath, basename: target.basename });
+}
+
 function canEditLinkLabel(node: AssemblyTreeNode): boolean {
   return assemblyTreeCanEditLabel(node, props.editable);
 }
 
 function canExpand(node: AssemblyTreeNode): boolean {
-  return props.hasSubtree || isAssemblyNode(node);
+  return props.hasSubtree || assemblyTreeCanLoadSourceChildren(node);
 }
 
 function expandedSet(node: AssemblyTreeNode): ReadonlySet<string> {
@@ -120,6 +146,7 @@ function onLabelInput(
 
 <template>
   <tr :class="rowStatusClass(node)">
+    <td class="col-position">{{ position }}</td>
     <td class="tree-cell">
       <div
         class="tree-item"
@@ -131,10 +158,10 @@ function onLabelInput(
           class="pnw-expand-btn toggle"
           :class="[`toggle-${toggleVisualState(node)}`, { leaf: !canExpand(node) }]"
           :disabled="!canExpand(node) || subtreeLoading"
-          :aria-expanded="hasSubtree ? treeExpanded : isAssemblyNode(node) ? false : undefined"
+          :aria-expanded="hasSubtree ? treeExpanded : assemblyTreeCanLoadSourceChildren(node) ? false : undefined"
           :aria-label="toggleAriaLabel(node)"
           :title="
-            isAssemblyNode(node) && !hasSubtree
+            assemblyTreeCanLoadSourceChildren(node) && !hasSubtree
               ? '点击加载该装配的下级子件'
               : toggleAriaLabel(node)
           "
@@ -186,15 +213,17 @@ function onLabelInput(
           <div class="tree-label-row">
             <input
               v-if="canEditLinkLabel(node) && instancesOf(node)[0]"
-              :key="`${node.id}-${editKey(node.host_repo_rel, instancesOf(node)[0].xlink_file_attr)}`"
+              :key="`${node.id}-${editKey(node.host_repo_rel, instancesOf(node)[0].xlink_file_attr, instancesOf(node)[0])}`"
               class="label-input"
               :class="{
+                'label-input-mismatch': Boolean(primaryRecommendation),
                 'label-input-edited': isLabelEdited(
                   node.host_repo_rel,
                   instancesOf(node)[0],
                 ),
               }"
               :value="displayLabel(node.host_repo_rel, instancesOf(node)[0])"
+              :title="`原名：${instancesOf(node)[0].link_label ?? ''}\n建议：${instancesOf(node)[0].rule_label ?? ''}`"
               spellcheck="false"
               :placeholder="resolveRuleLabelForNode(node) || '链接标签'"
               @input="onLabelInput(node, instancesOf(node)[0], $event)"
@@ -206,8 +235,14 @@ function onLabelInput(
             >
               {{ node.link_label || node.basename || "—" }}
             </span>
-            <span v-else class="tree-label-read">{{ node.link_label || "—" }}</span>
+            <span v-else class="tree-label-read" :title="node.label_edit_reason">{{ node.link_label || "—" }}</span>
           </div>
+          <div v-if="primaryRecommendation" class="label-recommendation" :title="`推荐：${primaryRecommendation}`">
+            <span>推荐：</span><span class="recommendation-name">{{ primaryRecommendation }}</span>
+            <button v-if="canEditLinkLabel(node)" type="button" class="btn-recommendation" title="只将此推荐名填入本行，应用后才写盘"
+              @click="emit('label-input', node, instancesOf(node)[0], primaryRecommendation)">填入</button>
+          </div>
+          <small v-if="instancesOf(node)[0]?.rule_error" class="tree-issue">{{ instancesOf(node)[0].rule_error }}</small>
           <div v-if="isUnresolved(node) && !isMissingNode(node)" class="tree-issue">
             <span class="issue-icon" :title="statusLabel(node.resolve_status)">⚠</span>
             <span class="issue-text">{{ statusLabel(node.resolve_status) }}</span>
@@ -222,21 +257,9 @@ function onLabelInput(
         </div>
       </div>
     </td>
-    <td class="col-file mono">
-      <button
-        v-if="node.repo_rel_path"
-        type="button"
-        class="file-link"
-        :title="node.repo_rel_path"
-        @click="emit('open-file', node)"
-      >
-        {{ node.basename }}
-      </button>
-      <span v-else :title="primaryXlinkAttr(node) || undefined">{{ node.basename }}</span>
-    </td>
     <td class="col-qty">
       <button
-        v-if="(node.ref_count ?? 1) > 1 && canEditLinkLabel(node)"
+        v-if="(node.ref_count ?? 1) > 1 && instancesOf(node).length > 1"
         type="button"
         class="qty-btn"
         :title="instanceExpanded ? '折叠各实例' : '展开编辑各实例标签'"
@@ -250,10 +273,28 @@ function onLabelInput(
     <td class="col-status">
       <span v-if="isMissingNode(node)" class="status-badge missing">缺失</span>
       <span v-else-if="node.resolve_status === 'ambiguous'" class="status-badge ambiguous">歧义</span>
+      <span v-else-if="instancesOf(node).some(instance => instance.rule_error)" class="status-badge ambiguous">需确认</span>
+      <span v-else-if="hasDrafts" class="status-badge ambiguous">待应用</span>
+      <span v-else-if="hasRecommendations" class="status-badge ambiguous">待修正</span>
       <span v-else-if="isResolvedNode(node)" class="status-ok" title="已解析">✓</span>
       <span v-else class="status-muted muted">{{ statusLabel(node.resolve_status) }}</span>
     </td>
-    <td v-if="showXlinkActionCol" class="col-action">
+    <td class="col-file mono">
+      <button
+        v-if="primaryTarget.repoRelPath"
+        type="button"
+        class="file-link"
+        :title="targetTitle()"
+        @click="openTargetFile()"
+      >
+        {{ primaryTarget.basename }}
+      </button>
+      <span v-else :title="primaryXlinkAttr(node) || undefined">{{ primaryTarget.basename }}</span>
+      <div v-if="showXlinkActionCol" class="row-actions" role="group" aria-label="本行操作">
+      <div v-if="canEditLinkLabel(node) && instancesOf(node)[0] && isLabelEdited(node.host_repo_rel, instancesOf(node)[0])" class="label-row-actions">
+        <button type="button" class="btn-row-action" title="恢复本行预览前的标签" @click="emit('label-input', node, instancesOf(node)[0], instancesOf(node)[0].link_label ?? '')">撤销</button>
+        <button type="button" class="btn-row-action apply-row" title="只写入这一行，保留其他行修改" @click="emit('apply-label-instance', node, instancesOf(node)[0])">应用</button>
+      </div>
       <button
         v-if="canReplaceXlink(node)"
         type="button"
@@ -263,7 +304,7 @@ function onLabelInput(
       >
         改链接
       </button>
-      <span v-else class="muted">—</span>
+      </div>
     </td>
   </tr>
   <tr
@@ -271,6 +312,7 @@ function onLabelInput(
     :key="`${node.id}-inst-${extra.instanceIndex}`"
     class="instance-row"
   >
+    <td class="col-position" :title="'同一位置的第 ' + (extra.instanceIndex + 1) + ' 个实例'">{{ position }} · {{ extra.instanceIndex + 1 }}</td>
     <td class="tree-cell" colspan="1">
       <div class="tree-item instance-indent" :style="{ paddingLeft: `${depth * 18 + 36}px` }">
         <span
@@ -298,20 +340,41 @@ function onLabelInput(
               v-if="canEditLinkLabel(node)"
               class="label-input"
               :class="{
+                'label-input-mismatch': Boolean(recommendation(extra.instance)),
                 'label-input-edited': isLabelEdited(node.host_repo_rel, extra.instance),
               }"
               :value="displayLabel(node.host_repo_rel, extra.instance)"
+              :title="`原名：${extra.instance.link_label ?? ''}\n建议：${extra.instance.rule_label ?? ''}`"
               spellcheck="false"
               @input="onLabelInput(node, extra.instance, $event)"
             />
+            <span v-else class="tree-label-read">{{ extra.instance.link_label || "—" }}</span>
           </div>
+          <div v-if="recommendation(extra.instance)" class="label-recommendation" :title="`推荐：${recommendation(extra.instance)}`">
+            <span>推荐：</span><span class="recommendation-name">{{ recommendation(extra.instance) }}</span>
+            <button v-if="canEditLinkLabel(node)" type="button" class="btn-recommendation" title="只将此推荐名填入本行，应用后才写盘"
+              @click="emit('label-input', node, extra.instance, recommendation(extra.instance))">填入</button>
+          </div>
+          <small v-if="extra.instance.rule_error" class="tree-issue">{{ extra.instance.rule_error }}</small>
         </div>
       </div>
     </td>
-    <td class="col-file muted instance-hint">—</td>
     <td class="col-qty muted instance-hint">—</td>
-    <td class="col-status muted instance-hint">—</td>
-    <td v-if="showXlinkActionCol" class="col-action muted">—</td>
+    <td class="col-status">
+      <span v-if="extra.instance.rule_error" class="status-badge ambiguous">需确认</span>
+      <span v-else-if="isLabelEdited(node.host_repo_rel, extra.instance)" class="status-badge ambiguous">待应用</span>
+      <span v-else-if="recommendation(extra.instance)" class="status-badge ambiguous">待修正</span>
+      <span v-else class="muted instance-hint">—</span>
+    </td>
+    <td class="col-file mono instance-hint">
+      <button v-if="assemblyTreeTargetFile(node, extra.instance).repoRelPath" type="button" class="file-link"
+        :title="targetTitle(extra.instance)" @click="openTargetFile(extra.instance)">{{ assemblyTreeTargetFile(node, extra.instance).basename }}</button>
+      <span v-else>—</span>
+      <div v-if="showXlinkActionCol && canEditLinkLabel(node) && isLabelEdited(node.host_repo_rel, extra.instance)" class="row-actions" role="group" aria-label="本实例操作">
+        <button type="button" class="btn-row-action" title="恢复本行预览前的标签" @click="emit('label-input', node, extra.instance, extra.instance.link_label ?? '')">撤销</button>
+        <button type="button" class="btn-row-action apply-row" title="只写入这一行，保留其他行修改" @click="emit('apply-label-instance', node, extra.instance)">应用</button>
+      </div>
+    </td>
   </tr>
 </template>
 
@@ -326,6 +389,8 @@ td {
 .tree-cell {
   vertical-align: top;
 }
+
+.col-position { width: 1%; white-space: nowrap; color: var(--phoenix-text-muted); font-variant-numeric: tabular-nums; }
 
 .tree-item {
   display: flex;
@@ -356,6 +421,7 @@ td {
 }
 
 .col-file {
+  position: relative;
   min-width: var(--asm-tree-file-min-width, 160px);
   max-width: var(--asm-tree-file-max-width, 280px);
   font-size: 0.76rem;
@@ -371,7 +437,7 @@ td {
   gap: 4px 8px;
   margin-top: 4px;
   font-size: 0.72rem;
-  color: #b45309;
+  color: var(--phoenix-warning-text);
 }
 
 .issue-icon {
@@ -384,7 +450,7 @@ td {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #92400e;
+  color: var(--phoenix-warning-text);
 }
 
 .role-icon {
@@ -394,11 +460,20 @@ td {
   width: 20px;
   height: 20px;
   border-radius: 4px;
-  background: #e2e8f0 center / 14px 14px no-repeat;
+  background: var(--phoenix-bg-elevated);
+  color: var(--phoenix-text-secondary);
+}
+
+.role-icon::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  background: currentColor;
+  mask: var(--role-icon-image) center / contain no-repeat;
 }
 
 .role-icon-dirty {
-  box-shadow: 0 0 0 1px #fdba74;
+  box-shadow: 0 0 0 1px var(--phoenix-warning-border);
 }
 
 .role-dirty-badge {
@@ -408,33 +483,34 @@ td {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #c2410c;
-  border: 1.5px solid #fff;
+  background: var(--phoenix-warning-text);
+  border: 1.5px solid var(--phoenix-bg-page);
   pointer-events: none;
 }
 
 .role-icon.icon-assembly {
-  background-color: #dbeafe;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%231d4ed8'%3E%3Cpath d='M2 5h5V2h2v3h5v2h-5v5H9V7H2V5z'/%3E%3C/svg%3E");
+  background-color: var(--phoenix-accent-soft);
+  color: var(--phoenix-accent);
+  --role-icon-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M2 5h5V2h2v3h5v2h-5v5H9V7H2V5z'/%3E%3C/svg%3E");
 }
 
 .role-icon.icon-part {
-  background-color: #f1f5f9;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23475569'%3E%3Cpath d='M3 3h10v10H3V3zm2 2v6h6V5H5z'/%3E%3C/svg%3E");
+  --role-icon-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 3h10v10H3V3zm2 2v6h6V5H5z'/%3E%3C/svg%3E");
 }
 
 .role-icon.icon-drawing {
-  background-color: #fef3c7;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23b45309'%3E%3Cpath d='M4 2h8l2 2v10H4V2zm1 3h6v1H5V5zm0 2h6v1H5V7zm0 2h4v1H5V9z'/%3E%3C/svg%3E");
+  background-color: var(--phoenix-warning-bg);
+  color: var(--phoenix-warning-text);
+  --role-icon-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 2h8l2 2v10H4V2zm1 3h6v1H5V5zm0 2h6v1H5V7zm0 2h4v1H5V9z'/%3E%3C/svg%3E");
 }
 
 .role-icon.icon-broken {
-  box-shadow: inset 0 -2px 0 #f59e0b;
+  box-shadow: inset 0 -2px 0 var(--phoenix-warning-border);
 }
 
 .role-icon.icon-instance {
-  background-color: #f8fafc;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%2394a3b8'%3E%3Ccircle cx='8' cy='8' r='3'/%3E%3C/svg%3E");
+  color: var(--phoenix-text-muted);
+  --role-icon-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='3'/%3E%3C/svg%3E");
 }
 
 .toggle {
@@ -446,13 +522,13 @@ td {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #cbd5e1;
+  background: var(--phoenix-text-muted);
 }
 
 .toggle-loading {
   font-size: 0.9rem;
   font-weight: 600;
-  color: #64748b;
+  color: var(--phoenix-text-muted);
 }
 
 .toggle-loading .pnw-expand-twistie {
@@ -481,12 +557,45 @@ td {
   font-size: 0.84rem;
   font-weight: 600;
   box-sizing: border-box;
-  background: #fff;
+  background: var(--phoenix-bg-elevated);
+  color: var(--phoenix-text);
 }
 
-.label-input-edited {
-  background: #fff7ed;
-  border-color: #fdba74;
+.label-input-edited,
+.label-input-mismatch {
+  background: var(--phoenix-warning-bg);
+  color: var(--phoenix-warning-text);
+  border-color: var(--phoenix-warning-border);
+}
+
+.label-recommendation {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  min-width: 0;
+  margin-top: 3px;
+  color: var(--phoenix-warning-text);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.recommendation-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-recommendation {
+  flex-shrink: 0;
+  padding: 0 5px;
+  border: 1px solid var(--phoenix-warning-border);
+  border-radius: 4px;
+  background: var(--phoenix-warning-bg);
+  color: var(--phoenix-warning-text);
+  font: inherit;
+  line-height: 1.4;
+  cursor: pointer;
 }
 
 .col-qty {
@@ -507,14 +616,15 @@ td {
   width: 22px;
   height: 22px;
   border-radius: 999px;
-  background: #d1fae5;
-  color: #047857;
+  background: var(--phoenix-success-bg);
+  color: var(--phoenix-success-text);
   font-size: 0.9rem;
   font-weight: 700;
   line-height: 1;
 }
 
 .status-badge {
+  white-space: nowrap;
   display: inline-block;
   padding: 2px 6px;
   border-radius: 4px;
@@ -523,13 +633,13 @@ td {
 }
 
 .status-badge.missing {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: var(--phoenix-danger-bg);
+  color: var(--phoenix-danger-text);
 }
 
 .status-badge.ambiguous {
-  background: #fef3c7;
-  color: #b45309;
+  background: var(--phoenix-warning-bg);
+  color: var(--phoenix-warning-text);
 }
 
 .status-muted {
@@ -537,11 +647,15 @@ td {
 }
 
 .qty-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
   padding: 2px 8px;
-  border: 1px solid #93c5fd;
+  border: 1px solid var(--phoenix-accent-border);
   border-radius: 999px;
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: var(--phoenix-accent-soft);
+  color: var(--phoenix-accent);
   font-size: 0.72rem;
   font-weight: 600;
   cursor: pointer;
@@ -554,7 +668,7 @@ td {
 }
 
 .instance-row {
-  background: #fafbfc;
+  background: var(--phoenix-bg-muted);
 }
 
 .instance-indent,
@@ -564,38 +678,72 @@ td {
 }
 
 tr.row-missing {
-  background: #fffbeb;
+  background: var(--phoenix-warning-bg);
 }
 
 tr.row-ambiguous {
-  background: #fff7ed;
+  background: var(--phoenix-warning-bg);
 }
 
-.col-action {
-  width: var(--asm-tree-action-width, 72px);
+.row-actions {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  width: max-content;
+  padding: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--phoenix-bg-elevated);
+  box-shadow: 0 2px 8px var(--phoenix-hover-overlay);
   white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+}
+
+tr:hover > .col-file > .row-actions,
+tr:focus-within > .col-file > .row-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.row-actions:empty { display: none; }
+
+@media (hover: none) {
+  .row-actions { opacity: 1; pointer-events: auto; }
 }
 
 .btn-row-action {
+  flex-shrink: 0;
+  white-space: nowrap;
   padding: 3px 8px;
   border-radius: 5px;
   border: 1px solid var(--border-strong);
-  background: #fff;
+  background: var(--phoenix-bg-elevated);
+  color: var(--phoenix-text);
   font-size: 0.74rem;
   cursor: pointer;
 }
 
 .btn-row-action:hover {
-  background: #f0f9ff;
-  border-color: #7dd3fc;
-  color: #0369a1;
+  background: var(--phoenix-accent-soft);
+  border-color: var(--phoenix-accent-border);
+  color: var(--phoenix-accent);
 }
+
+.label-row-actions { display: flex; flex-wrap: nowrap; gap: 4px; }
+.apply-row { color: var(--phoenix-accent); border-color: var(--phoenix-accent-border); }
 
 .file-link {
   padding: 0;
   border: none;
   background: none;
-  color: var(--accent, #2563eb);
+  color: var(--phoenix-accent);
   cursor: pointer;
   text-align: left;
   font: inherit;

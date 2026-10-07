@@ -43,7 +43,7 @@ function toggleCol(idx: number) {
           <span class="caa-gs-title">Grid 设置</span>
           <span class="caa-gs-sub mono">{{ containerId }}</span>
           <span class="caa-gs-type">{{ typeLabel(containerType) }}</span>
-          <button class="caa-gs-close" @click="emit('close')">&times;</button>
+          <button class="caa-gs-close" @click="emit('close')">关闭</button>
         </div>
 
         <!-- rows -->

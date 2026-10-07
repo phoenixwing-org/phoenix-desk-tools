@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Document, Folder, FolderOpened } from "@element-plus/icons-vue";
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import TreeBranch from "./TreeBranch.vue";
 import type { TreeNode } from "../api";
 
@@ -8,20 +8,25 @@ const props = defineProps<{
   node: TreeNode;
   selected: string | null;
   depth?: number;
+  expansion: ReadonlyMap<string, boolean>;
+  searching?: boolean;
 }>();
 
 const emit = defineEmits<{
   selectFile: [path: string];
+  keepFile: [path: string];
   pickDir: [path: string];
+  toggleDir: [path: string, expanded: boolean];
 }>();
 
-const expanded = ref((props.depth ?? 0) < 2);
+// Keep the workspace root visible; all child folders start collapsed outside search.
+const expanded = computed(() => props.expansion.get(props.node.path) ?? (props.searching || (props.depth ?? 0) === 0));
 const childCount = computed(() => props.node.children?.length ?? 0);
 const hasChildren = computed(() => childCount.value > 0);
 
 function toggleDir() {
   if (!hasChildren.value) return;
-  expanded.value = !expanded.value;
+  emit("toggleDir", props.node.path, !expanded.value);
 }
 
 function treeKindTag(kind?: string) {
@@ -37,7 +42,8 @@ function treeKindTag(kind?: string) {
 </script>
 
 <template>
-  <div v-if="node.type === 'file'" class="tree-row tree-file" :class="{ active: selected === node.path }" @click="emit('selectFile', node.path)">
+  <div v-if="node.type === 'file'" class="tree-row tree-file" :class="{ active: selected === node.path }"
+    @click="emit('selectFile', node.path)" @dblclick="emit('keepFile', node.path)">
     <span class="tree-twistie tree-twistie-leaf" aria-hidden="true">·</span>
     <el-tooltip :content="treeKindTag(node.kind)" placement="top" :show-after="400">
       <el-icon class="tree-kind-icon tree-file-icon" aria-hidden="true">
@@ -68,15 +74,19 @@ function treeKindTag(kind?: string) {
         @click.stop="emit('pickDir', node.path)"
       >📌</span>
     </button>
-    <div v-show="expanded && hasChildren" class="tree-children">
+    <div v-if="expanded && hasChildren" class="tree-children">
       <TreeBranch
         v-for="child in node.children ?? []"
         :key="child.path + child.name + child.type"
         :node="child"
         :selected="selected"
         :depth="(depth ?? 0) + 1"
+        :expansion="expansion"
+        :searching="searching"
         @select-file="(p) => emit('selectFile', p)"
+        @keep-file="(p) => emit('keepFile', p)"
         @pick-dir="(p) => emit('pickDir', p)"
+        @toggle-dir="(p, open) => emit('toggleDir', p, open)"
       />
     </div>
   </div>
@@ -93,6 +103,7 @@ function treeKindTag(kind?: string) {
   border-radius: 4px;
   font-size: 0.82rem;
   line-height: 1.35;
+  color: var(--phoenix-text);
 }
 
 .tree-twistie {
@@ -101,13 +112,13 @@ function treeKindTag(kind?: string) {
   text-align: center;
   font-size: 0.72rem;
   font-weight: 700;
-  color: #64748b;
+  color: var(--phoenix-text-muted);
   user-select: none;
 }
 
 .tree-twistie-leaf {
   font-weight: 400;
-  color: #cbd5e1;
+  color: var(--phoenix-text-muted);
 }
 
 .tree-kind-icon {
@@ -116,11 +127,11 @@ function treeKindTag(kind?: string) {
 }
 
 .tree-dir-icon {
-  color: var(--el-color-info);
+  color: var(--phoenix-text-secondary);
 }
 
 .tree-file-icon {
-  color: var(--el-text-color-secondary);
+  color: var(--phoenix-text-secondary);
 }
 
 .tree-label {
@@ -130,7 +141,7 @@ function treeKindTag(kind?: string) {
 
 .tree-dir-name {
   font-weight: 600;
-  color: #334155;
+  color: var(--phoenix-text-secondary);
 }
 
 .tree-dir-count {
@@ -138,7 +149,7 @@ function treeKindTag(kind?: string) {
   padding-left: 6px;
   font-size: 0.68rem;
   font-weight: 500;
-  color: #94a3b8;
+  color: var(--phoenix-text-muted);
 }
 
 .tree-dir-pick {
@@ -149,7 +160,7 @@ function treeKindTag(kind?: string) {
   cursor: pointer;
   font-size: 0.68rem;
   padding: 0 2px;
-  opacity: 0.35;
+  opacity: 0.65;
   transition: opacity 0.15s;
 }
 
@@ -166,13 +177,19 @@ function treeKindTag(kind?: string) {
 }
 
 .tree-file:hover {
-  background: #eef2ff;
+  background: var(--phoenix-hover-overlay);
+  color: var(--phoenix-text);
 }
 
 .tree-file.active {
-  background: #dbeafe;
+  background: var(--phoenix-accent-soft);
+  color: var(--phoenix-accent);
+  box-shadow: inset 2px 0 var(--phoenix-accent);
   font-weight: 500;
 }
+
+.tree-file.active .tree-kind-icon,
+.tree-file.active .tree-twistie { color: inherit; }
 
 .tree-dir-label {
   border: none;
@@ -183,16 +200,18 @@ function treeKindTag(kind?: string) {
 }
 
 .tree-dir-label:hover {
-  background: #f1f5f9;
+  background: var(--phoenix-hover-overlay);
 }
 
+.tree-dir-label:focus-visible { outline: 2px solid var(--phoenix-focus-ring); outline-offset: -2px; }
+
 .tree-dir-label.is-collapsed .tree-dir-name {
-  color: #475569;
+  color: var(--phoenix-text-secondary);
 }
 
 .tree-children {
   margin-left: 0.55em;
   padding-left: 0.45em;
-  border-left: 1px solid #d8dce3;
+  border-left: 1px solid var(--phoenix-border);
 }
 </style>

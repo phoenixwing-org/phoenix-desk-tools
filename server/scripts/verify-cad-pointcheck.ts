@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { readCadPointcheckFixtures } from "./cad-pointcheck-fixtures.js";
 import { pnwCreateDb } from "@phoenix-wing/db-node";
 import {
   loadBomPreview,
@@ -34,16 +35,11 @@ import {
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const deskRoot = path.resolve(scriptDir, "../..");
-const fixtureSubdir = "01-零件装配";
-const sourceNames = [
-  "8002.001-H-PX-滑动装置.ASSY.FCStd",
-  "8003.001-H-PX-滑轨.FCStd",
-  "8003.001-H-PX-滑轨.Drawing.FCStd",
-  "8004.001-H-PX-滑块.FCStd",
-  "8005.001-H-PX-螺栓.FCStd",
-] as const;
+const fixtureManifest = readCadPointcheckFixtures(optionValue(process.argv.slice(2), "--fixture-manifest"), deskRoot);
+const fixtureSubdir = fixtureManifest.subdir;
+const sourceNames = fixtureManifest.files;
 const originalPartName = sourceNames[1];
-const renamedPartName = "8103.002-H-PX-滑轨点检.FCStd";
+const renamedPartName = "730901.002-H-DEMO-PointcheckBlock.FCStd";
 const assemblyName = sourceNames[0];
 const drawingName = sourceNames[2];
 
@@ -70,6 +66,8 @@ function optionValue(args: string[], name: string): string | undefined {
 }
 
 function parseOptions(args: string[]): CliOptions {
+  const sourceRoot = optionValue(args, "--source-root") || process.env.PHOENIX_FREECAD_STUDY_ROOT;
+  assert(sourceRoot, "Pass --source-root for the explicitly authorized local fixture directory");
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const configuredFreecadCmd = path.resolve(
     optionValue(args, "--freecadcmd")
@@ -77,7 +75,7 @@ function parseOptions(args: string[]): CliOptions {
       || "/Applications/FreeCAD.app/Contents/Resources/bin/freecadcmd",
   );
   return {
-    sourceRoot: path.resolve(optionValue(args, "--source-root") || process.env.PHOENIX_FREECAD_STUDY_ROOT || path.join(deskRoot, "../phoenix-freecad-study")),
+    sourceRoot: path.resolve(sourceRoot),
     autoCadRoot: path.resolve(optionValue(args, "--auto-cad-root") || process.env.KT_AUTO_CAD_ROOT || path.join(deskRoot, "../kt-auto-cad")),
     freecadCmd: assertSafeFreecadCommand(configuredFreecadCmd),
     receipt: path.resolve(optionValue(args, "--receipt") || path.join(os.tmpdir(), `phoenix-cad-pointcheck-${stamp}.json`)),
@@ -118,6 +116,8 @@ function ensureInputs(options: CliOptions): void {
   assert(fs.statSync(options.freecadCmd).isFile(), `FreeCADCmd is not a file: ${options.freecadCmd}`);
   for (const name of sourceNames) {
     const filename = path.join(options.sourceRoot, fixtureSubdir, name);
+    const relative = path.relative(fs.realpathSync(options.sourceRoot), fs.realpathSync(filename));
+    assert(relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative), "Fixture resolves outside the authorized source directory");
     assert(fs.statSync(filename).isFile(), `Required source fixture is missing: ${filename}`);
   }
 }
@@ -401,31 +401,31 @@ async function main(): Promise<void> {
 
     const targetRel = rel(originalPartName);
     const targetFields = {
-      PartNumber: "8103",
+      PartNumber: "730901",
       PartVersion: "002",
       TypeCode: "h",
-      ModelSeries: "px",
-      PartName: "滑轨点检 & A+B",
-      label: "8103.002-滑轨点检 & A+B",
+      ModelSeries: "demo",
+      PartName: "PointcheckBlock & A+B",
+      label: "730901.002-PointcheckBlock & A+B",
     };
     const targetWrite = await writeBomToFcstd(workspace, targetRel, targetFields);
     const targetEmbedded = readFcstdEmbeddedBomFields(path.join(workspace, targetRel));
     const targetIndex = readAssetRow(workspace, targetRel);
     assert(targetWrite.index_updated === true, "Target BOM write did not update the existing Auto CAD index row");
-    assert(targetEmbedded?.PartNumber === "8103" && targetEmbedded?.PartVersion === "002", "Target embedded BOM fields were not written");
-    assert(targetEmbedded?.TypeCode === "H" && targetEmbedded?.ModelSeries === "PX", "Target embedded fields were not normalized");
+    assert(targetEmbedded?.PartNumber === "730901" && targetEmbedded?.PartVersion === "002", "Target embedded BOM fields were not written");
+    assert(targetEmbedded?.TypeCode === "H" && targetEmbedded?.ModelSeries === "DEMO", "Target embedded fields were not normalized");
     assert(targetEmbedded?.PartName === targetFields.PartName && targetEmbedded?.label === targetFields.label, "Target embedded special characters did not round-trip");
-    assert(targetIndex?.part_number === "8103" && targetIndex?.part_version === "002", "Target index identity is stale after BOM write");
+    assert(targetIndex?.part_number === "730901" && targetIndex?.part_version === "002", "Target index identity is stale after BOM write");
     assert(targetIndex?.part_name === targetFields.PartName && targetIndex?.label === targetFields.label, "Target index display fields are stale after BOM write");
 
     const assemblyRel = rel(assemblyName);
     const assemblyFields = {
-      PartNumber: "8202",
+      PartNumber: "730902",
       PartVersion: "003",
       TypeCode: "H",
-      ModelSeries: "PX",
-      PartName: "滑动装置点检",
-      label: "8202.003-滑动装置点检",
+      ModelSeries: "DEMO",
+      PartName: "PointcheckAssembly",
+      label: "730902.003-PointcheckAssembly",
     };
     const assemblyWrite = await writeBomToFcstd(workspace, assemblyRel, assemblyFields);
     const assemblyPreview = loadBomPreview(workspace, assemblyRel);

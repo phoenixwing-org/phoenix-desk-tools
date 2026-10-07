@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
+import { computed, ref } from "vue";
 import type { LauncherPrefs } from "../types/config";
 import {
   pdtCreateWorkspaceController,
+  pdtRecentWorkspaceType,
   type PdtWorkspaceApi,
 } from "./pdtWorkspaceController";
 
@@ -44,6 +46,15 @@ function api(initialPath = "/work/a") {
 }
 
 describe("Desk Workspace controller adapter", () => {
+  it("updates a controlled recent type from saved prefs without reopening or reloading the page", () => {
+    const prefs = ref(launcher(["/work/a"]));
+    prefs.value.recent_workspace_entries![0]!.workspace_type_id = "cad";
+    const displayed = computed(() => pdtRecentWorkspaceType(prefs.value, "/work/a/", "cad"));
+    expect(displayed.value).toBe("cad");
+    prefs.value = { ...prefs.value, recent_workspace_entries: [{ path: "/work/a", exists: true, workspace_type_id: "code" }] };
+    expect(displayed.value).toBe("code");
+    expect(pdtRecentWorkspaceType(prefs.value, "/work/absent", "mixed")).toBe("mixed");
+  });
   it("seeds the existing singleton without reopening it, then switches and closes through lifecycle", async () => {
     const host = api();
     const applied: string[] = [];

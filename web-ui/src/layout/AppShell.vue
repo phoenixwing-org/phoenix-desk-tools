@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch, type Component } from "vue";
+import { cadBatchNavigationPage } from "../composables/cadBatchTools";
 import {
   PnwDockablePrimarySection,
   PnwDockableToolWindow,
@@ -18,6 +19,8 @@ import StatusBar from "./StatusBar.vue";
 import WorkspaceTreeSidebar from "./WorkspaceTreeSidebar.vue";
 import WelcomePage from "../pages/WelcomePage.vue";
 import WorkbenchViewLoadingPage from "./WorkbenchViewLoadingPage.vue";
+import WorkbenchTabBar from "./WorkbenchTabBar.vue";
+import { createWorkbenchViewCache } from "./workbenchViewCache";
 import PlaceholderPage from "../pages/PlaceholderPage.vue";
 import { PAGE_COMPONENTS, preloadPageComponent } from "./pageRegistry";
 import { pageSideBlockComponent } from "./pageSideBlockRegistry";
@@ -33,6 +36,7 @@ import CaaRelatedFilePreviewHost from "../components/caa/CaaRelatedFilePreviewHo
 import AsyncProgressOverlay from "phoenix-wing/components/PnwAsyncProgressOverlay.vue";
 import GlobalWorkbenchBottomPanel from "../components/workbench/GlobalWorkbenchBottomPanel.vue";
 import { usePdtWorkbenchBottomPanel } from "../composables/usePdtWorkbenchBottomPanel";
+import { useWorkbenchBottomPanelState } from "../composables/useWorkbenchBottomContribution";
 import { buildRibbonTabs } from "./ribbon/ribbonConfig";
 import { ribbonIconFor } from "./ribbon/ribbonIcons";
 import GiteeIcon from "../components/icons/GiteeIcon.vue";
@@ -89,9 +93,16 @@ const uiPrefs = useUiPrefsStore();
 const pnwBottomPanel = usePdtWorkbenchBottomPanel(shell);
 const activeTab = computed(() => shell.activeTab());
 const pnwActiveBottomTabId = ref("output");
+const bottomPanelState = useWorkbenchBottomPanelState();
+watch(bottomPanelState.outputRevealRevision, () => { pnwActiveBottomTabId.value = "output"; });
 const displayedTab = shallowRef<WorkbenchTab>();
 const pendingViewLabel = ref("");
 const viewLoadError = ref("");
+const editorMaximized = ref(false);
+const viewCache = createWorkbenchViewCache(pageComponent);
+const cachedViewNames = computed(() => shell.tabs.value.map(tab => viewCache.nameFor(tab.id)));
+const visibleTab = computed(() => displayedTab.value && shell.getTab(displayedTab.value.id));
+watch(() => shell.tabs.value.map(tab => tab.id), ids => viewCache.retain(ids));
 
 const viewSwitch = createAsyncViewSwitchController<WorkbenchTab>({
   load: preloadPageComponent,
@@ -303,7 +314,7 @@ onUnmounted(() => {
       class="desk-pnw-workbench-shell"
       :nodes="pnwNavigationNodes"
       :presentation="pnwDisplayPreferences.presentation"
-      :active-node-id="shell.currentPage.value"
+      :active-node-id="cadBatchNavigationPage(shell.currentPage.value)"
       :expanded-node-ids="pnwExpandedNodeIds"
       :ribbon-appearance="pnwDisplayPreferences.ribbonAppearance"
       :tree-collapsed="pnwDisplayPreferences.treeCollapsed"
@@ -314,9 +325,13 @@ onUnmounted(() => {
       :active-bottom-tab-id="pnwActiveBottomTabId"
       :color-scheme="pnwDisplayPreferences.colorScheme"
       :tabs="shell.tabBarTabs.value"
+      v-model:editor-maximized="editorMaximized"
       :tab-bar-placement="pnwDisplayPreferences.tabBarPlacement"
       :active-tab-id="shell.activeTabId.value"
-      :can-close-all-tabs="shell.tabs.value.length > 1"
+      :can-close-all-tabs="shell.tabs.value.length > 0"
+      :tab-context-actions="['refresh', 'close', 'close-others', 'close-right', 'close-all']"
+      :tab-action-disabled="shell.tabActionDisabled"
+      @tab-action="shell.runTabAction"
       :brand-title="shell.appConfig.value?.title ?? 'Phoenix Desk Tools'"
       :brand-subtitle="workspaceShort"
       :show-empty-view="!activeTab"
@@ -339,6 +354,10 @@ onUnmounted(() => {
       @update:tab-bar-placement="updatePnwTabBarPlacement"
       @update:display-settings-positions="updatePnwSettingsPositions"
     >
+      <template #pages>
+        <WorkbenchTabBar :in-header="pnwDisplayPreferences.tabBarPlacement === 'header'"
+          :color-scheme="pnwDisplayPreferences.colorScheme" v-model:editor-maximized="editorMaximized" />
+      </template>
       <template #brand>
         <button
           type="button"
@@ -374,12 +393,11 @@ onUnmounted(() => {
         ><GiteeIcon /></a>
       </template>
       <div class="shell-pages" data-tour="main-content">
-        <KeepAlive :max="24">
+        <KeepAlive :include="cachedViewNames">
           <component
-            v-if="displayedTab"
-            :key="displayedTab.id"
-            :is="pageComponent(displayedTab.pageId)"
-            :workbench-tab-id="displayedTab.id"
+            v-if="visibleTab"
+            :key="visibleTab.id"
+            :is="viewCache.componentFor(visibleTab)"
           />
           <WorkbenchViewLoadingPage
             v-else-if="activeTab"
@@ -604,7 +622,11 @@ onUnmounted(() => {
 }
 
 .shell-pages {
-  flex: 1;
+  /* Wing Editor is a block, not a flex parent: flex:1 alone gives no height.
+   * Keep PageLayout's body bounded so it, not the outer Editor, owns scrolling. */
+  width: 100%;
+  height: 100%;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
   position: relative;
@@ -643,8 +665,8 @@ onUnmounted(() => {
   color: inherit;
 }
 
-.shell-pages :deep(> .page),
-.shell-pages :deep(> div) {
+.shell-pages :deep(> .page:not(.desk-page-layout)),
+.shell-pages :deep(> div:not(.desk-page-layout)) {
   width: 100%;
   max-width: none;
   box-sizing: border-box;
@@ -652,18 +674,4 @@ onUnmounted(() => {
   overflow: auto;
 }
 
-/* 页内自管滚动（如 Git：固定 PageHeader，仅 body 区滚动） */
-.shell-pages :deep(> .page.git-page) {
-  min-height: 0;
-  overflow: hidden;
-}
-
-</style>
-
-<style>
-/* 配置弹层内容区（非 scoped，作用于 ConfigPage 根节点） */
-.config-modal-panel .config-page {
-  padding: 20px 24px 28px;
-  box-sizing: border-box;
-}
 </style>

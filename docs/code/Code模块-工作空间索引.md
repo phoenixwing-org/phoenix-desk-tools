@@ -1,5 +1,7 @@
 # Code 模块 · 工作空间索引
 
+> 已退役（2026-10-04）：Desk 已移除本页描述的索引/扫描入口及 API，不删除原数据库。见 [当前边界](Desk-Code功能退役.md)。下文保留历史。
+
 > 表前缀 **`phoenix_code_*`**，与 CAD 索引共用 `.phoenix/phoenix-workspace.sqlite`。  
 > **勿用 `phoenix_audit_*`**：该前缀保留给 CAD 改名 / XLink 审计（`phoenix_audit_rename_log` 等）。
 

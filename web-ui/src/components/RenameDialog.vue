@@ -12,11 +12,12 @@ const props = defineProps<{
   preferredNewFilename?: string;
   form: Partial<BomFields>;
   baseline: Partial<BomFields>;
+  bomReadonly?: boolean;
 }>();
 
 const emit = defineEmits<{
   close: [];
-  renamed: [newRel: string];
+  renamed: [newRel: string, needsReview: boolean];
 }>();
 
 const rd = useRenameDialog(
@@ -24,6 +25,7 @@ const rd = useRenameDialog(
   toRef(props, "originalFilename"),
   toRef(props, "form"),
   toRef(props, "baseline"),
+  toRef(props, "bomReadonly"),
 );
 
 // Sync parent open/close
@@ -46,7 +48,7 @@ async function onExecuteRename() {
   if (rd.renamed.value) {
     const newRel =
       rd.lastRenameLog.value?.new_repo_rel_path || props.rel;
-    emit("renamed", newRel);
+    emit("renamed", newRel, Boolean(rd.pageError.value));
   }
 }
 </script>
@@ -72,6 +74,7 @@ async function onExecuteRename() {
         class="err-alert"
       />
 
+      <p v-if="rd.completionNote.value" class="muted" role="status">{{ rd.completionNote.value }}</p>
       <!-- 名称区 -->
       <div class="rename-grid">
         <span class="label">磁盘当前名</span>
@@ -89,6 +92,11 @@ async function onExecuteRename() {
           spellcheck="false"
           @keyup.enter="onExecuteRename"
         />
+      </div>
+
+      <div v-if="rd.sameFilename.value && !rd.renamed.value && !rd.busy.value" class="same-filename-notice" role="status">
+        <strong>文件名一致，无需改名</strong>
+        <span>目标文件名与磁盘当前名相同。修改目标文件名后才能执行；勾选引用选项不会单独触发修正。</span>
       </div>
 
       <!-- FCStd 引用修正选项 -->
@@ -236,7 +244,7 @@ async function onExecuteRename() {
   padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: #fafbfc;
+  background: var(--phoenix-bg-muted);
 }
 
 .options-section legend {
@@ -246,17 +254,27 @@ async function onExecuteRename() {
 }
 
 .option-row {
-  margin-top: 8px;
+  display: grid;
+  grid-template-columns: minmax(180px, 0.9fr) minmax(0, 1.1fr);
+  align-items: center;
+  gap: 8px 16px;
+  padding: 8px 0;
 }
+.option-row + .option-row { border-top: 1px solid var(--border); }
+.option-row :deep(.el-checkbox) { height: auto; margin-right: 0; }
+.option-row :deep(.el-checkbox__label) { white-space: normal; line-height: 1.45; }
 
 .option-hint {
-  margin: 2px 0 0 24px;
+  margin: 0;
   font-size: 0.75rem;
   line-height: 1.35;
 }
+.same-filename-notice { display: grid; gap: 4px; margin: 0 0 16px; padding: 10px 12px; border: 1px solid var(--phoenix-warning-border); border-left-width: 4px; border-radius: 6px; background: var(--phoenix-warning-bg); color: var(--phoenix-warning-text); }
+.same-filename-notice span { font-size: .8rem; line-height: 1.5; }
 
 .actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   align-items: center;
   margin-bottom: 12px;
@@ -297,12 +315,12 @@ async function onExecuteRename() {
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: #fafbfc;
+  background: var(--phoenix-bg-muted);
 }
 
 .record-card.latest {
-  border-color: #93c5fd;
-  background: #eff6ff;
+  border-color: var(--phoenix-accent-border);
+  background: var(--phoenix-accent-soft);
 }
 
 .record-row {
@@ -329,14 +347,14 @@ async function onExecuteRename() {
   border-radius: 999px;
   font-size: 0.68rem;
   font-weight: 600;
-  color: #1d4ed8;
-  background: #dbeafe;
-  border: 1px solid #93c5fd;
+  color: var(--phoenix-accent);
+  background: var(--phoenix-accent-soft);
+  border: 1px solid var(--phoenix-accent-border);
   flex-shrink: 0;
 }
 
 .record-row-main .old {
-  color: #64748b;
+  color: var(--muted);
   text-decoration: line-through;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -345,7 +363,7 @@ async function onExecuteRename() {
 }
 
 .record-row-main .new {
-  color: #0f172a;
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -364,7 +382,7 @@ async function onExecuteRename() {
 }
 
 .record-meta-tip {
-  color: #1d4ed8;
+  color: var(--phoenix-accent);
 }
 
 .empty {

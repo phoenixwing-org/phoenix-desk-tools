@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { DocumentCopy } from "@element-plus/icons-vue";
 import { useGitDiffPreview } from "../../composables/useGitDiffPreview";
 
 const props = withDefaults(
@@ -29,12 +28,12 @@ function onClick() {
     <el-button
       link
       size="small"
-      class="git-icon-btn"
+      class="git-action-btn"
       :disabled="disabled"
       :aria-label="`${tooltip} ${path}`"
       @click.stop="onClick"
     >
-      <el-icon><DocumentCopy /></el-icon>
+      差异
     </el-button>
   </el-tooltip>
 </template>

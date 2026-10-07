@@ -41,7 +41,7 @@ class TestModelSeries(unittest.TestCase):
 
     def test_hints_from_location(self) -> None:
         h = hints_from_fcstd_location(
-            "100337.001-H-ABC-PULL-GEAR-RING.FCStd",
+            "720422.001-H-ABC-TEST-SPACER-RING.FCStd",
             "./SampleABC001/z.FCStd",
         )
         self.assertEqual(h.get("ModelSeries"), "ABC")
@@ -85,13 +85,13 @@ class TestHints(unittest.TestCase):
 class TestRefinePartName(unittest.TestCase):
     def test_strip_full_filename_style_label(self) -> None:
         name = refine_inferred_part_name(
-            "100337.001-H-ABC-PULL-GEAR-RING",
-            part_number="100337",
+            "720422.001-H-ABC-TEST-SPACER-RING",
+            part_number="720422",
             part_version="001",
             type_code="H",
             model_series="ABC",
         )
-        self.assertEqual(name, "PULL-GEAR-RING")
+        self.assertEqual(name, "TEST-SPACER-RING")
 
     def test_strip_label_formula(self) -> None:
         name = refine_inferred_part_name(
@@ -103,38 +103,38 @@ class TestRefinePartName(unittest.TestCase):
 
     def test_plain_name_unchanged(self) -> None:
         self.assertEqual(
-            refine_inferred_part_name("永磁自动切换起吊机", part_number="100601", part_version="001"),
-            "永磁自动切换起吊机",
+            refine_inferred_part_name("示例装配台", part_number="720211", part_version="001"),
+            "示例装配台",
         )
 
     def test_infer_from_filename(self) -> None:
         name = infer_part_name_from_fcstd_filename(
-            "100337.001-H-ABC-PULL-GEAR-RING.FCStd",
-            part_number="100337",
+            "720422.001-H-ABC-TEST-SPACER-RING.FCStd",
+            part_number="720422",
             part_version="001",
             type_code="H",
             model_series="ABC",
         )
-        self.assertEqual(name, "PULL-GEAR-RING")
+        self.assertEqual(name, "TEST-SPACER-RING")
 
     def test_coerce_prefers_label_then_filename(self) -> None:
         name = coerce_inferred_part_name(
             "",
-            "100337.001-H-ABC-PULL-GEAR-RING",
+            "720422.001-H-ABC-TEST-SPACER-RING",
             filename="ignored.FCStd",
-            part_number="100337",
+            part_number="720422",
             part_version="001",
             type_code="H",
             model_series="ABC",
         )
-        self.assertEqual(name, "PULL-GEAR-RING")
+        self.assertEqual(name, "TEST-SPACER-RING")
 
     def test_existing_part_name_not_modified(self) -> None:
         self.assertEqual(
             coerce_inferred_part_name(
                 "  自定义名  ",
-                "100337.001-H-ABC-PULL-GEAR-RING",
-                part_number="100337",
+                "720422.001-H-ABC-TEST-SPACER-RING",
+                part_number="720422",
                 part_version="001",
             ),
             "自定义名",
@@ -142,8 +142,8 @@ class TestRefinePartName(unittest.TestCase):
 
     def test_auto_infer_fields_from_label(self) -> None:
         """无显式 BOM 字段时，从 label 自身解析编号/版本/类型/型号。"""
-        name = refine_inferred_part_name("100337.001-H-ABC-PULL-GEAR-RING")
-        self.assertEqual(name, "PULL-GEAR-RING")
+        name = refine_inferred_part_name("720422.001-H-ABC-TEST-SPACER-RING")
+        self.assertEqual(name, "TEST-SPACER-RING")
 
     def test_auto_infer_from_filename_only(self) -> None:
         name = infer_part_name_from_fcstd_filename("100082.002-R-FooBar.FCStd")
@@ -155,46 +155,46 @@ class TestRefinePartName(unittest.TestCase):
 
     def test_drawing_suffix_stripped(self) -> None:
         name = infer_part_name_from_fcstd_filename(
-            "100337.001-H-ABC-PULL-GEAR-RING.Drawing.FCStd",
-            part_number="100337",
+            "720422.001-H-ABC-TEST-SPACER-RING.Drawing.FCStd",
+            part_number="720422",
             part_version="001",
             type_code="H",
             model_series="ABC",
         )
-        self.assertEqual(name, "PULL-GEAR-RING")
+        self.assertEqual(name, "TEST-SPACER-RING")
 
     def test_coerce_picks_shorter_valid_name(self) -> None:
         name = coerce_inferred_part_name(
             "",
-            "100337.001-H-ABC-PULL-GEAR-RING",
-            filename="100337.001-H-ABC-PULL-GEAR-RING.FCStd",
+            "720422.001-H-ABC-TEST-SPACER-RING",
+            filename="720422.001-H-ABC-TEST-SPACER-RING.FCStd",
         )
-        self.assertEqual(name, "PULL-GEAR-RING")
+        self.assertEqual(name, "TEST-SPACER-RING")
 
     def test_force_update_overwrites_existing_part_name(self) -> None:
         kept = resolve_part_name_for_scan(
-            "100337.001-H-ABC-PULL-GEAR-RING",
-            "100337.001-H-ABC-PULL-GEAR-RING",
-            filename="100337.001-H-ABC-PULL-GEAR-RING.FCStd",
-            part_number="100337",
+            "720422.001-H-ABC-TEST-SPACER-RING",
+            "720422.001-H-ABC-TEST-SPACER-RING",
+            filename="720422.001-H-ABC-TEST-SPACER-RING.FCStd",
+            part_number="720422",
             part_version="001",
             type_code="H",
             model_series="ABC",
             force_update=False,
         )
-        self.assertEqual(kept, "100337.001-H-ABC-PULL-GEAR-RING")
+        self.assertEqual(kept, "720422.001-H-ABC-TEST-SPACER-RING")
 
         refined = resolve_part_name_for_scan(
-            "100337.001-H-ABC-PULL-GEAR-RING",
-            "100337.001-H-ABC-PULL-GEAR-RING",
-            filename="100337.001-H-ABC-PULL-GEAR-RING.FCStd",
-            part_number="100337",
+            "720422.001-H-ABC-TEST-SPACER-RING",
+            "720422.001-H-ABC-TEST-SPACER-RING",
+            filename="720422.001-H-ABC-TEST-SPACER-RING.FCStd",
+            part_number="720422",
             part_version="001",
             type_code="H",
             model_series="ABC",
             force_update=True,
         )
-        self.assertEqual(refined, "PULL-GEAR-RING")
+        self.assertEqual(refined, "TEST-SPACER-RING")
 
 
 class TestComposeLabelSlug(unittest.TestCase):
@@ -265,13 +265,13 @@ class TestRecommendedFilename(unittest.TestCase):
 
     def test_with_model_series(self) -> None:
         s = compose_fcstd_recommended_filename(
-            part_number="100337",
+            part_number="720422",
             part_version="001",
             type_code="H",
             model_series="ABC",
-            part_name="PULL-GEAR-RING",
+            part_name="TEST-SPACER-RING",
         )
-        self.assertEqual(s, "100337.001-H-ABC-PULL-GEAR-RING.FCStd")
+        self.assertEqual(s, "720422.001-H-ABC-TEST-SPACER-RING.FCStd")
 
     def test_standard_part_omits_model_series(self) -> None:
         s = compose_fcstd_recommended_filename(
@@ -295,18 +295,18 @@ class TestRecommendedFilename(unittest.TestCase):
 
     def test_assy_suffix_preserved(self) -> None:
         s = compose_fcstd_recommended_filename(
-            part_number="100601",
+            part_number="720211",
             part_version="001",
             type_code="H",
-            model_series="5TA",
-            part_name="永磁自动切换起吊机",
+            model_series="ALT",
+            part_name="示例装配台",
             suffix=".ASSY.FCStd",
         )
-        self.assertEqual(s, "100601.001-H-5TA-永磁自动切换起吊机.ASSY.FCStd")
+        self.assertEqual(s, "720211.001-H-ALT-示例装配台.ASSY.FCStd")
 
     def test_infer_assy_suffix(self) -> None:
         self.assertEqual(
-            infer_fcstd_name_suffix("100601.001-H-5TA-foo.ASSY.FCStd"),
+            infer_fcstd_name_suffix("720211.001-H-ALT-foo.ASSY.FCStd"),
             ".ASSY.FCStd",
         )
         self.assertEqual(infer_fcstd_name_suffix("a.Drawing.FCStd"), ".Drawing.FCStd")

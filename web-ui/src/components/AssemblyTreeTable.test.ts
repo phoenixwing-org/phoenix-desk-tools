@@ -90,7 +90,7 @@ describe("AssemblyTreeTable characterization", () => {
   it("真实 SSR 保留五列、根/子层级、状态和工具栏", async () => {
     const html = await render();
     const visible = text(html);
-    expect(visible).toContain("链接标签 目标文件 数量 状态 操作");
+    expect(visible).toContain("# 链接标签 数量 状态 目标文件");
     expect(html).toContain('value="泵体实例"');
     expect(visible).toContain("Root.Assy.FCStd");
     expect(visible).toContain("Child.FCStd");
@@ -99,17 +99,18 @@ describe("AssemblyTreeTable characterization", () => {
     expect(visible).toContain("改链接");
     expect(visible).toContain("全部展开");
     expect(visible).toContain("全部折叠");
-    expect(visible).toContain("标签已修改，点「应用」后写回 FCStd");
+    expect(visible).toContain("有待应用标签");
     expect((html.match(/<tbody[^>]*>[\s\S]*?<\/tbody>/u)?.[0].match(/<tr(?:\s|>)/gu) ?? [])).toHaveLength(4);
   });
 
-  it("缺失行保持只读，其他可编辑行保留输入 key 与动作列", async () => {
+  it("缺失与歧义行保持只读，已解析行保留输入 key 与悬浮操作", async () => {
     const html = await render();
-    expect((html.match(/class="label-input/g) ?? [])).toHaveLength(3);
+    expect((html.match(/class="label-input/g) ?? [])).toHaveLength(2);
     expect((html.match(/value="泵体实例"/gu) ?? [])).toHaveLength(2);
-    expect(html).toContain('value="共享实例"');
+    expect(html).not.toContain('value="共享实例"');
     expect(html).not.toContain('value="缺失实例"');
-    expect((html.match(/class="col-action"/gu) ?? [])).toHaveLength(5);
+    expect(html).not.toContain('class="col-action"');
+    expect((html.match(/class="row-actions"/gu) ?? [])).toHaveLength(4);
   });
 
   it("真实 SSR 保留 loading、empty、只读和无操作列分支", async () => {

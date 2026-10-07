@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from "vue";
-import { fetchAssemblyTreeByHost, patchLinkLabels, type AssemblyTreeNode } from "../../api";
+import { fetchAssemblyTreeByHost, patchLinkLabels, type AssemblyTreeNode, type LinkLabelPatch } from "../../api";
+import { assemblyTreeRemainingPatches } from "../../models/assemblyTreeViewModel";
 import AssemblyTreeTable from "../AssemblyTreeTable.vue";
 import { useAppShell } from "../../composables/useAppShell";
 import { useFileDetailContext } from "../../composables/useFileDetailContext";
@@ -9,6 +10,7 @@ import { getAssemblyTreeDepth, setAssemblyTreeDepth } from "../../utils/uiPrefs"
 
 const emit = defineEmits<{
   "edits-change": [dirty: boolean];
+  "busy-change": [busy: boolean];
 }>();
 
 const shell = useAppShell();
@@ -20,6 +22,8 @@ const treeLoading = ref(false);
 const treeNodes = ref<AssemblyTreeNode[]>([]);
 const assemblyTreeRef = ref<InstanceType<typeof AssemblyTreeTable> | null>(null);
 const savingLabels = ref(false);
+const replacingLink = ref(false);
+watch(() => savingLabels.value || replacingLink.value, busy => emit("busy-change", busy), { flush: "sync" });
 const labelEdits = ref(false);
 
 let loadSeq = 0;
@@ -84,8 +88,10 @@ function ensureAssemblyLoaded(opts?: { refreshDisk?: boolean; force?: boolean })
   void loadAssemblyTree({ ...opts, allowEmptyRetry: true });
 }
 
-async function saveAssemblyLabels() {
-  const patches = assemblyTreeRef.value?.getPendingPatches() ?? [];
+async function saveAssemblyLabels(selected?: LinkLabelPatch[]) {
+  if (savingLabels.value) return;
+  const allPending = assemblyTreeRef.value?.getPendingPatches() ?? [];
+  const patches = selected ?? allPending;
   if (!patches.length) return;
   const pendingChanges = assemblyTreeRef.value?.getPendingLabelChanges() ?? [];
   savingLabels.value = true;
@@ -102,8 +108,7 @@ async function saveAssemblyLabels() {
       shell.appendLog,
       {
         label_patches: data.label_patches,
-        label_changes:
-          data.label_changes?.length ? data.label_changes : pendingChanges,
+        label_changes: data.label_changes ?? (failed.length ? [] : pendingChanges),
         applied_hosts: data.applied_hosts,
         failed: failed.map((f) => ({
           host_repo_rel_path: f.host_repo_rel,
@@ -113,11 +118,11 @@ async function saveAssemblyLabels() {
       { source: "file_detail", title: "已保存链接标签" },
     );
     shell.setStatus(msg);
-    assemblyTreeRef.value?.resetEdits();
-    labelEdits.value = false;
-    emit("edits-change", false);
+    const remaining = assemblyTreeRemainingPatches(allPending, patches, failed);
     invalidateAssemblyCache(rel.value);
     await loadAssemblyTree({ force: true });
+    await nextTick();
+    assemblyTreeRef.value?.restorePendingPatches(remaining);
   } catch (e) {
     pageError.value = String(e);
     shell.setStatus(String(e));
@@ -130,6 +135,7 @@ function discardAssemblyLabelEdits() {
   assemblyTreeRef.value?.resetEdits();
   labelEdits.value = false;
   emit("edits-change", false);
+  shell.setStatus("已放弃装配标签修改，未写入 CAD 文件");
 }
 
 function onAssemblyEditsChange(dirty: boolean) {
@@ -140,12 +146,13 @@ function onAssemblyEditsChange(dirty: boolean) {
 function onApplyRuleLabelsPreview() {
   const stats = assemblyTreeRef.value?.applyRuleLabelsPreview();
   if (!stats) return;
+  const skipped = stats.noRule ? `；${stats.noRule} 处无法确认，已跳过` : "";
   if (stats.filled > 0) {
-    shell.setStatus(`已按规则填入 ${stats.filled} 处，请点「应用」写回 FCStd`);
+    shell.setStatus(`已按规则填入 ${stats.filled} 处，请逐行或点「应用全部」写回当前总成${skipped}`);
     return;
   }
   if (stats.unchanged > 0) {
-    shell.setStatus(`共 ${stats.unchanged} 处标签已与规则名一致，无需修改`);
+    shell.setStatus(`共 ${stats.unchanged} 处已与建议一致${labelEdits.value ? '；仍有未保存修改，请点「应用」' : '，无需修改'}${skipped}`);
     return;
   }
   shell.setStatus(
@@ -185,16 +192,9 @@ watch(treeMode, (mode) => {
   setAssemblyTreeDepth(mode);
 });
 
-watch([rel, treeMode], () => {
+watch([rel, treeMode, activeSubTab], () => {
   ensureAssemblyLoaded();
-});
-
-watch(
-  () => activeSubTab.value,
-  (tab) => {
-    if (tab === "assembly") ensureAssemblyLoaded();
-  },
-);
+}, { immediate: true });
 
 defineExpose({
   hasLabelEdits: () => Boolean(assemblyTreeRef.value?.getPendingPatches().length),
@@ -204,24 +204,6 @@ defineExpose({
 
 <template>
   <section class="assembly-block">
-    <div class="section-head">
-      <el-button
-        size="small"
-        :disabled="treeLoading || !treeNodes.length"
-        title="将规则名填入各行链接标签文本框，不写盘"
-        @click="onApplyRuleLabelsPreview"
-      >
-        按规则填入标签
-      </el-button>
-      <el-radio-group v-model="treeMode" size="small" class="section-controls">
-        <el-radio-button value="first">第一级</el-radio-button>
-        <el-radio-button value="full">全部层级</el-radio-button>
-      </el-radio-group>
-    </div>
-    <p class="asm-hint muted">
-      链接标签列仿 FreeCAD 零件树（图标 + 可编辑名）；目标文件单独一列。<strong>缺失</strong>行不可改标签，请用「改链接」；歧义在标签下显示 ⚠。
-      「按规则填入标签」只改已解析行，确认后点底部「应用」写回。
-    </p>
     <AssemblyTreeTable
       ref="assemblyTreeRef"
       :nodes="treeNodes"
@@ -232,69 +214,32 @@ defineExpose({
       @need-full-depth="onExpandAllTree"
       @edits-change="onAssemblyEditsChange"
       @xref-replaced="onXrefReplaced"
+      @operation-change="replacingLink = $event"
       @discard-label-edits="discardAssemblyLabelEdits"
       @apply-label-edits="saveAssemblyLabels"
-    />
+    >
+      <template #toolbar-title><h3 class="panel-title">装配结构</h3></template>
+      <template #toolbar-actions>
+        <div class="file-panel-actions">
+          <el-button size="small" :disabled="!rel" @click="shell.openTab({ pageId: 'part_gallery', payload: { partGallery: { rel } } })">零件图册</el-button>
+          <el-button size="small" :disabled="treeLoading || savingLabels || !treeNodes.length" title="仅填入草稿；应用后写入当前总成标签，不改引用路径或源文件" @click="onApplyRuleLabelsPreview">填入推荐标签</el-button>
+          <el-radio-group v-model="treeMode" size="small">
+            <el-radio-button value="first">第一级</el-radio-button>
+            <el-radio-button value="full">全部层级</el-radio-button>
+          </el-radio-group>
+        </div>
+      </template>
+    </AssemblyTreeTable>
   </section>
 </template>
 
 <style scoped>
+@import "./file-panel-header.css";
 .assembly-block {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-}
-
-.asm-hint {
-  margin: 0 0 8px;
-  font-size: 0.76rem;
-  line-height: 1.45;
-  flex-shrink: 0;
-}
-
-.section-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
-  flex-shrink: 0;
-}
-
-.section-head .btn.subtle {
-  padding: 5px 12px;
-  font-size: 0.78rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: #fff;
-  color: #047857;
-  cursor: pointer;
-}
-
-.section-head .btn.subtle:hover:not(:disabled) {
-  background: #f0fdf4;
-  border-color: #86efac;
-}
-
-.section-head .btn.subtle:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.section-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  margin-left: auto;
-}
-
-.mode-opt {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.82rem;
 }
 
 </style>

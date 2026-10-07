@@ -9,6 +9,8 @@ import {
   collectNlsOrdered,
 } from "@desk-tools/catdlg-core";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
+import PageLayout from "phoenix-wing/layout/PnwPageLayout.vue";
+import PageMainBlock from "phoenix-wing/layout/PnwPageMainBlock.vue";
 import CaaDialogEditorView from "../components/caa/CaaDialogEditorView.vue";
 import CaaDialogPrimaryBlock from "../components/caa/CaaDialogPrimaryBlock.vue";
 import CaaNlsSupplementDialog from "../components/caa/CaaNlsSupplementDialog.vue";
@@ -1267,50 +1269,16 @@ onActivated(() => {
 </script>
 
 <template>
-  <div class="page tool-page caa-dialog-page">
-    <PageHeader :title="pageTitle" :page-id="PAGE_ID">
-      <template #actions>
-        <div class="head-actions-inner">
-          <el-button
-            v-if="hasParsed"
-            size="small"
-            :type="editMode ? 'primary' : 'default'"
-            :title="editMode ? '拖拽/插入模式 ⇅ — 点击切回编辑' : '编辑模式 — 点击切换拖拽/插入'"
-            @click="editMode = !editMode"
-          >
-            {{ editMode ? '⇅' : '✎' }}
-          </el-button>
-          <el-button
-            v-if="hasParsed"
-            size="small"
-            :disabled="!canUndo"
-            title="撤销 (Ctrl+Z)"
-            @click="undoIrChange"
-          >
-            撤销
-          </el-button>
-          <el-button
-            v-if="hasParsed"
-            size="small"
-            :disabled="!canRedo"
-            title="重做 (Ctrl+Y / Ctrl+Shift+Z)"
-            @click="redoIrChange"
-          >
-            重做
-          </el-button>
-          <el-button
-            v-if="hasParsed && !openIsDemo && !isNewDraft"
-            size="small"
-            :disabled="!nlsLocaleOptions.length"
-            @click="openNlsTreeForSelectedControl"
-          >
-            编辑文案
-          </el-button>
+  <PageLayout :title="pageTitle" class="desk-page-layout" :body-inset="false">
+    <template #header>
+      <PageHeader :title="pageTitle">
+        <template v-if="(nlsLocaleOptions.length > 1 && !isNewDraft) || (nlsLocaleOptions.length === 1 && hasParsed)" #center>
           <el-select
             v-if="nlsLocaleOptions.length > 1 && !isNewDraft"
             :model-value="nlsEditorLocale"
             size="small"
             style="width: 160px"
+            aria-label="文案语言"
             @update:model-value="(v: string) => setNlsEditorLocale(v)"
           >
             <el-option
@@ -1325,6 +1293,7 @@ onActivated(() => {
             :model-value="nlsEditorLocale"
             size="small"
             style="width: 160px"
+            aria-label="文案语言"
             disabled
           >
             <el-option
@@ -1334,141 +1303,182 @@ onActivated(() => {
               :value="opt.id"
             />
           </el-select>
-          <el-button
-            v-if="canPreviewWrite"
-            size="small"
-            :loading="writePreviewLoading"
-            title="先用 dry-run 预览 IR 写回 .CATDlg / Wizard .h/.cpp 的文本差异"
-            @click="previewWriteback"
-          >
-            预览写回
+        </template>
+        <template #right>
+          <div class="head-actions-inner">
+            <el-button
+              v-if="hasParsed"
+              size="small"
+              :type="editMode ? 'primary' : 'default'"
+              :title="editMode ? '拖拽/插入模式 ⇅ — 点击切回编辑' : '编辑模式 — 点击切换拖拽/插入'"
+              @click="editMode = !editMode"
+            >
+              {{ editMode ? '编辑' : '拖拽' }}
+            </el-button>
+            <el-button
+              v-if="hasParsed"
+              size="small"
+              :disabled="!canUndo"
+              title="撤销 (Ctrl+Z)"
+              @click="undoIrChange"
+            >
+              撤销
+            </el-button>
+            <el-button
+              v-if="hasParsed"
+              size="small"
+              :disabled="!canRedo"
+              title="重做 (Ctrl+Y / Ctrl+Shift+Z)"
+              @click="redoIrChange"
+            >
+              重做
+            </el-button>
+            <el-button
+              v-if="hasParsed && !openIsDemo && !isNewDraft"
+              size="small"
+              :disabled="!nlsLocaleOptions.length"
+              @click="openNlsTreeForSelectedControl"
+            >
+              编辑文案
+            </el-button>
+            <el-button
+              v-if="canPreviewWrite"
+              size="small"
+              :loading="writePreviewLoading"
+              title="先用 dry-run 预览 IR 写回 .CATDlg / Wizard .h/.cpp 的文本差异"
+              @click="previewWriteback"
+            >
+              预览写回
+            </el-button>
+            <el-button
+              v-if="!isNewDraft"
+              type="success"
+              size="small"
+              :loading="saving"
+              :disabled="!canSaveNls"
+              @click="saveNls"
+            >
+              保存
+            </el-button>
+            <el-button
+              v-if="isNewDraft"
+              type="success"
+              size="small"
+              :loading="saving"
+              @click="openModulePicker"
+            >
+              创建文件…
+            </el-button>
+            <el-button v-if="!isNewDraft" type="primary" size="small" :loading="parsing" @click="parseDialog">解析</el-button>
+          </div>
+        </template>
+      </PageHeader>
+    </template>
+    <PageMainBlock class="tool-page caa-dialog-page">
+
+      <el-alert
+        v-if="hasNlsKeyMismatch && nlsKeyCountMismatch"
+        type="warning"
+        :closable="false"
+        class="caa-nls-consistency-banner"
+      >
+        <template #title>
+          <span>
+            NLS 键数量不一致：英文 {{ nlsKeyCountMismatch.en }} 键，
+            简体中文 {{ nlsKeyCountMismatch.cn }} 键
+            <template v-if="nlsKeyCountMismatch.missingInCn.length">
+              （简体中文缺少 {{ nlsKeyCountMismatch.missingInCn.length }} 键）
+            </template>
+            <template v-if="nlsKeyCountMismatch.missingInEn.length">
+              （英文缺少 {{ nlsKeyCountMismatch.missingInEn.length }} 键）
+            </template>
+            <el-button type="warning" size="small" link style="margin-left: 8px" @click="openSupplementDialog">
+              补全缺失键
+            </el-button>
+          </span>
+        </template>
+      </el-alert>
+
+      <CaaDialogEditorView :has-parsed="hasParsed" />
+
+      <!-- 拖放指示器（页面级 position:fixed，最高层级，唯一视觉反馈） -->
+      <CaaDropOverlay />
+
+      <CaaDialogRelatedFilesTable v-if="localIr" :ir="localIr" />
+      <CaaDialogRscPreviewPanel v-if="localIr" :ir="localIr" />
+
+      <!-- NLS 编辑器（页面内嵌面板，最后） -->
+      <CaaNlsTreeEditor
+        :open="nlsTreeEditorOpen"
+        :root="localIr?.root ?? null"
+        :en-flat="currentNlsFlat"
+        :cn-flat="localeNlsFlats[CAA_NLS_LOCALE_SIMPLIFIED_CHINESE]"
+        :compare-mode="hasChineseLocale"
+        :dirty="nlsIsDirtyAll()"
+        :focus-node-id="nlsFocusNodeId"
+        :initial-locale-mode="nlsTreeLocaleMode"
+        :can-create-cn="canCreateChinese"
+        @close="nlsTreeEditorOpen = false"
+        @update:value="setNlsFlatKey"
+        @save="saveNls({ gridSave: false })"
+        @create-cn="createChineseLocale"
+        @locale-change="onNlsEditorLocaleChange"
+      />
+
+      <CaaNlsSupplementDialog
+        :open="supplementDialogOpen"
+        :direction="supplementDirection"
+        :missing-keys="supplementMissingKeys"
+        :applying="supplementing"
+        @close="supplementDialogOpen = false"
+        @update:direction="(v) => (supplementDirection = v)"
+        @apply:keys="supplementNlsKeys"
+      />
+
+      <CaaControlContextMenu />
+
+      <CaaDialogWritePreviewDialog
+        :open="writePreviewOpen"
+        :loading="writePreviewLoading"
+        :cat-dlg-rel="catDlgRel"
+        :preview="writePreviewResult"
+        @close="writePreviewOpen = false"
+        @confirm="confirmWritePreview"
+      />
+
+      <!-- 模块目录选择器（新建对话框时） -->
+      <el-dialog v-model="modulePickerOpen" title="选择模块目录" width="480px" :close-on-click-modal="false">
+        <el-form label-position="top">
+          <el-form-item label="目标模块目录（目录名含 . 的 CAA 模块）">
+            <el-select
+              v-model="selectedModuleDir"
+              filterable
+              allow-create
+              :loading="loadingModuleDirs"
+              :placeholder="loadingModuleDirs ? '扫描模块目录…' : '选择或输入模块目录'"
+              style="width: 100%"
+            >
+              <el-option
+                v-for="d in moduleDirs"
+                :key="d"
+                :label="d"
+                :value="d"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="对话框名称">
+            <el-input v-model="newDialogName" placeholder="如 MyDialog" />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="modulePickerOpen = false">取消</el-button>
+          <el-button type="primary" :disabled="!selectedModuleDir.trim() || !newDialogName.trim()" :loading="saving" @click="saveDialogToDisk">
+            创建
           </el-button>
-          <el-button
-            v-if="!isNewDraft"
-            type="success"
-            size="small"
-            :loading="saving"
-            :disabled="!canSaveNls"
-            @click="saveNls"
-          >
-            保存
-          </el-button>
-          <el-button
-            v-if="isNewDraft"
-            type="success"
-            size="small"
-            :loading="saving"
-            @click="openModulePicker"
-          >
-            创建文件…
-          </el-button>
-          <el-button v-if="!isNewDraft" type="primary" size="small" :loading="parsing" @click="parseDialog">解析</el-button>
-        </div>
-      </template>
-    </PageHeader>
-
-    <el-alert
-      v-if="hasNlsKeyMismatch && nlsKeyCountMismatch"
-      type="warning"
-      :closable="false"
-      class="caa-nls-consistency-banner"
-    >
-      <template #title>
-        <span>
-          NLS 键数量不一致：英文 {{ nlsKeyCountMismatch.en }} 键，
-          简体中文 {{ nlsKeyCountMismatch.cn }} 键
-          <template v-if="nlsKeyCountMismatch.missingInCn.length">
-            （简体中文缺少 {{ nlsKeyCountMismatch.missingInCn.length }} 键）
-          </template>
-          <template v-if="nlsKeyCountMismatch.missingInEn.length">
-            （英文缺少 {{ nlsKeyCountMismatch.missingInEn.length }} 键）
-          </template>
-          <el-button type="warning" size="small" link style="margin-left: 8px" @click="openSupplementDialog">
-            补全缺失键
-          </el-button>
-        </span>
-      </template>
-    </el-alert>
-
-    <CaaDialogEditorView :has-parsed="hasParsed" />
-
-    <!-- 拖放指示器（页面级 position:fixed，最高层级，唯一视觉反馈） -->
-    <CaaDropOverlay />
-
-    <CaaDialogRelatedFilesTable v-if="localIr" :ir="localIr" />
-    <CaaDialogRscPreviewPanel v-if="localIr" :ir="localIr" />
-
-    <!-- NLS 编辑器（页面内嵌面板，最后） -->
-    <CaaNlsTreeEditor
-      :open="nlsTreeEditorOpen"
-      :root="localIr?.root ?? null"
-      :en-flat="currentNlsFlat"
-      :cn-flat="localeNlsFlats[CAA_NLS_LOCALE_SIMPLIFIED_CHINESE]"
-      :compare-mode="hasChineseLocale"
-      :dirty="nlsIsDirtyAll()"
-      :focus-node-id="nlsFocusNodeId"
-      :initial-locale-mode="nlsTreeLocaleMode"
-      :can-create-cn="canCreateChinese"
-      @close="nlsTreeEditorOpen = false"
-      @update:value="setNlsFlatKey"
-      @save="saveNls({ gridSave: false })"
-      @create-cn="createChineseLocale"
-      @locale-change="onNlsEditorLocaleChange"
-    />
-
-    <CaaNlsSupplementDialog
-      :open="supplementDialogOpen"
-      :direction="supplementDirection"
-      :missing-keys="supplementMissingKeys"
-      :applying="supplementing"
-      @close="supplementDialogOpen = false"
-      @update:direction="(v) => (supplementDirection = v)"
-      @apply:keys="supplementNlsKeys"
-    />
-
-    <CaaControlContextMenu />
-
-    <CaaDialogWritePreviewDialog
-      :open="writePreviewOpen"
-      :loading="writePreviewLoading"
-      :cat-dlg-rel="catDlgRel"
-      :preview="writePreviewResult"
-      @close="writePreviewOpen = false"
-      @confirm="confirmWritePreview"
-    />
-
-    <!-- 模块目录选择器（新建对话框时） -->
-    <el-dialog v-model="modulePickerOpen" title="选择模块目录" width="480px" :close-on-click-modal="false">
-      <el-form label-position="top">
-        <el-form-item label="目标模块目录（目录名含 . 的 CAA 模块）">
-          <el-select
-            v-model="selectedModuleDir"
-            filterable
-            allow-create
-            :loading="loadingModuleDirs"
-            :placeholder="loadingModuleDirs ? '扫描模块目录…' : '选择或输入模块目录'"
-            style="width: 100%"
-          >
-            <el-option
-              v-for="d in moduleDirs"
-              :key="d"
-              :label="d"
-              :value="d"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="对话框名称">
-          <el-input v-model="newDialogName" placeholder="如 MyDialog" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="modulePickerOpen = false">取消</el-button>
-        <el-button type="primary" :disabled="!selectedModuleDir.trim() || !newDialogName.trim()" :loading="saving" @click="saveDialogToDisk">
-          创建
-        </el-button>
-      </template>
-    </el-dialog>
-  </div>
+        </template>
+      </el-dialog>
+    </PageMainBlock>
+  </PageLayout>
 </template>
 
 <style scoped>

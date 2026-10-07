@@ -71,7 +71,7 @@ function Wait-Until([scriptblock]$Predicate, [int]$TimeoutSeconds, [string]$Fail
 Assert-Condition ($Version -eq [string]$TauriConfig.version) "package.json and tauri.conf.json versions differ"
 Assert-Condition $CargoVersionMatch.Success "cannot read the Cargo package version"
 Assert-Condition ($Version -eq $CargoVersionMatch.Groups[1].Value) "package.json and Cargo.toml versions differ"
-Assert-Condition ($Version -eq "0.4.0") "this gate expects the current Desk Tools 0.4.0 release"
+Assert-Condition ($Version -eq "0.5.0") "this gate expects the current Desk Tools 0.5.0 candidate"
 
 $BundleDir = Join-Path $RepoRoot "src-tauri\target\release\bundle\nsis"
 $TempRoot = Join-Path ([IO.Path]::GetTempPath()) ("phoenix-nsis-smoke-" + [Guid]::NewGuid().ToString("N"))
@@ -137,10 +137,21 @@ try {
     }
     Assert-Condition (Test-Path $SmokeReceipt -PathType Leaf) "installed app smoke did not write its receipt"
     $AppSmoke = Get-Content $SmokeReceipt -Raw | ConvertFrom-Json
+    Assert-Condition ($AppSmoke.kind -eq "phoenix.desk.tauri-release-app-smoke" -and $AppSmoke.schemaVersion -eq 2) "installed app smoke receipt is not the current schema"
     Assert-Condition ($AppSmoke.platform -like "win32-*") "installed app smoke did not run on Windows"
-    Assert-Condition ([bool]$AppSmoke.flows.codegenApply) "installed Codegen Apply did not pass"
-    Assert-Condition ([bool]$AppSmoke.flows.realFcstdRead) "installed FCStd read did not pass"
-    Assert-Condition ([bool]$AppSmoke.flows.sidecarReleased) "installed sidecar was not released"
+    Assert-Condition ($AppSmoke.appVersion -eq $Version) "installed app smoke version does not match the release"
+    Assert-Condition ($AppSmoke.binarySha256 -eq $ExecutableHash) "installed app smoke executable does not match the installed binary"
+    Assert-Condition ($AppSmoke.health.status -eq "ok" -and $AppSmoke.health.service -eq "phoenix-node" -and $AppSmoke.health.protocol_version -eq 1) "installed app health check did not pass"
+    Assert-Condition ($AppSmoke.userDataIsolated -eq $true) "installed app user data was not isolated"
+    Assert-Condition ($AppSmoke.cadRuntime -eq "typescript") "installed CAD runtime is not TypeScript"
+    foreach ($Flow in @("launch", "workspaceActivation", "runtimeResources", "retiredCodeRoutes404", "realFcstdRead", "gracefulExit", "sidecarReleased")) {
+        Assert-Condition ($AppSmoke.flows.$Flow -eq $true) "installed app smoke flow did not pass: $Flow"
+    }
+    $RetiredRouteChecks = @($AppSmoke.retiredCodeRoutes)
+    Assert-Condition ($RetiredRouteChecks.Count -eq 30) "installed app smoke did not check all 30 retired Code routes"
+    Assert-Condition (@($RetiredRouteChecks | Where-Object { $_.status -ne 404 }).Count -eq 0) "a retired Code route did not return HTTP 404"
+    $RetiredRouteKeys = @($RetiredRouteChecks | ForEach-Object { "$($_.method) $($_.path)" } | Select-Object -Unique)
+    Assert-Condition ($RetiredRouteKeys.Count -eq 30) "installed app smoke contains duplicate retired Code route checks"
 
     $UninstallProcess = Start-Process -FilePath $Uninstaller.FullName -ArgumentList @("/S") -Wait -PassThru
     Assert-Condition ($UninstallProcess.ExitCode -eq 0) "NSIS uninstall exited with code $($UninstallProcess.ExitCode)"
@@ -154,7 +165,7 @@ try {
     }
     $Receipt = [ordered]@{
         kind = "phoenix.desk.windows-nsis-release"
-        schemaVersion = 1
+        schemaVersion = 2
         generatedAt = [DateTime]::UtcNow.ToString("o")
         version = $Version
         platform = "$([Environment]::OSVersion.Platform)-$env:PROCESSOR_ARCHITECTURE"
@@ -176,11 +187,13 @@ try {
         flows = [ordered]@{
             build = (-not $SkipBuild)
             install = $true
-            launch = $true
-            codegenApply = $true
-            realFcstdRead = $true
-            gracefulExit = $true
-            sidecarReleased = $true
+            launch = $AppSmoke.flows.launch
+            workspaceActivation = $AppSmoke.flows.workspaceActivation
+            runtimeResources = $AppSmoke.flows.runtimeResources
+            retiredCodeRoutes404 = $AppSmoke.flows.retiredCodeRoutes404
+            realFcstdRead = $AppSmoke.flows.realFcstdRead
+            gracefulExit = $AppSmoke.flows.gracefulExit
+            sidecarReleased = $AppSmoke.flows.sidecarReleased
             uninstall = $true
             registrationRemoved = $true
             installDirectoryRemoved = $true

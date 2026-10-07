@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, reactive, toValue } from "vue";
-import SidebarBlock from "phoenix-wing/layout/PnwSidebarBlock.vue";
-import SidebarBlockHead from "phoenix-wing/layout/PnwSidebarBlockHead.vue";
+import PrimaryPanel from "phoenix-wing/layout/PnwPrimaryPanel.vue";
+import PrimarySection from "phoenix-wing/layout/PnwPrimarySection.vue";
+import PrimaryDirectoryControl from "./PrimaryDirectoryControl.vue";
+import PrimaryTaskProgress from "./PrimaryTaskProgress.vue";
+import PrimaryThumbnail from "./PrimaryThumbnail.vue";
 import { useAppShell } from "../../composables/useAppShell";
 import {
   useRegisteredPagePrimaryContribution,
@@ -10,6 +13,7 @@ import {
   type PagePrimaryResolvable,
 } from "../../composables/usePagePrimaryContribution";
 import {
+  primaryPanelBlocks,
   primarySectionCountLabel,
   primarySectionLayout,
   primarySectionStateKey,
@@ -32,6 +36,7 @@ const primarySections = computed(() => {
   const contribution = primaryContribution.value;
   return contribution?.sections ? toValue(contribution.sections) : [];
 });
+const panelBlocks = computed(() => primaryPanelBlocks(primarySections.value));
 const primaryContent = computed(() => primaryContribution.value?.content ?? null);
 const primaryContentProps = computed(() => {
   const content = primaryContent.value;
@@ -47,13 +52,13 @@ const activeTab = computed(() => props.workbenchTabId
   ? shell.getTab(props.workbenchTabId)
   : shell.activeTab());
 const pageLabel = computed(() => navItem.value?.label || activeTab.value?.title || props.pageId || "页面");
+const primaryLabel = computed(() => toValue(primaryContribution.value?.title) || pageLabel.value);
 const viewTitle = computed(() => activeTab.value?.title || pageLabel.value);
 const viewContext = computed(() => activeTab.value?.subtitle
   || activeTab.value?.contextKey
   || "当前页面没有独立文档上下文");
 const moduleLabel = computed(() => {
-  if (navItem.value?.module === "cad") return "CAD";
-  if (navItem.value?.module === "code") return "Code";
+  if (navItem.value?.module === "cad" || navItem.value?.module === "code" || props.pageId === "audio_extract") return "工具";
   return "系统";
 });
 const workspaceLabel = computed(() => {
@@ -72,9 +77,9 @@ function isSectionExpanded(sectionId: string): boolean {
   return !collapsedSections.has(sectionStateKey(sectionId));
 }
 
-function toggleSection(sectionId: string): void {
+function setSectionExpanded(sectionId: string, expanded: boolean): void {
   const key = sectionStateKey(sectionId);
-  if (collapsedSections.has(key)) collapsedSections.delete(key);
+  if (expanded) collapsedSections.delete(key);
   else collapsedSections.add(key);
 }
 
@@ -112,18 +117,17 @@ function actionType(action: PagePrimaryAction): "primary" | "danger" | undefined
     :workbench-tab-id="props.workbenchTabId"
     class="primary-custom-content"
   />
-  <SidebarBlock
+  <PrimaryPanel
     v-else
-    :title="pageLabel"
-    variant="strip"
-    :collapsible="false"
+    :title="primaryLabel"
     body-scroll
     class="generic-primary-block"
-    :aria-label="`${pageLabel} Primary`"
+    :aria-label="`${primaryLabel} Primary`"
   >
     <template #suffix><span class="primary-badge">Primary</span></template>
 
-    <section class="primary-context">
+    <template v-for="block in panelBlocks" :key="block.key">
+    <section v-if="block.kind === 'context' && primaryContribution?.showContext !== false" class="primary-context">
       <div class="context-title-row">
         <strong :title="viewTitle">{{ viewTitle }}</strong>
         <span class="module-chip">{{ moduleLabel }}</span>
@@ -136,39 +140,41 @@ function actionType(action: PagePrimaryAction): "primary" | "danger" | undefined
       </div>
     </section>
 
-    <section v-if="primarySummary || shell.pageSummary.value" class="primary-status" aria-live="polite">
+    <PrimaryThumbnail v-if="block.kind === 'context' && toValue(primaryContribution?.thumbnail)" :image="toValue(primaryContribution!.thumbnail)!" />
+
+    <section v-else-if="block.kind === 'status' && (primarySummary || shell.pageSummary.value)" class="primary-status" aria-live="polite">
       <span class="status-dot" aria-hidden="true" />
       <p>{{ primarySummary || shell.pageSummary.value }}</p>
     </section>
 
-    <section
-      v-for="section in primarySections"
-      :key="section.id"
-      class="contributed-section"
-      :class="{ 'is-collapsed': !isSectionExpanded(section.id) }"
+    <PrimarySection
+      v-else-if="block.kind === 'section'"
+      :key="sectionStateKey(block.section.id)"
+      :title="block.section.title"
+      :expanded="isSectionExpanded(block.section.id)"
+      :data-section-id="block.section.id"
+      @update:expanded="setSectionExpanded(block.section.id, $event)"
     >
-      <SidebarBlockHead
-        class="contributed-section-head"
-        :expanded="isSectionExpanded(section.id)"
-        @toggle="toggleSection(section.id)"
-      >
-        <template #title>{{ section.title }}</template>
-        <template #suffix>{{ primarySectionCountLabel(section) }}</template>
-      </SidebarBlockHead>
-
-      <div v-show="isSectionExpanded(section.id)" class="contributed-section-body">
-        <p v-if="section.description" class="section-description">
-          {{ textValue(section.description) }}
+      <template #suffix>{{ primarySectionCountLabel(block.section) }}</template>
+      <div class="contributed-section-body">
+        <PrimaryTaskProgress v-if="block.section.progress" :progress="toValue(block.section.progress)" />
+        <p v-if="block.section.description" class="section-description">
+          {{ textValue(block.section.description) }}
         </p>
 
         <div
-          v-if="section.controls?.length"
+          v-if="block.section.controls?.length"
           class="primary-controls"
-          :class="`is-${primarySectionLayout(section)}`"
+          :class="`is-${primarySectionLayout(block.section)}`"
         >
-          <template v-for="control in section.controls" :key="control.id">
+          <template v-for="control in block.section.controls" :key="control.id">
+            <div v-if="control.kind === 'directory'" class="primary-control">
+              <span class="control-label">{{ control.label }}</span>
+              <PrimaryDirectoryControl :control="control" />
+              <small v-if="control.description">{{ control.description }}</small>
+            </div>
             <label
-              v-if="control.kind === 'text'"
+              v-else-if="control.kind === 'text'"
               class="primary-control"
               :class="{ 'is-disabled': booleanValue(control.disabled) }"
             >
@@ -283,15 +289,16 @@ function actionType(action: PagePrimaryAction): "primary" | "danger" | undefined
 
           <dl v-else class="readonly-control">
             <dt>{{ control.label }}</dt>
-            <dd :class="{ mono: control.mono }">{{ displayValue(control.value) }}</dd>
+            <dd :class="{ mono: control.mono }" :title="displayValue(control.value)">{{ displayValue(control.value) }}</dd>
           </dl>
           </template>
         </div>
 
-        <div v-if="section.actions?.length" class="primary-actions">
+        <div v-if="block.section.actions?.length" class="primary-actions" :class="{ 'is-grid': block.section.actionLayout === 'grid' }">
           <el-button
-            v-for="action in section.actions"
+            v-for="action in block.section.actions"
             :key="action.id"
+            class="primary-action"
             size="small"
             :type="actionType(action)"
             :plain="action.plain"
@@ -300,22 +307,22 @@ function actionType(action: PagePrimaryAction): "primary" | "danger" | undefined
             :loading="booleanValue(action.loading)"
             @click="action.run"
           >
-            {{ textValue(action.label) }}
+            <span class="primary-action-label">{{ textValue(action.label) }}</span>
           </el-button>
         </div>
       </div>
-    </section>
+    </PrimarySection>
+    </template>
 
     <section v-if="!primarySections.length" class="empty-primary-note">
       <strong>此 View 暂无可调参数</strong>
       <p>主要操作和结果位于中央编辑区。</p>
     </section>
-  </SidebarBlock>
+  </PrimaryPanel>
 </template>
 
 <style scoped>
 .generic-primary-block { width: 100%; height: 100%; }
-.generic-primary-block :deep(.pnw-sidebar-block-body) { padding: 0 !important; }
 .primary-custom-content { width: 100%; height: 100%; min-height: 0; }
 .primary-badge {
   padding: 1px 6px;
@@ -410,14 +417,8 @@ function actionType(action: PagePrimaryAction): "primary" | "danger" | undefined
   border-radius: 50%;
   background: var(--el-color-primary);
 }
-.contributed-section { border-bottom: 1px solid var(--border); }
-.contributed-section.is-collapsed { background: color-mix(in srgb, var(--panel-head-bg) 34%, transparent); }
-.contributed-section-head { min-height: 27px; background: var(--panel-head-bg); }
-.contributed-section-head :deep(.pnw-sidebar-block-head-toggle) { padding: 4px 8px; }
-.contributed-section-head :deep(.pnw-sidebar-block-title) { font-size: 0.68rem; }
-.contributed-section-head :deep(.pnw-sidebar-block-suffix) { font-size: 0.57rem; }
-.contributed-section-body { padding: 7px 10px 9px; }
-.section-description { margin: 0 0 7px; color: var(--muted); font-size: 0.62rem; line-height: 1.4; }
+.contributed-section-body { padding: 8px; }
+.section-description { margin: 0 0 7px; color: var(--muted); font-size: 0.62rem; line-height: 1.4; overflow-wrap: anywhere; white-space: pre-line; }
 .primary-controls { display: flex; flex-direction: column; gap: 7px; }
 .primary-controls.is-readonly-grid,
 .primary-controls.is-boolean-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 8px; }
@@ -456,8 +457,26 @@ function actionType(action: PagePrimaryAction): "primary" | "danger" | undefined
 .is-readonly-grid .readonly-control dt { font-size: 0.58rem; }
 .is-readonly-grid .readonly-control dd { font-size: 0.69rem; font-weight: 600; }
 .readonly-control dd { overflow: hidden; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }
+.primary-controls.is-properties { gap: 0; }
+.is-properties .readonly-control { grid-template-columns: minmax(86px, 32%) minmax(0, 1fr); column-gap: 8px; }
+.is-properties .readonly-control dt,
+.is-properties .readonly-control dd { padding-block: 6px; line-height: 1.5; }
+.is-properties .readonly-control:first-child dt,
+.is-properties .readonly-control:first-child dd { border-top: 0; }
+.is-properties .readonly-control dd { white-space: normal; overflow-wrap: anywhere; }
 .primary-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
 .primary-actions :deep(.el-button) { min-height: 25px; margin-left: 0; padding-inline: 8px; font-size: 0.64rem; }
+.primary-actions.is-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr));
+  grid-auto-rows: minmax(36px, auto);
+  gap: 6px;
+}
+.primary-actions.is-grid .primary-action {
+  width: 100%; min-width: 0; height: 100%; min-height: 36px;
+  margin: 0; padding: 7px 10px; font-size: 0.72rem; line-height: 1.35;
+}
+.primary-actions.is-grid .primary-action-label { white-space: normal; overflow-wrap: anywhere; }
 .empty-primary-note { display: grid; gap: 2px; padding: 12px 10px; color: var(--muted); }
 .empty-primary-note strong { color: var(--text); font-size: 0.68rem; }
 .empty-primary-note p { margin: 0; font-size: 0.62rem; line-height: 1.4; }

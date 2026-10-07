@@ -42,10 +42,16 @@ afterEach(() => {
 });
 
 describe("packagedRuntimeTestService", () => {
+  it("does not advertise retired Code scan or source mutation checks", () => {
+    const checks = packagedRuntimeChecks();
+    expect(checks.some((item) => /reorder|codegen|uuid|code-index|code-rename/i.test(item.id))).toBe(false);
+    expect(checks.filter((item) => item.suiteId === "code").map((item) => item.module))
+      .toEqual(["runtime/code/source-codec"]);
+  });
+
   it("executes source, FCStd XML, and CAA checks without a source test runner", async () => {
     const modules = new Set([
       "runtime/code/source-codec",
-      "runtime/code/reorder-members",
       "runtime/cad/fcstd-xml",
       "runtime/caa/dialog",
     ]);
@@ -54,7 +60,7 @@ describe("packagedRuntimeTestService", () => {
       results.push(await runPackagedRuntimeCheck(runtimeCheck));
     }
 
-    expect(results).toHaveLength(6);
+    expect(results).toHaveLength(5);
     expect(results.filter((result) => result.status !== "passed")).toEqual([]);
   });
 
@@ -67,7 +73,7 @@ describe("packagedRuntimeTestService", () => {
     const nodeFile = writeFile(resources, "node/node.bin", "node");
     const serverFile = writeFile(resources, "server/server.mjs", "server");
     writeFile(resources, "phoenix/config/app_config.json", JSON.stringify({
-      navigation: [{ id: "home", page: "home" }, { id: "code", page: "code_index" }],
+      navigation: [{ id: "home", page: "home" }, { id: "code", page: "code_ignore" }],
     }));
     writeFile(resources, "scripts/freecad_batch_step_runner.py", "# adapter");
     writeFile(resources, "scripts/sw-step-export.ps1", "# adapter");

@@ -24,9 +24,9 @@ afterEach(() => {
 function sampleCatalog() {
   const modules: VitestModule[] = [
     {
-      file: "server/src/lib/pdtCodeService.test.ts",
+      file: "server/src/lib/codeIgnoreService.test.ts",
       count: 2,
-      tests: ["code index > scans files", "code uuid > applies selected hits"],
+      tests: ["code ignore > reads preferences", "ignore presets > saves custom patterns"],
     },
     {
       file: "server/src/lib/pnwBomXrefService.test.ts",
@@ -67,11 +67,11 @@ describe("unitTestService catalog and plan", () => {
 
   it("filters plan by suite, module, include cases, and exclude cases", () => {
     const catalog = sampleCatalog();
-    const target = "server/src/lib/pdtCodeService.test.ts > code index > scans files";
-    const skipped = "server/src/lib/pdtCodeService.test.ts > code uuid > applies selected hits";
+    const target = "server/src/lib/codeIgnoreService.test.ts > code ignore > reads preferences";
+    const skipped = "server/src/lib/codeIgnoreService.test.ts > ignore presets > saves custom patterns";
     const plan = buildUnitTestPlan({
       suites: ["code"],
-      include_modules: ["server/src/lib/pdtCodeService.test.ts"],
+      include_modules: ["server/src/lib/codeIgnoreService.test.ts"],
       include_cases: [target, skipped],
       exclude_cases: [skipped],
       include_case_details: true,
@@ -84,8 +84,8 @@ describe("unitTestService catalog and plan", () => {
 
   it("returns runtime catalog maps keyed by module and case id", () => {
     const catalog = sampleCatalog();
-    const modules = testModuleCatalog(["server/src/lib/pdtCodeService.test.ts"], catalog).modules;
-    expect(modules["server/src/lib/pdtCodeService.test.ts"].suite_id).toBe("code");
+    const modules = testModuleCatalog(["server/src/lib/codeIgnoreService.test.ts"], catalog).modules;
+    expect(modules["server/src/lib/codeIgnoreService.test.ts"].suite_id).toBe("code");
     const cases = testCaseCatalog(["packages/catdlg-core/src/emitCatDlg.test.ts > emitCatDlg > emits dialog"], catalog).cases;
     expect(cases["packages/catdlg-core/src/emitCatDlg.test.ts > emitCatDlg > emits dialog"].method_name).toBe("emits dialog");
   });
@@ -109,10 +109,10 @@ describe("parseVitestJsonRun", () => {
       numPassedTests: 1,
       numFailedTests: 1,
       testResults: [{
-        name: "server/src/lib/pdtCodeService.test.ts",
+        name: "server/src/lib/codeIgnoreService.test.ts",
         assertionResults: [
-          { ancestorTitles: ["code index"], fullName: "code index scans files", title: "scans files", status: "passed", duration: 5, failureMessages: [] },
-          { ancestorTitles: ["code uuid"], fullName: "code uuid applies selected hits", title: "applies selected hits", status: "failed", duration: 7, failureMessages: ["boom"] },
+          { ancestorTitles: ["code ignore"], fullName: "code ignore reads preferences", title: "reads preferences", status: "passed", duration: 5, failureMessages: [] },
+          { ancestorTitles: ["ignore presets"], fullName: "ignore presets saves custom patterns", title: "saves custom patterns", status: "failed", duration: 7, failureMessages: ["boom"] },
         ],
       }],
     });
@@ -169,7 +169,7 @@ describe("runUnitTests cancellation", () => {
       stderr: "",
       stdout: JSON.stringify({ numTotalTests: 0, numPassedTests: 0, numFailedTests: 0, testResults: [] }),
     }));
-    const module = catalog.modules.find((item) => item.module === "server/src/lib/pdtCodeService.test.ts")!;
+    const module = catalog.modules.find((item) => item.module === "server/src/lib/codeIgnoreService.test.ts")!;
     const target = module.cases[0].id;
 
     const result = await runUnitTests({

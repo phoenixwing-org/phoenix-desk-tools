@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
-import { QuestionFilled } from "@element-plus/icons-vue";
 import { getPageHelp, hasPageTour, type PageHelpContent } from "../content/pageHelp";
 import { startPageTour } from "../composables/usePageTour";
 import { useAppShell } from "../composables/useAppShell";
@@ -88,16 +87,14 @@ onUnmounted(() => {
   <div ref="rootRef" class="page-help">
     <el-button
       class="page-help-btn"
-      circle
       plain
       size="small"
-      :icon="QuestionFilled"
       :aria-expanded="open"
       aria-haspopup="dialog"
       aria-label="本页说明"
       title="本页说明"
       @click.stop="toggle"
-    />
+    >帮助</el-button>
     <div v-if="open" class="page-help-popover" role="dialog" @click.stop>
       <p class="popover-title">{{ help.title }}</p>
       <ul class="popover-list">

@@ -41,7 +41,7 @@ describe("codeIgnoreService", () => {
     expect(saved.ignore_builtin).toContain("node_modules");
     expect(saved.ignore_custom_patterns).toContain("ImportedInterfaces");
     expect(saved.ignore_patterns).toEqual(expect.arrayContaining(["LegacySkip", "CustomSkip", "ImportedInterfaces"]));
-    expect(saved.consumers).toContain("code_uuid");
+    expect(saved.consumers).toEqual([]);
     const workspacePrefs = loadWorkspacePrefs(workspace);
     expect(workspacePrefs.code_ignore).toMatchObject({ custom_ignore: ["CustomSkip", "LegacySkip"], ignore_preset: "caa", process_dirs_seeded: true });
   });

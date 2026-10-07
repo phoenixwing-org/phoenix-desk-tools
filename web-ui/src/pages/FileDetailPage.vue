@@ -3,6 +3,9 @@ import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watc
 import type { BomFields, BomPreview } from "../api";
 import { fetchBom, fetchBomXrefCounts } from "../api";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
+import PageLayout from "phoenix-wing/layout/PnwPageLayout.vue";
+import PageMainBlock from "phoenix-wing/layout/PnwPageMainBlock.vue";
+import FileDrawingPanel from "../components/file-detail/FileDrawingPanel.vue";
 import FileOverviewPanel from "../components/file-detail/FileOverviewPanel.vue";
 import FileAttributesPanel from "../components/file-detail/FileAttributesPanel.vue";
 import FileXrefPanel from "../components/file-detail/FileXrefPanel.vue";
@@ -11,11 +14,11 @@ import RenameDialog from "../components/RenameDialog.vue";
 import DrawingBomReadonlyBanner from "../components/file-detail/DrawingBomReadonlyBanner.vue";
 import { provideFileDetailContext } from "../composables/useFileDetailContext";
 import { useDrawingBomReadonly } from "../composables/useDrawingBomReadonly";
+import { useFileThumbnail } from "../composables/useFileThumbnail";
 import { useAppShell } from "../composables/useAppShell";
 import { usePageSession } from "../composables/usePageSession";
-import { pnwPromptChoice } from "phoenix-wing";
 import type { FileDetailSubTab } from "../types/fileDetail";
-import { normalizeFileDetailSubTab } from "../types/fileDetail";
+import { DEFAULT_FILE_DETAIL_SUB_TAB, normalizeFileDetailSubTab } from "../types/fileDetail";
 import {
   usePagePrimaryContribution,
   type PagePrimarySection,
@@ -29,18 +32,26 @@ const SESSION_V = 1;
 
 const shell = useAppShell();
 const rel = ref("");
+const thumbnailRel = ref("");
+const thumbnailRevision = ref(0);
+const thumbnail = useFileThumbnail(shell.workspacePath, thumbnailRel, thumbnailRevision);
 const preview = ref<BomPreview | null>(null);
 const form = ref<Partial<BomFields>>({});
 const baseline = ref<Partial<BomFields>>({});
 const originalFilename = ref("");
 const loading = ref(false);
 const pageError = ref("");
-const activeSubTab = ref<FileDetailSubTab>("overview");
+const activeSubTab = ref<FileDetailSubTab>(DEFAULT_FILE_DETAIL_SUB_TAB);
 const incomingCount = ref(0);
 const outgoingCount = ref(0);
 const xrefCacheByRel = ref<Record<string, import("../api").FileDetailXrefsPayload>>({});
 const assemblyCacheByKey = ref<Record<string, import("../api").AssemblyTreeNode[]>>({});
 const assemblyLabelEdits = ref(false);
+const detailOperations = ref<Record<string, boolean>>({});
+function onOperationChange(source: string, busy: boolean) {
+  detailOperations.value = { ...detailOperations.value, [source]: busy };
+  if (busy && props.workbenchTabId) shell.keepTab(props.workbenchTabId);
+}
 /** 已写入属性但未改盘符时的目标文件名（按 repo_rel 缓存） */
 const filenameDraftByRel = ref<Record<string, string>>({});
 let reloadSeq = 0;
@@ -131,6 +142,10 @@ function triggerRename(target?: string) {
 }
 
 function switchSubTab(tab: FileDetailSubTab) {
+  if (Object.values(detailOperations.value).some(Boolean)) {
+    shell.setStatus("当前操作尚未完成，请完成或取消后再切换详情面板");
+    return;
+  }
   activeSubTab.value = tab;
 }
 
@@ -139,6 +154,8 @@ async function reloadFile(targetRel?: string) {
   if (!path) return;
   const prevRel = rel.value.trim();
   const seq = ++reloadSeq;
+  thumbnailRel.value = path;
+  thumbnailRevision.value++;
   loading.value = true;
   pageError.value = "";
   try {
@@ -193,25 +210,8 @@ function hasUnsavedEdits() {
   return hasUnsavedAttrs() || assemblyLabelEdits.value;
 }
 
-async function confirmSwitchFile(targetRel: string): Promise<boolean> {
-  if (!rel.value || targetRel === rel.value) return true;
-  if (!hasUnsavedEdits()) return true;
-  const name = rel.value.split("/").pop() ?? "当前文件";
-  const next = targetRel.split("/").pop() ?? targetRel;
-  const hint = assemblyLabelEdits.value ? "链接标签或属性" : "属性";
-  const choice = await pnwPromptChoice({
-    title: "切换文件",
-    message: `「${name}」有尚未写入的${hint}。\n\n要打开「${next}」？`,
-    choices: [
-      { id: "discard", label: "放弃修改并切换", variant: "danger" },
-      { id: "cancel", label: "取消切换" },
-    ],
-  });
-  return choice.choiceId === "discard";
-}
-
-async function onRenameComplete(newRel: string) {
-  showRenameDialog.value = false;
+async function onRenameComplete(newRel: string, needsReview = false) {
+  if (!needsReview) showRenameDialog.value = false;
   if (newRel && newRel !== rel.value) {
     await reloadFile(newRel);
   } else {
@@ -228,15 +228,13 @@ function onAssemblyEditsChange(dirty: boolean) {
 
 watch(showAssemblyTab, (show) => {
   if (!show && activeSubTab.value === "assembly") {
-    activeSubTab.value = "overview";
+    activeSubTab.value = DEFAULT_FILE_DETAIL_SUB_TAB;
   }
 });
 
 async function onTreeSelect(targetRel: string): Promise<boolean> {
   if (targetRel === rel.value) return true;
-  if (!(await confirmSwitchFile(targetRel))) return false;
-  activeSubTab.value = "overview";
-  await reloadFile(targetRel);
+  shell.openFileDetailForRel(targetRel);
   return true;
 }
 
@@ -347,6 +345,7 @@ usePageSession(props.workbenchTabId, {
   }),
   hydrate: hydratePageSession,
   isDirty: hasUnsavedEdits,
+  isBusy: () => showRenameDialog.value || Object.values(detailOperations.value).some(Boolean),
 });
 
 watch([rel, form, baseline, activeSubTab, filenameDraftByRel], () => shell.scheduleWorkbenchSave(), {
@@ -361,7 +360,13 @@ watch(
   { immediate: true },
 );
 
+// Entering the rename workflow owns state even before the first field edit.
+watch(showRenameDialog, (open) => {
+  if (open && props.workbenchTabId) shell.keepTab(props.workbenchTabId);
+}, { flush: "sync" });
+
 usePagePrimaryContribution("file_detail", props.workbenchTabId, {
+  thumbnail,
   summary: computed(() => rel.value
     ? `${originalFilename.value || rel.value} · 入向 ${incomingCount.value} · 出向 ${outgoingCount.value}`
     : "请从工作空间树选择文件"),
@@ -379,6 +384,7 @@ usePagePrimaryContribution("file_detail", props.workbenchTabId, {
           modelValue: activeSubTab,
           options: [
             { value: "overview", label: "属性" },
+            ...(preview.value?.is_fcstd ? [{ value: "drawing", label: "出图" }] : []),
             { value: "edit", label: editSubTabLabel.value },
             { value: "xref", label: `引用（${incomingCount.value + outgoingCount.value}）` },
             ...(showAssemblyTab.value ? [{ value: "assembly", label: "装配结构" }] : []),
@@ -406,6 +412,10 @@ usePagePrimaryContribution("file_detail", props.workbenchTabId, {
         },
       ],
     },
+    ...(activeSubTab.value === "assembly" ? [{
+      id: "assembly-help", title: "装配标签说明",
+      description: "显示磁盘中的真实节点标签。\n推荐取目标零件显示名；同级重复件按树序加 .001 起编号。\n点击数量展开实例；悬停行可撤销或应用。\n推荐仅填入草稿，应用才写盘。\n只改当前总成标签，不改引用路径或源文件。\n目标文件为最终零件；经由总成见悬浮提示。",
+    }] : []),
   ]),
 });
 
@@ -426,81 +436,89 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="page file-detail-page">
-    <PageHeader title="文件详情" page-id="file_detail">
-      <template #actions>
-        <el-button
-          v-if="rel"
-          size="small"
-          type="primary"
-          plain
-          :disabled="!originalFilename"
-          @click="triggerRename()"
-        >
-          改名
-        </el-button>
-      </template>
-    </PageHeader>
-
-    <el-alert v-if="pageError" type="error" :title="pageError" show-icon :closable="false" class="err-alert" />
-
-    <div v-if="!rel && !loading" class="empty">在树中选择 .FCStd</div>
-    <div v-else-if="loading && !preview" class="empty">载入中…</div>
-
-    <template v-else-if="rel && preview">
-      <div data-tour-page-filedetail-body>
-      <DrawingBomReadonlyBanner :preview="preview" :show-open-button="true" />
-      <el-radio-group
-        :model-value="activeSubTab"
-        size="small"
-        class="sub-tabs"
-        data-tour-page-filedetail-tabs
-        @change="switchSubTab($event as FileDetailSubTab)"
-      >
-        <el-radio-button value="overview">属性</el-radio-button>
-        <el-radio-button value="edit">{{ editSubTabLabel }}</el-radio-button>
-        <el-radio-button value="xref">
-          引用
-          <span v-if="incomingCount + outgoingCount" class="tab-badge">{{ incomingCount + outgoingCount }}</span>
-        </el-radio-button>
-        <el-radio-button v-if="showAssemblyTab" value="assembly">装配结构</el-radio-button>
-      </el-radio-group>
-
-      <div class="sub-panel">
-        <FileOverviewPanel v-show="activeSubTab === 'overview'" />
-        <FileAttributesPanel v-show="activeSubTab === 'edit'" />
-        <FileXrefPanel v-if="activeSubTab === 'xref'" :key="rel" />
-        <FileAssemblyPanel
-          v-show="activeSubTab === 'assembly'"
-          @edits-change="onAssemblyEditsChange"
-        />
-        <RenameDialog
-          :open="showRenameDialog"
-          :rel="rel"
-          :original-filename="originalFilename"
-          :preferred-new-filename="renameDialogTarget"
-          :form="form"
-          :baseline="baseline"
-          @close="showRenameDialog = false"
-          @renamed="onRenameComplete"
-        />
-      </div>
-      </div>
+  <PageLayout title="文件详情" class="desk-page-layout" :body-inset="false" :body-scroll="false">
+    <template #header>
+      <PageHeader title="文件详情">
+        <template #center>
+          <el-radio-group
+            v-if="rel && preview"
+            :model-value="activeSubTab"
+            size="small"
+            class="sub-tabs"
+            aria-label="文件详情内容"
+            data-tour-page-filedetail-tabs
+            @change="switchSubTab($event as FileDetailSubTab)"
+          >
+            <el-radio-button value="overview">属性</el-radio-button>
+            <el-radio-button v-if="preview.is_fcstd" value="drawing">出图</el-radio-button>
+            <el-radio-button value="edit">{{ editSubTabLabel }}</el-radio-button>
+            <el-radio-button value="xref">
+              引用
+              <span v-if="incomingCount + outgoingCount" class="tab-badge">{{ incomingCount + outgoingCount }}</span>
+            </el-radio-button>
+            <el-radio-button v-if="showAssemblyTab" value="assembly">装配结构</el-radio-button>
+          </el-radio-group>
+        </template>
+        <template #right>
+          <el-button
+            v-if="rel"
+            size="small"
+            type="primary"
+            plain
+            :disabled="!originalFilename"
+            @click="triggerRename()"
+          >
+            改名
+          </el-button>
+        </template>
+      </PageHeader>
     </template>
-  </div>
+    <PageMainBlock class="file-detail-page desk-page-body--fill">
+      <el-alert v-if="pageError" type="error" :title="pageError" show-icon :closable="false" class="err-alert" />
+
+      <div v-if="!rel && !loading" class="empty">在树中选择 .FCStd</div>
+      <div v-else-if="loading && !preview" class="empty">载入中…</div>
+
+      <template v-else-if="rel && preview">
+        <div class="file-detail-content" data-tour-page-filedetail-body>
+        <DrawingBomReadonlyBanner :preview="preview" :show-open-button="true" />
+        <div class="sub-panel" :class="{ 'sub-panel--assembly': activeSubTab === 'assembly' }">
+          <FileDrawingPanel v-if="activeSubTab === 'drawing'" :key="rel" />
+          <FileOverviewPanel v-show="activeSubTab === 'overview'" />
+          <FileAttributesPanel v-show="activeSubTab === 'edit'" @busy-change="onOperationChange('attributes', $event)" />
+          <FileXrefPanel v-if="activeSubTab === 'xref'" :key="rel" @busy-change="onOperationChange('xref', $event)" />
+          <FileAssemblyPanel
+            v-show="activeSubTab === 'assembly'"
+            @edits-change="onAssemblyEditsChange"
+            @busy-change="onOperationChange('assembly', $event)"
+          />
+          <RenameDialog
+            :open="showRenameDialog"
+            :rel="rel"
+            :original-filename="originalFilename"
+            :preferred-new-filename="renameDialogTarget"
+            :form="form"
+            :baseline="baseline"
+            :bom-readonly="preview?.bom_readonly"
+            @close="showRenameDialog = false"
+            @renamed="onRenameComplete"
+          />
+        </div>
+        </div>
+      </template>
+    </PageMainBlock>
+  </PageLayout>
 </template>
 
 <style scoped>
 @import "./page-shared.css";
 
-.file-detail-page {
+.file-detail-content {
   display: flex;
+  flex: 1;
   flex-direction: column;
-  width: 100%;
-  box-sizing: border-box;
-  height: 100%;
+  min-height: 0;
   overflow: hidden;
-  padding: 16px 20px;
 }
 
 .empty {
@@ -509,7 +527,7 @@ onUnmounted(() => {
 }
 
 .sub-tabs {
-  margin-bottom: 12px;
+  flex-wrap: nowrap;
   flex-shrink: 0;
 }
 
@@ -532,6 +550,7 @@ onUnmounted(() => {
   min-height: 0;
   overflow: auto;
 }
+.sub-panel--assembly { display: flex; flex-direction: column; overflow: hidden; }
 
 .mono {
   font-family: var(--font-mono);

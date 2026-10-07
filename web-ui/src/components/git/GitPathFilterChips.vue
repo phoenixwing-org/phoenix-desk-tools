@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowDown, Search } from "@element-plus/icons-vue";
+import { Search } from "@element-plus/icons-vue";
 import { computed, ref } from "vue";
 import { pushGitPathFilterTagSuggestion } from "../../utils/gitPathFilterPrefs";
 
@@ -117,7 +117,7 @@ function formatSet(set: string[]) {
         title="清除全部筛选"
         @click.stop="clearAll"
       >
-        ×
+        清空
       </button>
     </div>
     <el-dropdown
@@ -133,7 +133,7 @@ function formatSet(set: string[]) {
         title="筛选历史与建议"
         @click.stop
       >
-        <el-icon><ArrowDown /></el-icon>
+        历史
       </button>
       <template #dropdown>
         <el-dropdown-menu class="git-filter-menu">
@@ -228,14 +228,14 @@ function formatSet(set: string[]) {
 
 .git-filter-clear {
   flex-shrink: 0;
-  width: 18px;
-  height: 18px;
-  padding: 0;
+  min-width: 36px;
+  height: 24px;
+  padding: 2px 4px;
   border: none;
-  border-radius: 50%;
+  border-radius: 3px;
   background: transparent;
   color: var(--el-text-color-secondary);
-  font-size: 14px;
+  font-size: 12px;
   line-height: 1;
   cursor: pointer;
 }
@@ -247,9 +247,9 @@ function formatSet(set: string[]) {
 
 .git-filter-dropdown-btn {
   flex-shrink: 0;
-  width: 24px;
+  min-width: 40px;
   height: 24px;
-  padding: 0;
+  padding: 2px 6px;
   border: 1px solid var(--el-border-color);
   border-radius: var(--el-border-radius-base);
   background: var(--el-fill-color-blank);

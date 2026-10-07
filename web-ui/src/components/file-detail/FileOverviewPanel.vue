@@ -62,7 +62,16 @@ const summaryRows = computed(() => {
     </section>
 
     <section class="attrs-block">
-      <h3 class="section-title">BOM 属性摘要</h3>
+      <header class="file-panel-header">
+        <h3 class="panel-title">BOM 属性摘要</h3>
+        <div class="file-panel-actions">
+          <el-button v-if="canOpenSourceModel" type="primary" size="small" @click="openSourceModel">打开模型</el-button>
+          <el-button v-if="canOpenPart" size="small" class="mono" @click="openPartKey">{{ partKey }}</el-button>
+          <el-button size="small" @click="switchSubTab('edit')">{{ editSubTabLabel }}</el-button>
+          <el-button v-if="incomingCount + outgoingCount" size="small" @click="switchSubTab('xref')">查看引用</el-button>
+          <el-button size="small" @click="triggerRename()">改名</el-button>
+        </div>
+      </header>
       <dl class="summary-grid">
         <dt>零件标识</dt>
         <dd>
@@ -84,23 +93,11 @@ const summaryRows = computed(() => {
       </dl>
     </section>
 
-    <section class="quick-links">
-      <el-button v-if="canOpenSourceModel" type="primary" size="small" @click="openSourceModel">
-        打开模型
-      </el-button>
-      <el-button v-if="canOpenPart" size="small" class="mono" @click="openPartKey">
-        {{ partKey }}
-      </el-button>
-      <el-button size="small" @click="switchSubTab('edit')">{{ editSubTabLabel }}</el-button>
-      <el-button v-if="incomingCount + outgoingCount" size="small" @click="switchSubTab('xref')">
-        查看引用
-      </el-button>
-      <el-button size="small" @click="triggerRename()">改名</el-button>
-    </section>
   </div>
 </template>
 
 <style scoped>
+@import "./file-panel-header.css";
 .overview-panel {
   padding-top: 4px;
   display: flex;
@@ -112,7 +109,8 @@ const summaryRows = computed(() => {
   padding: 14px 16px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: #fafafa;
+  background: var(--phoenix-bg-elevated);
+  color: var(--phoenix-text);
 }
 
 .path {
@@ -124,7 +122,7 @@ const summaryRows = computed(() => {
 .kinds {
   margin: 0 0 6px;
   font-size: 0.85rem;
-  color: #0369a1;
+  color: var(--phoenix-accent);
 }
 
 .counts {
@@ -145,14 +143,9 @@ const summaryRows = computed(() => {
 .warn {
   margin: 8px 0 0;
   font-size: 0.78rem;
-  color: #b45309;
+  color: var(--phoenix-warning-text);
 }
 
-.section-title {
-  margin: 0 0 10px;
-  font-size: 0.88rem;
-  font-weight: 600;
-}
 
 .summary-grid {
   display: grid;
@@ -172,23 +165,19 @@ const summaryRows = computed(() => {
   word-break: break-word;
 }
 
-.quick-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
 
 .part-key-link {
   padding: 0;
   border: none;
   background: none;
-  color: var(--accent, #2563eb);
+  color: var(--phoenix-accent);
   cursor: pointer;
   font: inherit;
   font-size: 0.85rem;
 }
 
 .part-key-link:hover {
+  color: var(--phoenix-accent-hover);
   text-decoration: underline;
 }
 

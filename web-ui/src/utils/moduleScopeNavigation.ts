@@ -1,6 +1,7 @@
 import type { ModuleScope } from "../constants/moduleScope";
 import type { WorkbenchTab } from "../types/workbench";
-import { RIBBON_SHELL_TAB_ID } from "../layout/ribbon/ribbonConfig";
+import { RIBBON_SHELL_TAB_ID, RIBBON_TOOLS_TAB_ID } from "../layout/ribbon/ribbonConfig";
+import { CODE_PAGE_FALLBACK } from "../constants/retiredCodePages";
 
 const DOCUMENT_PAGES = new Set([
   "file_detail",
@@ -56,10 +57,10 @@ export function defaultPageForModuleScope(
   scope: ModuleScope,
   enabledModules: readonly string[],
 ): string {
-  if (scope === "code" && enabledModules.includes("code")) return "code_index";
+  if (scope === "code" && enabledModules.includes("code")) return CODE_PAGE_FALLBACK;
   if (scope === "cad" && enabledModules.includes("cad")) return "part_catalog";
   if (enabledModules.includes("cad")) return "part_catalog";
-  if (enabledModules.includes("code")) return "code_index";
+  if (enabledModules.includes("code")) return CODE_PAGE_FALLBACK;
   return "home";
 }
 
@@ -67,7 +68,7 @@ export function ribbonTabIdForModuleScope(
   scope: ModuleScope,
   enabledModules: readonly string[],
 ): string {
-  if (scope === "cad" && enabledModules.includes("cad")) return "cad";
-  if (scope === "code" && enabledModules.includes("code")) return "code";
+  if (scope === "cad" && enabledModules.includes("cad")) return RIBBON_TOOLS_TAB_ID;
+  if (scope === "code" && enabledModules.includes("code")) return RIBBON_TOOLS_TAB_ID;
   return RIBBON_SHELL_TAB_ID;
 }

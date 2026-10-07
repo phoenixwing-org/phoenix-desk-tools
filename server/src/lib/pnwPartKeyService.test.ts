@@ -104,6 +104,36 @@ afterEach(() => {
 });
 
 describe("pnwPartKeyService", () => {
+  it("reuses persisted projection without row writes and invalidates it when indexed attributes change", () => {
+    const workspace = makeTempRoot(); createPartFixture(workspace);
+    loadPartKeysPayload(workspace);
+    let db = pnwCreateDb(path.join(workspace, ".phoenix", "phoenix-workspace.sqlite"));
+    db.exec(`CREATE TABLE projection_writes (value INTEGER);
+      CREATE TRIGGER count_key_writes AFTER UPDATE ON phoenix_cad_part_key BEGIN INSERT INTO projection_writes VALUES (1); END;
+      CREATE TRIGGER count_link_writes AFTER UPDATE ON phoenix_cad_part_file_link BEGIN INSERT INTO projection_writes VALUES (1); END;`);
+    db.close();
+    loadPartKeysPayload(workspace); loadPartKeysPayload(workspace, { search: "Bolt" });
+    db = pnwCreateDb(path.join(workspace, ".phoenix", "phoenix-workspace.sqlite"));
+    expect(db.get<{ n: number }>("SELECT COUNT(*) AS n FROM projection_writes")?.n).toBe(0);
+    db.run("UPDATE phoenix_cad_file_asset SET part_name='New fixture name' WHERE id=3"); db.close();
+    expect(loadPartKeysPayload(workspace).entries.find((row: any) => row.part_number === "100003").PartName).toBe("New fixture name");
+    db = pnwCreateDb(path.join(workspace, ".phoenix", "phoenix-workspace.sqlite"));
+    expect(db.get<{ n: number }>("SELECT COUNT(*) AS n FROM projection_writes")!.n).toBeGreaterThan(0);
+    db.exec("DROP TABLE phoenix_cad_part_file_link"); db.close();
+    expect(loadPartKeysPayload(workspace).stats.total_files).toBe(4);
+  });
+
+  it("loads a 500-file synthetic catalog from cached indexed fields without FCStd tree reads", () => {
+    const workspace = makeTempRoot(); createPartFixture(workspace);
+    const db = pnwCreateDb(path.join(workspace, ".phoenix", "phoenix-workspace.sqlite"));
+    db.exec("BEGIN");
+    for (let i = 5; i <= 500; i++) db.run("INSERT INTO phoenix_cad_file_asset(id,repo_rel_path,filename,part_number,part_version,part_name,file_status) VALUES (?,?,?,?,?,?,?)", [i, `parts/demo-${i}.FCStd`, `demo-${i}.FCStd`, `D${i}`, "001", `Demo ${i}`, "present"]);
+    db.exec("COMMIT"); db.close();
+    const start = performance.now(); const cold = loadPartKeysPayload(workspace); const projected = performance.now();
+    const warm = loadPartKeysPayload(workspace); const finish = performance.now();
+    expect(warm.entries).toEqual(cold.entries); expect(warm.stats.total_files).toBe(500);
+    console.info(`Synthetic catalog 500 files: projection ${Math.round(projected - start)}ms, cached ${Math.round(finish - projected)}ms`);
+  });
   it("syncs part keys from file assets, serves details, patches metadata/link state, infers keys, and loads assembly trees", () => {
     const workspace = makeTempRoot();
     createPartFixture(workspace);

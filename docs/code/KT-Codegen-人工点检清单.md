@@ -1,5 +1,7 @@
 # KT Codegen 人工点检清单
 
+> 已被替代（2026-10-04）：Desk 不再运行本清单中的 Codegen 正向流程，改用 [退役 API 与会话点检](Desk-Code功能退役.md)。下文保留历史。
+
 > 适用范围：Phoenix Desk Tools 的“自动代码 / KT Codegen”页面。
 >
 > 目标：在真实 Git 工作区中确认配置发现、独立 View、Wing 参数表、32 个控制符、预检、问题定位、配置保存和源码真实 Apply 均可用。

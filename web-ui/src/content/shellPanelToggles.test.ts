@@ -5,8 +5,8 @@ describe("shellPanelToggleTip", () => {
   it("uses a contributed page Block label in its action copy", () => {
     expect(shellPanelToggleTip("pageBlock", {
       open: true,
-      name: "KT Codegen Block",
-    })).toBe("KT Codegen Block — 隐藏页面 Block");
+      name: "CAA Block",
+    })).toBe("CAA Block — 隐藏页面 Block");
   });
 
   it("keeps the generic label as a fallback", () => {

@@ -55,7 +55,7 @@ export function useXlinkFixPropertySheet(
           { defaultCollapsed: false },
         ),
       ],
-      { title: "链接路径修正", schemaVersion: 1 },
+      { title: "错误修正 · XLink 范围", schemaVersion: 1 },
     ),
   );
 }

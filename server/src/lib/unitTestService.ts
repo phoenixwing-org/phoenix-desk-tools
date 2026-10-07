@@ -187,7 +187,7 @@ const SUITE_LABELS: Record<UnitTestSuiteId, string> = {
 };
 
 const SUITE_DESCRIPTIONS: Record<UnitTestSuiteId, string> = {
-  code: "Code index, rename, UUID, ignore, workset, and reorder member tests.",
+  code: "Code ignore, workspace worksets, and shared source text services tests.",
   cad: "CAD, FCStd, BOM, part, and xref migration tests.",
   platform: "Launcher, shell, API adapter, layout, and test platform checks.",
   caa: "CAA dialog parser, writer, NLS, wizard, and visual editor tests.",
@@ -247,7 +247,7 @@ function classifySuite(module: string): UnitTestSuiteId {
     /(emitcatdlg|parsecatdlg|patchcatdlg|patchcatnls|caadialog|caacontrol|caadrop|caaspan)/i.test(module)
   ) return "caa";
   if (/(cad|fcstd|bom|part|xlink|pnwcad|pnwbom|filerename)/i.test(module)) return "cad";
-  if (/(code|reorder|uuid|workset|ignore|pdtcode)/i.test(module)) return "code";
+  if (/(code|workset|ignore)/i.test(module)) return "code";
   return "platform";
 }
 

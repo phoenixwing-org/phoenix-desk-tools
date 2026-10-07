@@ -8,6 +8,7 @@ import {
   applyReferenceLabelCorrections,
 } from "../api";
 import { useAppShell } from "./useAppShell";
+import { useRenamePreferencesStore } from "../stores/renamePreferences";
 import {
   validateRenameTarget,
   isFcstdFile,
@@ -22,6 +23,7 @@ export function useRenameDialog(
   originalFilename: Ref<string>,
   form: Ref<Partial<BomFields>>,
   baseline: Ref<Partial<BomFields>>,
+  bomReadonly: Ref<boolean | undefined> = ref(undefined),
 ) {
   const shell = useAppShell();
 
@@ -33,17 +35,27 @@ export function useRenameDialog(
   const logsLoading = ref(false);
   const busy = ref(false);
   const pageError = ref("");
-  const fixXref = ref(true);
-  const syncLabels = ref(false);
-  const fixBasename = ref(false);
+  const completionNote = ref("");
+  const preferences = useRenamePreferencesStore();
+  const option = (key: "fixXref" | "syncLabels" | "fixBasename") => computed({
+    get: () => preferences[key],
+    set: (value: boolean) => preferences.setOption(key, value),
+  });
+  const fixXref = option("fixXref");
+  const syncLabels = option("syncLabels");
+  const fixBasename = option("fixBasename");
 
   const isFcstd = computed(() => isFcstdFile(rel.value));
+  const drawingReadonly = computed(() => bomReadonly.value ?? /\.drawing\.fcstd$/i.test(rel.value));
+  const sameFilename = computed(() => Boolean(newFilename.value.trim())
+    && newFilename.value.trim() === originalFilename.value.trim());
 
   const canRename = computed(
     () =>
       Boolean(rel.value.trim()) &&
+      Boolean(newFilename.value.trim()) &&
       !renamed.value &&
-      newFilename.value.trim() !== originalFilename.value.trim() &&
+      !sameFilename.value &&
       !busy.value,
   );
 
@@ -81,15 +93,14 @@ export function useRenameDialog(
 
   function open(opts?: RenameDialogOpenOptions) {
     pageError.value = "";
+    completionNote.value = "";
     renamed.value = false;
     lastRenameLog.value = null;
-    fixXref.value = true;
-    syncLabels.value = false;
-    fixBasename.value = false;
 
     const preferred = opts?.preferredNewFilename?.trim();
+    const draft = form.value.filename?.trim();
     const disk = originalFilename.value.trim();
-    newFilename.value = preferred || disk;
+    newFilename.value = preferred || draft || disk;
 
     dialogOpen.value = true;
     void loadRenameLogs();
@@ -141,7 +152,11 @@ export function useRenameDialog(
     pageError.value = "";
 
     const targetName = newFilename.value.trim();
-    const hasUnsaved =
+    const renameWorkspace = shell.workspacePath.value;
+    const options = { fixXref: fixXref.value, syncLabels: syncLabels.value, fixBasename: fixBasename.value };
+    const correctionWarnings: string[] = [];
+    completionNote.value = "";
+    const hasUnsaved = !drawingReadonly.value &&
       (["PartNumber", "PartVersion", "TypeCode", "ModelSeries", "PartName", "label"] as const).some(
         (k) => String(form.value[k] ?? "").trim() !== String(baseline.value[k] ?? "").trim(),
       );
@@ -155,7 +170,7 @@ export function useRenameDialog(
 
       const data = await executeFileRename(
         curRel,
-        { ...form.value, filename: targetName },
+        { ...(drawingReadonly.value ? baseline.value : form.value), filename: targetName },
         baseline.value,
         { writeAttrsFirst: hasUnsaved },
       );
@@ -170,7 +185,7 @@ export function useRenameDialog(
       );
 
       // Step 3-4: 引用修正（仅 FCStd 且勾选时）
-      if (isFcstd.value && (fixXref.value || syncLabels.value || fixBasename.value) && log) {
+      if (isFcstd.value && (options.fixXref || options.syncLabels || options.fixBasename) && log) {
         shell.appendLog("[改名] 扫描入向引用…", { source: "file_detail" });
 
         const scan = await analyzeRenameReferences({
@@ -183,10 +198,24 @@ export function useRenameDialog(
           `[改名] 引用扫描完成：宿主 ${scan.host_count} 个 · XLink ${scan.hit_count} 处 · 待修正 ${scan.pending_hit_count ?? 0} 处`,
           { source: "file_detail" },
         );
+        const hosts = [...new Set(scan.hosts.map((h) => h.host_repo_rel_path.trim()).filter(Boolean))];
+        if (!hosts.length) {
+          if (scan.host_count > 0 || scan.hit_count > 0 || (scan.pending_hit_count ?? 0) > 0) {
+            throw new Error("引用扫描计数与宿主列表不一致，请重新分析");
+          }
+          completionNote.value = "当前索引未发现引用，已跳过引用修正";
+          if (drawingReadonly.value || data.bom_readonly) completionNote.value += "；未找到适用的 Label / basename 修正项";
+          shell.appendLog(`[改名] ${completionNote.value}。若磁盘文件在其他地方发生变化，请更新索引后再分析。`, {
+            source: "file_detail",
+          });
+        }
+
+        if (hosts.length && options.fixBasename && !scan.pending_hit_count) {
+          shell.appendLog("[改名] 未找到待修正的 basename 引用，已跳过", { source: "file_detail" });
+        }
 
         // Step 4: 修正 XLink（fixXref 或 fixBasename 勾选时）
-        if ((fixXref.value || fixBasename.value) && scan.pending_hit_count && scan.pending_hit_count > 0) {
-          const hosts = scan.hosts.map((h) => h.host_repo_rel_path);
+        if (hosts.length && (options.fixXref || options.fixBasename) && scan.pending_hit_count && scan.pending_hit_count > 0) {
           shell.appendLog(`[改名] 写回 XLink 修正（${hosts.length} 个宿主）…`, {
             source: "file_detail",
           });
@@ -202,6 +231,7 @@ export function useRenameDialog(
           );
 
           if (result.failed.length > 0) {
+            correctionWarnings.push(`XLink 修正失败 ${result.failed.length} 个宿主`);
             shell.appendLog(
               `[改名] ⚠ XLink 修正失败 ${result.failed.length} 个：${result.failed.map((f) => f.host_repo_rel_path).join(", ")}`,
               { source: "file_detail" },
@@ -210,8 +240,7 @@ export function useRenameDialog(
         }
 
         // Step 5: 标签同步
-        if (syncLabels.value) {
-          const hosts = scan.hosts.map((h) => h.host_repo_rel_path);
+        if (options.syncLabels && hosts.length) {
           shell.appendLog(`[改名] 同步引用标签（${hosts.length} 个宿主）…`, {
             source: "file_detail",
           });
@@ -226,16 +255,33 @@ export function useRenameDialog(
             `[改名] 标签同步完成：${labelResult.label_patches ?? 0} 处`,
             { source: "file_detail" },
           );
+          if (labelResult.failed.length > 0) {
+            correctionWarnings.push(`标签同步失败 ${labelResult.failed.length} 个宿主`);
+          }
+          for (const skipped of labelResult.skipped || []) {
+            const note = `${skipped.host_repo_rel_path}：${skipped.reason}`;
+            shell.appendLog(`[改名] ${note}`, { source: "file_detail" });
+          }
+          if (labelResult.skipped?.length) completionNote.value = `未找到适用的 Label 修正项 ${labelResult.skipped.length} 处，已跳过`;
         }
       }
 
-      shell.setStatus(`改名完成：${targetName}`);
+      if (correctionWarnings.length) {
+        pageError.value = `文件已改名，但${correctionWarnings.join("；")}。请打开改名分析继续处理。`;
+        shell.appendLog(`[改名] ${pageError.value}`, { source: "file_detail" });
+        shell.setStatus("文件已改名，引用修正未完成");
+      } else {
+        shell.setStatus(`改名完成：${targetName}${completionNote.value ? ` · ${completionNote.value}` : ""}`);
+      }
     } catch (e) {
       const msg = String(e);
-      pageError.value = msg;
+      pageError.value = renamed.value ? `文件已改名，但后续处理失败：${msg}。请打开改名分析继续处理。` : msg;
       shell.appendLog(`[改名] 失败: ${msg}`, { source: "file_detail" });
     } finally {
       busy.value = false;
+      // Refresh even after a partial failure or lost reply; a disk rename may have succeeded.
+      // Do not select/open a file or refresh another workspace after switching away.
+      if (shell.workspacePath.value === renameWorkspace) shell.requestTreeRescan();
       await loadRenameLogs();
     }
   }
@@ -245,6 +291,7 @@ export function useRenameDialog(
     newFilename,
     renamed,
     canRename,
+    sameFilename,
     busy,
     logsLoading,
     renameLogs,
@@ -254,6 +301,7 @@ export function useRenameDialog(
     syncLabels,
     fixBasename,
     pageError,
+    completionNote,
     lastRenameLog,
     open,
     close,

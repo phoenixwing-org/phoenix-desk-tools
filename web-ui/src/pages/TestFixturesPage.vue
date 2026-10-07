@@ -12,6 +12,8 @@ import {
 import { useAppShell } from "../composables/useAppShell";
 import { useTestFixturesPropertySheet } from "../composables/useTestFixturesPropertySheet";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
+import PageLayout from "phoenix-wing/layout/PnwPageLayout.vue";
+import PageMainBlock from "phoenix-wing/layout/PnwPageMainBlock.vue";
 import {
   usePagePrimaryContribution,
   type PagePrimarySection,
@@ -250,103 +252,106 @@ usePagePrimaryContribution("test_fixtures", props.workbenchTabId, {
 </script>
 
 <template>
-  <div class="page tool-page test-fixtures-page">
-    <PageHeader title="检出测试工程" page-id="test_fixtures">
-      <template #actions>
-        <el-button
-          type="primary"
-          size="small"
-          :loading="syncing && !busyName"
-          :disabled="!enabledCount || (syncing && !!busyName)"
-          @click="syncFixtures"
-        >
-          {{ primaryActionLabel }}
-        </el-button>
-        <el-button size="small" :disabled="loading || syncing" @click="reload">刷新状态</el-button>
-      </template>
-    </PageHeader>
+  <PageLayout title="检出测试工程" class="desk-page-layout" :body-inset="false">
+    <template #header>
+      <PageHeader title="检出测试工程">
+        <template #right>
+          <el-button
+            type="primary"
+            size="small"
+            :loading="syncing && !busyName"
+            :disabled="!enabledCount || (syncing && !!busyName)"
+            @click="syncFixtures"
+          >
+            {{ primaryActionLabel }}
+          </el-button>
+          <el-button size="small" :disabled="loading || syncing" @click="reload">刷新状态</el-button>
+        </template>
+      </PageHeader>
+    </template>
+    <PageMainBlock class="tool-page test-fixtures-page">
+      <section class="section">
+        <div class="row checkout-row">
+          <el-tooltip :content="checkoutRootHint" placement="top" :show-after="280">
+            <label class="field-label-inline field-label-tip">本机检出根目录</label>
+          </el-tooltip>
+          <el-input
+            v-model="checkoutRootInput"
+            spellcheck="false"
+            placeholder="默认：桌面应用数据目录；开发态为仓库上一级"
+            :disabled="syncing"
+          />
+          <el-button :disabled="syncing" title="填入默认检出根目录" @click="useDefaultCheckoutRoot">默认</el-button>
+          <el-button :loading="pickingRoot" :disabled="syncing" @click="browseCheckoutRoot">浏览…</el-button>
+        </div>
+      </section>
 
-    <section class="section">
-      <div class="row checkout-row">
-        <el-tooltip :content="checkoutRootHint" placement="top" :show-after="280">
-          <label class="field-label-inline field-label-tip">本机检出根目录</label>
-        </el-tooltip>
-        <el-input
-          v-model="checkoutRootInput"
-          spellcheck="false"
-          placeholder="默认：桌面应用数据目录；开发态为仓库上一级"
-          :disabled="syncing"
-        />
-        <el-button :disabled="syncing" title="填入默认检出根目录" @click="useDefaultCheckoutRoot">默认</el-button>
-        <el-button :loading="pickingRoot" :disabled="syncing" @click="browseCheckoutRoot">浏览…</el-button>
-      </div>
-    </section>
+      <section class="section">
+        <div class="section-head">
+          <h2 class="section-title">可引用的测试工程</h2>
+          <span class="section-meta">
+            系统内置 {{ items.length }} 项 · 已勾选 {{ enabledCount }} · 已检出 {{ checkedOutCount }}
+          </span>
+        </div>
+        <p class="section-hint muted small">
+          清单由产品配置，不可在本页增删。勾选表示启用；点击「检出」后会将仓库克隆到上方目录中的同名子目录。
+        </p>
 
-    <section class="section">
-      <div class="section-head">
-        <h2 class="section-title">可引用的测试工程</h2>
-        <span class="section-meta">
-          系统内置 {{ items.length }} 项 · 已勾选 {{ enabledCount }} · 已检出 {{ checkedOutCount }}
-        </span>
-      </div>
-      <p class="section-hint muted small">
-        清单由产品配置，不可在本页增删。勾选表示启用；点击「检出」后会将仓库克隆到上方目录中的同名子目录。
-      </p>
-
-      <div v-loading="loading" class="fixture-list">
-        <article
-          v-for="row in items"
-          :key="row.name"
-          class="fixture-card"
-          :class="{ enabled: isEnabled(row.name), checkedOut: row.checkout_exists }"
-        >
-          <div class="fixture-card-head">
-            <el-checkbox
-              :model-value="isEnabled(row.name)"
-              :disabled="syncing"
-              @change="(v: boolean) => onToggleEnabled(row.name, v)"
-            >
-              <span class="fixture-name">{{ row.name }}</span>
-              <span v-if="busyName === row.name" class="fixture-busy">处理中…</span>
-            </el-checkbox>
-            <div class="fixture-tags">
-              <el-tag type="info" size="small" effect="plain">系统内置</el-tag>
-              <el-tag v-if="isEnabled(row.name)" type="primary" size="small" effect="plain">要引用</el-tag>
-              <el-tag v-else type="info" size="small" effect="plain">未启用</el-tag>
-              <el-tag :type="statusTagType(row)" size="small" effect="plain">{{ checkoutLabel(row) }}</el-tag>
+        <div v-loading="loading" class="fixture-list">
+          <article
+            v-for="row in items"
+            :key="row.name"
+            class="fixture-card"
+            :class="{ enabled: isEnabled(row.name), checkedOut: row.checkout_exists }"
+          >
+            <div class="fixture-card-head">
+              <el-checkbox
+                :model-value="isEnabled(row.name)"
+                :disabled="syncing"
+                @change="(v: boolean) => onToggleEnabled(row.name, v)"
+              >
+                <span class="fixture-name">{{ row.name }}</span>
+                <span v-if="busyName === row.name" class="fixture-busy">处理中…</span>
+              </el-checkbox>
+              <div class="fixture-tags">
+                <el-tag type="info" size="small" effect="plain">系统内置</el-tag>
+                <el-tag v-if="isEnabled(row.name)" type="primary" size="small" effect="plain">要引用</el-tag>
+                <el-tag v-else type="info" size="small" effect="plain">未启用</el-tag>
+                <el-tag :type="statusTagType(row)" size="small" effect="plain">{{ checkoutLabel(row) }}</el-tag>
+              </div>
             </div>
-          </div>
-          <p class="fixture-desc">{{ row.description }}</p>
-          <dl class="fixture-meta">
-            <div class="meta-row">
-              <dt>检出路径</dt>
-              <dd><code>{{ checkoutPath(row.name) }}</code></dd>
+            <p class="fixture-desc">{{ row.description }}</p>
+            <dl class="fixture-meta">
+              <div class="meta-row">
+                <dt>检出路径</dt>
+                <dd><code>{{ checkoutPath(row.name) }}</code></dd>
+              </div>
+              <div class="meta-row">
+                <dt>检出目录</dt>
+                <dd class="mono" :title="row.checkout_path">{{ row.checkout_path }}</dd>
+              </div>
+              <div class="meta-row">
+                <dt>仓库</dt>
+                <dd>
+                  <a :href="row.clone_url" target="_blank" rel="noopener noreferrer">{{ row.clone_url }}</a>
+                </dd>
+              </div>
+              <div v-if="row.link_detail && needsSetup(row)" class="meta-row">
+                <dt>说明</dt>
+                <dd class="muted">{{ row.link_detail }}</dd>
+              </div>
+            </dl>
+            <div v-if="needsSetup(row)" class="card-actions">
+              <el-button size="small" type="primary" :loading="syncing && busyName === row.name" :disabled="syncing && busyName !== row.name" @click="applySync(row.name)">
+                {{ checkoutActionLabel(row) }}
+              </el-button>
             </div>
-            <div class="meta-row">
-              <dt>检出目录</dt>
-              <dd class="mono" :title="row.checkout_path">{{ row.checkout_path }}</dd>
-            </div>
-            <div class="meta-row">
-              <dt>仓库</dt>
-              <dd>
-                <a :href="row.clone_url" target="_blank" rel="noopener noreferrer">{{ row.clone_url }}</a>
-              </dd>
-            </div>
-            <div v-if="row.link_detail && needsSetup(row)" class="meta-row">
-              <dt>说明</dt>
-              <dd class="muted">{{ row.link_detail }}</dd>
-            </div>
-          </dl>
-          <div v-if="needsSetup(row)" class="card-actions">
-            <el-button size="small" type="primary" :loading="syncing && busyName === row.name" :disabled="syncing && busyName !== row.name" @click="applySync(row.name)">
-              {{ checkoutActionLabel(row) }}
-            </el-button>
-          </div>
-        </article>
-        <el-empty v-if="!loading && !items.length" description="内置 catalog 中无可引用工程" />
-      </div>
-    </section>
-  </div>
+          </article>
+          <el-empty v-if="!loading && !items.length" description="内置 catalog 中无可引用工程" />
+        </div>
+      </section>
+    </PageMainBlock>
+  </PageLayout>
 </template>
 
 <style scoped>

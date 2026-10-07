@@ -11,6 +11,8 @@ import {
 } from "../api";
 import RenameAnalysisPanel from "../components/RenameAnalysisPanel.vue";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
+import PageLayout from "phoenix-wing/layout/PnwPageLayout.vue";
+import PageMainBlock from "phoenix-wing/layout/PnwPageMainBlock.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { useFileRenamePropertySheet } from "../composables/useFileRenamePropertySheet";
 import { useIncomingRefQuery } from "../composables/useIncomingRefQuery";
@@ -609,107 +611,103 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="page rename-page">
-    <PageHeader title="改名分析" page-id="file_rename">
-      <template #actions>
-        <el-button type="primary" size="small" :loading="busy" :disabled="!canAnalyze()" @click="onScanRefs">
-          开始分析
-        </el-button>
-        <el-button size="small" :disabled="busy" @click="loadLogs">刷新历史</el-button>
-      </template>
-    </PageHeader>
+  <PageLayout title="改名分析" class="desk-page-layout" :body-inset="false">
+    <template #header>
+      <PageHeader title="改名分析">
+        <template #right>
+          <el-button size="small" @click="shell.openTab({ pageId: 'document_sync' })">关联文档同步</el-button>
+          <el-button type="primary" size="small" :loading="busy" :disabled="!canAnalyze()" @click="onScanRefs">
+            开始分析
+          </el-button>
+          <el-button size="small" :disabled="busy" @click="loadLogs">刷新历史</el-button>
+        </template>
+      </PageHeader>
+    </template>
+    <PageMainBlock class="rename-page">
+      <el-alert v-if="pageError" type="error" :title="pageError" show-icon :closable="false" class="err-alert" />
 
-    <el-alert v-if="pageError" type="error" :title="pageError" show-icon :closable="false" class="err-alert" />
+      <section class="source-block">
+        <el-radio-group v-model="panelMode" size="small" class="mode-tabs" data-tour-page-rename-modes>
+          <el-radio-button value="history">改名历史</el-radio-button>
+          <el-radio-button value="manual">手填旧名 / 新名</el-radio-button>
+        </el-radio-group>
 
-    <section class="source-block">
-      <el-radio-group v-model="panelMode" size="small" class="mode-tabs" data-tour-page-rename-modes>
-        <el-radio-button value="history">改名历史</el-radio-button>
-        <el-radio-button value="manual">手填旧名 / 新名</el-radio-button>
-      </el-radio-group>
+        <div v-if="panelMode === 'history'" class="mode-body">
+          <label class="field">
+            <span class="field-label">记录</span>
+            <el-select v-model="renameLogId" class="field-input" placeholder="— 选择改名记录 —" clearable>
+              <el-option
+                v-for="row in renameLogs"
+                :key="row.id"
+                :label="`#${row.id} · ${row.old_filename} → ${row.new_filename} · ${row.created_at}`"
+                :value="row.id"
+              />
+            </el-select>
+          </label>
+          <p v-if="!renameLogs.length" class="field-hint">
+            尚无记录。请在文件详情页头点「改名」按钮（弹出对话框）执行磁盘改名。
+          </p>
+        </div>
 
-      <div v-if="panelMode === 'history'" class="mode-body">
-        <label class="field">
-          <span class="field-label">记录</span>
-          <el-select v-model="renameLogId" class="field-input" placeholder="— 选择改名记录 —" clearable>
-            <el-option
-              v-for="row in renameLogs"
-              :key="row.id"
-              :label="`#${row.id} · ${row.old_filename} → ${row.new_filename} · ${row.created_at}`"
-              :value="row.id"
+        <div v-else class="mode-body manual-grid">
+          <label class="field">
+            <span class="field-label">旧文件名</span>
+            <el-input
+              v-model="queryText"
+              class="field-input mono"
+              spellcheck="false"
+              placeholder="部分文件名；或右侧树点击"
+              @input="clearPickedOnInput"
+              @keydown.enter.prevent="onScanRefs"
             />
-          </el-select>
-        </label>
-        <p v-if="!renameLogs.length" class="field-hint">
-          尚无记录。请在文件详情页头点「改名」按钮（弹出对话框）执行磁盘改名。
-        </p>
+          </label>
+          <label class="field">
+            <span class="field-label">新文件名</span>
+            <el-input
+              v-model="newBasename"
+              class="field-input mono"
+              spellcheck="false"
+              placeholder="留空则仅按旧名检查引用"
+            />
+          </label>
+          <p v-if="pickedRel" class="picked-hint mono field-span">已从树选择：{{ pickedRel }}</p>
+        </div>
+      </section>
+
+      <div data-tour-page-rename-panel>
+      <RenameAnalysisPanel
+        :scan="scan"
+        :selected-hosts="selectedHosts"
+        :busy="busy"
+        :can-apply="canApplyRefs()"
+        :can-apply-incoming-labels="canApplyIncomingLabels()"
+        :can-apply-host-all-labels="canApplyHostAllLabels()"
+        :target-label="scan?.new_basename"
+        label-sync-ui="incoming-only"
+        show-export
+        @toggle-host="toggleHost"
+        @toggle-all="toggleAll"
+        @apply="onApplyRefs"
+        @apply-incoming-labels="onApplyIncomingLabels"
+        @apply-host-all-labels="onApplyHostAllLabels"
+        @export-report="onExportReport"
+      />
       </div>
 
-      <div v-else class="mode-body manual-grid">
-        <label class="field">
-          <span class="field-label">旧文件名</span>
-          <el-input
-            v-model="queryText"
-            class="field-input mono"
-            spellcheck="false"
-            placeholder="部分文件名；或右侧树点击"
-            @input="clearPickedOnInput"
-            @keydown.enter.prevent="onScanRefs"
-          />
-        </label>
-        <label class="field">
-          <span class="field-label">新文件名</span>
-          <el-input
-            v-model="newBasename"
-            class="field-input mono"
-            spellcheck="false"
-            placeholder="留空则仅按旧名检查引用"
-          />
-        </label>
-        <p v-if="pickedRel" class="picked-hint mono field-span">已从树选择：{{ pickedRel }}</p>
-      </div>
-    </section>
-
-    <div data-tour-page-rename-panel>
-    <RenameAnalysisPanel
-      :scan="scan"
-      :selected-hosts="selectedHosts"
-      :busy="busy"
-      :can-apply="canApplyRefs()"
-      :can-apply-incoming-labels="canApplyIncomingLabels()"
-      :can-apply-host-all-labels="canApplyHostAllLabels()"
-      :target-label="scan?.new_basename"
-      label-sync-ui="incoming-only"
-      show-export
-      @toggle-host="toggleHost"
-      @toggle-all="toggleAll"
-      @apply="onApplyRefs"
-      @apply-incoming-labels="onApplyIncomingLabels"
-      @apply-host-all-labels="onApplyHostAllLabels"
-      @export-report="onExportReport"
-    />
-    </div>
-
-    <details class="help-panel">
-      <summary class="help-summary">说明</summary>
-      <ul class="help-list">
-        <li>改名写回：先修正 XLink 路径；显示名（Label）可在「文件详情 → 引用」随时同步，改名页亦可操作。</li>
-        <li>手填模式用于无历史时的预览；日常请在文件详情页头点「改名」按钮（弹出对话框）改名。</li>
-        <li>右侧树选文件时会自动带入路径，被改名文件本身不会作为宿主。</li>
-      </ul>
-    </details>
-  </div>
+      <details class="help-panel">
+        <summary class="help-summary">说明</summary>
+        <ul class="help-list">
+          <li>改名写回：先修正 XLink 路径；显示名（Label）可在「文件详情 → 引用」随时同步，改名页亦可操作。</li>
+          <li>手填模式用于无历史时的预览；日常请在文件详情页头点「改名」按钮（弹出对话框）改名。</li>
+          <li>右侧树选文件时会自动带入路径，被改名文件本身不会作为宿主。</li>
+        </ul>
+      </details>
+    </PageMainBlock>
+  </PageLayout>
 </template>
 
 <style scoped>
 @import "./page-shared.css";
-
-.rename-page {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 16px 20px 24px;
-  height: 100%;
-  overflow: auto;
-}
 
 .err-alert {
   margin-bottom: 10px;

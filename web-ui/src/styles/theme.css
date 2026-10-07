@@ -53,6 +53,12 @@
   --phoenix-warning-bg: #fef3c7;
   --phoenix-warning-border: #f59e0b;
   --phoenix-warning-text: #92400e;
+  --phoenix-success-bg: #ecfdf5;
+  --phoenix-success-border: #86c9a5;
+  --phoenix-success-text: #166534;
+  --phoenix-danger-bg: #fef2f2;
+  --phoenix-danger-border: #fca5a5;
+  --phoenix-danger-text: #b91c1c;
   --phoenix-danger: #dc2626;
 
   /* ── 交互 ── */
@@ -173,6 +179,12 @@
   --phoenix-warning-bg: rgba(245, 158, 11, 0.15);
   --phoenix-warning-border: #d97706;
   --phoenix-warning-text: #fcd34d;
+  --phoenix-success-bg: rgba(34, 197, 94, 0.12);
+  --phoenix-success-border: #32764d;
+  --phoenix-success-text: #86efac;
+  --phoenix-danger-bg: rgba(248, 113, 113, 0.12);
+  --phoenix-danger-border: #b45353;
+  --phoenix-danger-text: #fca5a5;
 
   --phoenix-hover-overlay: rgba(255, 255, 255, 0.06);
   --phoenix-focus-ring: #60a5fa;

@@ -4,16 +4,7 @@ import { useAppShell } from "../composables/useAppShell";
 import { useWorksetPageScope } from "../composables/useWorksetPageScope";
 import { useFileWorksetsStore, type WorksetScopeMode } from "../stores/fileWorksets";
 
-const props = withDefaults(
-  defineProps<{
-    pageId: string;
-    /** Code 模块页可显示「Code 索引 present」 */
-    showIndexScope?: boolean;
-  }>(),
-  {
-    showIndexScope: true,
-  },
-);
+const props = defineProps<{ pageId: string }>();
 
 const store = useFileWorksetsStore();
 const shell = useAppShell();
@@ -77,7 +68,6 @@ async function openWorksetSidebar() {
       class="mode-select"
       @update:model-value="onScopeModeChange($event as WorksetScopeMode)"
     >
-      <el-option v-if="showIndexScope" value="index" label="Code 索引 present" />
       <el-option value="all" label="全工作空间" />
       <el-option value="scope" label="子目录" />
       <el-option value="workset" label="工作集" />

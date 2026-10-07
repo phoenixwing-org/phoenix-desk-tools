@@ -14,6 +14,8 @@ import { BOM_FIELD_LABELS as L, PART_KEY_META_FIELDS } from "../utils/bomFieldLa
 import { TYPE_CODE_OPTIONS } from "../utils/typeCodeOptions";
 import { parsePartKeyText } from "../utils/partNaming";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
+import PageLayout from "phoenix-wing/layout/PnwPageLayout.vue";
+import PageMainBlock from "phoenix-wing/layout/PnwPageMainBlock.vue";
 import { useAppShell } from "../composables/useAppShell";
 import { isDrawingFcstdFile } from "../composables/useDrawingBomReadonly";
 import { usePageSession } from "../composables/usePageSession";
@@ -47,6 +49,7 @@ const partVersion = ref("");
 const partKeyInput = ref("");
 const loading = ref(false);
 const saving = ref(false);
+watch(saving, busy => { if (busy && props.workbenchTabId) shell.keepTab(props.workbenchTabId); }, { flush: "sync" });
 const detail = ref<PartKeyDetail | null>(null);
 const pageError = ref("");
 
@@ -354,6 +357,7 @@ usePageSession(props.workbenchTabId, {
   serialize: () => ({ v: SESSION_V }),
   hydrate: hydratePageSession,
   isDirty: hasUnsavedEdits,
+  isBusy: () => saving.value,
 });
 
 watch(
@@ -449,152 +453,140 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="page part-detail-page">
-    <PageHeader title="零件详情" page-id="part_key_detail">
-      <template #actions>
-        <div class="part-key-bar">
-          <label class="pk-label" for="part-key-input">
-            <span class="cn">{{ L.partKey }}</span>
-            <span class="en">PartKey</span>
-          </label>
-          <el-input
-            id="part-key-input"
-            v-model="partKeyInput"
-            class="pk-input mono"
-            placeholder="8001.001"
-            spellcheck="false"
-            :disabled="loading"
-            @keydown.enter="onSearchPartKey"
-          />
-          <el-button type="primary" size="small" class="pk-btn" :loading="loading" @click="onSearchPartKey">
-            检索
-          </el-button>
+  <PageLayout title="零件详情" class="desk-page-layout" :body-inset="false" :body-scroll="false">
+    <template #header>
+      <PageHeader title="零件详情">
+        <template #center>
+          <div class="head-filter-group">
+            <label class="pk-label" for="part-key-input">
+              <span class="cn">{{ L.partKey }}</span>
+              <span class="en">PartKey</span>
+            </label>
+            <el-input
+              id="part-key-input"
+              v-model="partKeyInput"
+              class="pk-input mono"
+              placeholder="8001.001"
+              spellcheck="false"
+              :disabled="loading"
+              @keydown.enter="onSearchPartKey"
+            />
+          </div>
+        </template>
+        <template #right>
+          <el-button type="primary" size="small" :loading="loading" @click="onSearchPartKey">检索</el-button>
+        </template>
+      </PageHeader>
+    </template>
+    <PageMainBlock class="part-detail-page desk-page-body--fill">
+
+      <el-alert v-if="pageError" type="error" :title="pageError" show-icon :closable="false" class="err-alert" />
+      <div v-if="loading && !detail" class="empty">载入中…</div>
+
+      <template v-else-if="detail">
+        <div class="sub-panel" data-tour-page-partkey-body>
+          <section class="detail-meta">
+            <div class="meta-grid">
+              <label
+                v-for="field in PART_KEY_META_FIELDS"
+                :key="field.key"
+                :class="{ wide: field.wide, full: field.full }"
+              >
+                <span class="field-label">
+                  <span class="cn">{{ field.cn }}</span>
+                  <span class="en">{{ field.en }}</span>
+                </span>
+                <ComboTextInput
+                  v-if="field.kind === 'typeCode'"
+                  v-model="editForm.TypeCode"
+                  :options="TYPE_CODE_OPTIONS"
+                />
+                <el-input
+                  v-else-if="field.kind === 'input'"
+                  v-model="editForm[field.key as 'ModelSeries' | 'PartName' | 'label' | 'notes']"
+                  spellcheck="false"
+                />
+                <el-select v-else v-model="editForm.status" class="status-select">
+                  <el-option label="有效" value="active" />
+                  <el-option label="失效" value="obsolete" />
+                </el-select>
+              </label>
+            </div>
+            <el-button type="primary" size="small" :loading="saving" @click="savePartMeta">
+              保存零件属性
+            </el-button>
+          </section>
+
+          <section class="files-block">
+            <h2 class="section-title">关联文件</h2>
+            <ResizableDataTable
+              v-if="detail.files.length"
+              :columns="fileColumns"
+              table-class="files-table"
+              wrap-class="table-grow"
+            >
+              <tbody>
+                <tr
+                  v-for="file in detail.files"
+                  :key="file.id"
+                  :class="[file.file_status, file.link_status]"
+                >
+                  <td>{{ fileStatusLabel(file) }}</td>
+                  <td>{{ assetKindLabel(file.asset_kind) }}</td>
+                  <td class="mono">
+                    <button
+                      v-if="file.file_status === 'present'"
+                      type="button"
+                      class="file-link"
+                      :title="file.repo_rel_path"
+                      @click="openFileDetail(file)"
+                    >
+                      {{ file.filename }}
+                    </button>
+                    <span v-else>{{ file.filename }}</span>
+                  </td>
+                  <td>{{ fileRoleLabel(file.file_role) }}</td>
+                  <td>{{ linkStatusLabel(file.link_status) }}</td>
+                  <td class="note-cell" :class="{ empty: !file.link_notes?.trim() }">
+                    {{ file.link_notes?.trim() || "—" }}
+                  </td>
+                  <td class="mono">{{ relDir(file.repo_rel_path) }}</td>
+                  <td class="actions">
+                    <el-button v-if="file.file_status === 'present'" size="small" @click="openFileDetail(file)">
+                      详情
+                    </el-button>
+                    <el-button
+                      v-if="file.file_status === 'present' && isDrawingFcstdFile(file.filename, file.file_role)"
+                      size="small"
+                      @click="openDrawingAttributes(file)"
+                    >
+                      查看属性
+                    </el-button>
+                    <el-button
+                      v-if="file.file_status === 'present' && isAssemblyFile(file)"
+                      size="small"
+                      @click="openAssemblyStructure(file)"
+                    >
+                      装配结构
+                    </el-button>
+                  </td>
+                </tr>
+              </tbody>
+            </ResizableDataTable>
+            <div v-else class="table-wrap empty-wrap">
+              <p class="empty">该零件键下暂无关联文件</p>
+            </div>
+          </section>
         </div>
       </template>
-    </PageHeader>
 
-    <el-alert v-if="pageError" type="error" :title="pageError" show-icon :closable="false" class="err-alert" />
-    <div v-if="loading && !detail" class="empty">载入中…</div>
-
-    <template v-else-if="detail">
-      <div class="sub-panel" data-tour-page-partkey-body>
-        <section class="detail-meta">
-          <div class="meta-grid">
-            <label
-              v-for="field in PART_KEY_META_FIELDS"
-              :key="field.key"
-              :class="{ wide: field.wide, full: field.full }"
-            >
-              <span class="field-label">
-                <span class="cn">{{ field.cn }}</span>
-                <span class="en">{{ field.en }}</span>
-              </span>
-              <ComboTextInput
-                v-if="field.kind === 'typeCode'"
-                v-model="editForm.TypeCode"
-                :options="TYPE_CODE_OPTIONS"
-              />
-              <el-input
-                v-else-if="field.kind === 'input'"
-                v-model="editForm[field.key as 'ModelSeries' | 'PartName' | 'label' | 'notes']"
-                spellcheck="false"
-              />
-              <el-select v-else v-model="editForm.status" class="status-select">
-                <el-option label="有效" value="active" />
-                <el-option label="失效" value="obsolete" />
-              </el-select>
-            </label>
-          </div>
-          <el-button type="primary" size="small" :loading="saving" @click="savePartMeta">
-            保存零件属性
-          </el-button>
-        </section>
-
-        <section class="files-block">
-          <h2 class="section-title">关联文件</h2>
-          <ResizableDataTable
-            v-if="detail.files.length"
-            :columns="fileColumns"
-            table-class="files-table"
-            wrap-class="table-grow"
-          >
-            <tbody>
-              <tr
-                v-for="file in detail.files"
-                :key="file.id"
-                :class="[file.file_status, file.link_status]"
-              >
-                <td>{{ fileStatusLabel(file) }}</td>
-                <td>{{ assetKindLabel(file.asset_kind) }}</td>
-                <td class="mono">
-                  <button
-                    v-if="file.file_status === 'present'"
-                    type="button"
-                    class="file-link"
-                    :title="file.repo_rel_path"
-                    @click="openFileDetail(file)"
-                  >
-                    {{ file.filename }}
-                  </button>
-                  <span v-else>{{ file.filename }}</span>
-                </td>
-                <td>{{ fileRoleLabel(file.file_role) }}</td>
-                <td>{{ linkStatusLabel(file.link_status) }}</td>
-                <td class="note-cell" :class="{ empty: !file.link_notes?.trim() }">
-                  {{ file.link_notes?.trim() || "—" }}
-                </td>
-                <td class="mono">{{ relDir(file.repo_rel_path) }}</td>
-                <td class="actions">
-                  <el-button v-if="file.file_status === 'present'" size="small" @click="openFileDetail(file)">
-                    详情
-                  </el-button>
-                  <el-button
-                    v-if="file.file_status === 'present' && isDrawingFcstdFile(file.filename, file.file_role)"
-                    size="small"
-                    @click="openDrawingAttributes(file)"
-                  >
-                    查看属性
-                  </el-button>
-                  <el-button
-                    v-if="file.file_status === 'present' && isAssemblyFile(file)"
-                    size="small"
-                    @click="openAssemblyStructure(file)"
-                  >
-                    装配结构
-                  </el-button>
-                </td>
-              </tr>
-            </tbody>
-          </ResizableDataTable>
-          <div v-else class="table-wrap empty-wrap">
-            <p class="empty">该零件键下暂无关联文件</p>
-          </div>
-        </section>
-      </div>
-    </template>
-
-    <p v-else-if="!loading" class="empty">输入标识检索，或点树中 .FCStd</p>
-  </div>
+      <p v-else-if="!loading" class="empty">输入标识检索，或点树中 .FCStd</p>
+    </PageMainBlock>
+  </PageLayout>
 </template>
 
 <style scoped>
 @import "./page-shared.css";
-
-.part-detail-page {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  padding: 16px 20px;
-  height: 100%;
-  box-sizing: border-box;
-}
-
-.part-key-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
 
 .pk-input {
   width: 148px;

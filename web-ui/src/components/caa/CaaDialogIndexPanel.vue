@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Grid, Folder } from "@element-plus/icons-vue";
-import SidebarBlock from "phoenix-wing/layout/PnwSidebarBlock.vue";
+import PrimarySection from "phoenix-wing/layout/PnwPrimarySection.vue";
 import { fetchCaaIndexGroups, scanCaaIndex } from "../../api/caaDialog";
 import { useAppShell } from "../../composables/useAppShell";
 import { useCaaDialogPageStore } from "../../stores/caaDialogPage";
@@ -128,21 +128,19 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <SidebarBlock
+  <PrimarySection
     v-model:expanded="expanded"
     class="caa-dialog-index-panel"
     title="对话框索引"
-    variant="strip"
-    body-scroll
     aria-label="CAA 对话框索引"
   >
     <template #suffix>
       <span>{{ query.trim() ? `${visibleCount}/${count}` : count }}</span>
     </template>
     <template #actions>
-      <el-button size="small" text class="act-btn" :title="store.indexViewMode === 'tree' ? '列表视图' : '分组视图'" @click.stop="store.indexViewMode = store.indexViewMode === 'tree' ? 'table' : 'tree'">{{ store.indexViewMode === 'tree' ? '📋' : '🌳' }}</el-button>
-      <el-button size="small" text class="act-btn" :loading="loading" title="刷新索引" @click.stop="loadIndex()">🔄</el-button>
-      <el-button size="small" text class="act-btn" :loading="scanning" title="扫描 .CATDlg" @click.stop="rescan">🔍</el-button>
+      <el-button size="small" text class="act-btn" :title="store.indexViewMode === 'tree' ? '列表视图' : '分组视图'" @click.stop="store.indexViewMode = store.indexViewMode === 'tree' ? 'table' : 'tree'">{{ store.indexViewMode === 'tree' ? '列表' : '分组' }}</el-button>
+      <el-button size="small" text class="act-btn" :loading="loading" title="刷新索引" @click.stop="loadIndex()">刷新</el-button>
+      <el-button size="small" text class="act-btn" :loading="scanning" title="扫描 .CATDlg" @click.stop="rescan">扫描</el-button>
     </template>
 
     <div class="caa-index-body">
@@ -202,21 +200,18 @@ onBeforeUnmount(() => {
         </table>
       </div>
     </div>
-  </SidebarBlock>
+  </PrimarySection>
 </template>
 
 <style scoped>
-.caa-dialog-index-panel:not(.sidebar-block--collapsed) {
-  flex: 1 1 auto;
-  min-height: 150px;
-  width: 100%;
-}
-
 .caa-index-body {
   display: flex;
   flex-direction: column;
   gap: 8px;
   min-height: 0;
+  min-width: 0;
+  padding: 8px;
+  box-sizing: border-box;
 }
 
 .caa-index-list {
@@ -338,19 +333,5 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   color: #2563eb;
   font-weight: 600;
-}
-</style>
-
-<style>
-.caa-dialog-index-panel .sidebar-block-actions {
-  gap: 2px;
-  padding-left: 3px;
-}
-.caa-dialog-index-panel .sidebar-block-actions .act-btn {
-  padding: 2px 3px !important;
-}
-.caa-dialog-index-panel .sidebar-block-actions .act-btn:hover {
-  color: #3b82f6 !important;
-  background: rgba(59,130,246,0.08) !important;
 }
 </style>

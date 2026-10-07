@@ -17,3 +17,5 @@ export function resolvePhoenixWingContext(
 ): PhoenixWingContext;
 export function createPhoenixWingSourceAliases(wingRoot: string): PhoenixWingAlias[];
 export function resolveLocalWingExport(wingRoot: string, specifier: string): string | null;
+
+export function createPhoenixWingTypePaths(wingRoot: string): Record<string, string[]>;

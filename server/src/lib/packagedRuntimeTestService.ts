@@ -13,7 +13,6 @@ import {
   patchReferenceLabelsInDocumentXml,
   patchXlinkAttributesInDocumentXml,
 } from "./fcstdReferenceLabelService.js";
-import { runReorderMembersSelfTest } from "./reorderMembersService.js";
 import { decodeSourceBuffer, encodeSourceText } from "./sourceTextCodec.js";
 
 export type PackagedRuntimeSuiteId = "code" | "cad" | "platform" | "caa";
@@ -98,12 +97,6 @@ function verifyGbkCodec(): string {
   return "GBK source round-trip passed";
 }
 
-function verifyReorderMembers(): string {
-  const result = runReorderMembersSelfTest();
-  expectRuntime(result.ok, result.summary);
-  return result.summary;
-}
-
 function verifyReferenceLabels(): string {
   const xml = '<Document><ObjectData><Object name="Part"><Property name="Label" type="App::PropertyString"><String value="Old"/></Property><XLink file="old.FCStd"/></Object></ObjectData></Document>';
   const result = patchReferenceLabelsInDocumentXml(xml, { "old.FCStd": "New & Label" });
@@ -179,7 +172,6 @@ function verifyCatNlsPatch(): string {
 export function packagedRuntimeChecks(): PackagedRuntimeCheck[] {
   return [
     check("runtime/code/source-codec", "code", "Packaged source services", "round-trips GBK source", verifyGbkCodec),
-    check("runtime/code/reorder-members", "code", "Packaged source services", "reorders C++ and header members", verifyReorderMembers),
     check("runtime/cad/fcstd-xml", "cad", "Packaged FCStd services", "patches reference labels", verifyReferenceLabels),
     check("runtime/cad/fcstd-xml", "cad", "Packaged FCStd services", "patches XLink attributes", verifyXlinkAttributes),
     check("runtime/cad/external-adapters", "cad", "Packaged external adapters", "bundles FreeCAD STEP adapter", () => verifyScript("freecad_batch_step_runner.py")),

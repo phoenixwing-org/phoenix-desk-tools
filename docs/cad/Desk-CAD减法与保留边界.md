@@ -4,13 +4,17 @@
 
 Owner：Desk Tools CAD maintainers
 
-最后核验：2026-09-04
+最后核验：2026-10-04
+
+2026-10-04 专项更新：用户授权将 Auto CAD 的索引领域算法提炼为 Wing 公共函数，两宿主独立
+消费，Desk 恢复手动全量入口与确认清理。下方删除清单是旧实现退役事实，不禁止新的共享 Host
+入口；实现和安全边界以 [第二阶段回执](CAD目录与索引职责拆分.md#第二阶段共享索引与用户缺陷收口2026-10-04) 为准。
 
 ## 产品边界
 
-- `kt-auto-cad` 是唯一的新 CAD/BOM 本地整理端，负责工作区扫描、Schema v13 索引、轻量 FCStd 读取、BOM/引用查询、质量门禁、确定性交付包和后续向 Web 推送。
+- `kt-auto-cad` 保留 VS Code 文件发现/ZIP/SQLite adapter、BOM 交付等产品能力；XML 字段投影、索引计划和 SQL 事务已提炼到 Wing 本地候选。不将 VS Code 设为 Desk 运行前提。
 - `phoenix-bom` 是正式 Part/BOM 数据、导入审核、权限、审计和发布状态的唯一真源。
-- Desk Tools 不再提供第二套 CAD 索引或 BOM 列表客户端；只保留必须在 Desk Host/Tauri 内执行的文件事务、外部引擎和 Auto CAD 尚未具备的产品流程。
+- Desk Tools 不再提供第二套索引算法或正式 BOM 管理客户端；CAD 索引页面调用共享 Wing 函数，并保留 Desk 文件事务、外部引擎与确认交互，不恢复旧 `fcstd_map` 页面/路由。
 - TypeScript/Node 与 Wing 是当前实现基线。Python 只在出现现行契约无法解释的具体回归时用于定点对照；FreeCADCmd 内执行的薄脚本属于外部引擎 adapter，不是后端真源。
 
 ## 删除清单
@@ -38,15 +42,17 @@ Owner：Desk Tools CAD maintainers
 | SolidWorks → STEP | 依赖 Windows SolidWorks COM 与本机进程生命周期 | Desk external-engine adapter | 独立工具提供同等 Windows COM 流程和失败恢复 |
 | Tauri/Node Host 生命周期与诊断 | 属于 Desk 产品壳、打包、服务发现和文件权限边界 | Desk | Desk 产品整体退役 |
 
-保留项不得继续扩展为第二套扫描、交付或 Web 正式管理客户端。新增能力必须先记录 Auto CAD/Phoenix BOM 的缺口、无法复用原因、owner 和明确退役条件。
+保留项不得继续扩展为第二套扫描算法、交付或 Web 正式管理客户端。共享扫描是用户授权专项例外，其他新增能力仍先记录无法复用原因、owner 和退役条件。
 
 ## 数据兼容门禁
+
+`cad_index` 的产品呈现归 Desk；领域计划/事务归 Wing，不拥有独立 DDL/迁移真源，不等同于已删除的 `fcstd_map`。只读诊断不触发扫描；更新及清理分别明确确认。
 
 1. Desk 与 KT Auto CAD 只消费 Wing 的 Workspace Schema v13，不在 Desk 复制 DDL 或字段推断规则。
 2. Desk 读取 Auto CAD 生成的数据库时不得隐式全量重扫、覆盖人工 PartKey 字段或改变交付快照。
 3. Desk 文件写事务只做必要的索引局部更新，并在失败时保持磁盘与 SQLite 可恢复。
 4. 删除页面和扫描 API 后，保留的文件详情、零件目录、改名、XLink、STEP 与 SolidWorks 流程必须通过现有自动测试和生产构建。
-5. 发布说明必须明确：先用 KT Auto CAD 扫描/整理，再用 Desk 执行仍需 Host 的本地写操作，最后由 Phoenix BOM Web 管理正式数据。
+5. 发布说明必须明确：Desk 或 KT Auto CAD 均可通过 Wing 共享索引扫描，Desk 提供本地文件修复，Phoenix BOM Web 管理正式数据；共享候选须在 Wing 发布并精确采用后才能正式发行。
 
 ## 2026-09-04 实施回执
 

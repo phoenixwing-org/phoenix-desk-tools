@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import {
   pnwBuildAssemblyTreeFromXrefs,
   pnwResolveIncomingXlinkHosts,
@@ -11,7 +12,8 @@ import {
   refreshBomXrefHostsIndex,
   type BomXrefIndexOptions,
 } from "./pnwBomXrefIndexEngine.js";
-import { patchFcstdReferenceLabels } from "./fcstdReferenceLabelService.js";
+import { patchFcstdReferenceLabels, type ObjectLabelPatch } from "./fcstdReferenceLabelService.js";
+import { buildHostObjectAssemblyTree, enrichAssemblyLabelPreview } from "./assemblyLabelPreview.js";
 
 function dbPath(ws: string): string {
   return path.join(ws, ".phoenix", "phoenix-workspace.sqlite");
@@ -215,21 +217,28 @@ export function searchIncomingRefs(
 }
 
 export function loadAssemblyTreeFromXrefs(ws: string, hostRel: string, opts: { full?: boolean } = {}): any {
+  return createAssemblyTreeReader(ws)(hostRel, opts);
+}
+
+/** Share one read-only index snapshot across a batch of host previews. */
+export function createAssemblyTreeReader(ws: string) {
   const db = openDb(ws);
-  const hostKey = normKey(hostRel);
-  const mode = opts.full ? "full" : "first";
-  if (!db || !hostKey) {
-    return { host_repo_rel_path: hostKey || hostRel, mode, node_count: 0, nodes: [], index_pending: true };
-  }
+  let edges: any[] | null = null;
   try {
-    if (!hasBomXrefTable(db)) {
+    if (db && hasBomXrefTable(db)) edges = allEdges(db);
+  } finally { db?.close(); }
+  return (hostRel: string, opts: { full?: boolean } = {}): any => {
+    const hostKey = normKey(hostRel);
+    const mode = opts.full ? "full" : "first";
+    if (!edges || !hostKey) {
       return { host_repo_rel_path: hostKey, mode, node_count: 0, nodes: [], index_pending: true };
     }
-    const tree = pnwBuildAssemblyTreeFromXrefs(allEdges(db), hostKey, Boolean(opts.full));
+    const tree = pnwBuildAssemblyTreeFromXrefs(edges, hostKey, Boolean(opts.full));
+    const objectTree = buildHostObjectAssemblyTree(ws, hostKey, tree.nodes);
+    if (objectTree) return { host_repo_rel_path: hostKey, mode, ...objectTree };
+    enrichAssemblyLabelPreview(ws, hostKey, tree.nodes);
     return { host_repo_rel_path: hostKey, mode, ...tree };
-  } finally {
-    db.close();
-  }
+  };
 }
 
 export function refreshBomXrefForHost(ws: string, rel: string, options: BomXrefIndexOptions = {}): any {
@@ -282,10 +291,10 @@ export function fileDetailXrefs(
   return payload;
 }
 
-export function patchBomLinkLabels(ws: string, patches: Array<{ host_repo_rel?: string; xlink_file_attr?: string; link_label?: string }>): any {
+export function patchBomLinkLabels(ws: string, patches: Array<{ host_repo_rel?: string; xlink_file_attr?: string; link_label?: string } & Partial<ObjectLabelPatch>>, options: { refreshIndex?: boolean } = {}): any {
   const db = openDb(ws);
   const failed: Array<{ host_repo_rel: string; error: string }> = [];
-  const byHost = new Map<string, Map<string, string>>();
+  const byHost = new Map<string, typeof patches>();
   const labelChanges: Array<{ host_repo_rel: string; xlink_file_attr: string; old_label: string; new_label: string }> = [];
   let labelPatches = 0;
 
@@ -315,13 +324,18 @@ export function patchBomLinkLabels(ws: string, patches: Array<{ host_repo_rel?: 
         failed.push({ host_repo_rel: host, error: `xref row not found: ${attr}` });
         continue;
       }
-      if (!byHost.has(host)) byHost.set(host, new Map());
-      byHost.get(host)!.set(attr, label);
+      if (patch.host_object_name && (typeof patch.target_object_name !== "string" || typeof patch.old_label !== "string")) {
+        failed.push({ host_repo_rel: host, error: "逐对象写回必须包含目标对象和预览原标签，请刷新预览" });
+        continue;
+      }
+      if (!byHost.has(host)) byHost.set(host, []);
+      byHost.get(host)!.push({ ...patch, xlink_file_attr: attr, link_label: label });
     }
   } finally {
     db.close();
   }
   const appliedHosts: string[] = [];
+  const backups: Array<{ host_repo_rel: string; backup_file: string }> = [];
   const root = path.resolve(ws);
   for (const [host, labels] of byHost) {
     const hostPath = path.resolve(root, host.replace(/^\.\//, ""));
@@ -335,7 +349,15 @@ export function patchBomLinkLabels(ws: string, patches: Array<{ host_repo_rel?: 
       continue;
     }
     try {
-      const result = patchFcstdReferenceLabels(hostPath, Object.fromEntries(labels));
+      const realRelative = path.relative(fs.realpathSync(root), fs.realpathSync(hostPath));
+      if (realRelative.startsWith("..") || path.isAbsolute(realRelative)) throw new Error("host symlink escapes workspace");
+      // A request may not mix legacy file-wide patches with exact object edits.
+      const exact = labels.some(label => label.host_object_name);
+      if (exact && labels.some(label => !label.host_object_name)) throw new Error("不可混用文件级与对象级标签补丁");
+      const backup = path.join(root, ".phoenix", "reference-label-backups", randomUUID(), host.replace(/^\.\//, ""));
+      const result = patchFcstdReferenceLabels(hostPath, exact ? labels as ObjectLabelPatch[]
+        : Object.fromEntries(labels.map(label => [label.xlink_file_attr!, label.link_label!])), backup);
+      if (result.backup_file) backups.push({ host_repo_rel: host, backup_file: result.backup_file });
       if (result.count > 0) {
         labelPatches += result.count;
         appliedHosts.push(host);
@@ -345,7 +367,7 @@ export function patchBomLinkLabels(ws: string, patches: Array<{ host_repo_rel?: 
       failed.push({ host_repo_rel: host, error: error.message || String(error) });
     }
   }
-  if (appliedHosts.length) {
+  if (appliedHosts.length && options.refreshIndex !== false) {
     try {
       refreshBomXrefsForHosts(ws, appliedHosts);
     } catch (error: any) {
@@ -357,5 +379,6 @@ export function patchBomLinkLabels(ws: string, patches: Array<{ host_repo_rel?: 
     applied_hosts: appliedHosts,
     failed,
     label_changes: labelChanges,
+    backups,
   };
 }

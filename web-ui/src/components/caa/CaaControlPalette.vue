@@ -41,13 +41,13 @@ function onDragStart(e: DragEvent, type: string) {
     <div class="palette-header">
       <div v-if="!collapsed" class="palette-header-left">
         <button class="palette-toggle" :title="layout === 'vertical' ? '切换水平布局' : '切换垂直布局'"
-          @click="layout = layout === 'vertical' ? 'horizontal' : 'vertical'">↕</button>
+          @click="layout = layout === 'vertical' ? 'horizontal' : 'vertical'">{{ layout === 'vertical' ? '横排' : '竖排' }}</button>
         <button class="palette-toggle" :title="density === 'grid' ? '切换单行' : '切换双列'"
-          @click="density = density === 'grid' ? 'ribbon' : 'grid'">{{ density === 'grid' ? '☰' : '⊞' }}</button>
+          @click="density = density === 'grid' ? 'ribbon' : 'grid'">{{ density === 'grid' ? '单行' : '双列' }}</button>
       </div>
       <span v-if="!collapsed" class="palette-title">工具箱</span>
       <button class="palette-toggle" :title="collapsed ? '展开工具箱' : '折叠工具箱'" @click="collapsed = !collapsed">
-        {{ collapsed ? '🧰' : '📌' }}
+        {{ collapsed ? '工具箱' : '收起' }}
       </button>
     </div>
 
@@ -96,7 +96,7 @@ function onDragStart(e: DragEvent, type: string) {
 }
 
 .caa-palette--collapsed {
-  width: 30px;
+  width: 56px;
   min-height: auto;
   flex: 0 0 auto;
   position: absolute;
@@ -122,10 +122,6 @@ function onDragStart(e: DragEvent, type: string) {
 .caa-palette--collapsed .palette-header-left,
 .caa-palette--collapsed .palette-title {
   display: none;
-}
-
-.caa-palette--collapsed .palette-toggle {
-  font-size: 16px;
 }
 
 .caa-palette--horizontal:not(.caa-palette--collapsed) {
@@ -173,10 +169,12 @@ function onDragStart(e: DragEvent, type: string) {
   border: none;
   background: transparent;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 12px;
   padding: 1px 3px;
   border-radius: 3px;
-  line-height: 1;
+  line-height: 1.5;
+  white-space: nowrap;
+  color: inherit;
 }
 
 .palette-toggle:hover {

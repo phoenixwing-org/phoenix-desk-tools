@@ -2,6 +2,8 @@
 import { computed, onMounted, provide } from "vue";
 import CodeIgnorePanel from "../components/CodeIgnorePanel.vue";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
+import PageLayout from "phoenix-wing/layout/PnwPageLayout.vue";
+import PageMainBlock from "phoenix-wing/layout/PnwPageMainBlock.vue";
 import { codeIgnoreFormKey } from "../composables/codeIgnoreFormKey";
 import { useCodeIgnoreForm } from "../composables/useCodeIgnoreForm";
 import { useCodeIgnorePropertySheet } from "../composables/useCodeIgnorePropertySheet";
@@ -34,7 +36,7 @@ usePagePrimaryContribution("code_ignore", props.workbenchTabId, {
     {
       id: "source",
       title: "规则来源",
-      description: "索引、成员排序、批量改名和 UUID 替换共用这些规则。",
+      description: "独立保留工作空间忽略设定；保存不会触发源码扫描。",
       controls: [
         {
           id: "file",
@@ -85,7 +87,7 @@ usePagePrimaryContribution("code_ignore", props.workbenchTabId, {
           id: "patterns",
           kind: "textarea",
           label: "忽略规则",
-          description: "每行一条，支持 Git 式通配；保存后立即供各 Code 工具使用。",
+          description: "每行一条，支持 Git 式通配；当前仅保存配置。",
           modelValue: form.customIgnoreText,
           placeholder: "# 每行一条\nImportedInterfaces",
           rows: 8,
@@ -117,14 +119,18 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="page tool-page code-ignore-page">
-    <PageHeader title="Code 忽略设定" page-id="code_ignore">
-      <template #actions>
-        <el-button size="small" :loading="loading" @click="loadPrefs">刷新</el-button>
-      </template>
-    </PageHeader>
-    <CodeIgnorePanel layout="page" />
-  </div>
+  <PageLayout title="Code 忽略设定" class="desk-page-layout" :body-inset="false">
+    <template #header>
+      <PageHeader title="Code 忽略设定">
+        <template #right>
+          <el-button size="small" :loading="loading" @click="loadPrefs">刷新</el-button>
+        </template>
+      </PageHeader>
+    </template>
+    <PageMainBlock class="tool-page code-ignore-page">
+      <CodeIgnorePanel layout="page" />
+    </PageMainBlock>
+  </PageLayout>
 </template>
 
 <style scoped>

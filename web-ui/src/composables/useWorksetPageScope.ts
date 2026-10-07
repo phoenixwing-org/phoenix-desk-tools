@@ -7,7 +7,6 @@ import {
 
 export type PathScopeBody = {
   scope?: string;
-  use_index_scope?: boolean;
   repo_rel_paths?: string[];
 };
 
@@ -20,8 +19,6 @@ export function buildPathScopeBody(
       const s = prefs.scope.trim();
       return s ? { scope: s } : {};
     }
-    case "index":
-      return { use_index_scope: true };
     case "workset": {
       const paths = worksetPaths ?? [];
       if (!paths.length) {

@@ -43,6 +43,11 @@ function pdtNormalizeRootPath(value: string): string {
     : normalized;
 }
 
+/** Type edits are persisted by the launcher API, independently of lifecycle snapshots. */
+export function pdtRecentWorkspaceType(prefs: LauncherPrefs | null | undefined, rootPath: string, fallback = "mixed"): string {
+  return prefs?.recent_workspace_entries?.find(entry => pdtNormalizeRootPath(entry.path) === pdtNormalizeRootPath(rootPath))?.workspace_type_id || fallback;
+}
+
 export function pdtWorkspaceId(rootPath: string): string {
   return `local:${pdtNormalizeRootPath(rootPath)}`;
 }

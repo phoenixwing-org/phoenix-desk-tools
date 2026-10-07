@@ -30,6 +30,13 @@ export type WorkbenchBottomContribution = {
 const contributions = shallowReactive(new Map<string, WorkbenchBottomContribution>());
 const activeContributionKey = ref("");
 const activePanelTab = ref<"preflight" | "problems" | "output">("preflight");
+const outputRevealRevision = ref(0);
+
+/** Explicit log reveals must also activate Output when another Bottom tab is selected. */
+export function revealWorkbenchOutput(): void {
+  activePanelTab.value = "output";
+  outputRevealRevision.value++;
+}
 
 export function workbenchBottomContributionKey(pageId: string, workbenchTabId?: string): string {
   return workbenchTabId?.trim() || pageId.trim();
@@ -91,6 +98,7 @@ export function useGlobalWorkbenchBottomContribution() {
 export function useWorkbenchBottomPanelState() {
   return {
     activeTab: activePanelTab,
+    outputRevealRevision,
     setActiveTab(tab: "preflight" | "problems" | "output") {
       activePanelTab.value = tab;
     },

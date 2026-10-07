@@ -2,19 +2,19 @@
 
 [Phoenix Wing](https://gitee.com/phoenixwing) · [Gitee 仓库](https://gitee.com/phoenixwing/phoenix-desk-tools) · Apache-2.0
 
-围绕 FreeCAD 工作空间的 **Web 桌面辅助工具**：CAD 索引与检索、BOM、Code 工具等。
+围绕 FreeCAD 工作空间的 **Web 桌面辅助工具**：CAD 索引诊断与检索、文件与装配工具、CAA 对话框编辑等。
 
 ## 与 KT Auto Code 的关系
 
-[KT Auto Code](https://gitee.com/phoenixwing/kt-auto-code) 与 Desk Tools 是高度关联、可独立使用的两个宿主。两者共用 Phoenix Wing 中的 Codegen 算法、状态契约和 Web UI 组件，但面向不同的使用场景：
+[KT Auto Code](https://gitee.com/phoenixwing/kt-auto-code) 与 Desk Tools 是高度关联、可独立使用的两个产品，共用 Phoenix Wing 的基础能力，但不再维护两套代码编辑/生成界面：
 
 | 选择 | 更适合的场景 |
 | --- | --- |
 | **KT Auto Code（VS Code 扩展）** | 希望在编辑器内完成代码生成、预检、Apply 和文件级操作，与源码编辑、Problems 和 Git 流程保持在同一个 VS Code 窗口。 |
-| **Desk Tools（Web / Tauri）** | 需要独立的本地工作台，统一处理 FreeCAD/CAD 索引、BOM、CAA 与 Code 工具，或不希望将工作流限定在 VS Code 中。 |
+| **Desk Tools（Web / Tauri）** | 需要独立的本地工作台处理 CAD 文件、索引诊断、装配查询、批量工具和 CAA 对话框；Code 区保留忽略设定与 CAA。 |
 | **组合使用** | 日常编辑使用 KT Auto Code，同时保留 Desk Tools 的 CAD/桌面能力。两个前端可发现并复用同一个 Desk API 进程，不应各自启动一份后台。 |
 
-它们不是“同一个应用的两张皮”：可共享的算法和交互下沉到 [Phoenix Wing](https://gitee.com/phoenixwing/phoenix-wing)，VS Code 编辑器能力留在 KT Auto Code，本地服务、Tauri 生命周期和 CAD 业务留在 Desk Tools。详细选型、安装和组合边界见[安装说明](docs/user/桌面工具-安装说明.md)。
+可共享的算法和交互下沉到 [Phoenix Wing](https://gitee.com/phoenixwing/phoenix-wing)，VS Code 编辑器能力留在 KT Auto Code，本地服务、Tauri 生命周期和 CAD/CAA 业务留在 Desk Tools。Desk 的 Code 索引、成员排序、批量改名、UUID 替换及自动代码已退役；旧数据不删除，具体边界见 [Code 功能退役说明](docs/code/Desk-Code功能退役.md)。详细选型、安装和组合边界见[安装说明](docs/user/桌面工具-安装说明.md)。
 
 ## 快速启动
 
@@ -90,7 +90,7 @@ phoenix-desktop --workspace /path/to/workspace --catdlg /path/to/workspace/UI/Sa
 pnpm install --frozen-lockfile --force
 ```
 
-正式依赖始终使用 `package.json` 与 `pnpm-lock.yaml` 锁定的 Wing Registry 精确版本。Codegen Host/Apply、Workspace Schema、Ribbon、UUID/GUID 和 workspace path 契约直接消费包内 fixture；聚合根入口与 composable 子路径的 singleton 由自动测试保护。本地联调由启动进程临时 alias/resolver 完成，不执行 `link:` / `file:` 安装，也不修改清单、锁文件或 `node_modules`。
+正式依赖始终使用 `package.json` 与 `pnpm-lock.yaml` 锁定的 Wing Registry 精确版本。Workspace Schema、Ribbon、CAA 交接和 workspace path 等保留契约由自动测试保护；不再直接依赖 `@phoenix-wing/kt-codegen`。本地联调由启动进程临时 alias/resolver 完成，不执行 `link:` / `file:` 安装，也不修改清单、锁文件或 `node_modules`。
 
 FCStd 文件发现、SQLite 查询、ZIP/Document.xml 读取与 BOM/XLink 写回均由 TypeScript 完成。Desk 不再构建或随 Tauri 打包 `fcstd-read`、`fcstd-xlink`、`fcstd-query` Rust sidecar；Tauri 自身只保留桌面窗口和 Node sidecar 生命周期所需的薄 Rust 壳。
 

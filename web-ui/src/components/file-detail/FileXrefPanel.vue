@@ -19,6 +19,8 @@ import { basenameFromRel, normalizeRepoRelForApi, repoDirFromRel } from "../../u
 import { logReferenceLabelApply } from "../../utils/referenceLabelLog";
 import XlinkReplaceDialog from "../XlinkReplaceDialog.vue";
 
+const emit = defineEmits<{ "busy-change": [busy: boolean] }>();
+
 const ctx = useFileDetailContext();
 const shell = useAppShell();
 const refreshUI = useAsyncProgress("xref-rebuild");
@@ -316,6 +318,8 @@ const canSyncIncomingLabels = computed(
 const { syncing: labelSyncing, syncIncomingLabels } = useReferenceLabelSync(
   () => ctx.rel.value,
 );
+watch(() => refreshing.value || labelSyncing.value || replaceOpen.value,
+  busy => emit("busy-change", busy), { flush: "sync" });
 
 function toggleIncoming(hostRel: string, checked: boolean) {
   const next = new Set(selectedIncoming.value);
@@ -369,29 +373,31 @@ async function onSyncIncomingLabels() {
 
 <template>
   <div class="xref-panel">
-    <h3 class="panel-title">引用关系</h3>
+    <header class="file-panel-header">
+      <h3 class="panel-title">引用关系</h3>
+      <div class="file-panel-actions">
+        <el-button
+          type="primary"
+          size="small"
+          :loading="refreshing"
+          :disabled="loading"
+          title="从磁盘重读本文件 XLink 并写入引用表；勾选下级时一并索引子装配 FCStd"
+          @click="onRefreshIndex"
+        >
+          局部刷新本文件引用
+        </el-button>
+        <el-checkbox v-model="refreshSubtree" size="small" :disabled="refreshing">含下级 FCStd</el-checkbox>
+        <el-checkbox v-model="includeTransitive" size="small">入向含间接宿主</el-checkbox>
+        <el-button size="small" :loading="loading" :disabled="refreshing" @click="loadTables(true, true)">
+          刷新列表
+        </el-button>
+        <el-button size="small" @click="ctx.triggerRename()">改名后修正 XLink…</el-button>
+      </div>
+    </header>
     <p v-if="loading && !outgoingRefs.length" class="empty muted">载入出向引用…</p>
     <p v-else-if="indexPending" class="banner warn">
-      引用表尚未构建。请先在 VS Code 的 KT Auto CAD 扫描工作空间，再回到本页局部刷新当前文件。
+      引用表尚未构建。请先在「CAD 索引」或 KT Auto CAD 更新工作空间索引，再回到本页局部刷新当前文件。
     </p>
-    <div class="toolbar">
-      <el-button
-        type="primary"
-        size="small"
-        :loading="refreshing"
-        :disabled="loading"
-        title="从磁盘重读本文件 XLink 并写入引用表；勾选下级时一并索引子装配 FCStd"
-        @click="onRefreshIndex"
-      >
-        局部刷新本文件引用
-      </el-button>
-      <el-checkbox v-model="refreshSubtree" :disabled="refreshing">含下级 FCStd</el-checkbox>
-      <el-checkbox v-model="includeTransitive">入向含间接宿主</el-checkbox>
-      <el-button size="small" :loading="loading" :disabled="refreshing" @click="loadTables(true, true)">
-        刷新列表
-      </el-button>
-      <el-button size="small" @click="ctx.triggerRename()">改名后修正 XLink…</el-button>
-    </div>
     <p v-if="indexSummary" class="index-summary">{{ indexSummary }}</p>
 
     <section class="block">
@@ -403,6 +409,7 @@ async function onSyncIncomingLabels() {
           </span>
         </h3>
         <el-button
+          class="label-sync-action"
           type="success"
           plain
           size="small"
@@ -581,13 +588,9 @@ async function onSyncIncomingLabels() {
 </template>
 
 <style scoped>
+@import "./file-panel-header.css";
 .xref-panel {
   padding-top: 4px;
-}
-.panel-title {
-  margin: 0 0 10px;
-  font-size: 0.92rem;
-  font-weight: 600;
 }
 
 .sub-title-row {
@@ -609,82 +612,25 @@ async function onSyncIncomingLabels() {
   line-height: 1.4;
 }
 
-.btn-label-sync {
-  padding: 5px 10px;
-  border-radius: 6px;
-  border: 1px solid #059669;
-  background: #059669;
-  color: #fff;
-  font-size: 0.78rem;
-  white-space: nowrap;
-}
-
-.btn-label-sync:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.btn-assembly-link {
-  padding: 5px 10px;
-  border-radius: 6px;
-  border: 1px solid #86efac;
-  background: #fff;
-  color: #047857;
-  font-size: 0.78rem;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.btn-assembly-link:hover {
-  background: #f0fdf4;
-}
-
-.inline-link {
-  padding: 0;
-  border: none;
-  background: none;
-  color: #047857;
-  font: inherit;
-  font-size: inherit;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  cursor: pointer;
-}
-
-.inline-link:hover {
-  color: #065f46;
-}
-.toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-  margin-bottom: 14px;
-}
-.chk {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.82rem;
-}
-.btn {
-  padding: 6px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--border-strong);
-  background: var(--btn-bg);
-  font-size: 0.82rem;
-}
-
-.btn.primary {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
+.label-sync-action.el-button.is-plain {
+  --el-button-text-color: var(--phoenix-success-text);
+  --el-button-bg-color: var(--phoenix-success-bg);
+  --el-button-border-color: var(--phoenix-success-border);
+  --el-button-hover-text-color: var(--phoenix-success-text);
+  --el-button-hover-bg-color: var(--phoenix-success-bg);
+  --el-button-hover-border-color: var(--phoenix-success-text);
+  --el-button-active-text-color: var(--phoenix-success-text);
+  --el-button-active-bg-color: var(--phoenix-success-bg);
+  --el-button-active-border-color: var(--phoenix-success-text);
+  --el-button-disabled-text-color: var(--phoenix-text-muted);
+  --el-button-disabled-bg-color: var(--phoenix-bg-muted);
+  --el-button-disabled-border-color: var(--phoenix-border);
 }
 
 .index-summary {
   margin: 0 0 12px;
   font-size: 0.78rem;
-  color: #0369a1;
+  color: var(--phoenix-accent);
 }
 
 .col-chk {
@@ -694,11 +640,12 @@ async function onSyncIncomingLabels() {
 .out-stats {
   font-size: 0.78rem;
   font-weight: 500;
-  color: #b45309;
+  color: var(--phoenix-warning-text);
 }
 
-.data-table tr.row-label-mismatch {
-  background: #fefce8;
+.data-table tr.row-label-mismatch,
+.data-table tr.row-ambiguous {
+  background: var(--phoenix-warning-bg);
 }
 
 .tree-name-cell {
@@ -712,11 +659,7 @@ async function onSyncIncomingLabels() {
 }
 
 .data-table tr.row-missing {
-  background: #fffbeb;
-}
-
-.data-table tr.row-ambiguous {
-  background: #fff7ed;
+  background: var(--phoenix-danger-bg);
 }
 
 .tag {
@@ -724,24 +667,30 @@ async function onSyncIncomingLabels() {
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 0.72rem;
+  border: 1px solid var(--phoenix-border);
+  background: var(--phoenix-bg-muted);
+  color: var(--phoenix-text-secondary);
 }
 
 .tag.resolved,
 .tag.self,
 .tag.present,
 .tag.ok {
-  background: #d1fae5;
-  color: #047857;
+  background: var(--phoenix-success-bg);
+  color: var(--phoenix-success-text);
+  border-color: var(--phoenix-success-border);
 }
 
 .tag.missing {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: var(--phoenix-danger-bg);
+  color: var(--phoenix-danger-text);
+  border-color: var(--phoenix-danger-border);
 }
 
 .tag.ambiguous {
-  background: #fef3c7;
-  color: #b45309;
+  background: var(--phoenix-warning-bg);
+  color: var(--phoenix-warning-text);
+  border-color: var(--phoenix-warning-border);
 }
 .block {
   margin-bottom: 20px;
@@ -754,6 +703,7 @@ async function onSyncIncomingLabels() {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.8rem;
+  color: var(--phoenix-text);
 }
 .data-table th,
 .data-table td {
@@ -762,7 +712,8 @@ async function onSyncIncomingLabels() {
   text-align: left;
 }
 .data-table th {
-  background: #f8fafc;
+  background: var(--phoenix-bg-panel-head);
+  color: var(--phoenix-text-secondary);
   font-weight: 600;
 }
 .empty {
@@ -777,8 +728,8 @@ async function onSyncIncomingLabels() {
 .banner.warn {
   padding: 8px 12px;
   border-radius: 6px;
-  background: #fffbeb;
-  color: #92400e;
+  background: var(--phoenix-warning-bg);
+  color: var(--phoenix-warning-text);
   font-size: 0.85rem;
   margin-bottom: 10px;
 }
@@ -794,7 +745,7 @@ async function onSyncIncomingLabels() {
   padding: 0;
   border: none;
   background: none;
-  color: #1d4ed8;
+  color: var(--phoenix-accent);
   font: inherit;
   cursor: pointer;
   text-align: left;
@@ -803,7 +754,7 @@ async function onSyncIncomingLabels() {
 }
 
 .link-key:hover {
-  color: #1e40af;
+  color: var(--phoenix-accent-hover);
 }
 
 .muted-link {
@@ -811,7 +762,7 @@ async function onSyncIncomingLabels() {
 }
 
 .muted-link:hover {
-  color: #1d4ed8;
+  color: var(--phoenix-accent-hover);
 }
 
 .col-action {
@@ -823,15 +774,16 @@ async function onSyncIncomingLabels() {
   padding: 3px 8px;
   border-radius: 5px;
   border: 1px solid var(--border-strong);
-  background: #fff;
+  background: var(--phoenix-bg-elevated);
+  color: var(--phoenix-text-secondary);
   font-size: 0.74rem;
   cursor: pointer;
 }
 
 .btn-row-action:hover:not(:disabled) {
-  background: #f0f9ff;
-  border-color: #7dd3fc;
-  color: #0369a1;
+  background: var(--phoenix-accent-soft);
+  border-color: var(--phoenix-accent-border);
+  color: var(--phoenix-accent);
 }
 
 .btn-row-action:disabled {

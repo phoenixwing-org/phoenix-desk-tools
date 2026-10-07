@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { Minus, Plus } from "@element-plus/icons-vue";
 import GitDiffPreviewButton from "./GitDiffPreviewButton.vue";
 import GitRevertWorktreeButton from "./GitRevertWorktreeButton.vue";
 
@@ -41,12 +40,12 @@ const emit = defineEmits<{
       <el-button
         link
         size="small"
-        class="git-icon-btn"
+        class="git-action-btn"
         :aria-label="staged ? `取消暂存 ${path}` : `暂存 ${path}`"
         :loading="actionPaths?.includes(path)"
         @click.stop="staged ? emit('unstage') : emit('stage')"
       >
-        <el-icon><Minus v-if="staged" /><Plus v-else /></el-icon>
+        {{ staged ? '取消暂存' : '暂存' }}
       </el-button>
     </el-tooltip>
   </div>

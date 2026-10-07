@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { Refresh } from "@element-plus/icons-vue";
 import GitPathFilterChips from "../components/git/GitPathFilterChips.vue";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
+import PageLayout from "phoenix-wing/layout/PnwPageLayout.vue";
+import PageMainBlock from "phoenix-wing/layout/PnwPageMainBlock.vue";
 import GitChangeList from "../components/git/GitChangeList.vue";
 import GitSectionHead from "../components/git/GitSectionHead.vue";
 import {
@@ -431,10 +432,10 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="page tool-page git-page">
-    <div class="git-page-head">
-      <PageHeader title="Git" page-id="git">
-        <template #actions>
+  <PageLayout title="Git" class="desk-page-layout" :body-inset="false">
+    <template #header>
+      <PageHeader title="Git">
+        <template #center>
           <GitPathFilterChips
             v-model="filterTags"
             :workspace-path="shell.workspacePath.value"
@@ -443,15 +444,16 @@ onUnmounted(() => {
             @apply-set="applyFilterSet"
             @remember="rememberFilters"
           />
+        </template>
+        <template #right>
           <el-button size="small" :loading="loading" @click="refresh">
-            <el-icon class="btn-icon"><Refresh /></el-icon>
             刷新
           </el-button>
         </template>
       </PageHeader>
-    </div>
+    </template>
 
-    <div class="git-page-body">
+    <PageMainBlock class="tool-page git-page-body">
       <el-alert v-if="loadError" type="error" :title="loadError" show-icon class="git-banner" />
 
     <el-alert
@@ -581,40 +583,12 @@ onUnmounted(() => {
       </section>
       </template>
     </template>
-    </div>
-  </div>
+    </PageMainBlock>
+  </PageLayout>
 </template>
 
 <style scoped>
 @import "./page-shared.css";
-
-.git-page {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-.git-page-head {
-  flex-shrink: 0;
-  padding: 20px 22px 10px;
-  background: var(--page-bg);
-  border-bottom: 1px solid var(--el-border-color-lighter);
-}
-
-.git-page-head :deep(.page-head) {
-  margin-bottom: 0;
-}
-
-.git-page-body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 12px 22px 32px;
-}
 
 .git-banner {
   margin-bottom: 12px;
@@ -648,10 +622,6 @@ onUnmounted(() => {
   max-height: min(400px, calc(50vh - 120px));
   overflow-y: auto;
   overscroll-behavior: contain;
-}
-
-.btn-icon {
-  margin-right: 4px;
 }
 
 .git-clean-empty {

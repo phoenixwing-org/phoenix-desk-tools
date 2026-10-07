@@ -1,5 +1,7 @@
 # 成员排序 · Git 预览 / Revert — 消费方说明
 
+> 已被替代（2026-10-04）：Desk 成员排序专属入口/API 已删除。通用 Git 页面保留，见 [Code 退役边界](../code/Desk-Code功能退役.md)。下文保留历史。
+
 > **壳层能力**见 **[Web壳层-Git工作区插件-规划.md](Web壳层-Git工作区插件-规划.md)**（**Git 页** + **Git 文件 Tab**）。  
 > **实现归档**：[Web壳层-Git工作区插件-G1续归档.md](Web壳层-Git工作区插件-G1续归档.md)  
 > 关联：[成员函数排序-reorder_members.md](../code/成员函数排序-reorder_members.md) · `ReorderMembersPage.vue`  

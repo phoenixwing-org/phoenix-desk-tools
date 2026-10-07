@@ -26,8 +26,12 @@ if (userDataMigration.errors.length) {
 
 const app = createPhoenixServerApp();
 
-// 启动检查
-refreshRuntimeCatalog();
+// The auxiliary test catalog must not make CAD/workspace APIs unavailable.
+try {
+  refreshRuntimeCatalog();
+} catch (error) {
+  console.error(`[runtime] 测试目录同步失败，主服务继续启动；可在单元测试页重试：${error instanceof Error ? error.message : String(error)}`);
+}
 
 async function listen(server: ServerType, port: number): Promise<number> {
   return new Promise((resolve, reject) => {

@@ -72,15 +72,29 @@ import {
   loadRenameAnalysis,
 } from "../lib/pnwRenameService.js";
 import { runtimeUserDataDir } from "../lib/appRuntimePaths.js";
+import { analyzeFcstdProperties, applyFcstdPropertyRepairs } from "../lib/fcstdPropertyRepairService.js";
+import { inspectCadIndex } from "../lib/cadIndexStatusService.js";
+import { previewBatchAttributes, applyBatchAttributes } from "../lib/fcstdBatchAttributes.js";
+import { nameNormalizeRoutes } from "../features/cad-name-normalize/routes.js";
+import { assemblyLabelRoutes } from "../features/cad-assembly-labels/routes.js";
+import { partGalleryRoutes } from "../features/part-gallery/routes.js";
+import { readFileThumbnail } from "../lib/fcstdThumbnail.js";
+import {
+  CadBatchDirectoryError,
+  listCadBatchDirectories,
+  validateCadBatchDirectory,
+} from "../lib/cadBatchDirectoryService.js";
 
-function getWorkspace(c: any): string {
-  const q = c.req.query("workspace") || "";
-  if (q) return q;
+function currentWorkspace(): string {
   try {
     const p = path.join(runtimeUserDataDir(), "launcher-prefs.json");
     if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, "utf-8")).workspace || "";
   } catch { /* ignore */ }
   return "";
+}
+
+function getWorkspace(c: any): string {
+  return c.req.query("workspace") || currentWorkspace();
 }
 
 // ── helpers ────────────────────────────────────────────
@@ -106,6 +120,34 @@ function flattenAssemblyTreeItems(nodes: any[], depth = 0, prefix = ""): any[] {
 // ── Hono app ────────────────────────────────────────────
 
 export const cadRoutes = new Hono();
+cadRoutes.route("/name-normalize", nameNormalizeRoutes);
+cadRoutes.route("/assembly-labels", assemblyLabelRoutes);
+cadRoutes.route("/part-gallery", partGalleryRoutes);
+cadRoutes.get("/file-thumbnail", c => {
+  c.header("Cache-Control", "no-store");
+  try { return c.json({ thumbnail: readFileThumbnail(getWorkspace(c), c.req.query("rel") || "") }); }
+  catch { return c.json({ thumbnail: null }); } // Optional preview must not block file details.
+});
+
+cadRoutes.get("/batch-directories", (c) => {
+  try {
+    return c.json(listCadBatchDirectories(c.req.query("workspace") || "", currentWorkspace()));
+  } catch (error) {
+    return c.json({ detail: error instanceof Error ? error.message : String(error) },
+      error instanceof CadBatchDirectoryError ? error.status : 400);
+  }
+});
+
+cadRoutes.get("/batch-directory", (c) => {
+  try {
+    return c.json(validateCadBatchDirectory(
+      c.req.query("workspace") || "", currentWorkspace(), c.req.query("directory") || "",
+    ));
+  } catch (error) {
+    return c.json({ detail: error instanceof Error ? error.message : String(error) },
+      error instanceof CadBatchDirectoryError ? error.status : 400);
+  }
+});
 
 type BomXrefProgress = {
   scan_id: string;
@@ -578,6 +620,83 @@ cadRoutes.post("/sw-step/run", async (c) => {
 // ── XLink fix + rename analysis native routes ────────────────────────────────
 
 // xlink-fix native routes
+cadRoutes.post("/batch-attributes/preview", async (c) => {
+  try { return c.json(await previewBatchAttributes(getWorkspace(c), await c.req.json())); }
+  catch (error: any) { return c.json({ detail: error.message || String(error) }, 400); }
+});
+cadRoutes.post("/batch-attributes/apply", async (c) => {
+  try { return c.json(applyBatchAttributes(getWorkspace(c), await c.req.json())); }
+  catch (error: any) { return c.json({ detail: error.message || String(error) }, 400); }
+});
+
+async function sharedCadIndexAvailable() {
+  const core = await import("@phoenix-wing/cad-core");
+  const contracts = await import("@phoenix-wing/cad-contracts");
+  return typeof Reflect.get(core, "pnwBuildCadWorkspaceIndex") === "function"
+    && typeof Reflect.get(core, "pnwAnalyzeCadIndexDocumentXml") === "function"
+    && typeof Reflect.get(contracts, "pnwWriteCadWorkspaceIndexV1") === "function"
+    && typeof Reflect.get(contracts, "pnwResetCadWorkspaceIndexV1") === "function";
+}
+async function sharedCadIndexService() {
+  if (!await sharedCadIndexAvailable()) throw new Error("当前 Wing 尚未提供共享索引接口；请使用本地 Wing 开发模式，正式发布前需升级公共包");
+  return import("../lib/cadIndexScanService.js");
+}
+cadRoutes.get("/index/status", async (c) => {
+  try { return c.json({ ...inspectCadIndex(getWorkspace(c)), scanSupported: await sharedCadIndexAvailable() }); }
+  catch (error: any) { return c.json({ detail: error.message || String(error) }, 400); }
+});
+
+cadRoutes.post("/index/scan/start", async (c) => {
+  try {
+    const input = await c.req.json();
+    if (input.confirm !== true || input.scope !== "workspace") throw new Error("需要确认完整工作空间索引；不接受目录裁剪");
+    const workspace = fs.realpathSync(getWorkspace(c));
+    const assertActive = () => {
+      if (!currentWorkspace() || fs.realpathSync(currentWorkspace()) !== workspace) throw new Error("当前工作空间已关闭或切换，索引取消");
+    };
+    assertActive();
+    return c.json((await sharedCadIndexService()).startCadIndexScan(workspace, assertActive));
+  } catch (error: any) { return c.json({ detail: error.message || String(error) }, 400); }
+});
+cadRoutes.get("/index/scan/progress", async (c) => {
+  try { return c.json((await sharedCadIndexService()).getCadIndexScan(getWorkspace(c), c.req.query("id") || "")); }
+  catch (error: any) { return c.json({ detail: error.message || String(error) }, 400); }
+});
+cadRoutes.post("/index/scan/cancel", async (c) => {
+  try { return c.json((await sharedCadIndexService()).cancelCadIndexScan(getWorkspace(c), c.req.query("id") || "")); }
+  catch (error: any) { return c.json({ detail: error.message || String(error) }, 400); }
+});
+cadRoutes.get("/index/reset/preview", async (c) => {
+  try { return c.json((await sharedCadIndexService()).previewCadIndexReset(getWorkspace(c))); }
+  catch (error: any) { return c.json({ detail: error.message || String(error) }, 400); }
+});
+cadRoutes.post("/index/reset", async (c) => {
+  try {
+    const input = await c.req.json();
+    if (input.confirm_remove_file_links !== true || !input.expected) throw new Error("需要明确确认清理文件索引及文件关联");
+    const workspace = fs.realpathSync(getWorkspace(c));
+    return c.json((await sharedCadIndexService()).resetCadIndex(workspace, input.expected, true, () => {
+      if (!currentWorkspace() || fs.realpathSync(currentWorkspace()) !== workspace) throw new Error("工作空间已切换，取消清理");
+    }));
+  } catch (error: any) { return c.json({ detail: error.message || String(error) }, 400); }
+});
+
+cadRoutes.post("/error-fix/properties/analyze", async (c) => {
+  try {
+    return c.json(await analyzeFcstdProperties(getWorkspace(c), await c.req.json()));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
+});
+
+cadRoutes.post("/error-fix/properties/apply", async (c) => {
+  try {
+    return c.json(applyFcstdPropertyRepairs(getWorkspace(c), await c.req.json()));
+  } catch (e: any) {
+    return c.json({ detail: e.message || String(e) }, 400);
+  }
+});
+
 cadRoutes.get("/xlink-fix/prefs", (c) => {
   try {
     const ws = getWorkspace(c);

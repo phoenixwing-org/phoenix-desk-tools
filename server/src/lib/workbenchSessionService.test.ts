@@ -35,13 +35,13 @@ describe("workbench session service", () => {
     const saved = saveWorkbenchSession(workspace, {
       version: 99,
       active_tab_id: "tab-code",
-      tabs: [{ id: "tab-code", pageId: "code_index" }, null, "bad"],
+      tabs: [{ id: "tab-code", pageId: "code_ignore" }, null, "bad"],
       ignored: true,
     });
     expect(saved.session).toEqual({
       version: 1,
       active_tab_id: "tab-code",
-      tabs: [{ id: "tab-code", pageId: "code_index" }],
+      tabs: [{ id: "tab-code", pageId: "code_ignore" }],
     });
     expect(saved.updated_at).toBeTruthy();
     expect(loadWorkbenchSession(workspace)).toMatchObject({

@@ -53,7 +53,7 @@
 
 ## 3. Tab 与工作台
 
-- 单页功能（如 CAD 索引、Code 索引）默认 **1 个 Tab**；Ribbon 再次点击会激活已有 Tab，不重复打开。
+- 单页功能（如 CAD 索引、忽略设定）默认 **1 个 Tab**；Ribbon 再次点击会激活已有 Tab，不重复打开。
 - **文件详情**、**零件详情** 等支持 **多 Tab**（上限见 `app_config.json` → `workbench.pages`）。
 - 同一文件路径或同一 PartKey **复用**已有 Tab。
 - **主页**、**欢迎页** 默认不出现在顶栏页面 Tab 中（主页由入口打开；欢迎页为全屏态）。
@@ -116,7 +116,8 @@
 | 链接路径修正 | CAD | [链接路径修正-未找到手选.md](../cad/链接路径修正-未找到手选.md)（**须先 CAD 索引**） |
 | STEP 批量 | CAD | [STEP批量转FCStd.md](../cad/STEP批量转FCStd.md) |
 | SW→STEP | CAD | [SolidWorks批量STEP导出.md](../cad/SolidWorks批量STEP导出.md) |
-| Code 索引 / 成员排序等 | Code | [Code模块-工作空间索引.md](../code/Code模块-工作空间索引.md) |
+| 忽略设定 | Code → 编辑 | 保留忽略设置，不触发源码扫描 |
+| CAA 对话框 | Code → CAA | [CAA 当前架构与契约](../caa/CAA当前架构与契约.md) |
 | 单元测试 | 系统 | 本机 `tests/` unittest；套件 + **模块**勾选运行 |
 
 完整字段约定：[Phoenix嵌入式BOM属性约定.md](../cad/Phoenix嵌入式BOM属性约定.md)、[BOM工具说明.md](../cad/BOM工具说明.md)。
@@ -129,8 +130,8 @@
 
 ### 7.2 文件工作集（侧栏 · 工作集）
 
-- 侧栏 **工作集** Tab：命名 path 集合；Code 索引 / 工作空间树可 **加入当前工作集**。
-- Code UUID 等页通过 **WorksetScopePicker** 限定扫描范围；详见 [FileWorkset-规划.md](../platform/FileWorkset-规划.md)。
+- 侧栏 **工作集** Tab：命名 path 集合；工作空间树可 **加入当前工作集**。
+- 工作集存储保留，退役 Code 页面不再消费扫描范围；详见 [Code 功能退役说明](../code/Desk-Code功能退役.md)。
 
 ---
 

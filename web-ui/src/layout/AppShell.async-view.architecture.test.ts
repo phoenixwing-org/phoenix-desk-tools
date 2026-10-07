@@ -13,12 +13,15 @@ describe("AppShell async View boundary", () => {
     expect(registry).toContain("loader: sharedLoader");
   });
 
-  it("renders only the last ready tab instead of the pending active tab", () => {
+  it("renders the last ready tab only while it is still open, never a replaced preview or pending target", () => {
     const shell = source("./AppShell.vue");
     expect(shell).toContain("createAsyncViewSwitchController");
     expect(shell).toContain("displayedTab.value = state.displayed");
-    expect(shell).toContain('v-if="displayedTab"');
-    expect(shell).toContain(':key="displayedTab.id"');
+    expect(shell).toContain("displayedTab.value && shell.getTab(displayedTab.value.id)");
+    expect(shell).toContain('v-if="visibleTab"');
+    expect(shell).toContain(':key="visibleTab.id"');
+    expect(shell).toContain(':include="cachedViewNames"');
+    expect(shell).toContain('viewCache.componentFor(visibleTab)');
     expect(shell).not.toContain(':key="activeTab.id"');
     expect(shell).toContain("viewSwitch.cancel()");
   });

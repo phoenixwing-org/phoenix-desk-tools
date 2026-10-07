@@ -82,7 +82,8 @@ describe("Desk Workspace welcome consumer contract", () => {
     expect(shellSource).toContain('@update:color-scheme="updatePnwColorScheme"');
     expect(source).not.toContain("desk-welcome-rail-action");
     expect(source).toContain("PnwWorkspaceTypeSelect");
-    expect(source).toContain(":model-value=\"entry.workspaceTypeId ?? 'mixed'\"");
+    expect(source).toContain(":model-value=\"pdtRecentWorkspaceType(shell.launcher.value, entry.rootPath, entry.workspaceTypeId ?? 'mixed')\"");
+    expect(source).toContain("updatingTypes.has(entry.rootPath)");
     expect(source).not.toContain("entryWorkspaceType");
     expect(source).not.toContain("desk-welcome-type-select");
     expect(source).toContain("shell.setWorkspaceType");
@@ -162,7 +163,7 @@ describe("Desk Workspace welcome consumer contract", () => {
       "cad",
       "lighting",
     ]);
-    expect(source).toContain(":model-value=\"entry.workspaceTypeId ?? 'mixed'\"");
+    expect(source).toContain("pdtRecentWorkspaceType(shell.launcher.value, entry.rootPath, entry.workspaceTypeId ?? 'mixed')");
   });
 
   it("required 强制无工作空间停留 Welcome，optional 才允许显式进入", () => {

@@ -3,7 +3,7 @@
 > [文档索引](../文档索引.md) · 状态：**P3 稳定 · KT Codegen MVC 试点已完成 · 2026-07-17**
 > **规划**：[Web壳层-页面属性面板-规划.md](Web壳层-页面属性面板-规划.md) · **P1**：[Web壳层-页面属性面板-P1归档.md](Web壳层-页面属性面板-P1归档.md) · **P2**：[Web壳层-页面属性面板-P2归档.md](Web壳层-页面属性面板-P2归档.md) · **P2 续**：[Web壳层-页面属性面板-P2续归档.md](Web壳层-页面属性面板-P2续归档.md) · **稳定化**：[Web壳层-属性面板与壳层稳定化-归档.md](Web壳层-属性面板与壳层稳定化-归档.md) · 待办：[TODO.md](../TODO.md) §侧栏·页面属性面板
 
-KT Codegen 已用 Page Param + UI-neutral PropertySchema + pure derive 替代页内手写属性描述；实现与边界见[页面参数与属性 MVC 试点](Web壳层-页面参数与属性-MVC研讨.md)。其它页面继续使用现有 `useXxxPropertySheet`，不在本轮批量迁移。
+Codegen MVC 试点已随 [Code 功能退役](../code/Desk-Code功能退役.md) 删除，旧[试点记录](Web壳层-页面参数与属性-MVC研讨.md)仅保留历史。通用属性面板继续服务保留页面，不因旧试点退役重写公共机制。
 
 ## 设计原则（对齐 FreeCAD）
 
@@ -27,13 +27,10 @@ KT Codegen 已用 Page Param + UI-neutral PropertySchema + pure derive 替代页
 
 | pageId | composable |
 | --- | --- |
-| `reorder_members` | `useReorderMembersPropertySheet.ts` |
 | `xlink_fix` | `useXlinkFixPropertySheet.ts` |
-| `code_rename` | `useCodeRenamePropertySheet.ts` |
-| `code_uuid` | `useCodeUuidPropertySheet.ts` |
 | `part_dedup` | `usePartDedupPropertySheet.ts` |
-| `fcstd_map` | `useFcstdMapPropertySheet.ts` |
-| `bom_export` | `useBomExportPropertySheet.ts` |
+
+上表仅列当前保留示例；旧 Code 五页与 `fcstd_map` / `bom_export` 专属接线已退役。
 
 ## 业务页接入
 

@@ -1,6 +1,6 @@
 {
   "name": "phoenix-desk-tools",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "author": "上海锟钛",
   "license": "Apache-2.0",
   "private": true,
@@ -34,7 +34,7 @@
     "test:web": "pnpm -C web-ui test",
     "test:caa": "pnpm run test:core && pnpm run test:web",
     "test:local-wing": "node scripts/run-with-phoenix-wing.mjs local -- pnpm run test:local-wing-consumers",
-    "test:local-wing-consumers": "pnpm brand:check && pnpm run test:wing-consumers",
+    "test:local-wing-consumers": "pnpm brand:check && pnpm typecheck && pnpm run test:wing-consumers",
     "test:registry": "node scripts/run-with-phoenix-wing.mjs registry -- pnpm run test:wing-consumers",
     "test:wing-consumers": "pnpm test:ts && pnpm test:caa",
     "build:local-wing": "node scripts/run-with-phoenix-wing.mjs local -- pnpm run build:local-wing-consumers",

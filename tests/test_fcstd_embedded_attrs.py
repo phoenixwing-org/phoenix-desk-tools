@@ -171,26 +171,26 @@ class EmbeddedBomAttrsTest(unittest.TestCase):
             z.writestr("Document.xml", MIN_DOC_TEMPLATE.strip().encode("utf-8"))
 
         vals = {
-            "PartNumber": "100346",
+            "PartNumber": "730101",
             "PartVersion": "001",
             "TypeCode": "H",
-            "ModelSeries": "3TB",
+            "ModelSeries": "DEMO",
             "PartName": "外壳",
             "label": "灯座",
         }
         write_embedded_bom_attrs(fc, vals)
 
         got = read_embedded_bom_attrs(fc)
-        self.assertEqual(got["PartNumber"], "100346")
+        self.assertEqual(got["PartNumber"], "730101")
         self.assertEqual(got["PartVersion"], "001")
         self.assertEqual(got["TypeCode"], "H")
-        self.assertEqual(got["ModelSeries"], "3TB")
+        self.assertEqual(got["ModelSeries"], "DEMO")
         self.assertEqual(got["PartName"], "外壳")
         self.assertEqual(got["label"], "灯座")
 
         with zipfile.ZipFile(fc, "r") as z:
             raw = z.read("Document.xml")
-        self.assertEqual(_prop_value_from_document_xml(raw, "PartNumber"), "100346")
+        self.assertEqual(_prop_value_from_document_xml(raw, "PartNumber"), "730101")
         self.assertEqual(_prop_value_from_document_xml(raw, "Label"), "灯座")
         self.assertEqual(
             _property_wrapper_attrib(raw, "PartNumber").get("group"),
@@ -281,8 +281,8 @@ class EmbeddedBomAttrsTest(unittest.TestCase):
             "PartNumber": "A-1",
             "PartVersion": "01",
             "TypeCode": "H",
-            "ModelSeries": "5TA",
-            "PartName": "吊机",
+            "ModelSeries": "ALT",
+            "PartName": "测试台",
             "label": "总成",
         }
         write_embedded_bom_attrs(fc, vals)

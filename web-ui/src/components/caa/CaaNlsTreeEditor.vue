@@ -510,7 +510,7 @@ const title = computed(() => {
     <!-- header bar -->
     <div class="caa-nls-panel-header">
       <span class="caa-nls-panel-title">{{ title }}</span>
-      <button class="caa-nls-panel-close" @click="$emit('close')">✕</button>
+      <button class="caa-nls-panel-close" @click="$emit('close')">关闭</button>
     </div>
     <!-- toolbar -->
     <div class="caa-nls-toolbar">

@@ -31,6 +31,7 @@ export function updateCadIndexEntryAfterBomWrite(
   workspace: string,
   relativePath: string,
   fields: CadIndexBomFields,
+  selectedFields?: readonly (keyof CadIndexBomFields)[],
 ): boolean {
   if (!workspace) return false;
   const filename = phoenixDatabasePath(workspace);
@@ -44,8 +45,14 @@ export function updateCadIndexEntryAfterBomWrite(
       id: number;
       repo_rel_path: string;
       filename: string;
+      part_number?: string | null;
+      part_version?: string | null;
+      type_code?: string | null;
+      model_series?: string | null;
+      part_name?: string | null;
+      label?: string | null;
     }>(
-      `SELECT id, repo_rel_path, filename
+      `SELECT id, repo_rel_path, filename${selectedFields ? ", part_number, part_version, type_code, model_series, part_name, label" : ""}
        FROM phoenix_cad_file_asset
        WHERE repo_rel_path IN (${keys.map(() => "?").join(", ")})
        LIMIT 1`,
@@ -53,6 +60,10 @@ export function updateCadIndexEntryAfterBomWrite(
     );
     if (!row) return false;
 
+    if (selectedFields) {
+      const patch = Object.fromEntries(Object.entries(fields).filter(([key]) => selectedFields.includes(key as keyof CadIndexBomFields)));
+      fields = { PartNumber: row.part_number || "", PartVersion: row.part_version || "", TypeCode: row.type_code || "", ModelSeries: row.model_series || "", PartName: row.part_name || "", label: row.label || "", ...patch };
+    }
     const values = {
       part_number: String(fields.PartNumber ?? "").trim() || null,
       part_version: String(fields.PartVersion ?? "").trim() || null,
@@ -61,6 +72,13 @@ export function updateCadIndexEntryAfterBomWrite(
       part_name: String(fields.PartName ?? "").trim() || null,
       label: String(fields.label ?? "").trim() || null,
     };
+    if (selectedFields) {
+      const columns = { PartNumber: "part_number", PartVersion: "part_version", TypeCode: "type_code", ModelSeries: "model_series", PartName: "part_name", label: "label" } as const;
+      for (const field of Object.keys(columns) as (keyof typeof columns)[]) {
+        // A partial write must not normalize or clear another indexed field.
+        if (!selectedFields.includes(field)) values[columns[field]] = row[columns[field]] ?? null;
+      }
+    }
     const ruleLabel = pnwCadXlinkRuleLabel(values, row.filename, row.repo_rel_path);
 
     db.exec("BEGIN TRANSACTION");

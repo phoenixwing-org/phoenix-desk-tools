@@ -32,6 +32,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.8
         version: 1.19.14(hono@4.12.27)
+      '@phoenix-wing/cad-contracts':
+        specifier: 0.6.3
+        version: 0.6.3
       '@phoenix-wing/cad-core':
         specifier: 0.6.3
         version: 0.6.3
@@ -44,9 +47,6 @@ importers:
       '@phoenix-wing/git-node':
         specifier: 0.6.5
         version: 0.6.5
-      '@phoenix-wing/kt-codegen':
-        specifier: 0.6.6
-        version: 0.6.6
       '@phoenix-wing/workspace-schema':
         specifier: 0.6.3
         version: 0.6.3
@@ -90,12 +90,6 @@ importers:
       '@element-plus/icons-vue':
         specifier: ^2.3.2
         version: 2.3.2(vue@3.5.35(typescript@5.7.3))
-      '@phoenix-wing/code-core':
-        specifier: 0.6.6
-        version: 0.6.6
-      '@phoenix-wing/kt-codegen':
-        specifier: 0.6.6
-        version: 0.6.6
       diff2html:
         specifier: ^3.4.56
         version: 3.4.56
@@ -106,8 +100,8 @@ importers:
         specifier: ^2.14.2
         version: 2.14.2(vue@3.5.35(typescript@5.7.3))
       phoenix-wing:
-        specifier: 0.7.5
-        version: 0.7.5(element-plus@2.14.2(vue@3.5.35(typescript@5.7.3)))(pinia@3.0.4(typescript@5.7.3)(vue@3.5.35(typescript@5.7.3)))(vue@3.5.35(typescript@5.7.3))
+        specifier: 0.7.6
+        version: 0.7.6(element-plus@2.14.2(vue@3.5.35(typescript@5.7.3)))(pinia@3.0.4(typescript@5.7.3)(vue@3.5.35(typescript@5.7.3)))(vue@3.5.35(typescript@5.7.3))
       pinia:
         specifier: ^3.0.4
         version: 3.0.4(typescript@5.7.3)(vue@3.5.35(typescript@5.7.3))
@@ -602,6 +596,9 @@ packages:
     resolution: {integrity: sha512-tmmZ3lQxAe/k/+rNnXQRawJ4NjxO2hqiOLTHvWchtGZULp4RyFeh6aU4XdOYBFe2KE1oShQTv4AblOs2iOrNnQ==}
     engines: {node: '>= 10.0.0'}
 
+  '@phoenix-wing/cad-contracts@0.6.3':
+    resolution: {integrity: sha512-PEif9niWsZZzJflQQ2bjunRZjt++V6SolaaC6ETtCU1es4mndyNsJZ4Pxhh7n+wf0AdOlqf4P499gjy5IHXhDQ==}
+
   '@phoenix-wing/cad-core@0.6.3':
     resolution: {integrity: sha512-+evaiiAYvEsuAjDryVNbCOxbvj3+HkxCONca995shBzaB99sLHbWC1etVbYVzH8PcMPEqXIDbw/lLeYC9MQLow==}
 
@@ -616,9 +613,6 @@ packages:
 
   '@phoenix-wing/git-node@0.6.5':
     resolution: {integrity: sha512-MniPRroEUGjfHXOx8mapoj1GdBp8rZkdQ5KaowUdJ/2Az5AMWP/5S2yVQGmyeUnFK4PwAI4dW233jAa5c4TDTQ==}
-
-  '@phoenix-wing/kt-codegen@0.6.6':
-    resolution: {integrity: sha512-i3b4edJtoVbaV6arUwghj92TnntDWl9ehupHiYGgURsNjUFE8i1A3+Y/nFpn3USTwYqYPUjpDryU0OEDuNgZAg==}
 
   '@phoenix-wing/workspace-schema@0.6.3':
     resolution: {integrity: sha512-Y72rconkXTRzcRutDTFs4i+7MOkbWJS1rALxxYSh0EM0Us6PkjalQGssrJyU1YbZle64LRdKBxyNxqf1tkSDDg==}
@@ -1185,8 +1179,8 @@ packages:
   perfect-debounce@1.0.0:
     resolution: {integrity: sha512-xCy9V055GLEqoFaHoC1SoLIaLmWctgCUaBaWxDZ7/Zx4CTyX7cJQLJOok/orfjZAh9kEYpjJa4d0KcJmCbctZA==}
 
-  phoenix-wing@0.7.5:
-    resolution: {integrity: sha512-UILnKZl6luelwwkdQcmgSIBUgIqCd6+VlbK14K5IiKOCKUQoBVDCguoS1jwiY87SZSZMp4/Jw/zbitD5e3tuFA==}
+  phoenix-wing@0.7.6:
+    resolution: {integrity: sha512-Vym/iEeg+hqTqngUzu05An16FTU/tVn4xeyEYzk4Jf//A+Ns7Ia9t9JcRNnCSQAQNQLi9U6COZvVfokIK5itOg==}
     peerDependencies:
       element-plus: ^2.0.0
       pinia: ^2.0.0 || ^3.0.0
@@ -1905,6 +1899,8 @@ snapshots:
       '@parcel/watcher-win32-x64': 2.5.6
     optional: true
 
+  '@phoenix-wing/cad-contracts@0.6.3': {}
+
   '@phoenix-wing/cad-core@0.6.3': {}
 
   '@phoenix-wing/code-core@0.6.6': {}
@@ -1918,8 +1914,6 @@ snapshots:
   '@phoenix-wing/git-node@0.6.5':
     dependencies:
       '@phoenix-wing/git-core': 0.6.4
-
-  '@phoenix-wing/kt-codegen@0.6.6': {}
 
   '@phoenix-wing/workspace-schema@0.6.3': {}
 
@@ -2493,7 +2487,7 @@ snapshots:
 
   perfect-debounce@1.0.0: {}
 
-  phoenix-wing@0.7.5(element-plus@2.14.2(vue@3.5.35(typescript@5.7.3)))(pinia@3.0.4(typescript@5.7.3)(vue@3.5.35(typescript@5.7.3)))(vue@3.5.35(typescript@5.7.3)):
+  phoenix-wing@0.7.6(element-plus@2.14.2(vue@3.5.35(typescript@5.7.3)))(pinia@3.0.4(typescript@5.7.3)(vue@3.5.35(typescript@5.7.3)))(vue@3.5.35(typescript@5.7.3)):
     dependencies:
       '@phoenix-wing/code-core': 0.6.6
       '@phoenix-wing/db-node': 0.6.3

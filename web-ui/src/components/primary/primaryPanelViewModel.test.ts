@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PagePrimarySection } from "../../composables/usePagePrimaryContribution";
 import {
+  primaryPanelBlocks,
   primarySectionCountLabel,
   primarySectionLayout,
   primarySectionStateKey,
@@ -9,6 +10,16 @@ import {
 const noop = () => undefined;
 
 describe("Primary panel ViewModel", () => {
+  it("puts navigation first without reordering other sections or changing their identity", () => {
+    const scope = { id: "scope", title: "范围" };
+    const tools = { id: "tools", title: "功能", placement: "before-context" as const };
+    const result = { id: "result", title: "结果" };
+    const blocks = primaryPanelBlocks([scope, tools, result]);
+    expect(blocks.map(block => block.key)).toEqual(["section:tools", "context", "status", "section:scope", "section:result"]);
+    expect(blocks[0]).toMatchObject({ section: tools });
+    expect(primaryPanelBlocks([scope]).map(block => block.key)).toEqual(["context", "status", "section:scope"]);
+    expect(primaryPanelBlocks([]).map(block => block.key)).toEqual(["context", "status"]);
+  });
   it("compacts homogeneous readonly and boolean sections only", () => {
     const readonly: PagePrimarySection = {
       id: "stats",
@@ -49,8 +60,24 @@ describe("Primary panel ViewModel", () => {
     };
 
     expect(primarySectionCountLabel(section)).toBe("1 项 · 1 操作");
-    expect(primarySectionStateKey("code_index", "tab-a", "scope")).toBe("tab-a:scope");
-    expect(primarySectionStateKey("code_index", "tab-b", "scope")).not.toBe("tab-a:scope");
-    expect(primarySectionStateKey("code_index", "", "scope")).toBe("code_index:scope");
+    expect(primarySectionStateKey("code_ignore", "tab-a", "scope")).toBe("tab-a:scope");
+    expect(primarySectionStateKey("code_ignore", "tab-b", "scope")).not.toBe("tab-a:scope");
+    expect(primarySectionStateKey("code_ignore", "", "scope")).toBe("code_ignore:scope");
+  });
+
+  it("opts readonly metadata into label/value rows without affecting mixed forms", () => {
+    const section: PagePrimarySection = {
+      id: "properties", title: "属性", readonlyLayout: "properties",
+      controls: [
+        { id: "path", kind: "readonly", label: "工作空间", value: "/workspace/example" },
+        { id: "count", kind: "readonly", label: "文件数", value: 23 },
+      ],
+    };
+    expect(primarySectionLayout(section)).toBe("properties");
+    expect(primarySectionLayout({ ...section, readonlyLayout: undefined })).toBe("readonly-grid");
+    expect(primarySectionLayout({ ...section, controls: [] })).toBe("stack");
+    expect(primarySectionLayout({ ...section, controls: [...section.controls!,
+      { id: "search", kind: "text", label: "搜索", modelValue: "", onUpdate: noop },
+    ] })).toBe("stack");
   });
 });

@@ -10,9 +10,9 @@ async function setupShellWithUnitTests() {
   const service = await import("../lib/unitTestService.js");
   service.setUnitTestCatalogForTests(service.buildUnitTestCatalogFromList([
     {
-      file: "server/src/lib/pdtCodeService.test.ts",
+      file: "server/src/lib/codeIgnoreService.test.ts",
       count: 1,
-      tests: ["code index > scans files"],
+      tests: ["code ignore > reads preferences"],
     },
     {
       file: "packages/catdlg-core/src/emitCatDlg.test.ts",
@@ -28,11 +28,11 @@ async function setupShellWithUnitTests() {
       numPassedTests: 1,
       numFailedTests: 0,
       testResults: [{
-        name: "server/src/lib/pdtCodeService.test.ts",
+        name: "server/src/lib/codeIgnoreService.test.ts",
         assertionResults: [{
-          ancestorTitles: ["code index"],
-          fullName: "code index > scans files",
-          title: "scans files",
+          ancestorTitles: ["code ignore"],
+          fullName: "code ignore > reads preferences",
+          title: "reads preferences",
           status: "passed",
           duration: 4,
           failureMessages: [],
@@ -75,12 +75,12 @@ describe("shell unit test routes", () => {
     expect(planRes.status).toBe(200);
     const plan = await planRes.json();
     expect(plan.total_modules).toBe(1);
-    expect(plan.modules[0].cases[0].id).toBe("server/src/lib/pdtCodeService.test.ts > code index > scans files");
+    expect(plan.modules[0].cases[0].id).toBe("server/src/lib/codeIgnoreService.test.ts > code ignore > reads preferences");
 
-    const catalogRes = await shellRoutes.request("/api/runtime-catalog/test-modules?modules=server/src/lib/pdtCodeService.test.ts");
+    const catalogRes = await shellRoutes.request("/api/runtime-catalog/test-modules?modules=server/src/lib/codeIgnoreService.test.ts");
     expect(catalogRes.status).toBe(200);
     const catalog = await catalogRes.json();
-    expect(catalog.modules["server/src/lib/pdtCodeService.test.ts"].suite_id).toBe("code");
+    expect(catalog.modules["server/src/lib/codeIgnoreService.test.ts"].suite_id).toBe("code");
 
     const statusRes = await shellRoutes.request("/api/runtime-catalog/status");
     expect(statusRes.status).toBe(200);
@@ -89,7 +89,7 @@ describe("shell unit test routes", () => {
       counts: { test_modules: 2, test_cases: 2 },
     });
 
-    const searchRes = await shellRoutes.request("/api/runtime-catalog/search?q=scans%20files&entity_type=test_case");
+    const searchRes = await shellRoutes.request("/api/runtime-catalog/search?q=reads%20preferences&entity_type=test_case");
     expect(searchRes.status).toBe(200);
     const search = await searchRes.json();
     expect(search.total).toBe(1);
@@ -97,7 +97,7 @@ describe("shell unit test routes", () => {
     const streamRes = await shellRoutes.request("/api/unit-tests/run/stream", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ suites: ["code"], include_modules: ["server/src/lib/pdtCodeService.test.ts"] }),
+      body: JSON.stringify({ suites: ["code"], include_modules: ["server/src/lib/codeIgnoreService.test.ts"] }),
     });
     expect(streamRes.status).toBe(200);
     const events = (await streamRes.text()).trim().split(/\n/).map((line) => JSON.parse(line));

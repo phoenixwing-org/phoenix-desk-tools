@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { RefreshLeft } from "@element-plus/icons-vue";
 
 const props = withDefaults(
   defineProps<{
@@ -30,13 +29,13 @@ function onClick() {
     <el-button
       link
       size="small"
-      class="git-icon-btn"
+      class="git-action-btn"
       :disabled="props.disabled"
       :loading="props.loading"
       :aria-label="`${props.tooltip} ${props.path}`"
       @click.stop="onClick"
     >
-      <el-icon><RefreshLeft /></el-icon>
+      放弃
     </el-button>
   </el-tooltip>
 </template>

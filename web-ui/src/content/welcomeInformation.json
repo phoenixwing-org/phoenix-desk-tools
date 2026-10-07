@@ -25,7 +25,7 @@
         "id": "shared-framework",
         "label": "共享框架",
         "value": "Phoenix Wing",
-        "note": "Codegen 算法、状态契约和公共 Web UI 与 KT Auto Code 共享。"
+        "note": "工作空间、文档与公共 Web UI 使用 Phoenix Wing 共享能力。"
       }
     ]
   },

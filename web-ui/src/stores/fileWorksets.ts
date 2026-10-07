@@ -1,4 +1,5 @@
 import { defineStore } from "pinia";
+import { RETIRED_CODE_PAGE_IDS } from "../constants/retiredCodePages";
 import {
   fetchFileWorksets,
   pruneMissingFileWorksetPaths,
@@ -11,7 +12,7 @@ import {
 const UI_STORAGE_KEY = "phoenix-file-worksets-ui-v1";
 const DEFAULT_WORKSPACE_KEY = "__default__";
 
-export type WorksetScopeMode = "all" | "scope" | "index" | "workset";
+export type WorksetScopeMode = "all" | "scope" | "workset";
 
 export type PageWorksetScopePrefs = {
   scopeMode: WorksetScopeMode;
@@ -62,7 +63,7 @@ function workspaceKey(path: string): string {
 }
 
 function normalizeScopeMode(raw: unknown): WorksetScopeMode {
-  if (raw === "scope" || raw === "index" || raw === "workset") return raw;
+  if (raw === "scope" || raw === "workset") return raw;
   return "all";
 }
 
@@ -82,15 +83,9 @@ function normalizeUiPrefs(raw: Partial<FileWorksetUiPrefs> | undefined): FileWor
   const pageScopes: Record<string, PageWorksetScopePrefs> = {};
   if (raw.pageScopes && typeof raw.pageScopes === "object") {
     for (const [k, v] of Object.entries(raw.pageScopes)) {
+      if (RETIRED_CODE_PAGE_IDS.has(k)) continue;
       pageScopes[k] = normalizePageScope(v as Partial<PageWorksetScopePrefs>);
     }
-  }
-  // 迁移旧版 codeUuid 字段
-  const legacy = raw as FileWorksetUiPrefs & {
-    codeUuid?: Partial<PageWorksetScopePrefs>;
-  };
-  if (legacy.codeUuid) {
-    pageScopes.code_uuid = normalizePageScope(legacy.codeUuid);
   }
   return {
     activeId: typeof raw.activeId === "string" ? raw.activeId : base.activeId,
@@ -164,6 +159,7 @@ export const useFileWorksetsStore = defineStore("fileWorksets", {
     },
 
     getPageScope(pageId: string): PageWorksetScopePrefs {
+      if (RETIRED_CODE_PAGE_IDS.has(pageId)) return defaultPageScope();
       return this.pageScopes[pageId] ?? defaultPageScope();
     },
 
@@ -178,8 +174,16 @@ export const useFileWorksetsStore = defineStore("fileWorksets", {
       const key = this.activeWorkspaceKey;
       const data = readUiPersisted();
       const byWorkspace = { ...(data.byWorkspace ?? {}) };
-      byWorkspace[key] = this.uiPrefsSnapshot();
-      writeUiPersisted({ byWorkspace });
+      const stored = byWorkspace[key];
+      const current = this.uiPrefsSnapshot();
+      // Runtime excludes retired tools; saving current preferences must not erase
+      // their stored scopes, legacy fields, or preferences belonging to other versions.
+      byWorkspace[key] = {
+        ...stored,
+        ...current,
+        pageScopes: { ...stored?.pageScopes, ...current.pageScopes },
+      };
+      writeUiPersisted({ ...data, byWorkspace });
     },
 
     applyUiPrefs(prefs: FileWorksetUiPrefs) {
@@ -188,6 +192,7 @@ export const useFileWorksetsStore = defineStore("fileWorksets", {
     },
 
     patchPageScope(pageId: string, patch: Partial<PageWorksetScopePrefs>) {
+      if (RETIRED_CODE_PAGE_IDS.has(pageId)) return;
       const cur = this.getPageScope(pageId);
       this.pageScopes = {
         ...this.pageScopes,

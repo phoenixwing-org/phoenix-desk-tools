@@ -11,11 +11,11 @@ const dependencySections = [
   "peerDependencies",
 ];
 const expectedWingVersions = {
-  "phoenix-wing": "0.7.5",
+  "phoenix-wing": "0.7.6",
   "@phoenix-wing/code-core": "0.6.6",
   "@phoenix-wing/git-node": "0.6.5",
-  "@phoenix-wing/kt-codegen": "0.6.6",
   "@phoenix-wing/cad-core": "0.6.3",
+  "@phoenix-wing/cad-contracts": "0.6.3",
   "@phoenix-wing/db-node": "0.6.3",
   "@phoenix-wing/workspace-schema": "0.6.3",
 };

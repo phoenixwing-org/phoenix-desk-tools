@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
+import PageLayout from "phoenix-wing/layout/PnwPageLayout.vue";
+import PageMainBlock from "phoenix-wing/layout/PnwPageMainBlock.vue";
 import CaaDialogHomeView from "../components/caa/CaaDialogHomeView.vue";
 import CaaDialogPrimaryBlock from "../components/caa/CaaDialogPrimaryBlock.vue";
 import { fetchCaaHealth, fetchCaaIndexGroups, scanCaaIndex, type CaaIndexStats } from "../api/caaDialog";
@@ -150,52 +152,46 @@ watch(workspacePath, () => {
 </script>
 
 <template>
-  <div class="page tool-page caa-dialog-home-page">
-    <PageHeader title="CAA 对话框" :page-id="PAGE_ID">
-      <template #actions>
-        <div class="head-actions-inner">
-          <el-button type="primary" size="small" @click="onNewDialog">
-            + 新建
-          </el-button>
-          <el-button type="primary" size="small" :loading="scanning" :disabled="!workspaceReady" @click="onRescan">
-            重新检索
-          </el-button>
-          <el-button size="small" :loading="listLoading && !scanning" :disabled="!workspaceReady" @click="onRefresh">
-            刷新
-          </el-button>
-        </div>
-      </template>
-    </PageHeader>
+  <PageLayout title="CAA 对话框" class="desk-page-layout" :body-inset="false" :body-scroll="false">
+    <template #header>
+      <PageHeader title="CAA 对话框">
+        <template #right>
+          <div class="head-actions-inner">
+            <el-button type="primary" size="small" @click="onNewDialog">
+              + 新建
+            </el-button>
+            <el-button type="primary" size="small" :loading="scanning" :disabled="!workspaceReady" @click="onRescan">
+              重新检索
+            </el-button>
+            <el-button size="small" :loading="listLoading && !scanning" :disabled="!workspaceReady" @click="onRefresh">
+              刷新
+            </el-button>
+          </div>
+        </template>
+      </PageHeader>
+    </template>
+    <PageMainBlock class="tool-page caa-dialog-home-page desk-page-body--fill">
+      <p v-if="store.caaOnline === false" class="banner banner-warn">
+        Phoenix Node 服务离线，CAA API 当前不可用。
+      </p>
 
-    <p v-if="store.caaOnline === false" class="banner banner-warn">
-      Phoenix Node 服务离线，CAA API 当前不可用。
-    </p>
-
-    <CaaDialogHomeView
-      :groups="dialogGroups"
-      :count="dialogCount"
-      :loading="listLoading || scanning"
-      :error-text="listErrorText"
-      :workspace-ready="workspaceReady"
-      :has-scan="hasScan"
-      :indexed="indexed"
-      :type-coverage="indexStats?.control_type_coverage"
-      @open="onOpen"
-    />
-  </div>
+      <CaaDialogHomeView
+        :groups="dialogGroups"
+        :count="dialogCount"
+        :loading="listLoading || scanning"
+        :error-text="listErrorText"
+        :workspace-ready="workspaceReady"
+        :has-scan="hasScan"
+        :indexed="indexed"
+        :type-coverage="indexStats?.control_type_coverage"
+        @open="onOpen"
+      />
+    </PageMainBlock>
+  </PageLayout>
 </template>
 
 <style scoped>
 @import "./page-shared.css";
-
-.caa-dialog-home-page {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  padding: 16px 20px;
-  height: 100%;
-  box-sizing: border-box;
-}
 
 .banner {
   margin: 0 0 10px;

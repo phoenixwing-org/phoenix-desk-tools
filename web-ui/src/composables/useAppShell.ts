@@ -18,7 +18,10 @@ import {
   resetLauncherFactory,
   setWorkspace,
 } from "../api";
-import { collectPageStates } from "./usePageSession";
+import { collectPageStates, getPageSession } from "./usePageSession";
+import { createWorkbenchTabActions } from "./workbenchTabActions";
+import { revealWorkbenchOutput } from "./useWorkbenchBottomContribution";
+import { pnwPromptChoice, type PnwWorkbenchTabActionRequest } from "phoenix-wing";
 import { loadWorkbenchSession, saveWorkbenchSessionAll, writeLocalWorkbenchSession } from "./workbenchSession";
 import { createWorkbench, type WorkbenchContext } from "./useWorkbench";
 import type { OpenTabOptions, WorkbenchTab, WorkbenchTabPayload } from "../types/workbench";
@@ -48,12 +51,7 @@ import { createBlankCaaDialogIr } from "../utils/createBlankCaaDialogIr";
 import { acknowledgeCaaDialogOpenRequests, fetchCaaDialogOpenRequests, saveCaaDraft } from "../api/caaDialog";
 import type { CaaDialogDraft } from "../types/caaDialogDraft";
 import { resolveTabForModuleScope } from "../utils/moduleScopeNavigation";
-import {
-  findKtCodegenDocumentTab,
-  KT_CODEGEN_PAGE_ID,
-  normalizeKtCodegenDocumentPath,
-  reusableKtCodegenBlankTab,
-} from "../utils/ktCodegenTabBinding";
+import { resolveRetiredCodePage } from "../constants/retiredCodePages";
 import {
   pdtCreateWorkspaceController,
   pdtWorkspaceId,
@@ -136,8 +134,6 @@ export type AppShellContext = {
       baseline?: Partial<BomFields>;
     },
   ) => void;
-  /** 一个配置文档对应一个 KT Codegen View；重复打开只激活既有 Tab。 */
-  openKtCodegenDocument: (repoRelPath: string) => string | undefined;
   openCaaDialogForRel: (opts: {
     catDlgRel: string;
     dialogName?: string;
@@ -195,8 +191,12 @@ export type AppShellContext = {
   openTab: (opts: OpenTabOptions) => string;
   openNewTabForPage: (pageId: string) => string;
   activateTab: (tabId: string) => void;
+  keepTab: (tabId: string) => void;
+  keepFileDetailForRel: (rel: string) => void;
   closeTab: (tabId: string) => Promise<boolean>;
   closeAllTabs: () => Promise<boolean>;
+  runTabAction: (request: PnwWorkbenchTabActionRequest) => Promise<boolean>;
+  tabActionDisabled: (request: PnwWorkbenchTabActionRequest) => boolean;
   getTab: (tabId: string) => WorkbenchTab | undefined;
   activeTab: () => WorkbenchTab | undefined;
   updateTab: (
@@ -422,7 +422,7 @@ export function provideAppShell(): AppShellContext {
   const onboarding = useOnboardingStore();
 
   function normalizePageId(pageId: string): string {
-    return pageId === "rename_analysis" ? "file_rename" : pageId;
+    return pageId === "rename_analysis" ? "file_rename" : resolveRetiredCodePage(pageId);
   }
 
   const enabledNavModules = computed(() => {
@@ -539,7 +539,12 @@ export function provideAppShell(): AppShellContext {
     }
     syncActiveTreeHandler();
   }
-  const wb: WorkbenchContext = createWorkbench(appConfig);
+  const wb: WorkbenchContext = createWorkbench(appConfig, {
+    onTabLimit: (message) => {
+      setStatus(message);
+      toast(message, "warning");
+    },
+  });
 
   function shellOpenTab(opts: OpenTabOptions): string {
     if (opts.pageId === "welcome") {
@@ -705,6 +710,7 @@ export function provideAppShell(): AppShellContext {
     const wantOpen =
       opts?.open ??
       (shellLayout.value.log_auto_open_on_append && !logAutoOpenSuppressed.value);
+    if (opts?.open === true) revealWorkbenchOutput();
     if (wantOpen && !shellLayout.value.log_panel_open) {
       shellLayout.value = { ...shellLayout.value, log_panel_open: true };
       void persistShellLayout({ log_panel_open: true });
@@ -783,48 +789,10 @@ export function provideAppShell(): AppShellContext {
         contextKey,
         payload: { partKey: { partNumber: pn, partVersion: pv } },
         forceNew: true,
+        preview: true,
       });
     } catch (e) {
       setStatus(String(e));
-    }
-  }
-
-  function openKtCodegenDocument(repoRelPath: string): string | undefined {
-    const rel = normalizeKtCodegenDocumentPath(repoRelPath);
-    if (!rel || !requireWorkspace()) return undefined;
-
-    const existing = findKtCodegenDocumentTab(wb.tabs.value, rel);
-    if (existing) {
-      existing.title = basenameFromRel(rel);
-      existing.subtitle = rel;
-      existing.contextKey = rel;
-      shellActivateTab(existing.id);
-      return existing.id;
-    }
-
-    // Ribbon 首次进入会产生一个尚未绑定文档的空 View；第一次选择直接绑定它，
-    // 后续不同文档才创建新 View，避免留下无意义的空白 Tab。
-    const active = reusableKtCodegenBlankTab(wb.tabs.value, wb.activeTabId.value);
-    if (active) {
-      active.title = basenameFromRel(rel);
-      active.subtitle = rel;
-      active.contextKey = rel;
-      scheduleWorkbenchSave();
-      shellActivateTab(active.id);
-      return active.id;
-    }
-
-    try {
-      return shellOpenTab({
-        pageId: KT_CODEGEN_PAGE_ID,
-        title: basenameFromRel(rel),
-        subtitle: rel,
-        contextKey: rel,
-        forceNew: true,
-      });
-    } catch (error) {
-      setStatus(String(error));
-      return undefined;
     }
   }
 
@@ -842,6 +810,7 @@ export function provideAppShell(): AppShellContext {
     if (!requireWorkspace()) return;
     const existing = findFileDetailTab(rel);
     if (existing) {
+      if (opts?.preferredNewFilename || opts?.form) wb.keepTab(existing.id);
       const relApi = normalizeRepoRelForApi(rel) || rel;
       existing.title = wb.basename(rel);
       existing.subtitle = relApi;
@@ -894,6 +863,7 @@ export function provideAppShell(): AppShellContext {
             : {}),
         },
         forceNew: true,
+        preview: !opts?.preferredNewFilename && !opts?.form,
       });
       fileDetailTabByRel.set(normalizeDetailTabRel(rel), tabId);
       onboarding.markFileDetailOpened(workspacePath.value);
@@ -1023,7 +993,7 @@ export function provideAppShell(): AppShellContext {
     const preferred = String(form.filename ?? "").trim() || undefined;
     // 改名已从子 Tab 移至弹窗，直接打开文件详情页，preferredNewFilename 可预填弹窗
     openFileDetailForRel(repoRelPath, {
-      subTab: "overview",
+      subTab: "edit",
       preferredNewFilename: preferred,
       form,
       baseline,
@@ -1294,6 +1264,7 @@ export function provideAppShell(): AppShellContext {
   }
 
   async function closeTab(tabId: string): Promise<boolean> {
+    if (getPageSession(tabId)?.isBusy?.()) { setStatus("页面正在处理，请完成或取消后再关闭"); return false; }
     const closing = wb.getTab(tabId);
     const ok = await wb.closeTab(tabId);
     if (ok && !wb.tabs.value.length) {
@@ -1304,14 +1275,18 @@ export function provideAppShell(): AppShellContext {
   }
 
   async function closeAllTabs(): Promise<boolean> {
-    const lastPageId = wb.activeTab()?.pageId;
-    const ok = await wb.closeAllTabs();
-    if (ok) {
-      if (lastPageId) applyModuleScopeForPage(lastPageId);
-      stayInWorkbenchIdle();
-    }
-    return ok;
+    const tabId = wb.activeTabId.value || wb.tabs.value[0]?.id;
+    return tabId ? tabActions.run({ action: "close-all", tabId }) : false;
   }
+
+  const tabActions = createWorkbenchTabActions({
+    tabs: () => wb.tabs.value, session: getPageSession, close: closeTab, status: setStatus,
+    async confirmRefresh(title) {
+      const answer = await pnwPromptChoice({ title: "刷新此页", message: `「${title}」有未保存内容。刷新将丢弃这些更改并重新读取当前页，不会刷新整个应用。`,
+        choices: [{ id: "refresh", label: "放弃并刷新", variant: "danger" }, { id: "cancel", label: "取消" }], defaultChoiceId: "cancel" });
+      return answer.choiceId === "refresh";
+    },
+  });
 
   function setupWorkbenchPersistence() {
     watch(wb.tabs, () => {
@@ -1522,6 +1497,13 @@ export function provideAppShell(): AppShellContext {
     }
   }
 
+  function keepFileDetailForRel(rel: string) {
+    // Double-click should pin only the matching detail, never the previous tab
+    // if opening was rejected (for example by a capacity guard).
+    const tab = findFileDetailTab(rel);
+    if (tab) wb.keepTab(tab.id);
+  }
+
   async function dispatchTreeSelect(rel: string) {
     const norm = rel.replace(/\\/g, "/").trim();
     if (!norm) return;
@@ -1597,7 +1579,7 @@ export function provideAppShell(): AppShellContext {
       return;
     }
     if (pageId === "file_rename" && rel) {
-      openFileDetailForRel(rel, { subTab: "overview" });
+      openFileDetailForRel(rel, { subTab: "edit" });
       return;
     }
     if (pageId === "rename_analysis" || pageId === "file_rename") {
@@ -1754,7 +1736,6 @@ export function provideAppShell(): AppShellContext {
     openPartKeyDetail,
     openBomApplyForRel,
     openFileDetailForRel,
-    openKtCodegenDocument,
     openCaaDialogForRel,
     openNewCaaDialog,
     openCaaDialogForDraft,
@@ -1799,8 +1780,12 @@ export function provideAppShell(): AppShellContext {
     openTab: shellOpenTab,
     openNewTabForPage: (pageId: string) => shellOpenTab({ pageId, forceNew: true }),
     activateTab: shellActivateTab,
+    keepTab: wb.keepTab,
+    keepFileDetailForRel,
     closeTab,
     closeAllTabs,
+    runTabAction: tabActions.run,
+    tabActionDisabled: tabActions.disabled,
     getTab: wb.getTab,
     activeTab: wb.activeTab,
     updateTab: wb.updateTab,

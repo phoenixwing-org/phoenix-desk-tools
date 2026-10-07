@@ -1,4 +1,5 @@
 import type { WorkbenchTab } from "../types/workbench";
+import { CODE_PAGE_FALLBACK, RETIRED_CODE_PAGE_IDS } from "../constants/retiredCodePages";
 
 /** 从地址栏解析壳层深链（刷新 / 分享链接用） */
 export type ShellUrlIntent =
@@ -15,6 +16,7 @@ export function parseShellUrl(search = window.location.search): ShellUrlIntent |
   if (!page) return null;
   if (page === "welcome") return { kind: "welcome" };
   if (page === "config") return { kind: "config" };
+  if (RETIRED_CODE_PAGE_IDS.has(page)) return { kind: "page", pageId: CODE_PAGE_FALLBACK };
 
   const rel = params.get("rel")?.trim() || undefined;
   if (page === "bom_apply" && rel) {
@@ -54,6 +56,10 @@ export function buildShellSearchParams(opts: {
   if (!tab) return params;
 
   const pageId = tab.pageId;
+  if (RETIRED_CODE_PAGE_IDS.has(pageId)) {
+    params.set("page", CODE_PAGE_FALLBACK);
+    return params;
+  }
   params.set("page", pageId);
 
   const rel = (tab.contextKey || tab.subtitle || "").trim();

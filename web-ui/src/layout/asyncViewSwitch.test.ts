@@ -27,6 +27,24 @@ function target(id: string): AsyncViewTarget {
 }
 
 describe("async View switch", () => {
+  it("times out a pre-mount module load and retries without a late result poisoning the cache", async () => {
+    vi.useFakeTimers();
+    try {
+      const stale = deferred<string>();
+      const retry = deferred<string>();
+      const shared = createRetryableSharedLoader(vi.fn().mockReturnValueOnce(stale.promise).mockReturnValueOnce(retry.promise), 100);
+      const pending = shared();
+      const assertion = expect(pending).rejects.toThrow("页面模块加载超时");
+      await vi.advanceTimersByTimeAsync(100);
+      await assertion;
+      const retried = shared();
+      stale.resolve("old");
+      retry.resolve("new");
+      await expect(retried).resolves.toBe("new");
+      expect(shared()).toBe(retried);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
+  });
   it("reuses an in-flight loader and retries after a rejection", async () => {
     const first = deferred<string>();
     const loader = vi.fn()

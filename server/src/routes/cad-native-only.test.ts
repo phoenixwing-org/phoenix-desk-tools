@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { describe, expect, it } from "vitest";
 import { cadRoutes } from "./cad.js";
 
@@ -22,14 +23,19 @@ describe("CAD native-only route invariant", () => {
   });
 
   it("reports only the active native CAD backend", async () => {
-    const response = await cadRoutes.request("/health");
-    expect(response.status).toBe(200);
-    const payload = await response.json();
-    expect(payload).toMatchObject({
-      ok: true,
-      module: "cad-native",
-      native: { engine: "node-sqlite" },
-    });
-    expect(payload).not.toHaveProperty("python");
+    // Never let a health test inspect the developer's currently selected CAD DB.
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "desk-health-test-"));
+    try {
+      const response = await cadRoutes.request(`/health?workspace=${encodeURIComponent(workspace)}`);
+      expect(response.status).toBe(200);
+      const payload = await response.json();
+      expect(payload).toMatchObject({
+        ok: true,
+        module: "cad-native",
+        native: { engine: "node-sqlite" },
+      });
+      expect(payload).not.toHaveProperty("python");
+      expect(fs.readdirSync(workspace)).toEqual([]);
+    } finally { fs.rmSync(workspace, { recursive: true, force: true }); }
   });
 });

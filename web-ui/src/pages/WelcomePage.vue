@@ -32,6 +32,7 @@ import { useWorkspaceDirectoryPicker } from "../composables/useWorkspaceDirector
 import { confirmCloseTabsBeforeWorkspacePick } from "../composables/tabCloseConfirm";
 import { DEFAULT_APP_TITLE } from "../types/config";
 import deskWelcomeInformation from "../content/welcomeInformation.json";
+import { pdtRecentWorkspaceType } from "../workspace/pdtWorkspaceController";
 
 const shell = useAppShell();
 const props = defineProps<{
@@ -43,6 +44,7 @@ const emit = defineEmits<{
 const { startShellTour } = useShellTour(shell);
 const { picking, pickAndOpenWorkspace } = useWorkspaceDirectoryPicker();
 const touring = ref(false);
+const updatingTypes = ref(new Set<string>());
 const projectInformation: PnwInformationBlockDefinition = deskWelcomeInformation.project;
 const contributionInformation: PnwInformationBlockDefinition = deskWelcomeInformation.contribution.block;
 const contributionCards: PnwInformationCardGroupDefinition = deskWelcomeInformation.contribution.cardGroup;
@@ -107,6 +109,8 @@ async function removeRecent(entry: PnwRecentWorkspaceEntry) {
 }
 
 async function onWorkspaceTypeChange(rootPath: string, workspaceTypeId: string) {
+  if (updatingTypes.value.has(rootPath)) return;
+  updatingTypes.value.add(rootPath);
   try {
     const scope = moduleScopeForWorkspaceType(workspaceTypeId);
     await shell.setWorkspaceType(rootPath, workspaceTypeId);
@@ -114,6 +118,8 @@ async function onWorkspaceTypeChange(rootPath: string, workspaceTypeId: string) 
     shell.setStatus(`工作空间类型已更新；模块范围为 ${moduleScopeLabel(scope)}`);
   } catch (error) {
     shell.setStatus(String(error));
+  } finally {
+    updatingTypes.value.delete(rootPath);
   }
 }
 
@@ -234,7 +240,8 @@ async function enterAndStartTour() {
     <template #entry-actions="{ entry }">
       <PnwWorkspaceTypeSelect
         v-if="entry.availability === 'available' || entry.availability === 'unknown'"
-        :model-value="entry.workspaceTypeId ?? 'mixed'"
+        :model-value="pdtRecentWorkspaceType(shell.launcher.value, entry.rootPath, entry.workspaceTypeId ?? 'mixed')"
+        :disabled="workspaceWelcomeDisabled || updatingTypes.has(entry.rootPath)"
         size="compact"
         :aria-label="`${entry.name} 工作空间类型`"
         @update:model-value="onWorkspaceTypeChange(entry.rootPath, $event)"

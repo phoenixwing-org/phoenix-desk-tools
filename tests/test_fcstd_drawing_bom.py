@@ -57,7 +57,7 @@ DRAWING_DOC = """<?xml version='1.0' encoding='utf-8'?>
      <String value="Link"/>
     </Property>
     <Property name="LinkedObject" type="App::PropertyXLink">
-     <XLink file="8003.001-H-PX-滑轨.FCStd"/>
+     <XLink file="730201.001-H-DEMO-TestBlock.FCStd"/>
     </Property>
    </Properties>
   </Object>
@@ -86,7 +86,7 @@ class DrawingBomTest(unittest.TestCase):
 
         self.assertTrue(SAMPLE_INTERNAL_ASSY.is_file(), SAMPLE_INTERNAL_ASSY)
         doc_el = ET.fromstring(SAMPLE_INTERNAL_ASSY.read_text(encoding="utf-8"))
-        self.assertEqual(_first_bom_target_object_name(doc_el), "PCB")
+        self.assertEqual(_first_bom_target_object_name(doc_el), "RootPart")
 
     def test_drawing_primary_mounts_on_app_link(self) -> None:
         import xml.etree.ElementTree as ET
@@ -96,19 +96,19 @@ class DrawingBomTest(unittest.TestCase):
         self.assertEqual(_first_bom_target_object_name(doc_el), "Link")
 
     def test_resolve_drawing_bom_from_xlink_model(self) -> None:
-        model = self.root / "8003.001-H-PX-滑轨.FCStd"
-        drawing = self.root / "8003.001-H-PX-滑轨.Drawing.FCStd"
+        model = self.root / "730201.001-H-DEMO-TestBlock.FCStd"
+        drawing = self.root / "730201.001-H-DEMO-TestBlock.Drawing.FCStd"
         _write_fcstd(model, MODEL_DOC)
         _write_fcstd(drawing, DRAWING_DOC)
         write_embedded_bom_attrs(
             model,
             {
-                "PartNumber": "8003",
+                "PartNumber": "730201",
                 "PartVersion": "001",
                 "TypeCode": "H",
-                "ModelSeries": "PX",
-                "PartName": "滑轨",
-                "label": "8003.001-滑轨",
+                "ModelSeries": "DEMO",
+                "PartName": "TestBlock",
+                "label": "730201.001-TestBlock",
             },
         )
 
@@ -117,15 +117,15 @@ class DrawingBomTest(unittest.TestCase):
         assert res is not None
         self.assertTrue(res.readonly)
         self.assertEqual(res.source_repo_rel, f"./{model.name}")
-        self.assertEqual(res.values["PartNumber"], "8003")
+        self.assertEqual(res.values["PartNumber"], "730201")
         self.assertEqual(res.values["PartVersion"], "001")
-        self.assertEqual(res.values["PartName"], "滑轨")
+        self.assertEqual(res.values["PartName"], "TestBlock")
 
     def test_load_bom_preview_marks_drawing_readonly(self) -> None:
         model = self.root / "part.FCStd"
         drawing = self.root / "part.Drawing.FCStd"
         _write_fcstd(model, MODEL_DOC)
-        drawing_xml = DRAWING_DOC.replace("8003.001-H-PX-滑轨.FCStd", "part.FCStd")
+        drawing_xml = DRAWING_DOC.replace("730201.001-H-DEMO-TestBlock.FCStd", "part.FCStd")
         _write_fcstd(drawing, drawing_xml)
         write_embedded_bom_attrs(
             model,
@@ -148,7 +148,7 @@ class DrawingBomTest(unittest.TestCase):
         model = self.root / "m.FCStd"
         drawing = self.root / "m.Drawing.FCStd"
         _write_fcstd(model, MODEL_DOC)
-        drawing_xml = DRAWING_DOC.replace("8003.001-H-PX-滑轨.FCStd", "m.FCStd")
+        drawing_xml = DRAWING_DOC.replace("730201.001-H-DEMO-TestBlock.FCStd", "m.FCStd")
         _write_fcstd(drawing, drawing_xml)
 
         with self.assertRaises(ValueError) as ctx:
@@ -172,19 +172,19 @@ class DrawingBomTest(unittest.TestCase):
     def test_recommend_filename_for_drawing_with_xlink(self) -> None:
         from phoenix.services.bom_apply_service import recommend_filename_for_values
 
-        model = self.root / "8003.001-H-PX-滑轨.FCStd"
-        drawing = self.root / "8003.001-H-PX-滑轨.Drawing.FCStd"
+        model = self.root / "730201.001-H-DEMO-TestBlock.FCStd"
+        drawing = self.root / "730201.001-H-DEMO-TestBlock.Drawing.FCStd"
         _write_fcstd(model, MODEL_DOC)
         _write_fcstd(drawing, DRAWING_DOC)
         write_embedded_bom_attrs(
             model,
             {
-                "PartNumber": "8003",
+                "PartNumber": "730201",
                 "PartVersion": "001",
                 "TypeCode": "H",
-                "ModelSeries": "PX",
-                "PartName": "滑轨.Drawing.FCStd",
-                "label": "8003.001-H-PX-滑轨",
+                "ModelSeries": "DEMO",
+                "PartName": "TestBlock.Drawing.FCStd",
+                "label": "730201.001-H-DEMO-TestBlock",
             },
         )
 
@@ -192,12 +192,12 @@ class DrawingBomTest(unittest.TestCase):
             self.root,
             Path(drawing.name),
             {
-                "PartNumber": "8003",
+                "PartNumber": "730201",
                 "PartVersion": "001",
                 "TypeCode": "H",
-                "ModelSeries": "PX",
-                "PartName": "滑轨.Drawing.FCStd",
-                "label": "8003.001-H-PX-滑轨",
+                "ModelSeries": "DEMO",
+                "PartName": "TestBlock.Drawing.FCStd",
+                "label": "730201.001-H-DEMO-TestBlock",
                 "filename": drawing.name,
                 "repo_rel_path": drawing.name,
             },
@@ -217,37 +217,37 @@ class DrawingBomTest(unittest.TestCase):
         self.assertEqual(_first_bom_target_object_name(doc_el), "Link")
         self.assertEqual(
             _linked_object_fcstd_attr(doc_el, "Link"),
-            "8003.001-H-PHOENIX-滑轨.FCStd",
+            "730201.001-H-DEMO-TestBlock.FCStd",
         )
 
-        model = self.root / "8003.001-H-PHOENIX-滑轨.FCStd"
-        drawing = self.root / "8003.001-H-PX-滑轨.Drawing.FCStd"
+        model = self.root / "730201.001-H-DEMO-TestBlock.FCStd"
+        drawing = self.root / "730201.001-H-DEMO-TestBlock.Drawing.FCStd"
         _write_fcstd(model, MODEL_DOC)
         _write_fcstd(drawing, xml_text)
         write_embedded_bom_attrs(
             model,
             {
-                "PartNumber": "8003",
+                "PartNumber": "730201",
                 "PartVersion": "001",
                 "TypeCode": "H",
-                "ModelSeries": "PHOENIX",
-                "PartName": "滑轨",
-                "label": "8003.001-滑轨",
+                "ModelSeries": "DEMO",
+                "PartName": "TestBlock",
+                "label": "730201.001-TestBlock",
             },
         )
 
         res = resolve_drawing_bom(self.root, drawing.name, drawing)
         assert res is not None
         self.assertEqual(res.source_repo_rel, f"./{model.name}")
-        self.assertEqual(res.values["PartNumber"], "8003")
-        self.assertEqual(res.values["ModelSeries"], "PHOENIX")
+        self.assertEqual(res.values["PartNumber"], "730201")
+        self.assertEqual(res.values["ModelSeries"], "DEMO")
 
         drawing_path = self.root / "sample.Drawing.FCStd"
         _write_fcstd(drawing_path, xml_text)
         attrs = _iter_model_xlink_candidates(
             doc_el, drawing_path, mount_name="Link", mount_type="App::Link"
         )
-        self.assertEqual(attrs[0], "8003.001-H-PHOENIX-滑轨.FCStd")
+        self.assertEqual(attrs[0], "730201.001-H-DEMO-TestBlock.FCStd")
 
 
 if __name__ == "__main__":

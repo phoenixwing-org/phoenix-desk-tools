@@ -6,7 +6,7 @@ Owner：Desk Tools CAD maintainers
 
 适用版本：0.2.x
 
-最后核验：2026-07-20
+最后整理：2026-10-07（改用独立合成夹具，原生 FreeCAD 验收仍单列）
 
 ## 入口
 
@@ -18,7 +18,7 @@ pnpm verify:real-fcstd
 
 ## Fixture 与流程
 
-输入使用仓库冻结的真实 FreeCAD `Document.xml`：`tests/fixtures/workspaces/minimal/document-xml/图纸-通过link来创建-Document.xml`。测试把它和最小 `GuiDocument.xml` 打成有效 `.FCStd` ZIP，而不是把 XML 字符串直接当成 FCStd。
+自动回归使用独立构造的最小 XML，并在临时目录打成 `.FCStd` ZIP。Tauri smoke 的图纸结构位于 `tests/fixtures/workspaces/minimal/document-xml/图纸-通过link来创建-Document.xml`；它只表达 Page/Link 关系，不含工程导出或几何。ZIP 解析通过不代表该合成文档已通过原生 FreeCAD 保存重开。
 
 自动门禁依次验证：
 

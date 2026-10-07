@@ -19,7 +19,7 @@ function tempCatalogOptions() {
   const appConfigPath = path.join(root, "app_config.json");
   fs.writeFileSync(appConfigPath, JSON.stringify({
     navigation: [
-      { id: "code_index", page: "code_index", label: "Code 索引", description: "索引源码", module: "code" },
+      { id: "code_ignore", page: "code_ignore", label: "忽略设定", description: "保存忽略规则", module: "code" },
       { id: "caa_dialog", page: "caa_dialog", label: "CAA 对话框", module: "code" },
     ],
   }), "utf8");
@@ -32,9 +32,9 @@ function tempCatalogOptions() {
 function sampleCatalog() {
   return buildUnitTestCatalogFromList([
     {
-      file: "server/src/lib/pdtCodeService.test.ts",
+      file: "server/src/lib/codeIgnoreService.test.ts",
       count: 2,
-      tests: ["code index > scans files", "code uuid > replaces selected hit"],
+      tests: ["code ignore > reads preferences", "ignore presets > saves custom patterns"],
     },
     {
       file: "packages/catdlg-core/src/emitCatDlg.test.ts",
@@ -59,26 +59,26 @@ describe("runtimeCatalogService", () => {
     expect(status).toMatchObject({ ok: true, exists: true, schema_version: 2 });
     expect(status.counts).toEqual({ pages: 2, test_modules: 2, test_cases: 3, suites: 4 });
 
-    const moduleName = "server/src/lib/pdtCodeService.test.ts";
+    const moduleName = "server/src/lib/codeIgnoreService.test.ts";
     const modules = runtimeTestModuleMap([moduleName], options).modules as Record<string, any>;
     expect(modules[moduleName]).toMatchObject({ suite_id: "code", case_count: 2 });
-    expect(modules[moduleName].description_zh).toContain("code index");
+    expect(modules[moduleName].description_zh).toContain("code ignore");
 
-    const caseId = `${moduleName} > code index > scans files`;
+    const caseId = `${moduleName} > code ignore > reads preferences`;
     const cases = runtimeTestCaseMap([caseId], options).cases as Record<string, any>;
-    expect(cases[caseId]).toMatchObject({ method_name: "scans files", suite_id: "code" });
+    expect(cases[caseId]).toMatchObject({ method_name: "reads preferences", suite_id: "code" });
 
-    expect(searchRuntimeCatalog({ q: "Code 索引", entity_type: "page" }, options).total).toBe(1);
-    expect(searchRuntimeCatalog({ q: "replaces selected", suite_id: "code" }, options).total).toBe(1);
+    expect(searchRuntimeCatalog({ q: "忽略设定", entity_type: "page" }, options).total).toBe(1);
+    expect(searchRuntimeCatalog({ q: "saves custom", suite_id: "code" }, options).total).toBe(1);
   });
 
   it("full sync removes modules and cases that no longer exist", () => {
     const options = tempCatalogOptions();
     syncRuntimeCatalog(sampleCatalog(), options);
     const next = buildUnitTestCatalogFromList([{
-      file: "server/src/lib/pdtCodeService.test.ts",
+      file: "server/src/lib/codeIgnoreService.test.ts",
       count: 1,
-      tests: ["code index > scans files"],
+      tests: ["code ignore > reads preferences"],
     }]);
 
     syncRuntimeCatalog(next, options);

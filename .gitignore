@@ -19,6 +19,13 @@ web-ui/node_modules/
 node_modules/
 web-ui/dist
 .phoenix
+.tmp/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.env
+.env.*
+!.env.example
 .npmrc
 # Rust
 server/target/

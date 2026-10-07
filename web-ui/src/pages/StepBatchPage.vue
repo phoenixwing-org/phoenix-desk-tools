@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import {
   fetchStepBatchPrefs,
   previewStepBatch,
@@ -9,7 +9,10 @@ import {
 } from "../api";
 import OnboardingBanner from "../components/OnboardingBanner.vue";
 import PageHeader from "phoenix-wing/layout/PnwPageHeader.vue";
+import PageLayout from "phoenix-wing/layout/PnwPageLayout.vue";
+import { useCadBatchDirectory } from "../composables/useCadBatchDirectory";
 import { useAppShell } from "../composables/useAppShell";
+import { cadBatchToolsSection } from "../composables/cadBatchTools";
 import { useFreecadTaskGate } from "../composables/useFreecadTaskGate";
 import {
   STEP_VIEW_FIT_OPTIONS,
@@ -25,9 +28,10 @@ const props = defineProps<{
 }>();
 
 const shell = useAppShell();
+const shared = useCadBatchDirectory(shell.workspacePath);
 const { blocked: freecadBlocked, assertFreecadForTask, hint: freecadHint } = useFreecadTaskGate();
 
-const stepDir = ref("");
+const stepDir = shared.directory;
 const outDir = ref("");
 const skipExisting = ref(true);
 const viewFit = ref("none");
@@ -55,6 +59,13 @@ const saving = ref(false);
 const previewing = ref(false);
 const running = ref(false);
 const preview = ref<StepBatchPreview | null>(null);
+shared.bindBusy(computed(() => saving.value || previewing.value || running.value));
+let scopeEpoch = 0;
+watch(shared.scopeKey, () => {
+  scopeEpoch++;
+  preview.value = null;
+  if (prefsSaveTimer) clearTimeout(prefsSaveTimer);
+}, { flush: "sync" });
 
 function prefsPayload() {
   return {
@@ -68,8 +79,9 @@ function prefsPayload() {
 }
 
 async function loadPrefs() {
+  const epoch = scopeEpoch;
   const prefs = await fetchStepBatchPrefs();
-  stepDir.value = prefs.step_dir;
+  if (epoch !== scopeEpoch) return;
   outDir.value = prefs.out_dir;
   skipExisting.value = prefs.skip_existing;
   viewFit.value = prefs.view_fit || "none";
@@ -77,13 +89,16 @@ async function loadPrefs() {
 }
 
 async function onSave() {
+  if (saving.value || previewing.value || running.value || shared.disabled.value) return;
+  const epoch = scopeEpoch;
   saving.value = true;
   try {
     const prefs = await saveStepBatchPrefs(prefsPayload());
-    stepDir.value = prefs.step_dir;
+    if (epoch !== scopeEpoch) return;
     outDir.value = prefs.out_dir;
     shell.setStatus("已保存 STEP 批量偏好");
   } catch (e) {
+    if (epoch !== scopeEpoch) return;
     shell.setStatus(String(e));
   } finally {
     saving.value = false;
@@ -91,14 +106,19 @@ async function onSave() {
 }
 
 async function onPreview() {
+  if (!await shared.validate()) return;
+  const epoch = scopeEpoch;
   previewing.value = true;
   shell.appendLog("STEP 批量转换预览…", { source: "step_batch", open: true });
   try {
-    preview.value = await previewStepBatch(prefsPayload());
+    const data = await previewStepBatch(prefsPayload());
+    if (epoch !== scopeEpoch) return;
+    preview.value = data;
     const msg = `待转换 ${preview.value.batch_count} 个 STEP（顶层 ${preview.value.top_level} · 深层 ${preview.value.deep_total}）`;
     shell.appendLog(msg, { source: "step_batch" });
     shell.setStatus(msg);
   } catch (e) {
+    if (epoch !== scopeEpoch) return;
     shell.appendLog(String(e), { source: "step_batch" });
     shell.setStatus(String(e));
   } finally {
@@ -108,10 +128,13 @@ async function onPreview() {
 
 async function onRun() {
   if (!assertFreecadForTask()) return;
+  if (!await shared.validate()) return;
+  const epoch = scopeEpoch;
   running.value = true;
   shell.appendLog("freecadcmd 批量转换…（可能需要数分钟）", { source: "step_batch", open: true });
   try {
     const data = await runStepBatch(prefsPayload());
+    if (epoch !== scopeEpoch) return;
     shell.appendLog(data.log, { source: "step_batch" });
     if (data.exit_code === 0 && data.ok_count != null) {
       shell.setStatus(
@@ -123,6 +146,7 @@ async function onRun() {
       shell.setStatus(`freecadcmd 退出码 ${data.exit_code} · 详见运行日志`);
     }
   } catch (e) {
+    if (epoch !== scopeEpoch) return;
     shell.appendLog(String(e), { source: "step_batch" });
     shell.setStatus(String(e));
   } finally {
@@ -131,29 +155,20 @@ async function onRun() {
 }
 
 usePagePrimaryContribution("step_batch", props.workbenchTabId, {
+  title: "批量工具",
   summary: computed(() => {
     if (freecadBlocked.value) return freecadHint;
     if (!preview.value) return "尚未预览 STEP 批处理范围";
     return `待转换 ${preview.value.batch_count} 个 STEP · 深层 ${preview.value.deep_total}`;
   }),
   sections: computed<PagePrimarySection[]>(() => [
+    cadBatchToolsSection(shell, "step_batch"),
+    shared.section,
     {
       id: "paths",
       title: "转换范围",
       description: "通过 FreeCAD 将 STEP 批量转换为 FCStd。目录相对当前工作空间。",
       controls: [
-        {
-          id: "source",
-          kind: "text",
-          label: "STEP 目录",
-          modelValue: stepDir,
-          placeholder: "相对工作空间",
-          mono: true,
-          onUpdate: (value) => {
-            stepDir.value = value;
-            schedulePrefsSave();
-          },
-        },
         {
           id: "output",
           kind: "text",
@@ -220,28 +235,36 @@ usePagePrimaryContribution("step_batch", props.workbenchTabId, {
   ]),
 });
 
+onUnmounted(() => {
+  scopeEpoch++;
+  if (prefsSaveTimer) clearTimeout(prefsSaveTimer);
+});
+
 onMounted(async () => {
+  const epoch = scopeEpoch;
   try {
     await loadPrefs();
   } catch (e) {
-    shell.setStatus(String(e));
+    if (epoch === scopeEpoch) shell.setStatus(String(e));
   }
 });
 </script>
 
 <template>
-  <div class="page tool-page">
-    <PageHeader title="STEP 批量" page-id="step_batch">
-      <template #actions>
-        <div data-tour-page-step-run class="head-actions-inner">
-          <el-button size="small" :loading="saving" @click="onSave">保存偏好</el-button>
-          <el-button size="small" :loading="previewing" @click="onPreview">预览数量</el-button>
-          <el-button type="primary" size="small" :loading="running" :disabled="freecadBlocked" @click="onRun">
-            开始转换
-          </el-button>
-        </div>
-      </template>
-    </PageHeader>
+  <PageLayout class="desk-page-layout" title="STEP 批量">
+    <template #header>
+      <PageHeader title="STEP 批量">
+        <template #right>
+          <div data-tour-page-step-run class="head-actions-inner">
+            <el-button size="small" :loading="saving" @click="onSave">保存偏好</el-button>
+            <el-button size="small" :loading="previewing" @click="onPreview">预览数量</el-button>
+            <el-button type="primary" size="small" :loading="running" :disabled="freecadBlocked" @click="onRun">
+              开始转换
+            </el-button>
+          </div>
+        </template>
+      </PageHeader>
+    </template>
 
     <OnboardingBanner
       v-if="freecadBlocked"
@@ -256,7 +279,7 @@ onMounted(async () => {
         {{ preview.recursive ? "（含子目录）" : "" }}
       </p>
     </section>
-  </div>
+  </PageLayout>
 </template>
 
 <style scoped>

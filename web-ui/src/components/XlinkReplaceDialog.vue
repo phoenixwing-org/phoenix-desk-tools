@@ -163,7 +163,7 @@ watch(
       <div class="xlink-replace-dialog" role="dialog" aria-modal="true" aria-label="修改 XLink 链接">
         <header class="dialog-head">
           <h2 class="dialog-title">修改 XLink 链接</h2>
-          <button type="button" class="btn-close" title="关闭" @click="onClose">×</button>
+          <button type="button" class="btn-close" title="关闭" @click="onClose">关闭</button>
         </header>
 
         <p class="dialog-lead muted">
@@ -193,7 +193,7 @@ watch(
 
         <p v-if="errorText" class="err">{{ errorText }}</p>
         <p v-else-if="loadingCandidates" class="muted">加载候选…</p>
-        <p v-else-if="!candidates.length" class="muted">无 present 的 FCStd，请调整零件标识或先在 KT Auto CAD 扫描工作空间。</p>
+        <p v-else-if="!candidates.length" class="muted">无 present 的 FCStd，请调整零件标识或先在「CAD 索引」更新工作空间。</p>
 
         <ul v-else class="candidate-list">
           <li v-for="file in candidates" :key="file.id">
@@ -264,7 +264,7 @@ watch(
 .btn-close {
   border: none;
   background: none;
-  font-size: 1.4rem;
+  font-size: .85rem;
   line-height: 1;
   color: var(--muted);
   cursor: pointer;

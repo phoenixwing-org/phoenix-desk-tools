@@ -3,6 +3,8 @@ import path from "node:path";
 import { pnwCreateDb } from "@phoenix-wing/db-node";
 import { patchFcstdXlinkAttributes } from "./fcstdReferenceLabelService.js";
 import { patchBomLinkLabels, refreshBomXrefsForHosts } from "./pnwBomXrefService.js";
+import { drawingLinkLabelAttributes } from "./fcstdDrawing.js";
+import { fcstdWorkspace, readFcstdBatchArchive, safeFcstdPath } from "./fcstdBatchFiles.js";
 
 export type RenameLog = {
   id: number;
@@ -150,6 +152,11 @@ export function listRenameLogs(workspaceRoot: string, opts: { limit?: number; re
 export function getRenameLog(workspaceRoot: string, id: number): RenameLog | null {
   if (!workspaceOk(workspaceRoot)) return null;
   return readStore(workspaceRoot).entries.find((entry) => entry.id === id) || null;
+}
+
+/** Full history is needed to resolve chains, even beyond the recent-history UI limit. */
+export function readRenameHistory(workspaceRoot: string): RenameLog[] {
+  return workspaceOk(workspaceRoot) ? readStore(workspaceRoot).entries : [];
 }
 
 export function executeDiskFileRename(workspaceRoot: string, rel: string, body: any = {}) {
@@ -519,7 +526,28 @@ function applyRenameLabels(
   const sourceEdges = labelScope === "host_all"
     ? edges.filter((edge) => hostSet.has(cleanRel(edge.host_repo_rel_path)))
     : matchingEdges.filter((edge) => hostSet.has(cleanRel(edge.host_repo_rel_path)));
-  const patches = sourceEdges.map((edge) => ({
+  const skipped: Array<{ host_repo_rel_path: string; xlink_file_attr: string; reason: string }> = [];
+  const labelAttrs = new Map<string, Set<string> | null>();
+  const unreadable = new Set<string>();
+  const root = fcstdWorkspace(workspaceRoot);
+  const applicable = sourceEdges.filter(edge => {
+    const host = cleanRel(edge.host_repo_rel_path);
+    if (unreadable.has(host)) return false;
+    try {
+      if (!labelAttrs.has(host)) labelAttrs.set(host, drawingLinkLabelAttributes(host, readFcstdBatchArchive(safeFcstdPath(root, host)).xml));
+      const attrs = labelAttrs.get(host);
+      if (attrs && !attrs.has(edge.xlink_file_attr)) {
+        skipped.push({ host_repo_rel_path: host, xlink_file_attr: edge.xlink_file_attr, reason: "独立图纸未找到可同步的装配实例 Label，已跳过" });
+        return false;
+      }
+      return true;
+    } catch (error) {
+      unreadable.add(host);
+      failed.push({ host_repo_rel_path: host, error: error instanceof Error ? error.message : String(error) });
+      return false;
+    }
+  });
+  const patches = applicable.map((edge) => ({
     host_repo_rel: cleanRel(edge.host_repo_rel_path),
     xlink_file_attr: edge.xlink_file_attr,
     link_label: fallbackRuleLabel(edge),
@@ -540,6 +568,7 @@ function applyRenameLabels(
     xlink_patches: 0,
     label_patches: Number(patched.label_patches || 0),
     label_changes: patched.label_changes || [],
+    skipped,
     scan: labelScan,
   };
 }

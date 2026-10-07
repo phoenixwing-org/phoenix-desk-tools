@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { Minus, Plus, RefreshLeft } from "@element-plus/icons-vue";
 import ExpandCaret from "phoenix-wing/components/PnwExpandCaret.vue";
 
 defineProps<{
@@ -43,12 +42,12 @@ const emit = defineEmits<{
         <el-button
           link
           size="small"
-          class="git-icon-btn"
+          class="git-action-btn"
           :aria-label="revertTooltip ?? '放弃所有的更改'"
           :loading="busy === 'revert'"
           @click.stop="emit('revert')"
         >
-          <el-icon><RefreshLeft /></el-icon>
+          全部放弃
         </el-button>
       </el-tooltip>
       <el-tooltip
@@ -60,12 +59,12 @@ const emit = defineEmits<{
         <el-button
           link
           size="small"
-          class="git-icon-btn"
+          class="git-action-btn"
           :aria-label="primaryTooltip ?? '全部暂存'"
           :loading="busy === 'primary'"
           @click.stop="emit('primary')"
         >
-          <el-icon><Plus /></el-icon>
+          全部暂存
         </el-button>
       </el-tooltip>
       <el-tooltip
@@ -77,12 +76,12 @@ const emit = defineEmits<{
         <el-button
           link
           size="small"
-          class="git-icon-btn"
+          class="git-action-btn"
           :aria-label="primaryTooltip ?? '全部取消暂存'"
           :loading="busy === 'primary'"
           @click.stop="emit('primary')"
         >
-          <el-icon><Minus /></el-icon>
+          全部撤存
         </el-button>
       </el-tooltip>
     </div>
@@ -135,23 +134,21 @@ const emit = defineEmits<{
   gap: 2px;
 }
 
-.git-icon-btn {
-  padding: 0;
+.git-action-btn {
+  padding: 2px 6px;
   margin: 0;
-  width: 22px;
-  height: 22px;
+  width: auto;
+  height: auto;
   min-height: 22px;
+  font-size: 12px;
   border: none;
   color: var(--el-text-color-regular);
 }
 
-.git-icon-btn:hover {
+.git-action-btn:hover {
   color: var(--el-text-color-primary);
   background: var(--el-fill-color);
   border-radius: 3px;
 }
 
-.git-icon-btn :deep(.el-icon) {
-  font-size: 16px;
-}
 </style>

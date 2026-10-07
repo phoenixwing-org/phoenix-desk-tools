@@ -2,7 +2,7 @@ import { ref } from "vue";
 import { fetchAssemblyTreeByHost, type AssemblyTreeNode } from "../api";
 import {
   assemblyTreeFlatten,
-  assemblyTreeIsAssembly,
+  assemblyTreeCanLoadSourceChildren,
   walkAssemblyTree,
 } from "../models/assemblyTreeViewModel";
 
@@ -36,12 +36,12 @@ export function useAssemblyTreeController(options: AssemblyTreeControllerOptions
   }
 
   function canExpand(node: AssemblyTreeNode): boolean {
-    return hasSubtree(node) || assemblyTreeIsAssembly(node);
+    return hasSubtree(node) || assemblyTreeCanLoadSourceChildren(node);
   }
 
   async function ensureSubtree(node: AssemblyTreeNode): Promise<AssemblyTreeNode[]> {
     if (hasSubtree(node)) return childrenOf(node);
-    if (!assemblyTreeIsAssembly(node)) return [];
+    if (!assemblyTreeCanLoadSourceChildren(node)) return [];
     const rel = node.repo_rel_path?.trim();
     if (!rel) return [];
     const pending = inFlight.get(node.id);
@@ -79,7 +79,7 @@ export function useAssemblyTreeController(options: AssemblyTreeControllerOptions
   async function toggle(node: AssemblyTreeNode): Promise<void> {
     if (!canExpand(node)) return;
     const toggleGeneration = generation;
-    if (!hasSubtree(node) && assemblyTreeIsAssembly(node)) {
+    if (!hasSubtree(node) && assemblyTreeCanLoadSourceChildren(node)) {
       await ensureSubtree(node);
       if (toggleGeneration !== generation) return;
       if (!hasSubtree(node)) {
@@ -118,7 +118,7 @@ export function useAssemblyTreeController(options: AssemblyTreeControllerOptions
     const next = new Set<string>();
     async function walk(items: AssemblyTreeNode[]) {
       for (const node of items) {
-        if (assemblyTreeIsAssembly(node)) await ensureSubtree(node);
+        if (assemblyTreeCanLoadSourceChildren(node)) await ensureSubtree(node);
         if (hasSubtree(node)) {
           next.add(node.id);
           await walk(childrenOf(node));
