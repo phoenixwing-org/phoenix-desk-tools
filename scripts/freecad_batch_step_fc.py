@@ -14,6 +14,7 @@ import FreeCAD as App
 import Import
 
 from phoenix.batch_step.step_naming import body_label_from_file_stem_and_step, internal_name_from_stem
+from phoenix.freecad.thumbnail_preferences import ensure_save_thumbnail
 
 
 def ensure_part_design_nodes_visible(imported_feat, body) -> None:
@@ -116,7 +117,13 @@ def save_step_as_fcstd(
     view_fit: bool = True,
     close_doc: bool = False,
 ):
-    """导入单个 STEP 并保存为 out_dir/{stem}.FCStd。"""
+    """导入单个 STEP 并保存为 out_dir/{stem}.FCStd。
+
+    先持久化当前 App 的 SaveThumbnail 偏好；GUI 中要求的视图调整在保存
+    之前执行。无 GUI 时仅启用偏好，不保证实际生成 PNG；这里只保存新导入
+    的文档，不重存已有 FCStd，也不处理已有缩略图。
+    """
+    ensure_save_thumbnail(App)
     out_dir = Path(out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     step_path = Path(step_path).resolve()
@@ -124,9 +131,9 @@ def save_step_as_fcstd(
     doc, _stem_ret, display_label = import_step_into_new_doc_with_body(step_path)
     out_fcstd = out_dir / (stem + ".FCStd")
     doc_name = doc.Name
-    doc.saveAs(str(out_fcstd))
     if view_fit and getattr(App, "GuiUp", False):
         view_isometric_fit(doc_name)
+    doc.saveAs(str(out_fcstd))
     if close_doc:
         App.closeDocument(doc_name)
     return str(out_fcstd), display_label, doc_name

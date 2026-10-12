@@ -10,11 +10,14 @@ import FileOverviewPanel from "../components/file-detail/FileOverviewPanel.vue";
 import FileAttributesPanel from "../components/file-detail/FileAttributesPanel.vue";
 import FileXrefPanel from "../components/file-detail/FileXrefPanel.vue";
 import FileAssemblyPanel from "../components/file-detail/FileAssemblyPanel.vue";
+import CadObjectInfoPanel from "../features/cad-object-info/CadObjectInfoPanel.vue";
+import { cadIndexReadStateLabel } from "../utils/cadIndexState";
 import RenameDialog from "../components/RenameDialog.vue";
 import DrawingBomReadonlyBanner from "../components/file-detail/DrawingBomReadonlyBanner.vue";
 import { provideFileDetailContext } from "../composables/useFileDetailContext";
 import { useDrawingBomReadonly } from "../composables/useDrawingBomReadonly";
 import { useFileThumbnail } from "../composables/useFileThumbnail";
+import { useThumbnailGeneration } from "../composables/useThumbnailGeneration";
 import { useAppShell } from "../composables/useAppShell";
 import { usePageSession } from "../composables/usePageSession";
 import type { FileDetailSubTab } from "../types/fileDetail";
@@ -41,7 +44,9 @@ const baseline = ref<Partial<BomFields>>({});
 const originalFilename = ref("");
 const loading = ref(false);
 const pageError = ref("");
+const failedObjectReadRel = ref("");
 const activeSubTab = ref<FileDetailSubTab>(DEFAULT_FILE_DETAIL_SUB_TAB);
+const pageActive = ref(true);
 const incomingCount = ref(0);
 const outgoingCount = ref(0);
 const xrefCacheByRel = ref<Record<string, import("../api").FileDetailXrefsPayload>>({});
@@ -52,10 +57,17 @@ function onOperationChange(source: string, busy: boolean) {
   detailOperations.value = { ...detailOperations.value, [source]: busy };
   if (busy && props.workbenchTabId) shell.keepTab(props.workbenchTabId);
 }
+const thumbnailGeneration = useThumbnailGeneration(shell.workspacePath, rel, thumbnailRevision, {
+  disabled: () => loading.value || showRenameDialog.value || hasUnsavedEdits() || Object.values(detailOperations.value).some(Boolean),
+  operation: busy => onOperationChange("thumbnail", busy),
+  log: (message, error) => shell.appendLog(`[缩略图] ${message}`, { source: "file_detail", open: error }),
+});
 /** 已写入属性但未改盘符时的目标文件名（按 repo_rel 缓存） */
 const filenameDraftByRel = ref<Record<string, string>>({});
 let reloadSeq = 0;
+let xrefCountsSeq = 0;
 let bootstrapDone = false;
+let disposed = false;
 
 function rememberFilenameDraft(filename: string, relPath?: string) {
   const r = (relPath ?? rel.value).trim();
@@ -118,18 +130,24 @@ function notifyXrefMutation(relPath?: string) {
 }
 
 async function refreshXrefCounts() {
+  const seq = ++xrefCountsSeq;
+  const queryRel = rel.value;
+  const workspace = shell.workspacePath.value;
   if (!rel.value.trim()) {
     incomingCount.value = 0;
     outgoingCount.value = 0;
     return;
   }
   try {
-    const counts = await fetchBomXrefCounts(rel.value);
+    const counts = await fetchBomXrefCounts(queryRel);
+    if (seq !== xrefCountsSeq || queryRel !== rel.value || workspace !== shell.workspacePath.value) return;
     incomingCount.value = counts.direct_incoming_count;
     outgoingCount.value = counts.outgoing_count;
-  } catch {
-    incomingCount.value = 0;
-    outgoingCount.value = 0;
+    if (preview.value) preview.value = { ...preview.value, xref_counts: counts, xref_index_pending: counts.index_pending };
+  } catch (error) {
+    if (seq !== xrefCountsSeq || queryRel !== rel.value || workspace !== shell.workspacePath.value) return;
+    pageError.value = `引用计数读取失败：${String(error)}`;
+    shell.appendLog(pageError.value, { source: "file_detail", open: true });
   }
 }
 
@@ -154,13 +172,17 @@ async function reloadFile(targetRel?: string) {
   if (!path) return;
   const prevRel = rel.value.trim();
   const seq = ++reloadSeq;
+  const workspace = shell.workspacePath.value;
+  const isCurrent = () => !disposed && seq === reloadSeq && workspace === shell.workspacePath.value;
+  xrefCountsSeq++;
   thumbnailRel.value = path;
   thumbnailRevision.value++;
   loading.value = true;
   pageError.value = "";
+  failedObjectReadRel.value = "";
   try {
-    const data = await fetchBom(path);
-    if (seq !== reloadSeq) return;
+    const data = await fetchBom(path, workspace);
+    if (!isCurrent()) return;
     rel.value = path;
     if (props.workbenchTabId && prevRel && prevRel !== path) {
       shell.rerouteFileDetailTab(prevRel, path, props.workbenchTabId);
@@ -190,13 +212,43 @@ async function reloadFile(targetRel?: string) {
     }
     shell.setStatus(data.embedded_warning ? `警告: ${data.embedded_warning}` : data.source_note);
   } catch (e) {
-    if (seq !== reloadSeq) return;
+    if (!isCurrent()) return;
     pageError.value = String(e);
     preview.value = null;
+    // A BOM/root-selection failure must not prevent an independent read-only
+    // summary. Never synthesize a writable BomPreview from the failed read.
+    rel.value = path;
+    form.value = {};
+    baseline.value = {};
+    originalFilename.value = "";
+    incomingCount.value = 0;
+    outgoingCount.value = 0;
+    if (/\.fcstd$/i.test(path)) failedObjectReadRel.value = path;
   } finally {
-    if (seq === reloadSeq) loading.value = false;
+    if (isCurrent()) loading.value = false;
   }
 }
+
+watch(shell.workspacePath, () => {
+  reloadSeq++;
+  xrefCountsSeq++;
+  loading.value = false;
+  failedObjectReadRel.value = "";
+  rel.value = "";
+  thumbnailRel.value = "";
+  thumbnailRevision.value++;
+  preview.value = null;
+  pageError.value = "";
+  originalFilename.value = "";
+  form.value = {};
+  baseline.value = {};
+  filenameDraftByRel.value = {};
+  xrefCacheByRel.value = {};
+  assemblyCacheByKey.value = {};
+  assemblyLabelEdits.value = false;
+  incomingCount.value = 0;
+  outgoingCount.value = 0;
+}, { flush: "sync" });
 
 function hasUnsavedAttrs() {
   const keys = ["PartNumber", "PartVersion", "TypeCode", "ModelSeries", "PartName", "label"] as const;
@@ -367,6 +419,7 @@ watch(showRenameDialog, (open) => {
 
 usePagePrimaryContribution("file_detail", props.workbenchTabId, {
   thumbnail,
+  thumbnailGeneration: computed(() => preview.value?.is_fcstd && !preview.value.document_kinds?.drawing ? thumbnailGeneration.value : null),
   summary: computed(() => rel.value
     ? `${originalFilename.value || rel.value} · 入向 ${incomingCount.value} · 出向 ${outgoingCount.value}`
     : "请从工作空间树选择文件"),
@@ -385,6 +438,7 @@ usePagePrimaryContribution("file_detail", props.workbenchTabId, {
           options: [
             { value: "overview", label: "属性" },
             ...(preview.value?.is_fcstd ? [{ value: "drawing", label: "出图" }] : []),
+            ...(preview.value?.is_fcstd ? [{ value: "objects", label: "对象信息" }] : []),
             { value: "edit", label: editSubTabLabel.value },
             { value: "xref", label: `引用（${incomingCount.value + outgoingCount.value}）` },
             ...(showAssemblyTab.value ? [{ value: "assembly", label: "装配结构" }] : []),
@@ -393,6 +447,7 @@ usePagePrimaryContribution("file_detail", props.workbenchTabId, {
         },
         { id: "incoming", kind: "readonly", label: "被引用", value: incomingCount },
         { id: "outgoing", kind: "readonly", label: "出向引用", value: outgoingCount },
+        { id: "index-state", kind: "readonly", label: "索引状态", value: computed(() => cadIndexReadStateLabel(preview.value?.xref_counts)) },
         { id: "dirty", kind: "readonly", label: "未保存", value: computed(() => hasUnsavedEdits() ? "是" : "否") },
       ],
       actions: [
@@ -424,12 +479,16 @@ onMounted(() => {
 });
 
 onActivated(() => {
+  pageActive.value = true;
   if (bootstrapDone) applyOpenPayload();
   registerTreeHandler();
 });
-onDeactivated(() => {});
+onDeactivated(() => { pageActive.value = false; });
 
 onUnmounted(() => {
+  disposed = true;
+  reloadSeq++;
+  xrefCountsSeq++;
   unregisterTreeHandler();
   if (props.workbenchTabId) shell.setTabDirty(props.workbenchTabId, false);
 });
@@ -451,6 +510,7 @@ onUnmounted(() => {
           >
             <el-radio-button value="overview">属性</el-radio-button>
             <el-radio-button v-if="preview.is_fcstd" value="drawing">出图</el-radio-button>
+            <el-radio-button v-if="preview.is_fcstd" value="objects">对象信息</el-radio-button>
             <el-radio-button value="edit">{{ editSubTabLabel }}</el-radio-button>
             <el-radio-button value="xref">
               引用
@@ -479,11 +539,17 @@ onUnmounted(() => {
       <div v-if="!rel && !loading" class="empty">在树中选择 .FCStd</div>
       <div v-else-if="loading && !preview" class="empty">载入中…</div>
 
+      <section v-else-if="failedObjectReadRel && !preview" class="file-detail-readonly-fallback" aria-label="独立只读摘要">
+        <p>{{ failedObjectReadRel }}：常规属性读取失败；仍可尝试独立摘要。此处不提供属性写入或改名。</p>
+        <CadObjectInfoPanel :key="failedObjectReadRel" :workspace-path="shell.workspacePath.value" :file-path="failedObjectReadRel" :active="pageActive" initial-mode="light" />
+      </section>
+
       <template v-else-if="rel && preview">
         <div class="file-detail-content" data-tour-page-filedetail-body>
         <DrawingBomReadonlyBanner :preview="preview" :show-open-button="true" />
         <div class="sub-panel" :class="{ 'sub-panel--assembly': activeSubTab === 'assembly' }">
           <FileDrawingPanel v-if="activeSubTab === 'drawing'" :key="rel" />
+          <CadObjectInfoPanel v-if="activeSubTab === 'objects' && preview.is_fcstd" :key="rel" :workspace-path="shell.workspacePath.value" :file-path="rel" :active="pageActive && activeSubTab === 'objects'" />
           <FileOverviewPanel v-show="activeSubTab === 'overview'" />
           <FileAttributesPanel v-show="activeSubTab === 'edit'" @busy-change="onOperationChange('attributes', $event)" />
           <FileXrefPanel v-if="activeSubTab === 'xref'" :key="rel" @busy-change="onOperationChange('xref', $event)" />

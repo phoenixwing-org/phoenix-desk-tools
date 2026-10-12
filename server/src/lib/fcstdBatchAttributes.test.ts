@@ -22,6 +22,21 @@ function fixture(dir: string, name = rel, xml = document(existing)) {
   fs.writeFileSync(file, zipSync({ "Document.xml": strToU8(xml), "shape.brp": strToU8("shape unchanged"), "GuiDocument.xml": strToU8("gui unchanged") })); return file;
 }
 const fields = ["PartNumber", "PartVersion"];
+it.each(["Body", "Body001"])("batch attribute preview derives a plain filename name for saved default %s without changing the Label or file", async objectName => {
+  const dir = workspace(); const filename = "测试盖板.FCStd";
+  // Independent metadata-only root: default Label, no PartName or geometry.
+  const savedXml = document().replaceAll('name="Body"', `name="${objectName}"`).replace("保留标签", objectName);
+  const file = fixture(dir, filename, savedXml); const before = fs.readFileSync(file);
+  const plan = await previewBatchAttributes(dir);
+  expect(plan.errors).toEqual([]); expect(plan.rows).toHaveLength(1);
+  expect(plan.rows[0].object_name).toBe(objectName);
+  expect(plan.rows[0].changes.find(change => change.field === "PartName")).toMatchObject({
+    current: "", proposed: "测试盖板", source: "默认节点标签，从文件名补全", eligible: true, reason: "ready",
+  });
+  expect(readFcstdEmbeddedBomFields(file)).toMatchObject({ PartName: "", label: objectName });
+  expect(fs.readFileSync(file)).toEqual(before);
+  expect(fs.existsSync(path.join(dir, ".phoenix"))).toBe(false);
+});
 it.each(["", "S", " a "])("does not offer an invalid PartName %j or the single-letter label as a writable recommendation", async name => {
   const dir = workspace();
   const file = fixture(dir, rel, document(existing.replace("已有名称", name)).replace("保留标签", "100001.002-S"));

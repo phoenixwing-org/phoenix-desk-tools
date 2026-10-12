@@ -2,6 +2,7 @@ import type { Component } from "vue";
 import {
   Box,
   Connection,
+  Coin,
   Document,
   DocumentCopy,
   Files,
@@ -27,6 +28,8 @@ export const RIBBON_PAGE_ICONS: Record<string, Component> = {
   git: Share,
   part_catalog: Grid,
   cad_index: Files,
+  workspace_recovery: Coin,
+  bom_delivery: Upload,
   part_key_detail: Key,
   file_detail: Document,
   bom_apply: Document,

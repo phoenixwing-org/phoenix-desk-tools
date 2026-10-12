@@ -5,6 +5,7 @@ import {
   pdtReadWorkbenchDisplayPreferences,
   pdtWithWorkbenchLayoutState,
   pdtWriteWorkbenchDisplayPreferences,
+  pdtRevealWorkbenchBottom,
 } from "./PdtWorkbenchDisplayPreferences";
 
 function pdtMemoryStorage(initial?: Record<string, string>) {
@@ -16,6 +17,21 @@ function pdtMemoryStorage(initial?: Record<string, string>) {
 }
 
 describe("PdtWorkbenchDisplayPreferences", () => {
+  it("explicit output reveal opens only the hidden Bottom, preserving sizes and preferences", () => {
+    const initial = pdtDefaultWorkbenchDisplayPreferences("dark");
+    const hidden = pdtWithWorkbenchLayoutState(initial, {
+      visibility: { primary: false, bottom: false, secondary: false },
+      sizes: { primaryWidth: 340, secondaryWidth: 350, bottomHeight: 210 },
+    });
+    const before = JSON.stringify(hidden);
+    const revealed = pdtRevealWorkbenchBottom(hidden);
+    expect(revealed).toEqual({ ...hidden, layoutState: {
+      ...hidden.layoutState,
+      visibility: { primary: false, bottom: true, secondary: false },
+    } });
+    expect(JSON.stringify(hidden)).toBe(before);
+    expect(pdtRevealWorkbenchBottom(revealed)).toBe(revealed);
+  });
   it("用 Desk 默认值归一化损坏或不完整的 envelope", () => {
     const storage = pdtMemoryStorage({
       [PDT_WORKBENCH_DISPLAY_PREFERENCES_KEY]: JSON.stringify({

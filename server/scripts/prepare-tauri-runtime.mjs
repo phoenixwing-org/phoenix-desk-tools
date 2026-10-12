@@ -16,7 +16,7 @@ const runtimeRoot = path.join(repoRoot, "src-tauri", "resources", "runtime");
 const bundleFile = path.join(serverRoot, "dist-sidecar", "server.mjs");
 
 function requireFile(filename, hint) {
-  if (!fs.existsSync(filename) || !fs.statSync(filename).isFile()) {
+  if (!fs.existsSync(filename) || !fs.lstatSync(filename).isFile()) {
     throw new Error(`${filename} is missing${hint ? `; ${hint}` : ""}`);
   }
   return filename;
@@ -45,9 +45,27 @@ function sha256(filename) {
   return createHash("sha256").update(fs.readFileSync(filename)).digest("hex");
 }
 
+function runtimeFiles(directory = runtimeRoot) {
+  const files = [];
+  for (const name of fs.readdirSync(directory).sort()) {
+    const filename = path.join(directory, name);
+    const relativePath = path.relative(runtimeRoot, filename).split(path.sep).join("/");
+    // The manifest is the completion record, not one of its own payloads.
+    if (relativePath === "runtime-manifest.json") continue;
+    const stat = fs.lstatSync(filename);
+    if (stat.isSymbolicLink()) throw new Error(`Runtime payload must not be a symlink: ${relativePath}`);
+    if (stat.isDirectory()) files.push(...runtimeFiles(filename));
+    else if (stat.isFile()) files.push({ path: relativePath, bytes: stat.size, sha256: sha256(filename) });
+    else throw new Error(`Runtime payload must be a regular file: ${relativePath}`);
+  }
+  return files.sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
+}
+
 requireFile(bundleFile, "run pnpm -C server build:bundle");
 const sqliteRoot = path.join(serverRoot, "node_modules", "node-sqlite3-wasm");
 requireFile(path.join(sqliteRoot, "dist", "node-sqlite3-wasm.wasm"), "run pnpm install");
+const thumbnailPreferences = requireFile(path.join(repoRoot, "phoenix", "freecad", "thumbnail_preferences.py"));
+const freecadExecutableResolver = requireFile(path.join(repoRoot, "phoenix", "freecad", "freecad_exec.py"));
 
 fs.rmSync(runtimeRoot, { recursive: true, force: true });
 fs.mkdirSync(runtimeRoot, { recursive: true });
@@ -67,6 +85,8 @@ copyFile(path.join(serverRoot, "scripts", "sw-step-export.ps1"), path.join("scri
 copyFile(path.join(repoRoot, "phoenix", "__init__.py"), path.join("phoenix", "__init__.py"));
 copyTree(path.join(repoRoot, "phoenix", "batch_step"), path.join("phoenix", "batch_step"));
 copyFile(path.join(repoRoot, "phoenix", "freecad", "__init__.py"), path.join("phoenix", "freecad", "__init__.py"));
+copyFile(thumbnailPreferences, path.join("phoenix", "freecad", "thumbnail_preferences.py"));
+copyFile(freecadExecutableResolver, path.join("phoenix", "freecad", "freecad_exec.py"));
 copyTree(path.join(repoRoot, "phoenix", "freecad", "batch_step"), path.join("phoenix", "freecad", "batch_step"));
 
 const manifest = {
@@ -82,6 +102,7 @@ const manifest = {
     ddl_sha256: PNW_WORKSPACE_SCHEMA_V13_SHA256,
     database_filename: PNW_WORKSPACE_DATABASE_FILENAME,
   },
+  files: runtimeFiles(),
 };
 fs.writeFileSync(path.join(runtimeRoot, "runtime-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 process.stdout.write(`[tauri] runtime resources -> ${runtimeRoot}\n`);

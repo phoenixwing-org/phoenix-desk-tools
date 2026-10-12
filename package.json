@@ -25,7 +25,7 @@
     "tauri:dev:local-wing-services": "pnpm brand:sync && node scripts/run-tauri-dev.mjs",
     "tauri:build": "cargo tauri build",
     "tauri:installer": "cargo tauri build --bundles nsis",
-    "verify:tauri-release:macos": "cargo tauri build --bundles app --ci --no-sign && node server/scripts/smoke-tauri-release-app.mjs",
+    "verify:tauri-release:macos": "node scripts/build-tauri-smoke.mjs",
     "verify:tauri-release:windows": "powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts/verify-windows-release.ps1",
     "test": "pnpm typecheck && pnpm test:ts && pnpm test:caa && echo '' && echo '📊 测试报告: open test-report/index.html (或 npx serve test-report)'",
     "typecheck": "pnpm -C server typecheck && pnpm -C web-ui typecheck",

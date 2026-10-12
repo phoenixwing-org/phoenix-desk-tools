@@ -140,7 +140,7 @@ function actionType(action: PagePrimaryAction): "primary" | "danger" | undefined
       </div>
     </section>
 
-    <PrimaryThumbnail v-if="block.kind === 'context' && toValue(primaryContribution?.thumbnail)" :image="toValue(primaryContribution!.thumbnail)!" />
+    <PrimaryThumbnail v-if="block.kind === 'context' && toValue(primaryContribution?.thumbnail)" :image="toValue(primaryContribution!.thumbnail)!" :generation="toValue(primaryContribution?.thumbnailGeneration)" />
 
     <section v-else-if="block.kind === 'status' && (primarySummary || shell.pageSummary.value)" class="primary-status" aria-live="polite">
       <span class="status-dot" aria-hidden="true" />

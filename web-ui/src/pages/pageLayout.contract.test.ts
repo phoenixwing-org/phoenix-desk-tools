@@ -18,6 +18,11 @@ const headerPages = [
 const source = (relative: string) => fs.readFileSync(path.join(sourceRoot, relative), "utf8");
 
 describe("Wing workbench Main layout contract", () => {
+  it("loads only the local application module from the CAD page entry, with no remote capture script", () => {
+    const html = fs.readFileSync(path.resolve(sourceRoot, "../index.html"), "utf8");
+    const scripts = [...html.matchAll(/<script\b[^>]*>[\s\S]*?<\/script>/giu)].map(match => match[0]);
+    expect(scripts).toEqual(['<script type="module" src="/src/main.ts"></script>']);
+  });
   it("keeps name-normalization result filters in Header and usage help last in Primary", () => {
     const text = source("features/cad-name-normalize/NameNormalizePage.vue");
     const center = text.match(/<template #center>([\s\S]*?)<\/template>/u)?.[1] ?? "";
@@ -145,7 +150,8 @@ describe("Wing workbench Main layout contract", () => {
   it("keeps CAD scan progress in the first Primary section and confirms explicit reset", () => {
     const text = source("pages/CadIndexPage.vue");
     expect(text).not.toContain("#center");
-    expect(text).toContain('sections: [{ id: "scope", title: "索引维护", progress: computed(() => cadIndexProgress(job.value))');
+    expect(text).toContain('sections: [{ id: "scope", title: "索引维护", progress: computed(() => ({ ...cadIndexProgress(job.value),');
+    expect(text).toContain('job.value?.result?.partial ? { state: "warning" as const } : {}');
     expect(text).toContain('label: "已处理文件"');
     expect(text).toContain('title: "清理旧 CAD 索引", defaultChoiceId: "cancel"');
     expect(text).toContain("包括人工关联");
@@ -238,6 +244,18 @@ describe("CAA custom Primary layout contract", () => {
 });
 
 describe("File detail sub-tab toolbars", () => {
+  it("keeps independent light reading reachable after a failed BOM preview without creating a writable preview", () => {
+    const text = source("pages/FileDetailPage.vue");
+    expect(parse(text).errors).toEqual([]);
+    const fallback = text.split('aria-label="独立只读摘要"')[1].split("</section>")[0];
+    expect(fallback).toContain(':file-path="failedObjectReadRel"');
+    expect(fallback).toContain('initial-mode="light"');
+    expect(fallback).not.toContain("FileAttributesPanel");
+    expect(fallback).not.toContain("RenameDialog");
+    expect(text).toContain("preview.value = null;");
+    expect(text).toContain("originalFilename.value = \"\";");
+  });
+
   it("places file content navigation in the public Header center slot instead of a body row", () => {
     const text = source("pages/FileDetailPage.vue");
     const template = parse(text).descriptor.template!.content;

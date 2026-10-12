@@ -5,7 +5,8 @@ import {
   pnwBuildAssemblyTreeFromXrefs,
   pnwResolveIncomingXlinkHosts,
 } from "@phoenix-wing/cad-core";
-import { pnwCreateDb, type PnwDbAdapter } from "@phoenix-wing/db-node";
+import type { PnwDbAdapter } from "@phoenix-wing/db-node";
+import type { SQLInputValue } from "node:sqlite";
 import {
   refreshBomXrefHostIndex,
   refreshBomXrefHostIndexAsync,
@@ -14,6 +15,8 @@ import {
 } from "./pnwBomXrefIndexEngine.js";
 import { patchFcstdReferenceLabels, type ObjectLabelPatch } from "./fcstdReferenceLabelService.js";
 import { buildHostObjectAssemblyTree, enrichAssemblyLabelPreview } from "./assemblyLabelPreview.js";
+import { missingCadIndexFreshness, readCadIndexFreshness } from "./cadIndexFreshness.js";
+import { openCadSqliteReadDatabase } from "./cadSqliteReadLease.js";
 
 function dbPath(ws: string): string {
   return path.join(ws, ".phoenix", "phoenix-workspace.sqlite");
@@ -39,15 +42,40 @@ function keyCandidates(rel: string): string[] {
 
 function openDb(ws: string): PnwDbAdapter | null {
   if (!workspaceOk(ws) || !fs.existsSync(dbPath(ws))) return null;
-  return pnwCreateDb(dbPath(ws));
+  const filename = dbPath(ws);
+  const safeLocation = () => {
+    if (fs.lstatSync(path.dirname(filename)).isSymbolicLink() || fs.lstatSync(filename).isSymbolicLink()
+      || fs.realpathSync(filename) !== path.join(fs.realpathSync(ws), ".phoenix", "phoenix-workspace.sqlite")) {
+      throw new Error("CAD index database path is unsafe");
+    }
+    return fs.statSync(filename);
+  };
+  const before = safeLocation();
+  const native = openCadSqliteReadDatabase(filename);
+  try {
+    const after = safeLocation();
+    if (before.ino !== after.ino || before.dev !== after.dev) throw new Error("CAD index database changed while opening");
+    const values = (params?: unknown) => (params == null ? [] : params) as SQLInputValue[];
+    let active = true;
+    return {
+      get<T>(sql: string, params?: unknown) { return native.prepare(sql).get(...values(params)) as T | undefined; },
+      all<T>(sql: string, params?: unknown) { return native.prepare(sql).all(...values(params)) as T[]; },
+      run() { throw new Error("CAD index reader is read-only"); },
+      exec(sql: string) { native.exec(sql); },
+      get inTransaction() { return active; },
+      close() { if (active) { native.close(); active = false; } },
+    };
+  } catch (error) {
+    try { native.close(); }
+    catch (cleanupError) { throw new AggregateError([error, cleanupError], "CAD index open failed and read lease cleanup also failed"); }
+    throw error;
+  }
 }
 
 function tableExists(db: PnwDbAdapter, name: string): boolean {
-  try {
-    return Boolean(db.get("SELECT name FROM sqlite_master WHERE type='table' AND name = ?", [name]));
-  } catch {
-    return false;
-  }
+  // Missing tables are false; a locked/recovering/unreadable index is an error,
+  // not evidence of a missing table or a successful empty reference snapshot.
+  return Boolean(db.get("SELECT name FROM sqlite_master WHERE type='table' AND name = ?", [name]));
 }
 
 function hasBomXrefTable(db: PnwDbAdapter): boolean {
@@ -98,146 +126,170 @@ function allEdges(db: PnwDbAdapter): any[] {
 }
 
 export function queryXrefCountsForRel(ws: string, rel: string): any {
-  const db = openDb(ws);
-  const key = normKey(rel);
-  const keys = keyCandidates(rel);
-  if (!db || !key) return { outgoing_count: 0, direct_incoming_count: 0, outgoing: 0, incoming: 0, flat_lines: 0, index_pending: true };
-  try {
-    if (!hasBomXrefTable(db)) return { outgoing_count: 0, direct_incoming_count: 0, outgoing: 0, incoming: 0, flat_lines: 0, index_pending: true };
-    const row = db.get<{ outgoing_count: number; direct_incoming_count: number }>(
+  return withReadDb(ws, db => {
+    const key = normKey(rel);
+    const keys = keyCandidates(rel);
+    if (!db || !key) return { outgoing_count: 0, direct_incoming_count: 0, outgoing: 0, incoming: 0, flat_lines: 0, ...missingCadIndexFreshness() };
+    if (!hasBomXrefTable(db)) return { outgoing_count: 0, direct_incoming_count: 0, outgoing: 0, incoming: 0, flat_lines: 0, ...missingCadIndexFreshness() };
+    const freshness = readCadIndexFreshness(db, ws, rel);
+    const row = db.get<{ outgoing_count: number; outgoing: number; direct_incoming_count: number }>(
       `SELECT
          (SELECT COUNT(*) FROM phoenix_cad_bom_xref WHERE host_repo_rel_path IN (?, ?)) AS outgoing_count,
+         (SELECT COUNT(DISTINCT CASE WHEN substr(target_repo_rel_path,1,2)='./'
+           THEN substr(target_repo_rel_path,3) ELSE target_repo_rel_path END)
+          FROM phoenix_cad_bom_xref WHERE host_repo_rel_path IN (?, ?)) AS outgoing,
          (
-           SELECT COUNT(DISTINCT host_repo_rel_path) FROM phoenix_cad_bom_xref
+           SELECT COUNT(DISTINCT CASE WHEN substr(host_repo_rel_path,1,2)='./'
+             THEN substr(host_repo_rel_path,3) ELSE host_repo_rel_path END) FROM phoenix_cad_bom_xref
            WHERE target_repo_rel_path IN (?, ?)
-              OR target_file_asset_id = (
-                SELECT id FROM phoenix_cad_file_asset WHERE repo_rel_path IN (?, ?) LIMIT 1
+              OR target_file_asset_id IN (
+                SELECT id FROM phoenix_cad_file_asset WHERE repo_rel_path IN (?, ?)
               )
          ) AS direct_incoming_count`,
-      [...keys, ...keys, ...keys],
+      [...keys, ...keys, ...keys, ...keys],
     );
+    const flat = tableExists(db, "phoenix_cad_bom_line") ? db.get<{ count: number }>(
+      "SELECT COUNT(*) AS count FROM phoenix_cad_bom_line WHERE assembly_rel IN (?, ?)", keys,
+    ) : undefined;
     return {
       outgoing_count: Number(row?.outgoing_count || 0),
       direct_incoming_count: Number(row?.direct_incoming_count || 0),
-      outgoing: Number(row?.outgoing_count || 0),
+      outgoing: Number(row?.outgoing || 0),
       incoming: Number(row?.direct_incoming_count || 0),
-      flat_lines: Number(row?.outgoing_count || 0),
-      index_pending: false,
+      flat_lines: Number(flat?.count || 0),
+      ...freshness,
     };
-  } finally {
-    db.close();
+  });
+}
+
+function withReadDb<T>(ws: string, read: (db: PnwDbAdapter | null) => T): T {
+  const db = openDb(ws);
+  let readFailed = false;
+  let readError: unknown;
+  try { return read(db); }
+  catch (error) { readFailed = true; readError = error; throw error; }
+  finally {
+    try { db?.close(); }
+    catch (error) {
+      if (readFailed) throw new AggregateError([readError, error], "CAD index read and close/lease cleanup both failed");
+      throw error;
+    }
   }
 }
 
 export function searchOutgoingRefs(ws: string, rel: string, opts: { limit?: number } = {}): any {
-  const db = openDb(ws);
+  return withReadDb(ws, db => readOutgoingRefs(db, ws, rel, opts));
+}
+
+function readOutgoingRefs(db: PnwDbAdapter | null, ws: string, rel: string, opts: { limit?: number } = {}): any {
   const key = normKey(rel);
   const keys = keyCandidates(rel);
   const limit = Math.max(1, Math.min(2000, Number(opts.limit || 500)));
-  if (!db || !key) return { host_repo_rel_path: key || rel, count: 0, label_mismatch_count: 0, refs: [], items: [], index_pending: true };
-  try {
-    if (!hasBomXrefTable(db)) return { host_repo_rel_path: key, count: 0, label_mismatch_count: 0, refs: [], items: [], index_pending: true };
-    const rows = db.all<any>(
-      `SELECT * FROM phoenix_cad_bom_xref
-       WHERE host_repo_rel_path IN (?, ?)
-       ORDER BY target_basename, xlink_file_attr
-       LIMIT ?`,
-      [...keys, limit],
-    );
-    const refs = rows.map(rowToEdge);
-    return {
-      host_repo_rel_path: key,
-      count: refs.length,
-      label_mismatch_count: refs.filter((r) => r.label_mismatch).length,
-      refs,
-      items: refs,
-    };
-  } finally {
-    db.close();
-  }
+  if (!db || !key) return { host_repo_rel_path: key || rel, count: 0, label_mismatch_count: 0, refs: [], items: [], ...missingCadIndexFreshness() };
+  if (!hasBomXrefTable(db)) return { host_repo_rel_path: key, count: 0, label_mismatch_count: 0, refs: [], items: [], ...missingCadIndexFreshness() };
+  const rows = db.all<any>(
+    `SELECT * FROM phoenix_cad_bom_xref
+     WHERE host_repo_rel_path IN (?, ?)
+     ORDER BY target_basename, xlink_file_attr
+     LIMIT ?`,
+    [...keys, limit],
+  );
+  const refs = rows.map(rowToEdge);
+  return {
+    host_repo_rel_path: key,
+    count: refs.length,
+    label_mismatch_count: refs.filter((r) => r.label_mismatch).length,
+    refs,
+    items: refs,
+    ...readCadIndexFreshness(db, ws, rel),
+  };
 }
 
 export function searchIncomingRefs(
   ws: string,
   opts: { rel?: string; basename?: string; limit?: number; transitive?: boolean } = {},
 ): any {
-  const db = openDb(ws);
+  return withReadDb(ws, db => readIncomingRefs(db, ws, opts));
+}
+
+function readIncomingRefs(
+  db: PnwDbAdapter | null,
+  ws: string,
+  opts: { rel?: string; basename?: string; limit?: number; transitive?: boolean } = {},
+): any {
   const relKey = opts.rel ? normKey(opts.rel) : "";
   const relKeys = opts.rel ? keyCandidates(opts.rel) : [];
   const base = String(opts.basename || "").trim();
   const limit = Math.max(1, Math.min(2000, Number(opts.limit || 500)));
   if (!db || (!relKey && !base)) {
-    return { query: { repo_rel: relKey || null, basename: base || null, transitive: opts.transitive !== false }, count: 0, direct_count: 0, refs: [], items: [], hosts: [], index_pending: true };
+    return { query: { repo_rel: relKey || null, basename: base || null, transitive: opts.transitive !== false }, count: 0, direct_count: 0, refs: [], items: [], hosts: [], ...missingCadIndexFreshness() };
   }
-  try {
-    if (!hasBomXrefTable(db)) return { query: { repo_rel: relKey || null, basename: base || null, transitive: opts.transitive !== false }, count: 0, direct_count: 0, refs: [], items: [], hosts: [], index_pending: true };
-    const clauses: string[] = [];
-    const params: any[] = [];
-    if (relKey) {
-      clauses.push(`(target_repo_rel_path IN (?, ?) OR target_file_asset_id = (SELECT id FROM phoenix_cad_file_asset WHERE repo_rel_path IN (?, ?) LIMIT 1))`);
-      params.push(...relKeys, ...relKeys);
-    }
-    if (base) {
-      clauses.push(`target_basename LIKE ? COLLATE NOCASE`);
-      params.push(`%${base}%`);
-    }
-    const refs = db.all<any>(
-      `SELECT * FROM phoenix_cad_bom_xref
-       WHERE ${clauses.map((c) => `(${c})`).join(" OR ")}
-       ORDER BY host_repo_rel_path, xlink_file_attr
-       LIMIT ?`,
-      [...params, limit],
-    ).map(rowToEdge);
+  if (!hasBomXrefTable(db)) return { query: { repo_rel: relKey || null, basename: base || null, transitive: opts.transitive !== false }, count: 0, direct_count: 0, refs: [], items: [], hosts: [], ...missingCadIndexFreshness() };
+  const clauses: string[] = [];
+  const params: any[] = [];
+  if (relKey) {
+    clauses.push(`(target_repo_rel_path IN (?, ?) OR target_file_asset_id IN (SELECT id FROM phoenix_cad_file_asset WHERE repo_rel_path IN (?, ?)))`);
+    params.push(...relKeys, ...relKeys);
+  }
+  if (base) {
+    clauses.push(`target_basename LIKE ? COLLATE NOCASE`);
+    params.push(`%${base}%`);
+  }
+  const refs = db.all<any>(
+    `SELECT * FROM phoenix_cad_bom_xref
+     WHERE ${clauses.map((c) => `(${c})`).join(" OR ")}
+     ORDER BY host_repo_rel_path, xlink_file_attr
+     LIMIT ?`,
+    [...params, limit],
+  ).map(rowToEdge);
 
-    const edges = allEdges(db);
-    const targets = new Set<string>();
-    if (relKey) targets.add(relKey);
-    if (base) {
-      const folded = base.toLowerCase();
-      for (const edge of edges) {
-        if (String(edge.target_basename || "").toLowerCase().includes(folded) && edge.target_repo_rel_path) {
-          targets.add(normKey(edge.target_repo_rel_path));
-        }
+  const edges = allEdges(db);
+  const targets = new Set<string>();
+  if (relKey) targets.add(relKey);
+  if (base) {
+    const folded = base.toLowerCase();
+    for (const edge of edges) {
+      if (String(edge.target_basename || "").toLowerCase().includes(folded) && edge.target_repo_rel_path) {
+        targets.add(normKey(edge.target_repo_rel_path));
       }
     }
-    for (const ref of refs) if (ref.target_repo_rel_path) targets.add(normKey(ref.target_repo_rel_path));
-
-    const hosts = pnwResolveIncomingXlinkHosts(edges, refs, targets, opts.transitive !== false, limit);
-    return {
-      query: { repo_rel: relKey || null, basename: base || null, transitive: opts.transitive !== false },
-      count: hosts.length,
-      direct_count: hosts.filter((h) => h.depth === 0).length,
-      refs,
-      items: refs,
-      hosts,
-    };
-  } finally {
-    db.close();
   }
+  for (const ref of refs) if (ref.target_repo_rel_path) targets.add(normKey(ref.target_repo_rel_path));
+
+  const hosts = pnwResolveIncomingXlinkHosts(edges, refs, targets, opts.transitive !== false, limit);
+  return {
+    query: { repo_rel: relKey || null, basename: base || null, transitive: opts.transitive !== false },
+    count: hosts.length,
+    direct_count: hosts.filter((h) => h.depth === 0).length,
+    refs,
+    items: refs,
+    hosts,
+    ...readCadIndexFreshness(db, ws, opts.rel),
+  };
 }
 
 export function loadAssemblyTreeFromXrefs(ws: string, hostRel: string, opts: { full?: boolean } = {}): any {
-  return createAssemblyTreeReader(ws)(hostRel, opts);
+  return createAssemblyTreeReader(ws, hostRel)(hostRel, opts);
 }
 
 /** Share one read-only index snapshot across a batch of host previews. */
-export function createAssemblyTreeReader(ws: string) {
-  const db = openDb(ws);
+export function createAssemblyTreeReader(ws: string, relativePath?: string) {
   let edges: any[] | null = null;
-  try {
-    if (db && hasBomXrefTable(db)) edges = allEdges(db);
-  } finally { db?.close(); }
+  let freshness = missingCadIndexFreshness();
+  withReadDb(ws, db => {
+    if (db && hasBomXrefTable(db)) { edges = allEdges(db); freshness = readCadIndexFreshness(db, ws, relativePath); }
+  });
   return (hostRel: string, opts: { full?: boolean } = {}): any => {
     const hostKey = normKey(hostRel);
     const mode = opts.full ? "full" : "first";
     if (!edges || !hostKey) {
-      return { host_repo_rel_path: hostKey, mode, node_count: 0, nodes: [], index_pending: true };
+      return { host_repo_rel_path: hostKey, mode, node_count: 0, nodes: [], ...missingCadIndexFreshness() };
     }
     const tree = pnwBuildAssemblyTreeFromXrefs(edges, hostKey, Boolean(opts.full));
     const objectTree = buildHostObjectAssemblyTree(ws, hostKey, tree.nodes);
-    if (objectTree) return { host_repo_rel_path: hostKey, mode, ...objectTree };
+    if (objectTree) return { host_repo_rel_path: hostKey, mode, ...objectTree, ...freshness };
     enrichAssemblyLabelPreview(ws, hostKey, tree.nodes);
-    return { host_repo_rel_path: hostKey, mode, ...tree };
+    return { host_repo_rel_path: hostKey, mode, ...tree, ...freshness };
   };
 }
 
@@ -263,46 +315,46 @@ export function fileDetailXrefs(
   rel: string,
   opts: { limit?: number; transitive?: boolean; scope?: "both" | "outgoing" | "incoming" } = {},
 ): any {
-  const scope = opts.scope || "both";
-  const payload: any = {
-    rel,
-    incoming: { count: 0, direct_count: 0, hosts: [] },
-    outgoing: { count: 0, label_mismatch_count: 0, refs: [] },
-  };
-  if (scope === "both" || scope === "outgoing") {
-    const outgoing = searchOutgoingRefs(ws, rel, { limit: opts.limit });
-    payload.outgoing = { count: outgoing.count, label_mismatch_count: outgoing.label_mismatch_count || 0, refs: outgoing.refs || [] };
-    if (outgoing.index_pending) payload.index_pending = true;
-  }
-  if (scope === "both" || scope === "incoming") {
-    const incoming = searchIncomingRefs(ws, { rel, limit: opts.limit, transitive: opts.transitive });
-    payload.incoming = {
-      count: incoming.count,
-      direct_count: incoming.direct_count || 0,
-      hosts: (incoming.hosts || []).map((h: any) => ({
-        host_repo_rel_path: h.host_repo_rel_path,
-        depth: h.depth || 0,
-        usage_kind: h.usage_kind || "direct",
-        via_chain: h.via_chain || [],
-      })),
+  return withReadDb(ws, db => {
+    const scope = opts.scope || "both";
+    const payload: any = {
+      rel,
+      incoming: { count: 0, direct_count: 0, hosts: [] },
+      outgoing: { count: 0, label_mismatch_count: 0, refs: [] },
     };
-    if (incoming.index_pending) payload.index_pending = true;
-  }
-  return payload;
+    if (scope === "both" || scope === "outgoing") {
+      const outgoing = readOutgoingRefs(db, ws, rel, { limit: opts.limit });
+      payload.outgoing = { count: outgoing.count, label_mismatch_count: outgoing.label_mismatch_count || 0, refs: outgoing.refs || [] };
+      if (outgoing.index_pending) payload.index_pending = true;
+      Object.assign(payload, Object.fromEntries(Object.entries(outgoing).filter(([key]) => key.startsWith("index_") || key.startsWith("bom_index_") || key === "scan_id" || key === "freshness_scope")));
+    }
+    if (scope === "both" || scope === "incoming") {
+      const incoming = readIncomingRefs(db, ws, { rel, limit: opts.limit, transitive: opts.transitive });
+      payload.incoming = {
+        count: incoming.count,
+        direct_count: incoming.direct_count || 0,
+        hosts: (incoming.hosts || []).map((h: any) => ({
+          host_repo_rel_path: h.host_repo_rel_path,
+          depth: h.depth || 0,
+          usage_kind: h.usage_kind || "direct",
+          via_chain: h.via_chain || [],
+        })),
+      };
+      if (incoming.index_pending) payload.index_pending = true;
+      Object.assign(payload, Object.fromEntries(Object.entries(incoming).filter(([key]) => key.startsWith("index_") || key.startsWith("bom_index_") || key === "scan_id" || key === "freshness_scope")));
+    }
+    return payload;
+  });
 }
 
 export function patchBomLinkLabels(ws: string, patches: Array<{ host_repo_rel?: string; xlink_file_attr?: string; link_label?: string } & Partial<ObjectLabelPatch>>, options: { refreshIndex?: boolean } = {}): any {
-  const db = openDb(ws);
   const failed: Array<{ host_repo_rel: string; error: string }> = [];
   const byHost = new Map<string, typeof patches>();
   const labelChanges: Array<{ host_repo_rel: string; xlink_file_attr: string; old_label: string; new_label: string }> = [];
   let labelPatches = 0;
 
-  if (!db) {
-    return { label_patches: 0, applied_hosts: [], failed: [{ host_repo_rel: "", error: "BOM xref index is not available" }], label_changes: [] };
-  }
-  try {
-    if (!hasBomXrefTable(db)) {
+  const indexFailure = withReadDb(ws, db => {
+    if (!db || !hasBomXrefTable(db)) {
       return { label_patches: 0, applied_hosts: [], failed: [{ host_repo_rel: "", error: "BOM xref index is not available" }], label_changes: [] };
     }
     for (const patch of patches || []) {
@@ -331,9 +383,9 @@ export function patchBomLinkLabels(ws: string, patches: Array<{ host_repo_rel?: 
       if (!byHost.has(host)) byHost.set(host, []);
       byHost.get(host)!.push({ ...patch, xlink_file_attr: attr, link_label: label });
     }
-  } finally {
-    db.close();
-  }
+    return null;
+  });
+  if (indexFailure) return indexFailure;
   const appliedHosts: string[] = [];
   const backups: Array<{ host_repo_rel: string; backup_file: string }> = [];
   const root = path.resolve(ws);

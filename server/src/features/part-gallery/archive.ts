@@ -17,13 +17,16 @@ export function selectedGallery(workspace: string, body: { product?: string; rel
   const rows = body.rels.map(rel => { const row = byRel.get(rel); if (!row) throw new Error("所选文件不属于当前图册，请刷新"); return row; });
   return { ...result, rows };
 }
-export function printGallery(workspace: string, body: { product?: string; rels?: string[] }) {
+export function printGallery(workspace: string, body: { product?: string; rels?: string[]; show_category?: boolean; show_dimensions?: boolean; show_part_number?: boolean; show_filenames?: boolean }) {
+  for (const option of [body.show_category, body.show_dimensions, body.show_part_number, body.show_filenames]) {
+    if (option !== undefined && typeof option !== "boolean") throw new Error("图册显示选项必须为布尔值");
+  }
   const result = selectedGallery(workspace, body); let total = 0;
   return { html: galleryDocument(result.rows, result.product, result.updated_at, row => {
     const bytes = thumbnailBytes(workspace, row.rel); total += bytes.length;
     if (total > 64 * 1024 * 1024) throw new Error("打印图片超过 64 MiB，请缩小筛选范围");
     return `data:image/png;base64,${bytes.toString("base64")}`;
-  }) };
+  }, { showCategory: body.show_category !== false, showDimensions: body.show_dimensions !== false, showPartNumber: body.show_part_number !== false, showFilenames: body.show_filenames === true }) };
 }
 export function archiveGallery(workspace: string, body: { product?: string; rels?: string[]; directory?: string; include_documents?: boolean; confirmed?: boolean }) {
   if (body.confirmed !== true || typeof body.directory !== "string" || typeof body.include_documents !== "boolean") throw new Error("归档需要明确目录和确认");

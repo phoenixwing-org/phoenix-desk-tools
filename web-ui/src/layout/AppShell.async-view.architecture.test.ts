@@ -6,6 +6,13 @@ function source(relative: string): string {
 }
 
 describe("AppShell async View boundary", () => {
+  it("routes explicit Output reveals to current Wing display visibility, not only the legacy log flag", () => {
+    const shell = source("./AppShell.vue");
+    expect(shell).toContain("watch(bottomPanelState.outputRevealRevision");
+    expect(shell).toContain('pnwActiveBottomTabId.value = "output"');
+    expect(shell).toContain("pdtRevealWorkbenchBottom(current)");
+    expect(shell).toContain("uiPrefs.setWorkbenchDisplayPreferences(revealed)");
+  });
   it("preloads with the same page loader used by Vue async components", () => {
     const registry = source("./pageRegistry.ts");
     expect(registry).toContain("createRetryableSharedLoader");

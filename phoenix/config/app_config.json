@@ -36,12 +36,26 @@
             "ribbonGroup": "索引",
             "description": "共享索引更新、扫描诊断与确认清理；不修改 CAD 文件"
         }, {
+            "id": "workspace_recovery",
+            "label": "备份与恢复",
+            "page": "workspace_recovery",
+            "module": "cad",
+            "ribbonGroup": "索引",
+            "description": "整库与 outbox 备份、包校验和新目录隔离恢复；不覆盖、不激活、不重建索引"
+        }, {
             "id": "part_catalog",
             "label": "零件目录",
             "page": "part_catalog",
             "module": "cad",
             "ribbonGroup": "索引",
             "description": "查询 PartKey 零件与关联文件；索引状态请打开 CAD 索引"
+        }, {
+            "id": "bom_delivery",
+            "label": "BOM交付",
+            "page": "bom_delivery",
+            "module": "cad",
+            "ribbonGroup": "交付",
+            "description": "完整工作空间 BOM 只读预检与确认离线导出；不覆盖、不联网，推送与历史尚待迁移"
         }, {
             "id": "part_key_detail",
             "label": "零件详情",
@@ -190,6 +204,12 @@
                 "tab_enabled": true
             },
             "part_catalog": {
+                "max_tabs": 1
+            },
+            "workspace_recovery": {
+                "max_tabs": 1
+            },
+            "bom_delivery": {
                 "max_tabs": 1
             },
             "xlink_fix": {

@@ -178,7 +178,7 @@ function visibleFeatures(moduleId: NavModuleId): NavItem[] {
         <ul class="hint-list">
           <li>模块偏好保存在当前工作空间 SQLite；欢迎页最近工程可设置工作空间类型。</li>
           <li>首次使用请在欢迎页打开工作空间根目录。</li>
-          <li>在「CAD 索引」或 KT Auto CAD 中更新工作空间索引；两端共用 Wing 算法与 Schema v13 数据库。</li>
+          <li>在「CAD 索引」中点击更新工作空间索引；使用 Wing 共享算法与 Schema v13 数据库。</li>
           <li>预检、问题与运行日志固定在下方全局面板，切换 View 后仍会保留。</li>
         </ul>
       </section>

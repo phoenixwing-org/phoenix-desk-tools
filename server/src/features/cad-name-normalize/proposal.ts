@@ -1,9 +1,9 @@
 import path from "node:path";
-import { bomRecommendationSuffix, recommendPartName, type BomNameSource } from "../../lib/bomNameRecommendation.js";
+import { bomRecommendationSuffix, recommendPartName, type BomNameSource, type BomNameRootContext } from "../../lib/bomNameRecommendation.js";
 import { pnwComposeBomLabel, pnwComposeRecommendedBomFilename, pnwInferBomDocumentKinds, type PnwCadEmbeddedBomFields } from "@phoenix-wing/cad-core";
 
 /** Host batch policy only. Root choice, filename parsing, label and filename formula remain Wing-owned. */
-export function proposeNameNormalization(rel: string, current: PnwCadEmbeddedBomFields, types: Record<string, string>, hints: { index: Record<string, unknown>; filename: Record<string, unknown> }, fallback: BomNameSource = "label") {
+export function proposeNameNormalization(rel: string, current: PnwCadEmbeddedBomFields, types: Record<string, string>, hints: { index: Record<string, unknown>; filename: Record<string, unknown> }, fallback: BomNameSource = "label", root: BomNameRootContext = {}) {
   const kinds = pnwInferBomDocumentKinds(`model${bomRecommendationSuffix(rel, current)}`);
   if (kinds.drawing) throw new Error("图纸不作为名称真源，请打开源模型");
   for (const field of ["PartName", "Label"]) if (types[field] && types[field] !== "App::PropertyString") throw new Error(`${field} 不是字符串属性，请到文件详情确认`);
@@ -20,7 +20,7 @@ export function proposeNameNormalization(rel: string, current: PnwCadEmbeddedBom
   // The actual embedded property stays authoritative, regardless of fallback selection.
   const embeddedName = current.PartName.trim();
   if (!kinds.assembly && /\.(?:drawing|fcstd)$/i.test(embeddedName) && !/\.assy\.fcstd$/i.test(embeddedName)) throw new Error("属性 PartName 中的名称包含文件类型后缀，请在文件详情确认");
-  const recommendation = recommendPartName(rel, { ...current, ...fields, PartName: current.PartName }, fallback);
+  const recommendation = recommendPartName(rel, { ...current, ...fields, PartName: current.PartName }, fallback, root);
   const nameSource = recommendation.source_note;
   const PartName = recommendation.value;
   if (!PartName || /[<>:"/\\|?*\x00-\x1f]/.test(PartName) || PartName.includes("..") || /[. ]$/.test(PartName)) throw new Error(`${nameSource}中的名称为空或包含不安全的文件名字符，请在文件详情确认`);

@@ -11,10 +11,13 @@ import { archiveGallery, printGallery } from "./archive.js";
 import { galleryDocument } from "./document.js";
 import { partGalleryRoutes } from "./routes.js";
 import { readFileThumbnail } from "../../lib/fcstdThumbnail.js";
+import { cachedRow, openGalleryDb, saveRow } from "./storage.js";
+import { geometryJob, startGeometryJob } from "./geometryService.js";
+import type { GeometryInput } from "./geometryRunner.js";
 
 const roots: string[] = [];
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64");
-function root() { const r = fs.mkdtempSync(path.join(os.tmpdir(), "part-gallery-test-")); roots.push(r); return r; }
+function root() { const r = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "part-gallery-test-"))); roots.push(r); return r; }
 function save(root: string, rel: string, opts: { refs?: string[]; noImage?: boolean; name?: string; number?: string; png?: Uint8Array } = {}) {
   const fields = { PartNumber: opts.number || "710801", PartVersion: "003", PartName: opts.name || "测试件", TypeCode: "H", Label: "不要从这个标签推断名称" };
   const properties = Object.entries(fields).map(([key, value]) => `<Property name="${key}" type="App::PropertyString"><String value="${value}"/></Property>`).join("");
@@ -47,13 +50,14 @@ it("follows cross-directory dependencies, deduplicates files, preserves versions
 });
 it("reports missing references, cycles, unsafe symlinks and broken archives", async () => {
   const r = root(), outside = root(); save(outside, "secret.FCStd");
-  save(r, "Root.ASSY.FCStd", { refs: ["B.FCStd", "Absent.FCStd", "Escape.FCStd"] });
+  save(r, "Root.ASSY.FCStd", { refs: ["B.FCStd", "Absent.FCStd", "Escape.FCStd", "../Outside.FCStd"] });
   save(r, "B.FCStd", { refs: ["Root.ASSY.FCStd"] });
   fs.symlinkSync(path.join(outside, "secret.FCStd"), path.join(r, "Escape.FCStd"));
   expect((await run(r, "Root.ASSY.FCStd")).state).toBe("attention");
   const data = loadGallery(r, "Root.ASSY.FCStd"); expect(data.rows).toHaveLength(2);
   expect(data.issues.map(i => i.message).join(" ")).toMatch(/循环/);
   expect(data.issues.map(i => i.message).join(" ")).toMatch(/符号链接/);
+  expect(data.issues.map(i => i.message).join(" ")).toMatch(/不允许 \.\./);
   expect(() => startGalleryJob(r, "../escape.FCStd")).toThrow();
   fs.writeFileSync(path.join(r, "Bad.FCStd"), "not a zip"); await run(r, "Bad.FCStd");
   expect(loadGallery(r, "Bad.FCStd").rows[0].status).toBe("error");
@@ -69,6 +73,76 @@ it("allows read-only empty GET without creating a DB; global scope reads only in
   db.close();
   expect(galleryOptions(r)).toEqual({ products: ["Top.ASSY.FCStd"], indexed_files: 2 });
   await run(r, ""); expect(loadGallery(r).rows.map(row => row.rel).sort()).toEqual(["One.FCStd", "Top.ASSY.FCStd"]);
+});
+it("filters root and nested excluded directories from legacy index entries without deleting backups or excluding dot-prefixed files", async () => {
+  const r = root();
+  const visible = ["Visible.FCStd", "product/Top.ASSY.FCStd", "product/.Draft.FCStd"];
+  const excluded = [".thumbnail-backups/Saved.FCStd", "product/.history/Old.ASSY.FCStd", "__pycache__/Cache.FCStd", "product/__pycache__/Cache.FCStd", "node_modules/demo/Model.FCStd", "product/node_modules/demo/Model.FCStd", ".git/Copy.FCStd", "product/.venv/Model.FCStd"];
+  for (const rel of [...visible, ...excluded]) save(r, rel, { number: "SYNTHETIC" });
+  const before = excluded.map(rel => fcstdFingerprint(fs.readFileSync(path.join(r, rel))));
+  const db = openGalleryDb(r, true)!;
+  db.exec("CREATE TABLE phoenix_cad_file_asset(repo_rel_path TEXT,asset_kind TEXT,file_status TEXT)");
+  for (const rel of [...visible, ...excluded]) db.run("INSERT INTO phoenix_cad_file_asset VALUES(?,?,?)", [`./${rel}`, "part", "present"]);
+  db.close();
+  expect(galleryOptions(r)).toEqual({ products: ["product/Top.ASSY.FCStd"], indexed_files: visible.length });
+  expect(await run(r, "")).toMatchObject({ state: "done", completed: visible.length });
+  expect(loadGallery(r).rows.map(row => row.rel).sort()).toEqual([...visible].sort());
+  expect(excluded.map(rel => fcstdFingerprint(fs.readFileSync(path.join(r, rel))))).toEqual(before);
+});
+it("skips excluded reference targets silently, including missing backups, while rejecting explicit excluded products", async () => {
+  const r = root();
+  save(r, "product/Top.ASSY.FCStd", { number: "SYNTHETIC", refs: ["Unit.FCStd", "../.thumbnail-backups/Old.FCStd", ".history/Missing.FCStd", "__pycache__/Missing.FCStd", "../node_modules/demo/Missing.FCStd", "../.git/Missing.FCStd"] });
+  save(r, "product/Unit.FCStd", { number: "SYNTHETIC" });
+  expect(await run(r, "product/Top.ASSY.FCStd")).toMatchObject({ state: "done", completed: 2 });
+  expect(loadGallery(r, "product/Top.ASSY.FCStd")).toMatchObject({ issues: [] });
+  expect(loadGallery(r, "product/Top.ASSY.FCStd").rows.map(row => row.rel).sort()).toEqual(["product/Top.ASSY.FCStd", "product/Unit.FCStd"]);
+  for (const rel of [".thumbnail-backups/Old.ASSY.FCStd", "product/.history/Old.ASSY.FCStd", "product/__pycache__/Old.ASSY.FCStd", "node_modules/demo/Old.ASSY.FCStd"])
+    expect(() => startGalleryJob(r, rel)).toThrow("默认图册范围");
+});
+it("hides polluted catalog members and their host issues at read time, retaining historical DB records", async () => {
+  const r = root(); save(r, "Visible.FCStd", { number: "SYNTHETIC" }); await run(r, "Visible.FCStd");
+  const excluded = [".thumbnail-backups/Old.FCStd", "product/.history/Old.FCStd", "product/__pycache__/Old.FCStd", "node_modules/demo/Old.FCStd"];
+  const db = openGalleryDb(r)!, visible = cachedRow(db, "Visible.FCStd")!;
+  for (const rel of excluded) {
+    saveRow(db, { ...visible, rel, status: "error", source_stamp: "", message: "旧备份读取失败" });
+    db.run("INSERT INTO desk_cad_gallery_member(product,rel) VALUES(?,?)", ["Visible.FCStd", rel]);
+  }
+  const issues = [{ rel: "Visible.FCStd", message: "保留可见源文件提示" }, ...excluded.map(rel => ({ rel, message: "旧隐藏来源提示" }))];
+  db.run("UPDATE desk_cad_gallery_scope SET issues_json=? WHERE product=?", [JSON.stringify(issues), "Visible.FCStd"]);
+  db.run("INSERT INTO desk_cad_gallery_scope(product,updated_at,issues_json) VALUES(?,?,?)", [excluded[0], "2026-01-01", "[]"]);
+  db.run("INSERT INTO desk_cad_gallery_member(product,rel) VALUES(?,?)", [excluded[0], excluded[0]]);
+  db.close();
+  const data = loadGallery(r, "Visible.FCStd");
+  expect(data.rows.map(row => row.rel)).toEqual(["Visible.FCStd"]);
+  expect(data.issues).toEqual([issues[0]]);
+  expect(loadGallery(r, excluded[0])).toEqual({ product: excluded[0], updated_at: "", rows: [], issues: [] });
+  const retained = openGalleryDb(r)!;
+  expect(retained.all("SELECT rel FROM desk_cad_gallery_member WHERE product=?", ["Visible.FCStd"])).toHaveLength(excluded.length + 1);
+  expect(retained.all("SELECT rel FROM desk_cad_thumbnail")).toHaveLength(excluded.length + 1);
+  retained.close();
+});
+it("uses only visible cached catalog rows for dimensions and rejects excluded product scopes before native work", async () => {
+  const r = root(); save(r, "Visible.FCStd", { number: "SYNTHETIC" }); await run(r, "Visible.FCStd");
+  const db = openGalleryDb(r)!, visible = cachedRow(db, "Visible.FCStd")!;
+  db.run("INSERT INTO desk_cad_gallery_scope(product,updated_at,issues_json) VALUES(?,?,?)", ["", "2026-01-01", "[]"]);
+  db.run("INSERT INTO desk_cad_gallery_member(product,rel) VALUES(?,?)", ["", visible.rel]);
+  for (const rel of [".thumbnail-backups/Old.FCStd", "product/.history/Old.FCStd", "product/__pycache__/Old.FCStd"]) {
+    saveRow(db, { ...visible, rel, status: "error", source_stamp: "" });
+    db.run("INSERT INTO desk_cad_gallery_member(product,rel) VALUES(?,?)", ["", rel]);
+    expect(() => startGeometryJob(r, rel)).toThrow("默认图册范围");
+  }
+  db.close();
+  const read = vi.fn(async (inputs: GeometryInput[]) => inputs.map(input => ({ rel: input.rel, bounding_box: { x_mm: 1, y_mm: 2, z_mm: 3 }, message: "synthetic" })));
+  const job = startGeometryJob(r, "", read);
+  let finished = false;
+  for (let index = 0; index < 500; index++) {
+    await new Promise(resolve => setTimeout(resolve, 5));
+    const state = geometryJob(r, job.id);
+    if (state && state.state !== "running") { expect(state).toMatchObject({ state: "done", completed: 1, total: 1 }); finished = true; break; }
+  }
+  expect(finished).toBe(true);
+  expect(read).toHaveBeenCalledOnce();
+  expect(read.mock.calls[0][0].map(input => input.rel)).toEqual(["Visible.FCStd"]);
 });
 it("archives only PNG by default, maintains same basenames in separate source directories, and never stages Git", async () => {
   const r = root(); execFileSync("git", ["init", r], { stdio: "ignore" });
@@ -149,5 +223,10 @@ it("generates self-contained escaped A4 documents without storing them or includ
   const html = printGallery(r, { product: "Sample.FCStd", rels: ["Sample.FCStd"] }).html;
   expect(html).toContain("data:image/png;base64,"); expect(html).toContain("&lt;script&gt;"); expect(html).not.toContain("<script>"); expect(html).not.toContain(r); expect(html).toContain("size:A4");
   const row = loadGallery(r, "Sample.FCStd").rows[0];
-  expect(galleryDocument(Array.from({ length: 13 }, () => row), "产品", "2026-01-01", () => "").match(/class="sheet"/g)).toHaveLength(2);
+  expect(galleryDocument(Array.from({ length: 21 }, () => row), "产品", "2026-01-01", () => "").match(/class="sheet"/g)).toHaveLength(2);
+  const optionsHtml = printGallery(r, { product: "Sample.FCStd", rels: ["Sample.FCStd"], show_category: false, show_dimensions: false, show_part_number: false, show_filenames: true }).html;
+  expect(optionsHtml).not.toContain('class="badges"');
+  expect(optionsHtml).not.toContain('class="dimensions"');
+  expect(optionsHtml).not.toContain('class="number"');
+  expect(optionsHtml).toContain('<div class="file" title="Sample.FCStd">Sample.FCStd</div>');
 });

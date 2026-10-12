@@ -44,7 +44,9 @@ describe("Ribbon navigation contract", () => {
     ]);
     expect(pages.cad).toEqual([
       "cad_index",
+      "workspace_recovery",
       "part_catalog",
+      "bom_delivery",
       "file_rename",
       "cad_batch_tools",
       "rename_tasks",
@@ -63,7 +65,7 @@ describe("Ribbon navigation contract", () => {
 
   it.each([
     { enabled: ["code"], tools: ["rename_tasks", "code_ignore", "caa_dialog_home", "audio_extract"] },
-    { enabled: ["cad"], tools: ["cad_index", "part_catalog", "file_rename", "cad_batch_tools", "rename_tasks", "audio_extract"] },
+    { enabled: ["cad"], tools: ["cad_index", "workspace_recovery", "part_catalog", "bom_delivery", "file_rename", "cad_batch_tools", "rename_tasks", "audio_extract"] },
     { enabled: [], tools: ["rename_tasks", "audio_extract"] },
   ])("keeps the tools entry for $enabled preferences without exposing disabled domains", ({ enabled, tools }) => {
     // The production AppShell filters each original module before grouping.
@@ -83,6 +85,10 @@ describe("Ribbon navigation contract", () => {
     const byPage = new Map(navigationConfig().map((nav) => [nav.page, nav]));
     expect(byPage.get("part_catalog")?.module).toBe("cad");
     expect(byPage.get("cad_index")?.module).toBe("cad");
+    expect(byPage.get("workspace_recovery")?.module).toBe("cad");
+    expect(byPage.get("workspace_recovery")?.ribbonGroup).toBe("索引");
+    expect(byPage.get("bom_delivery")?.module).toBe("cad");
+    expect(byPage.get("bom_delivery")?.ribbonGroup).toBe("交付");
     expect(byPage.get("name_normalize")?.module).toBe("cad");
     expect(byPage.get("name_normalize")?.ribbonGroup).toBeUndefined();
     expect(byPage.get("code_ignore")?.module).toBe("code");

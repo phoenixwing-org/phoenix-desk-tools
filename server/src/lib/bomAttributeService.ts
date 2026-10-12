@@ -24,7 +24,6 @@ import {
   replaceWorkspaceSection,
 } from "./workspacePrefsService.js";
 import {
-  readFcstdEmbeddedBomFields,
   readFcstdDocumentXml,
   extractFcstdEmbeddedBomSnapshot,
   writeFcstdEmbeddedBomFields,
@@ -223,10 +222,6 @@ function readAssetFromDb(workspaceRoot: string, rel: string, strict = false): Bo
   }
 }
 
-function readFcstdEmbeddedBom(absPath: string): Partial<BomFields> {
-  return fs.existsSync(absPath) ? readFcstdEmbeddedBomFields(absPath) ?? {} : {};
-}
-
 function drawingState(workspaceRoot: string, rel: string) {
   const { abs } = resolveUnderWorkspace(workspaceRoot, rel);
   const xml = isFcstdFilename(rel) ? readFcstdDocumentXml(abs) : null;
@@ -310,8 +305,12 @@ export function loadBomPreview(workspaceRoot: string, rel: string): BomPreview {
   const fields = mergeNonEmptyFields(mergeNonEmptyFields(base, dbFields), embedded);
   // Disk intent wins over stale index/filename guesses, including deliberate empty strings.
   for (const key of snapshot?.present ?? []) fields[key] = clean(snapshot?.fields?.[key]);
-  // A filename/index projection must not masquerade as an existing PartName.
-  if (Object.keys(embedded).length) fields.PartName = clean(embedded.PartName);
+  // Filename/index projections and object-display fallbacks are not saved
+  // PartName/Label properties on an actual root object.
+  if (Object.keys(embedded).length) {
+    fields.PartName = clean(embedded.PartName);
+    fields.label = clean(embedded.label);
+  }
   const stat = fs.existsSync(abs) ? fs.statSync(abs) : null;
   return {
     rel_path: safeRel,
@@ -373,6 +372,8 @@ function composeRecommendedFilename(fields: Partial<BomFields>, suffix: string):
 }
 
 function recommendValueFromHints(workspaceRoot: string, rel: string, field: string, values: any = {}): { value: string; source_note: string; forceFilled?: boolean } {
+  if (values.explicit_name_source != null && typeof values.explicit_name_source !== "boolean") throw new Error("明确推荐来源选项必须是布尔值");
+  if (values.explicit_name_source && field !== "PartName") throw new Error("明确推荐来源仅用于零件名称");
   const drawing = drawingState(workspaceRoot, rel);
   if (drawing.readonly) {
     if (field !== "filename") throw new Error("独立图纸不推荐 BOM 属性，请打开源模型");
@@ -384,10 +385,15 @@ function recommendValueFromHints(workspaceRoot: string, rel: string, field: stri
   const filenameHints = inferBomFieldsFromFilename(rel);
   const prefs = loadBomApplyPrefs(workspaceRoot).recommended_fill as any;
   if (["PartName", "label", "filename"].includes(field)) {
-    const { abs } = resolveUnderWorkspace(workspaceRoot, rel);
-    const embedded = isFcstdFilename(rel) ? readFcstdEmbeddedBom(abs) : {};
+    const snapshot = isFcstdFilename(rel) && drawing.xml ? extractFcstdEmbeddedBomSnapshot(drawing.xml) : null;
+    const embedded: Partial<BomFields> = snapshot?.fields ?? {};
     if (!current.label) current.label = clean(embedded.label);
-    const recommended = recommendPartName(rel, { ...preview, ...embedded, PartName: field === "PartName" ? embedded.PartName : current.PartName || embedded.PartName, label: current.label || embedded.label || "" }, nameSource);
+    const recommended = recommendPartName(rel, {
+      ...preview, ...embedded,
+      PartName: field === "PartName" ? embedded.PartName : current.PartName || embedded.PartName,
+      // An explicit node action reads the saved node, not an unsaved label draft.
+      label: values.explicit_name_source ? embedded.label || "" : current.label || embedded.label || "",
+    }, nameSource, { objectName: snapshot?.objectName, typeId: snapshot?.typeId, explicitSource: values.explicit_name_source === true });
     if (field === "PartName") return recommended;
     current.PartName = recommended.value;
   }

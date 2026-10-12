@@ -11,6 +11,10 @@ use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager, RunEvent};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+mod isolated_smoke;
+use isolated_smoke::Profile as IsolatedSmokeProfile;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 const SERVER_PREFERRED_PORT: u16 = 48_375;
 const SERVER_PORT_ATTEMPTS: u16 = 32;
@@ -21,6 +25,25 @@ struct ManagedServer {
     child: Mutex<Option<Child>>,
     address: Mutex<SocketAddr>,
     runtime: Mutex<ApiRuntimeMetadata>,
+    smoke_instance: Mutex<Option<String>>,
+    quit_worker: Mutex<Option<IsolatedQuitWorker>>,
+}
+
+struct IsolatedQuitWorker {
+    stop: Arc<AtomicBool>,
+    thread: Option<thread::JoinHandle<()>>,
+}
+impl Drop for IsolatedQuitWorker {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Release);
+        if let Some(thread) = self.thread.take() {
+            // Runtime's emergency exit path may drop state on this same worker.
+            // Normal RunEvent::Exit joins; never attempt to join our own thread.
+            if thread.thread().id() != thread::current().id() {
+                let _ = thread.join();
+            }
+        }
+    }
 }
 
 struct ApiRuntimeMetadata {
@@ -42,12 +65,17 @@ impl Default for ManagedServer {
                 app_version: "unknown".to_string(),
                 protocol_version: SERVER_PROTOCOL_VERSION,
             }),
+            smoke_instance: Mutex::new(None),
+            quit_worker: Mutex::new(None),
         }
     }
 }
 
 impl Drop for ManagedServer {
     fn drop(&mut self) {
+        if let Ok(worker) = self.quit_worker.get_mut() {
+            worker.take();
+        }
         if let Ok(child) = self.child.get_mut() {
             if let Some(mut child) = child.take() {
                 let _ = child.kill();
@@ -83,6 +111,10 @@ struct DeskApiRegistration {
     protocol_version: u64,
     host: String,
     port: u16,
+    #[serde(default)]
+    pid: Option<u32>,
+    #[serde(default)]
+    instance_id: Option<String>,
 }
 
 struct DeskApiHealth {
@@ -218,6 +250,9 @@ fn phoenix_server_health(address: SocketAddr) -> Option<DeskApiHealth> {
 }
 
 fn desk_api_registration_path(app: &AppHandle) -> Result<PathBuf, String> {
+    if let Some(profile) = app.try_state::<IsolatedSmokeProfile>() {
+        return Ok(profile.directory("registration")?.join("service.v1.json"));
+    }
     if let Some(override_path) = std::env::var_os("PHOENIX_DESK_TOOLS_REGISTRY_DIR") {
         if !override_path.is_empty() {
             return Ok(PathBuf::from(override_path).join("service.v1.json"));
@@ -337,6 +372,9 @@ fn configured_app_data_override(
 }
 
 fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    if let Some(profile) = app.try_state::<IsolatedSmokeProfile>() {
+        return profile.create_directory("user-data");
+    }
     if let Some(path) =
         configured_app_data_override(std::env::var_os("PHOENIX_TAURI_USER_DATA_DIR"))?
     {
@@ -348,7 +386,12 @@ fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 #[cfg(debug_assertions)]
-fn backend_command(_app: &AppHandle, port: u16) -> Result<Command, String> {
+fn backend_command(app: &AppHandle, port: u16) -> Result<Command, String> {
+    if app.try_state::<IsolatedSmokeProfile>().is_some() {
+        return Err(
+            "isolated smoke requires a frozen release runtime, not a debug source launcher".into(),
+        );
+    }
     let root = repo_root();
     let node = std::env::var_os("PHOENIX_NODE_BINARY").unwrap_or_else(|| "node".into());
     let tsx = root.join("server/node_modules/tsx/dist/cli.mjs");
@@ -398,6 +441,18 @@ fn backend_command(app: &AppHandle, port: u16) -> Result<Command, String> {
         .env("PHOENIX_RESOURCES_DIR", &resources)
         .env("PHOENIX_USER_DATA_DIR", &user_data)
         .env("PHOENIX_NATIVE_BIN_DIR", resources.join("bin"));
+    if let Some(profile) = app.try_state::<IsolatedSmokeProfile>() {
+        profile.assert_current()?;
+        profile.create_directory("registration")?;
+        command
+            .env_clear()
+            .envs(isolated_smoke::clean_environment(std::env::vars_os()))
+            .envs(isolated_smoke::runtime_environment(
+                &profile.root,
+                &resources,
+                port,
+            ));
+    }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -407,7 +462,16 @@ fn backend_command(app: &AppHandle, port: u16) -> Result<Command, String> {
 }
 
 fn start_managed_server(app: &AppHandle) -> Result<(), String> {
-    if let Some((address, health)) = discover_registered_server(app)? {
+    let smoke = app.try_state::<IsolatedSmokeProfile>();
+    if let Some(profile) = &smoke {
+        profile.assert_current()?;
+        match std::fs::symlink_metadata(desk_api_registration_path(app)?) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            _ => {
+                return Err("isolated smoke refuses an existing or reused API registration".into())
+            }
+        }
+    } else if let Some((address, health)) = discover_registered_server(app)? {
         set_managed_server_address(app, address)?;
         let version = health.app_version.clone();
         set_api_runtime_metadata(app, "reused", health)?;
@@ -451,6 +515,44 @@ fn start_managed_server(app: &AppHandle) -> Result<(), String> {
     while Instant::now() < deadline {
         if let Some(health) = phoenix_server_health(address) {
             if health.protocol_version == SERVER_PROTOCOL_VERSION {
+                if let Some(profile) = &smoke {
+                    let server = app.state::<ManagedServer>();
+                    let mut child = server
+                        .child
+                        .lock()
+                        .map_err(|_| "Phoenix server process lock is poisoned")?;
+                    let owned = child.as_mut().ok_or("isolated smoke sidecar is missing")?;
+                    if owned
+                        .try_wait()
+                        .map_err(|_| "cannot inspect isolated sidecar")?
+                        .is_some()
+                    {
+                        return Err("isolated smoke sidecar exited before readiness".into());
+                    }
+                    let registration =
+                        match read_isolated_registration(app, owned.id(), None, address) {
+                            Ok(registration) => registration,
+                            Err(_) => {
+                                drop(child);
+                                thread::sleep(Duration::from_millis(100));
+                                continue;
+                            }
+                        };
+                    let instance = registration.instance_id.as_deref().unwrap();
+                    let handoff = isolated_smoke::handoff(
+                        profile,
+                        std::process::id(),
+                        owned.id(),
+                        instance,
+                        address,
+                    )?;
+                    *server
+                        .smoke_instance
+                        .lock()
+                        .map_err(|_| "isolated smoke identity lock is poisoned")? =
+                        Some(instance.to_owned());
+                    profile.publish_handoff(&handoff)?;
+                }
                 let version = health.app_version.clone();
                 set_api_runtime_metadata(app, "managed", health)?;
                 eprintln!("[tauri] Phoenix server v{version} ready at http://{address}");
@@ -482,6 +584,56 @@ fn start_managed_server(app: &AppHandle) -> Result<(), String> {
     ))
 }
 
+fn read_isolated_registration(
+    app: &AppHandle,
+    sidecar_pid: u32,
+    expected_instance: Option<&str>,
+    address: SocketAddr,
+) -> Result<DeskApiRegistration, String> {
+    let profile = app
+        .try_state::<IsolatedSmokeProfile>()
+        .ok_or("isolated smoke profile is missing")?;
+    profile.assert_current()?;
+    let registration = profile.read_registration()?;
+    if !isolated_smoke::owns_registration(&registration, sidecar_pid, expected_instance, address) {
+        return Err("isolated smoke registration does not belong to this sidecar".into());
+    }
+    Ok(registration)
+}
+
+fn start_isolated_quit_worker(app: &AppHandle) -> Result<(), String> {
+    let Some(profile) = app.try_state::<IsolatedSmokeProfile>() else {
+        return Ok(());
+    };
+    let profile = profile.inner().clone();
+    profile.assert_current()?;
+    let host_pid = std::process::id();
+    let stop = Arc::new(AtomicBool::new(false));
+    let stopping = stop.clone();
+    let handle = app.clone();
+    let worker = thread::spawn(move || {
+        while !stopping.load(Ordering::Acquire) {
+            match profile.quit_requested(host_pid) {
+                Ok(true) => {
+                    handle.exit(0);
+                    break;
+                }
+                Ok(false) => {}
+                Err(_) => { /* A partial or foreign request never grants an exit. */ }
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+    });
+    *app.state::<ManagedServer>()
+        .quit_worker
+        .lock()
+        .map_err(|_| "isolated smoke worker lock is poisoned")? = Some(IsolatedQuitWorker {
+        stop,
+        thread: Some(worker),
+    });
+    Ok(())
+}
+
 fn stop_managed_server(app: &AppHandle) {
     let state = app.state::<ManagedServer>();
     let mut child = match state.child.lock() {
@@ -497,7 +649,22 @@ fn stop_managed_server(app: &AppHandle) {
     let request = format!(
         "POST /api/shutdown HTTP/1.1\r\nHost: {address}\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{{}}"
     );
-    let _ = http_request(address, request.as_bytes());
+    let may_request_shutdown = if app.try_state::<IsolatedSmokeProfile>().is_some() {
+        let expected = state
+            .smoke_instance
+            .lock()
+            .ok()
+            .and_then(|value| value.clone());
+        matches!(child.try_wait(), Ok(None))
+            && expected.as_deref().is_some_and(|instance| {
+                read_isolated_registration(app, child.id(), Some(instance), address).is_ok()
+            })
+    } else {
+        true
+    };
+    if may_request_shutdown {
+        let _ = http_request(address, request.as_bytes());
+    }
     let deadline = Instant::now() + Duration::from_secs(2);
     while Instant::now() < deadline {
         match child.try_wait() {
@@ -570,21 +737,61 @@ fn get_runtime_info(app: AppHandle) -> Result<RuntimeInfoResponse, String> {
     })
 }
 
+fn configure_isolated_windows(config: &mut tauri::Config, webview: &std::path::Path) {
+    for window in &mut config.app.windows {
+        window.incognito = true;
+        window.data_store_identifier = None;
+        #[cfg(any(target_os = "windows", target_os = "linux"))]
+        {
+            window.data_directory = Some(webview.to_path_buf());
+        }
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    let _ = webview;
+}
+
 pub fn run() {
-    let app = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.unminimize();
-                let _ = window.show();
-                let _ = window.set_focus();
+    // Validate before plugin setup or automatic window creation. Unknown/partial
+    // profiles cannot fall through to the ordinary application's global state.
+    let profile = match IsolatedSmokeProfile::from_env() {
+        Ok(profile) => profile,
+        Err(error) => {
+            eprintln!("[tauri] isolated launch refused: {error}");
+            std::process::exit(2);
+        }
+    };
+    let mut context = tauri::generate_context!();
+    let mut builder = tauri::Builder::default();
+    if let Some(profile) = profile {
+        let webview = match profile.create_directory("webview") {
+            Ok(path) => path,
+            Err(error) => {
+                eprintln!("[tauri] isolated launch refused: {error}");
+                std::process::exit(2);
             }
-            let address = managed_server_address(app)
-                .unwrap_or_else(|_| SocketAddr::from((Ipv4Addr::LOCALHOST, SERVER_PREFERRED_PORT)));
-            if let Err(error) = dispatch_caa_dialog_launch_args(address, &args, &cwd) {
-                eprintln!("[tauri] cannot dispatch CATDlg open request: {error}");
-            }
-        }))
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        };
+        configure_isolated_windows(context.config_mut(), &webview);
+        // The locked plugins use global identifier/OS app-config locations.
+        // Do not register them for an isolated profile (filters are insufficient).
+        builder = builder.manage(profile);
+    } else {
+        builder = builder
+            .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.unminimize();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+                let address = managed_server_address(app).unwrap_or_else(|_| {
+                    SocketAddr::from((Ipv4Addr::LOCALHOST, SERVER_PREFERRED_PORT))
+                });
+                if let Err(error) = dispatch_caa_dialog_launch_args(address, &args, &cwd) {
+                    eprintln!("[tauri] cannot dispatch CATDlg open request: {error}");
+                }
+            }))
+            .plugin(tauri_plugin_window_state::Builder::default().build());
+    }
+    let app = builder
         .plugin(tauri_plugin_dialog::init())
         .manage(ManagedServer::default())
         .invoke_handler(tauri::generate_handler![
@@ -594,6 +801,11 @@ pub fn run() {
         ])
         .setup(|app| {
             if let Err(error) = start_managed_server(app.handle()) {
+                if app.try_state::<IsolatedSmokeProfile>().is_some() {
+                    stop_managed_server(app.handle());
+                    eprintln!("[tauri] isolated startup refused: {error}");
+                    return Err(std::io::Error::other(error).into());
+                }
                 let log_path = persist_startup_error(app.handle(), &error);
                 let detail = match log_path {
                     Some(path) => format!("{error}\n\nDiagnostic log: {}", path.display()),
@@ -606,6 +818,7 @@ pub fn run() {
                     .blocking_show();
                 return Err(std::io::Error::other(error).into());
             }
+            start_isolated_quit_worker(app.handle())?;
             let args: Vec<String> = std::env::args().collect();
             let cwd = std::env::current_dir()
                 .unwrap_or_default()
@@ -617,11 +830,14 @@ pub fn run() {
             }
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building Phoenix desktop");
 
     app.run(|app_handle, event| {
         if matches!(event, RunEvent::Exit) {
+            if let Ok(mut worker) = app_handle.state::<ManagedServer>().quit_worker.lock() {
+                worker.take();
+            }
             stop_managed_server(app_handle);
         }
     });
@@ -630,6 +846,45 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn isolated_window_configuration_is_nonpersistent_before_window_creation() {
+        let mut config: tauri::Config = serde_json::from_value(serde_json::json!({
+            "identifier": "org.example.isolation-test",
+            "app": {"windows": [{"label":"one"}, {"label":"two"}]}
+        }))
+        .unwrap();
+        assert!(config.app.windows.iter().all(|window| !window.incognito));
+        let path = std::env::temp_dir().join("independent-webview");
+        configure_isolated_windows(&mut config, &path);
+        assert_eq!(config.app.windows.len(), 2);
+        for window in config.app.windows {
+            assert!(window.incognito);
+            assert_eq!(window.data_store_identifier, None);
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
+            assert_eq!(window.data_directory, Some(path.clone()));
+        }
+    }
+
+    #[test]
+    fn isolated_worker_drop_stops_and_joins_its_owned_thread() {
+        let stop = Arc::new(AtomicBool::new(false));
+        let stopping = stop.clone();
+        let completed = Arc::new(AtomicBool::new(false));
+        let completion = completed.clone();
+        let thread = thread::spawn(move || {
+            while !stopping.load(Ordering::Acquire) {
+                thread::yield_now();
+            }
+            completion.store(true, Ordering::Release);
+        });
+        drop(IsolatedQuitWorker {
+            stop: stop.clone(),
+            thread: Some(thread),
+        });
+        assert!(stop.load(Ordering::Acquire));
+        assert!(completed.load(Ordering::Acquire));
+    }
 
     #[test]
     fn source_repo_root_contains_the_workspace_manifest() {

@@ -1,6 +1,7 @@
 import { pnwInferBomFieldsFromFilename, pnwInferFcstdSuffix, pnwNormalizeBomPartNameSuffix } from "@phoenix-wing/cad-core";
 
 export type BomNameSource = "label" | "filename";
+export type BomNameRootContext = { objectName?: string; typeId?: string; explicitSource?: boolean };
 export function bomNameSource(value: unknown): BomNameSource {
   if (value === undefined || value === "label") return "label";
   if (value === "filename") return "filename";
@@ -42,18 +43,26 @@ function labelName(label: string, fields: Record<string, unknown>) {
 }
 
 /** Actual PartName wins; an index projection is never proof that the property exists. */
-export function recommendPartName(rel: string, current: Record<string, unknown>, source: BomNameSource = "label") {
+export function recommendPartName(rel: string, current: Record<string, unknown>, source: BomNameSource = "label", context: BomNameRootContext = {}) {
   const hints = pnwInferBomFieldsFromFilename(rel);
-  const embedded = clean(current.PartName);
+  // Explicit row actions select their named source, without changing the
+  // default PartName-first policy used by bulk/default recommendations.
+  const embedded = context.explicitSource ? "" : clean(current.PartName);
   const label = clean(current.label);
+  const defaultBody = context.typeId === "PartDesign::Body"
+    && /^Body\d*$/.test(context.objectName || "") && label === context.objectName;
+  if (context.explicitSource && source === "label" && (!label || defaultBody)) {
+    throw new Error("节点标签为空或为默认 Body 名称，无法推荐有效零件名；请从文件名推荐或手动填写");
+  }
   const fields = { ...hints, ...Object.fromEntries(Object.entries(current).filter(([, value]) => clean(value))) };
-  const fromLabel = source === "label" && !!label && !embedded;
+  const fromLabel = source === "label" && !!label && !embedded && !defaultBody;
   const raw = embedded || (fromLabel ? labelName(label, fields) : hints.PartName);
   // PartName is always a plain business name, even when an older filename
   // lacks the assembly marker carried by its node Label or PartName.
   const suffix = /\.assy(?:\.fcstd)?$/i.test(raw) ? ".ASSY.FCStd" : bomRecommendationSuffix(rel, current);
   const value = pnwNormalizeBomPartNameSuffix(raw, suffix);
-  const source_note = embedded ? "属性 PartName" : fromLabel ? "标签名" : source === "label" ? "标签为空，从文件名补全" : "文件名";
+  const source_note = embedded ? "属性 PartName" : fromLabel ? "标签名" : source === "label"
+    ? defaultBody ? "默认节点标签，从文件名补全" : "标签为空，从文件名补全" : "文件名";
   // Invalid explicit properties or selected sources require review, never silent fallback.
   assertValidPartName(value, source_note);
   return { value, source_note };

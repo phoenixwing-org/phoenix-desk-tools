@@ -93,6 +93,8 @@ const initialFields = ref<Partial<BomFields>>({});
 const busy = ref(false);
 const recommendingField = ref<string | null>(null);
 const recommendingAll = ref(false);
+const operationsBusy = computed(() => busy.value || recommendingAll.value || !!recommendingField.value);
+const partNameRecommendDisabled = computed(() => operationsBusy.value || bomReadonly.value || !rel.value);
 const nameSource = ref<BomNameSource>("label");
 const kindFilters = ref<BomKindFilters>({
   part: true,
@@ -162,6 +164,7 @@ watch(
 );
 
 async function onReload() {
+  if (operationsBusy.value) return;
   shell.appendLog(`[文件详情] 从磁盘重新读取 ${rel.value}…`, { source: "file_detail", open: true });
   try {
     await reloadFile();
@@ -172,16 +175,31 @@ async function onReload() {
   }
 }
 
-async function onRecommendField(key: EditableKey) {
-  if (!rel.value) return;
+async function onRecommendField(key: EditableKey, explicitSource?: BomNameSource) {
+  if (!rel.value || operationsBusy.value) return;
   if (bomReadonly.value && key !== "filename") return;
   if (key === "filename" && !isFcstd.value) {
     shell.setStatus("仅 FCStd 可推荐文件名");
     return;
   }
+  pageError.value = "";
+  const requestRel = rel.value;
+  const requestPreview = preview.value;
+  const requestFields = { ...form.value };
+  const requestValues = EDITABLE_KEYS.map(field => String(requestFields[field] ?? ""));
+  const isCurrentRequest = () => rel.value === requestRel && preview.value === requestPreview &&
+    EDITABLE_KEYS.every((field, index) => String(form.value[field] ?? "") === requestValues[index]);
   recommendingField.value = key;
   try {
-    const data = await recommendBomField(rel.value, key, form.value, kindFilters.value, nameSource.value);
+    const data = key === "PartName" && explicitSource
+      ? await recommendBomField(requestRel, key, requestFields, kindFilters.value, explicitSource, true)
+      : await recommendBomField(requestRel, key, requestFields, kindFilters.value, nameSource.value);
+    // Compare scalar drafts, not form identity: stores may replace an unchanged
+    // form object, while any edited input can invalidate a recommendation formula.
+    if (!isCurrentRequest()) {
+      shell.setStatus("推荐已过期，请重试");
+      return;
+    }
     if (data.filled && data.value) {
       patchField(key as keyof BomFields, data.value);
       if (!bomReadonly.value && (key === "TypeCode" || key === "filename")) applyStandardPartModelSeriesRule();
@@ -193,14 +211,20 @@ async function onRecommendField(key: EditableKey) {
       shell.setStatus(data.source_note || "未找到可推荐值");
     }
   } catch (e) {
-    pageError.value = String(e);
+    if (!isCurrentRequest()) shell.setStatus("推荐已过期，请重试");
+    else pageError.value = String(e);
   } finally {
     recommendingField.value = null;
   }
 }
 
+async function onRecommendPartName(command: unknown) {
+  if (command === "default") await onRecommendField("PartName");
+  else if (command === "filename" || command === "label") await onRecommendField("PartName", command);
+}
+
 async function onRecommendAll() {
-  if (!rel.value || bomReadonly.value) return;
+  if (!rel.value || bomReadonly.value || operationsBusy.value) return;
   recommendingAll.value = true;
   shell.appendLog(`[文件详情] 全部推荐属性 ${rel.value}…`, { source: "file_detail", open: true });
   try {
@@ -226,7 +250,7 @@ async function onRecommendAll() {
 }
 
 async function onSave() {
-  if (!rel.value || !isFcstd.value || bomReadonly.value) return;
+  if (!rel.value || !isFcstd.value || bomReadonly.value || operationsBusy.value) return;
   busy.value = true;
   const filenameDraft = (form.value.filename ?? "").trim();
   shell.appendLog(`[文件详情] 写入 Document.xml ${rel.value}…`, { source: "file_detail", open: true });
@@ -246,7 +270,7 @@ async function onSave() {
 }
 
 async function onDetectKinds() {
-  if (!rel.value) return;
+  if (!rel.value || operationsBusy.value) return;
   busy.value = true;
   shell.appendLog(`[文件详情] 识别文档类型 ${rel.value}…`, { source: "file_detail", open: true });
   try {
@@ -281,23 +305,23 @@ onMounted(() => {
         <el-button v-if="canOpenSourceModel" type="primary" size="small" @click="openSourceModel">
           打开模型
         </el-button>
-        <el-button size="small" :disabled="busy" @click="onReload">重新读取</el-button>
+        <el-button size="small" :disabled="operationsBusy" @click="onReload">重新读取</el-button>
         <el-button
           v-if="!bomReadonly"
           size="small"
           :loading="recommendingAll"
-          :disabled="busy || !isFcstd || bomReadonly"
+          :disabled="operationsBusy || !isFcstd || bomReadonly"
           @click="onRecommendAll"
         >
           全部推荐
         </el-button>
-        <el-button size="small" :disabled="busy || !isFcstd" @click="onDetectKinds">识别类型</el-button>
+        <el-button size="small" :disabled="operationsBusy || !isFcstd" @click="onDetectKinds">识别类型</el-button>
         <el-button
           v-if="!bomReadonly"
           type="primary"
           size="small"
           :loading="busy"
-          :disabled="!isFcstd || bomReadonly"
+          :disabled="operationsBusy || !isFcstd || bomReadonly"
           @click="onSave"
         >
           写入文件
@@ -390,11 +414,38 @@ onMounted(() => {
           >
             恢复
           </el-button>
+          <el-dropdown
+            v-if="row.recommend && row.key === 'PartName'"
+            class="part-name-recommend"
+            size="small"
+            trigger="click"
+            placement="bottom-end"
+            :disabled="partNameRecommendDisabled"
+            @command="onRecommendPartName"
+          >
+            <el-button
+              class="part-name-recommend-trigger"
+              size="small"
+              aria-label="推荐零件名称来源"
+              title="默认规则保留已有有效 PartName；明确来源仅替换本行草稿"
+              :loading="recommendingField === 'PartName'"
+              :disabled="partNameRecommendDisabled"
+            >
+              推荐<span class="recommend-arrow" aria-hidden="true">▾</span>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="default" :disabled="partNameRecommendDisabled">按默认规则</el-dropdown-item>
+                <el-dropdown-item command="filename" :disabled="partNameRecommendDisabled">从文件名推荐</el-dropdown-item>
+                <el-dropdown-item command="label" :disabled="partNameRecommendDisabled">从节点标签推荐</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <el-button
-            v-if="row.recommend"
+            v-else-if="row.recommend"
             size="small"
             :loading="recommendingField === row.key"
-            :disabled="busy || recommendingAll || (bomReadonly && !canOpenSourceModel)"
+            :disabled="operationsBusy || (bomReadonly && !canOpenSourceModel)"
             @click="onRecommendField(row.key as EditableKey)"
           >
             推荐
@@ -578,6 +629,18 @@ onMounted(() => {
   flex: 0 0 auto;
   height: 28px;
   margin: 0;
+}
+.part-name-recommend {
+  flex: 0 0 auto;
+}
+.part-name-recommend-trigger {
+  height: 28px;
+  margin: 0;
+  padding: 0 7px;
+}
+.recommend-arrow {
+  margin-left: 2px;
+  font-size: 0.65rem;
 }
 .hint {
   margin: 8px 0 0;

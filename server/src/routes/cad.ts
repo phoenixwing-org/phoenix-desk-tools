@@ -74,11 +74,16 @@ import {
 import { runtimeUserDataDir } from "../lib/appRuntimePaths.js";
 import { analyzeFcstdProperties, applyFcstdPropertyRepairs } from "../lib/fcstdPropertyRepairService.js";
 import { inspectCadIndex } from "../lib/cadIndexStatusService.js";
+import { cadIndexSearchRoutes } from "../features/cad-index-search/routes.js";
+import { cadObjectInfoRoutes } from "../features/cad-object-info/routes.js";
+import { cadLightInfoRoutes } from "../features/cad-light-info/routes.js";
+import { cadBomDeliveryRoutes } from "../features/cad-bom-delivery/routes.js";
 import { previewBatchAttributes, applyBatchAttributes } from "../lib/fcstdBatchAttributes.js";
 import { nameNormalizeRoutes } from "../features/cad-name-normalize/routes.js";
 import { assemblyLabelRoutes } from "../features/cad-assembly-labels/routes.js";
 import { partGalleryRoutes } from "../features/part-gallery/routes.js";
 import { readFileThumbnail } from "../lib/fcstdThumbnail.js";
+import { regenerateThumbnail } from "../features/file-thumbnail/service.js";
 import {
   CadBatchDirectoryError,
   listCadBatchDirectories,
@@ -120,6 +125,10 @@ function flattenAssemblyTreeItems(nodes: any[], depth = 0, prefix = ""): any[] {
 // ── Hono app ────────────────────────────────────────────
 
 export const cadRoutes = new Hono();
+cadRoutes.route("/index/search", cadIndexSearchRoutes);
+cadRoutes.route("/object-info", cadObjectInfoRoutes);
+cadRoutes.route("/light-info", cadLightInfoRoutes);
+cadRoutes.route("/bom-delivery", cadBomDeliveryRoutes);
 cadRoutes.route("/name-normalize", nameNormalizeRoutes);
 cadRoutes.route("/assembly-labels", assemblyLabelRoutes);
 cadRoutes.route("/part-gallery", partGalleryRoutes);
@@ -127,6 +136,12 @@ cadRoutes.get("/file-thumbnail", c => {
   c.header("Cache-Control", "no-store");
   try { return c.json({ thumbnail: readFileThumbnail(getWorkspace(c), c.req.query("rel") || "") }); }
   catch { return c.json({ thumbnail: null }); } // Optional preview must not block file details.
+});
+cadRoutes.post("/file-thumbnail/regenerate", async c => {
+  try {
+    const body = await c.req.json();
+    return c.json(await regenerateThumbnail(getWorkspace(c), body.rel, body.options));
+  } catch (error) { return c.json({ detail: error instanceof Error ? error.message : String(error) }, 400); }
 });
 
 cadRoutes.get("/batch-directories", (c) => {
@@ -219,14 +234,17 @@ function finishBomXrefProgress(scanId: string, result: any): void {
 
 /** GET /api/cad/health */
 cadRoutes.get("/health", async (c) => {
-  let sqliteOk = false;
+  let index: ReturnType<typeof inspectCadIndex> | { state: "unreadable"; message: string };
   try {
     const ws = getWorkspace(c);
-    if (ws) { loadPartKeysPayload(ws); sqliteOk = true; }
-  } catch {}
+    index = inspectCadIndex(ws);
+  } catch (error) {
+    index = { state: "unreadable", message: error instanceof Error ? error.message : String(error) };
+  }
   // module/native 字段是既有前端兼容 envelope，不再代表 Rust provider。
   return c.json({ ok: true, module: "cad-native",
-    native: { available: sqliteOk, engine: "node-sqlite" },
+    native: { available: !["missing", "incompatible", "unreadable"].includes(index.state), engine: "node-sqlite" },
+    index,
   });
 });
 

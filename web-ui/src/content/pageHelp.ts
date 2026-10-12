@@ -36,7 +36,7 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
   home: {
     title: "主页",
     bullets: [
-      "新手指南四步：工作空间 → FreeCAD（推荐）→ KT Auto CAD 扫描 → 打开文件详情。",
+      "新手指南四步：工作空间 → FreeCAD（推荐）→ CAD 索引更新 → 打开文件详情。",
       "侧栏「? 新手指引」或主页清单可随时回到开工步骤；「界面巡游」为全壳层导览。",
     ],
     docPath: "docs/user/新手指引.md",
@@ -69,7 +69,8 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
     title: "文件详情",
     bullets: [
       "在工作空间树中点击 .FCStd 打开；同一路径复用一个 Tab。",
-      "子 Tab：概览、编辑属性（图纸档为「查看属性」）、引用、改名、装配结构等。",
+      "子 Tab：属性、编辑属性（图纸档为「查看属性」）、引用、装配结构和只读对象信息；改名从右上角打开。",
+      "对象信息静态读取文件中保存的完整对象、属性与局部变换，不重算几何、不写模型。",
       "纯图纸 FCStd：顶部提示 BOM 只读，点「打开模型」编辑 Link 源文件。",
     ],
     docPath: "docs/cad/文件详情页-整改规划.md",
@@ -136,8 +137,20 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
   },
   cad_index: {
     title: "CAD 索引",
-    bullets: ["只读检查当前工作空间已有索引与最近扫描状态，不扫描磁盘或重建数据库。", "全量扫描在 KT Auto CAD；局部引用刷新在文件详情。"],
+    bullets: ["诊断与文件资产检索只读已有索引；搜索覆盖文件名、路径、编号、版本、名称和标签，最多 200 行。", "点击「更新索引」才扫描。单文件解析失败时建立部分可用索引，图册可用，BOM 不完整；失败原因见页面和 Bottom 日志。目录遍历或文件快照不完整时仍不提交。", "局部引用刷新在文件详情，递归 BOM 待完整更新时会提示。不兼容数据库不会自动升级或重建；先备份并核对版本。"],
     docPath: "docs/cad/CAD目录与索引职责拆分.md",
+    tourSteps: [],
+  },
+  workspace_recovery: {
+    title: "备份与恢复",
+    bullets: [
+      "打开或刷新页面不自动备份、校验、恢复或扫描；只操作当前工作空间，写入须明确确认。",
+      "备份当前数据库原始整库与 opaque outbox（包括隐藏文件和空目录），保留人工字段和未知表；不包含 CAD 模型、缩略图或其他偏好，不是整工程归档。",
+      "先校验备份包，再恢复到不存在的新隔离目录；不会覆盖、切换或激活工作空间，也不重建索引。校验记录仅在本次服务会话有效，刷新或到期后需重新校验。",
+      "原位重建与 WAL/legacy-only 迁移仍禁用；清单和哈希只证明包自洽，不是来源签名，私人内容原样保留，请仅放本地受保护位置。",
+      "失败可能留下未完成目录；取消或失联时结果未确认，应核对原目标，不能自动清理或视为成功。发布后的 warnings 也需查看 Bottom 日志。",
+    ],
+    docPath: "docs/cad/KT-Auto-CAD下线计划.md",
     tourSteps: [],
   },
   part_key_detail: {
@@ -149,6 +162,18 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
     tourSteps: [
       tour("[data-tour-page-partkey-body]", "零件信息", "属性与关联文件列表；同 PartKey 复用 Tab。"),
     ],
+  },
+  bom_delivery: {
+    title: "BOM交付",
+    bullets: [
+      "进入页面不扫描、不创建目录；点击预检读取整个工作空间的完整且新鲜索引，部分可用或过期索引须先更新。",
+      "直接 BOM 的 qty 不做递归展开；预览分页仅方便浏览，不改变交付范围。",
+      "选择输出目标并确认后才导出，不覆盖不同内容、不修改 CAD；有效预览下，相同原字节可返回已存在。",
+      "预览十分钟到期，切换空间或服务重启须重新预览；取消或失联可能已发布，请核对原目标，原因见 Bottom 日志。",
+      "Desk 生产者接收端尚待适配，推送、审核和历史重试未开放，本页不自动联网。",
+    ],
+    docPath: "docs/cad/KT-Auto-CAD下线计划.md",
+    tourSteps: [],
   },
   file_rename: {
     title: "改名分析",

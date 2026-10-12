@@ -30,7 +30,7 @@ const steps = computed(() => [
   {
     id: "index",
     label: "CAD 索引已更新至少一次",
-    hint: "Desk 与 KT Auto CAD 共用 Wing 索引；进入页面后手动更新",
+    hint: "进入「CAD 索引」后点击更新；索引诊断和搜索不自动扫描",
     done: store.indexScanned,
     action: () => shell.openTab({ pageId: "cad_index" }),
     actionLabel: "CAD 索引",

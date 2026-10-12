@@ -13,6 +13,7 @@ import {
   ensurePhoenixDatabase,
   getPhoenixDatabaseStatus,
   PHOENIX_SCHEMA_VERSION,
+  PHOENIX_DATABASE_RECREATE_DISABLED,
   recreatePhoenixDatabase,
 } from "./phoenixDatabaseService.js";
 
@@ -101,7 +102,7 @@ describe("Phoenix workspace database", () => {
     });
   });
 
-  it("detects legacy files and replaces only the known database families", () => {
+  it("detects legacy files but refuses destructive recreation without touching any family", () => {
     const workspace = makeWorkspace();
     const phoenixDir = path.join(workspace, ".phoenix");
     fs.mkdirSync(phoenixDir, { recursive: true });
@@ -123,15 +124,26 @@ describe("Phoenix workspace database", () => {
       old_tables_found: ["meta"],
     });
 
-    const rebuilt = recreatePhoenixDatabase(workspace);
-    expect(rebuilt).toMatchObject({
-      status: "recreated",
-      removed_files: ["cad-database.sqlite"],
-      schema_version: 13,
-    });
-    expect(fs.existsSync(legacy)).toBe(false);
+    const original = fs.readFileSync(legacy);
+    fs.writeFileSync(`${legacy}-wal`, "opaque WAL bytes");
+    fs.writeFileSync(`${legacy}-shm`, "opaque SHM bytes");
+    expect(() => recreatePhoenixDatabase(workspace)).toThrow(/原位重建已禁用/);
+    try { recreatePhoenixDatabase(workspace); } catch (error) {
+      expect(error).toMatchObject({ code: PHOENIX_DATABASE_RECREATE_DISABLED });
+    }
+    expect(fs.readFileSync(legacy)).toEqual(original);
+    expect(fs.readFileSync(`${legacy}-wal`, "utf8")).toBe("opaque WAL bytes");
+    expect(fs.readFileSync(`${legacy}-shm`, "utf8")).toBe("opaque SHM bytes");
     expect(fs.readFileSync(unrelated, "utf8")).toBe("keep");
-    expect(getPhoenixDatabaseStatus(workspace).needs_recreate).toBe(false);
+    expect(fs.existsSync(path.join(phoenixDir, "phoenix-workspace.sqlite"))).toBe(false);
+  });
+
+  it("refuses recreation without even initializing an empty or missing workspace", () => {
+    const workspace = makeWorkspace();
+    expect(() => recreatePhoenixDatabase(workspace)).toThrow(/原数据保持不变/);
+    expect(fs.readdirSync(workspace)).toEqual([]);
+    expect(() => recreatePhoenixDatabase(path.join(workspace, "missing"))).toThrow(/原位重建已禁用/);
+    expect(fs.readdirSync(workspace)).toEqual([]);
   });
 
   it("flags a current-name database with a mismatched schema version", () => {

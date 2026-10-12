@@ -5,6 +5,7 @@ import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   extractDocumentXmlFromFcstdBytes,
+  extractFcstdEmbeddedBomSnapshot,
   inspectFcstdBatchTarget,
   FcstdBatchTargetAmbiguityError,
   patchFcstdEmbeddedBomDocumentXml,
@@ -139,6 +140,25 @@ function xmlFrom(filename: string): string {
 }
 
 describe("FCStd Document.xml Node adapter", () => {
+  it.each(["PartDesign::Body", "App::Part", "Assembly::AssemblyObject"])("reports saved root TypeId %s instead of a selection-probe type", typeId => {
+    const xml = `<Document><Objects><Object name="Body" type="${typeId}"/></Objects><ObjectData><Object name="Body"><Properties><Property name="Label" type="App::PropertyString"><String value="Body"/></Property></Properties></Object></ObjectData></Document>`;
+    expect(extractFcstdEmbeddedBomSnapshot(xml)).toMatchObject({ objectName: "Body", typeId, fields: { label: "Body" } });
+    expect(inspectFcstdBatchTarget(xml)).toMatchObject({ objectName: "Body", typeId });
+  });
+  it("does not trust conflicting saved type declarations or comment/CDATA examples", () => {
+    const xml = '<Document><Objects><!--<Object name="Body" type="App::Part"/>--><![CDATA[<Object name="Body" type="App::Part"/>]]><Object name="Body" type="PartDesign::Body"/></Objects><ObjectData><Object name="Body"><Properties><Property name="Label" type="App::PropertyString"><String value="Body"/></Property></Properties></Object></ObjectData></Document>';
+    expect(extractFcstdEmbeddedBomSnapshot(xml).typeId).toBe("PartDesign::Body");
+    expect(extractFcstdEmbeddedBomSnapshot(xml.replace('<Object name="Body"><Properties>', '<Object name="Body" type="App::Part"><Properties>')).typeId).toBe("");
+  });
+  it.each([
+    ['<String value=""/>', ""],
+    ['<String></String>', ""],
+    ['<String>  Synthetic &amp; name  </String>', "Synthetic & name"],
+  ])("uses the actual Label string instead of an internal-name fallback [case %#]", (value, expected) => {
+    const xml = `<Document><Objects><Object name="Body" type="PartDesign::Body"/></Objects><ObjectData><Object name="Body"><Properties><Property name="Label" type="App::PropertyString">${value}</Property></Properties></Object></ObjectData></Document>`;
+    expect(extractFcstdEmbeddedBomSnapshot(xml).fields?.label).toBe(expected);
+    expect(inspectFcstdBatchTarget(xml).current.label).toBe(expected);
+  });
   it("extracts only Document.xml and delegates BOM projection to Wing", async () => {
     const root = tempRoot("fcstd-ts-read-");
     const filename = path.join(root, "part.FCStd");

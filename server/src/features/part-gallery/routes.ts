@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { archiveGallery, printGallery } from "./archive.js";
 import { galleryJob, galleryOptions, loadGallery, startGalleryJob, thumbnailBytes } from "./service.js";
+import { geometryJob, startGeometryJob } from "./geometryService.js";
 
 export const partGalleryRoutes = new Hono();
 partGalleryRoutes.onError((error, c) => c.json({ detail: error.message.replaceAll(c.req.query("workspace") || "\0", "[工作空间]") }, 400));
@@ -16,6 +17,15 @@ partGalleryRoutes.post("/jobs", async c => {
   if (typeof body.product !== "string") throw new Error("请选择产品或全库");
   return c.json(startGalleryJob(c.req.query("workspace") || "", body.product));
 });
-partGalleryRoutes.get("/jobs/:id", c => c.json(galleryJob(c.req.query("workspace") || "", c.req.param("id"))));
+partGalleryRoutes.post("/geometry-jobs", async c => {
+  const body = await c.req.json();
+  if (typeof body.product !== "string") throw new Error("请选择产品或全库");
+  return c.json(startGeometryJob(c.req.query("workspace") || "", body.product));
+});
+partGalleryRoutes.get("/jobs/:id", c => {
+  // Both explicit operations use the existing job polling contract.
+  const workspace = c.req.query("workspace") || "", id = c.req.param("id");
+  return c.json(geometryJob(workspace, id) || galleryJob(workspace, id));
+});
 partGalleryRoutes.post("/document", async c => c.json(printGallery(c.req.query("workspace") || "", await c.req.json())));
 partGalleryRoutes.post("/archive", async c => c.json(archiveGallery(c.req.query("workspace") || "", await c.req.json())));

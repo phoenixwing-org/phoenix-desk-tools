@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import { strFromU8, unzipSync } from "fflate";
 import {
   pnwCadXlinkRuleLabel,
   pnwExtractXlinksFromDocumentXml,
@@ -9,8 +8,11 @@ import {
   type PnwCadResolvedXlinkTarget,
 } from "@phoenix-wing/cad-core";
 import { pnwCreateDb, type PnwDbAdapter } from "@phoenix-wing/db-node";
+import { randomUUID } from "node:crypto";
+import { analyzeCadIndexDocumentXmlWithInstances } from "./cadIndexLinkInstances.js";
+import { fcstdWorkspace, safeFcstdPath, readFcstdBatchArchive } from "./fcstdBatchFiles.js";
 
-const GRAPH_TARGET_STATUSES = new Set(["resolved", "ambiguous", "self"]);
+const GRAPH_TARGET_STATUSES = new Set(["resolved", "self"]);
 
 type AssetRow = {
   id: number;
@@ -55,6 +57,7 @@ type IndexContext = {
   assets: AssetRow[];
   assetsByRel: Map<string, AssetRow>;
   basenameMap: Map<string, string[]>;
+  snapshots: Map<string, fs.Stats>;
 };
 
 export type BomXrefIndexOptions = {
@@ -66,6 +69,12 @@ export type BomXrefIndexOptions = {
 
 function dbPath(ws: string): string {
   return path.join(ws, ".phoenix", "phoenix-workspace.sqlite");
+}
+
+function assertIndexPath(ws: string): void {
+  const filename = dbPath(ws);
+  if (fs.lstatSync(path.dirname(filename)).isSymbolicLink() || fs.lstatSync(filename).isSymbolicLink()
+    || fs.realpathSync(filename) !== path.join(fcstdWorkspace(ws), ".phoenix", "phoenix-workspace.sqlite")) throw new Error("CAD index database path is unsafe");
 }
 
 function utcNowIso(): string {
@@ -142,12 +151,15 @@ function latestScanId(db: PnwDbAdapter): number | null {
 
 function loadContext(ws: string): IndexContext | null {
   if (!workspaceOk(ws) || !fs.existsSync(dbPath(ws))) return null;
-  const db = pnwCreateDb(dbPath(ws));
+  const root = fcstdWorkspace(ws);
+  const filename = dbPath(root);
+  assertIndexPath(root);
+  const db = pnwCreateDb(filename);
   try {
     if (!tableExists(db, "phoenix_cad_file_asset") || !tableExists(db, "phoenix_cad_scan")) return null;
-    ensureXrefSchema(db);
     const scanId = latestScanId(db);
     if (scanId == null) return null;
+    ensureXrefSchema(db);
     const assets = db.all<AssetRow>(
       `SELECT id, repo_rel_path, filename, asset_kind, part_number, part_version,
               type_code, model_series, part_name, label, file_status
@@ -169,17 +181,20 @@ function loadContext(ws: string): IndexContext | null {
       paths.push(asset.repo_rel_path);
       basenameMap.set(key, paths);
     }
-    return { ws: path.resolve(ws), scanId, assets, assetsByRel, basenameMap };
+    return { ws: root, scanId, assets, assetsByRel, basenameMap, snapshots: new Map() };
   } finally {
     db.close();
   }
 }
 
 function absForRel(ws: string, rel: string): string | null {
-  const root = path.resolve(ws);
+  const root = fcstdWorkspace(ws);
   const abs = path.resolve(root, normKey(rel).replace(/^\.\//, ""));
   const diff = path.relative(root, abs);
-  if (diff === "" || (!diff.startsWith("..") && !path.isAbsolute(diff))) return abs;
+  if (diff === "" || (!diff.startsWith("..") && !path.isAbsolute(diff))) {
+    try { return safeFcstdPath(root, diff || "."); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; }
+  }
   return null;
 }
 
@@ -192,34 +207,25 @@ function relForAbs(ws: string, abs: string): string | null {
 
 export const extractXlinksFromDocumentXml = pnwExtractXlinksFromDocumentXml;
 
-function unzipDocumentXml(raw: Uint8Array): string | null {
-  try {
-    const files = unzipSync(raw, {
-      filter: (file) => file.name.replace(/\\/g, "/") === "Document.xml",
-    });
-    const bytes = files["Document.xml"];
-    return bytes ? strFromU8(bytes) : null;
-  } catch {
-    return null;
-  }
+function readFcstdIndexAnalysis(filePath: string) {
+  const { xml } = readFcstdBatchArchive(filePath);
+  return analyzeCadIndexDocumentXmlWithInstances(xml);
 }
 
 export function readFcstdXlinks(filePath: string): XlinkRef[] {
-  try {
-    const raw = fs.readFileSync(filePath);
-    return extractXlinksFromDocumentXml(unzipDocumentXml(raw) || "");
-  } catch {
-    return [];
-  }
+  return readFcstdIndexAnalysis(filePath).xlinks;
 }
 
-async function readFcstdXlinksAsync(filePath: string): Promise<XlinkRef[]> {
-  try {
-    const raw = await fs.promises.readFile(filePath);
-    return extractXlinksFromDocumentXml(unzipDocumentXml(raw) || "");
-  } catch {
-    return [];
-  }
+async function readFcstdIndexAnalysisAsync(filePath: string, validate: () => string = () => filePath) {
+  // Yield between hosts while reusing the one bounded ZIP reader.
+  await new Promise<void>(resolve => setImmediate(resolve));
+  const analysis = readFcstdIndexAnalysis(validate());
+  validate();
+  return analysis;
+}
+
+async function readFcstdXlinksAsync(filePath: string, validate: () => string = () => filePath): Promise<XlinkRef[]> {
+  return (await readFcstdIndexAnalysisAsync(filePath, validate)).xlinks;
 }
 
 function resolveTarget(ctx: IndexContext, hostRel: string, attr: string): ResolvedTarget {
@@ -234,9 +240,11 @@ function resolveTarget(ctx: IndexContext, hostRel: string, attr: string): Resolv
   if (candidates.length) directAttrs.push(basename);
   for (const directAttr of directAttrs) {
     const direct = path.resolve(hostDir, directAttr);
-    if (!fs.existsSync(direct) || !fs.statSync(direct).isFile()) continue;
-    directTargetRel = relForAbs(ctx.ws, direct);
-    if (directTargetRel) break;
+    const candidateRel = relForAbs(ctx.ws, direct);
+    if (!candidateRel || !fs.existsSync(direct)) continue;
+    const safeDirect = absForRel(ctx.ws, candidateRel);
+    if (!safeDirect || !fs.statSync(safeDirect).isFile()) continue;
+    directTargetRel = candidateRel; break;
   }
   const existingCandidateRels = candidates.filter((candidate) => {
     const absolute = absForRel(ctx.ws, candidate);
@@ -253,7 +261,9 @@ function resolveTarget(ctx: IndexContext, hostRel: string, attr: string): Resolv
 
 function edgeForXlink(ctx: IndexContext, host: AssetRow, xlink: XlinkRef): XrefEdge {
   const resolved = resolveTarget(ctx, host.repo_rel_path, xlink.file);
-  const targetAsset = resolved.targetRel ? ctx.assetsByRel.get(normKey(resolved.targetRel)) : undefined;
+  // Candidate suggestions are not committed target identities.
+  const targetRel = resolved.status === "resolved" || resolved.status === "self" ? resolved.targetRel : null;
+  const targetAsset = targetRel ? ctx.assetsByRel.get(normKey(targetRel)) : undefined;
   const targetBase = basenameOf(xlink.file);
   return {
     host_file_asset_id: host.id,
@@ -263,7 +273,7 @@ function edgeForXlink(ctx: IndexContext, host: AssetRow, xlink: XlinkRef): XrefE
     rule_label: pnwCadXlinkRuleLabel(targetAsset, targetBase, resolved.targetRel),
     target_basename: targetBase,
     target_file_asset_id: targetAsset?.id ?? null,
-    target_repo_rel_path: resolved.targetRel,
+    target_repo_rel_path: targetRel,
     target_part_number: String(targetAsset?.part_number || ""),
     target_part_version: String(targetAsset?.part_version || ""),
     target_type_code: String(targetAsset?.type_code || ""),
@@ -277,23 +287,57 @@ function edgeForXlink(ctx: IndexContext, host: AssetRow, xlink: XlinkRef): XrefE
 
 function edgesForHost(ctx: IndexContext, host: AssetRow): XrefEdge[] {
   const abs = absForRel(ctx.ws, host.repo_rel_path);
-  if (!abs || !fs.existsSync(abs)) return [];
-  return readFcstdXlinks(abs).map((xlink) => edgeForXlink(ctx, host, xlink));
+  if (!abs || !fs.existsSync(abs)) throw new Error(`Host FCStd file is missing; previous index preserved: ${host.repo_rel_path}`);
+  const before = fs.statSync(abs);
+  const analysis = readFcstdIndexAnalysis(abs);
+  const after = fs.statSync(absForRel(ctx.ws, host.repo_rel_path)!);
+  if (!sameStat(before, after)) throw new Error("Host changed during reference read; previous index preserved");
+  ctx.snapshots.set(host.repo_rel_path, after);
+  return edgesForAnalysis(ctx, host, analysis);
 }
 
 async function edgesForHostAsync(ctx: IndexContext, host: AssetRow): Promise<XrefEdge[]> {
   const abs = absForRel(ctx.ws, host.repo_rel_path);
-  if (!abs || !fs.existsSync(abs)) return [];
-  return (await readFcstdXlinksAsync(abs)).map((xlink) => edgeForXlink(ctx, host, xlink));
+  if (!abs || !fs.existsSync(abs)) throw new Error(`Host FCStd file is missing; previous index preserved: ${host.repo_rel_path}`);
+  const before = fs.statSync(abs);
+  const analysis = await readFcstdIndexAnalysisAsync(abs, () => {
+    const current = absForRel(ctx.ws, host.repo_rel_path);
+    if (!current) throw new Error("Host FCStd file is missing; previous index preserved");
+    return current;
+  });
+  const after = fs.statSync(absForRel(ctx.ws, host.repo_rel_path)!);
+  if (!sameStat(before, after)) throw new Error("Host changed during reference read; previous index preserved");
+  ctx.snapshots.set(host.repo_rel_path, after);
+  return edgesForAnalysis(ctx, host, analysis);
+}
+
+function edgesForAnalysis(ctx: IndexContext, host: AssetRow, analysis: ReturnType<typeof readFcstdIndexAnalysis>): XrefEdge[] {
+  const physicalFiles = new Set(analysis.bomXlinks.map(link => link.file));
+  return analysis.xlinks.map(link => {
+    const edge = edgeForXlink(ctx, host, link);
+    if (!physicalFiles.has(link.file)) edge.detail_json = JSON.stringify({ ...(edge.detail_json ? JSON.parse(edge.detail_json) : {}),
+      basic_bom: false, reference_role: "drawing_source" });
+    return edge;
+  });
+}
+
+function sameStat(a: fs.Stats, b: fs.Stats) {
+  return a.isFile() && b.isFile() && a.size === b.size && a.mtimeMs === b.mtimeMs && a.ctimeMs === b.ctimeMs && a.ino === b.ino && a.dev === b.dev;
 }
 
 function dedupeEdges(edges: XrefEdge[]): XrefEdge[] {
-  const seen = new Set<string>();
-  return edges.filter((edge) => {
+  const grouped = new Map<string, { edge: XrefEdge; quantity: number }>();
+  for (const edge of edges) {
     const key = `${edge.host_file_asset_id}\0${edge.xlink_file_attr}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
+    const entry = grouped.get(key);
+    if (entry) entry.quantity += 1;
+    else grouped.set(key, { edge, quantity: 1 });
+  }
+  return [...grouped.values()].map(({ edge, quantity }) => {
+    const detail = edge.detail_json ? JSON.parse(edge.detail_json) : {};
+    return { ...edge, detail_json: JSON.stringify({ ...detail,
+      source: "phoenix-desk-tools-xref-partial-refresh",
+      ...(detail.basic_bom === false ? { basic_bom: false } : { basic_bom: true, quantity }) }) };
   });
 }
 
@@ -356,20 +400,34 @@ function currentStats(db: PnwDbAdapter): Record<string, number> {
 }
 
 function writeHostIndex(ctx: IndexContext, hosts: string[], edges: XrefEdge[]): Record<string, number> {
+  assertIndexPath(ctx.ws);
   const db = pnwCreateDb(dbPath(ctx.ws));
   const now = utcNowIso();
   try {
+    assertIndexPath(ctx.ws);
     ensureXrefSchema(db);
-    db.exec("BEGIN TRANSACTION");
+    db.exec("BEGIN IMMEDIATE");
+    if (latestScanId(db) !== ctx.scanId) throw new Error("CAD index changed during reference discovery; retry required");
+    for (const [rel, snapshot] of ctx.snapshots) {
+      const abs = absForRel(ctx.ws, rel);
+      if (!abs || !sameStat(snapshot, fs.statSync(abs))) throw new Error("Host snapshot changed; previous index preserved");
+    }
+    // A partial refresh is a new index revision, never a full-scan completion.
+    // This also invalidates a full scan's optimistic expectedScanId contract.
+    db.run(`INSERT INTO phoenix_cad_scan
+      (scan_uuid,scanned_at,scan_root,stats_json,status,phase,started_at,finished_at)
+      VALUES (?,?,?,?,'stale','xref-partial-refresh',?,?)`,
+    [randomUUID(), now, ctx.ws, JSON.stringify({ source: "phoenix-desk-tools-xref-partial-refresh", complete: false, hosts: hosts.length }), now, now]);
+    const revision = latestScanId(db)!;
     clearDerivedTables(db);
-    const keys = [...new Set(hosts.map(normKey).filter(Boolean))];
+    const keys = [...new Set(hosts.map(normKey).filter(Boolean).flatMap(key => [key, key.slice(2)]))];
     if (keys.length) {
       const placeholders = keys.map(() => "?").join(", ");
       db.run(`DELETE FROM phoenix_cad_bom_xref WHERE host_repo_rel_path IN (${placeholders})`, keys);
-      const ids = keys.map((key) => ctx.assetsByRel.get(key)?.id).filter((id): id is number => id != null);
+      const ids = keys.map((key) => ctx.assetsByRel.get(normKey(key))?.id).filter((id): id is number => id != null);
       if (ids.length) db.run(`DELETE FROM phoenix_cad_bom_xref WHERE host_file_asset_id IN (${ids.map(() => "?").join(", ")})`, ids);
     }
-    insertEdges(db, ctx.scanId, edges, now);
+    insertEdges(db, revision, edges, now);
     const stats = currentStats(db);
     db.exec("COMMIT");
     return stats;
@@ -396,7 +454,9 @@ function discoverSubtree(ctx: IndexContext, rootHost: string, options: BomXrefIn
     if (!recursive) continue;
     const abs = absForRel(ctx.ws, host);
     if (!abs || !fs.existsSync(abs) || !isFcstd(abs)) continue;
-    for (const xlink of readFcstdXlinks(abs)) {
+    const xlinks = readFcstdXlinks(abs);
+    absForRel(ctx.ws, host); // Revalidate the same safe path after bounded I/O.
+    for (const xlink of xlinks) {
       const resolved = resolveTarget(ctx, host, xlink.file);
       const target = resolved.targetRel ? normKey(resolved.targetRel) : "";
       if (target && GRAPH_TARGET_STATUSES.has(resolved.status) && !seen.has(target) && !queue.includes(target)) queue.push(target);
@@ -424,7 +484,11 @@ async function discoverSubtreeAsync(ctx: IndexContext, rootHost: string, options
     if (!recursive) continue;
     const abs = absForRel(ctx.ws, host);
     if (!abs || !fs.existsSync(abs) || !isFcstd(abs)) continue;
-    for (const xlink of await readFcstdXlinksAsync(abs)) {
+    for (const xlink of await readFcstdXlinksAsync(abs, () => {
+      const current = absForRel(ctx.ws, host);
+      if (!current) throw new Error("Host FCStd file is missing; previous index preserved");
+      return current;
+    })) {
       const resolved = resolveTarget(ctx, host, xlink.file);
       const target = resolved.targetRel ? normKey(resolved.targetRel) : "";
       if (target && GRAPH_TARGET_STATUSES.has(resolved.status) && !seen.has(target) && !queue.includes(target)) queue.push(target);
@@ -436,8 +500,9 @@ async function discoverSubtreeAsync(ctx: IndexContext, rootHost: string, options
 
 export function refreshBomXrefHostsIndex(ws: string, rels: string[]): any {
   const ctx = loadContext(ws);
-  if (!ctx) return { updated_hosts: 0, edge_count: 0, hosts: [] };
-  const hosts = [...new Set(rels.map(normKey).filter(Boolean))].sort();
+  if (!ctx) return { updated_hosts: 0, edge_count: 0, hosts: [], index_pending: true };
+  const hosts = [...new Set(rels.map(normKey).filter(key => key && ctx.assetsByRel.has(key)))].sort();
+  if (!hosts.length) return { updated_hosts: 0, edge_count: 0, hosts: [], index_pending: true };
   const edges: XrefEdge[] = [];
   let updatedHosts = 0;
   for (const hostRel of hosts) {
@@ -448,13 +513,15 @@ export function refreshBomXrefHostsIndex(ws: string, rels: string[]): any {
     edges.push(...hostEdges);
   }
   writeHostIndex(ctx, hosts, edges);
+  const grouped = dedupeEdges(edges);
   return {
     updated_hosts: updatedHosts,
-    edge_count: dedupeEdges(edges).length,
-    target_resolved: edges.filter((edge) => edge.resolve_status === "resolved" || edge.resolve_status === "self").length,
-    target_ambiguous: edges.filter((edge) => edge.resolve_status === "ambiguous").length,
-    target_missing: edges.filter((edge) => edge.resolve_status === "missing" || edge.resolve_status === "non_fcstd").length,
+    edge_count: grouped.length,
+    target_resolved: grouped.filter((edge) => edge.resolve_status === "resolved" || edge.resolve_status === "self").length,
+    target_ambiguous: grouped.filter((edge) => edge.resolve_status === "ambiguous").length,
+    target_missing: grouped.filter((edge) => edge.resolve_status === "missing" || edge.resolve_status === "non_fcstd").length,
     hosts,
+    index_state: "stale", index_stale: true, bom_index_state: "stale", bom_index_stale: true, index_reason: "partial_refresh",
   };
 }
 
@@ -488,7 +555,7 @@ function validateRootHost(ws: string, rel: string): string {
 export function refreshBomXrefHostIndex(ws: string, rel: string, options: BomXrefIndexOptions = {}): any {
   const host = validateRootHost(ws, rel);
   const ctx = loadContext(ws);
-  if (!ctx) return { host_repo_rel_path: host, recursive: options.recursive !== false, hosts_refreshed: 0, hosts: [], updated_hosts: 0, edge_count: 0 };
+  if (!ctx || !ctx.assetsByRel.has(host)) return { host_repo_rel_path: host, recursive: options.recursive !== false, hosts_refreshed: 0, hosts: [], updated_hosts: 0, edge_count: 0, index_pending: true };
   const hosts = discoverSubtree(ctx, host, options);
   const refreshed = refreshBomXrefHostsIndex(ws, hosts);
   const summary = rootSummary(ws, host);
@@ -508,7 +575,7 @@ export async function refreshBomXrefHostIndexAsync(ws: string, rel: string, opti
   const host = validateRootHost(ws, rel);
   const isCancelled = options.isCancelled || (() => false);
   const ctx = loadContext(ws);
-  if (!ctx) return { host_repo_rel_path: host, recursive: options.recursive !== false, hosts_refreshed: 0, hosts: [], updated_hosts: 0, edge_count: 0 };
+  if (!ctx || !ctx.assetsByRel.has(host)) return { host_repo_rel_path: host, recursive: options.recursive !== false, hosts_refreshed: 0, hosts: [], updated_hosts: 0, edge_count: 0, index_pending: true };
   const discovered = await discoverSubtreeAsync(ctx, host, options);
   if (discovered.cancelled || isCancelled()) return { host_repo_rel_path: host, hosts: discovered.hosts, cancelled: true };
 
@@ -537,6 +604,7 @@ export async function refreshBomXrefHostIndexAsync(ws: string, rel: string, opti
     ...summary,
     updated_hosts: updatedHosts,
     edge_count: dedupeEdges(edges).length,
+    index_state: "stale", index_stale: true, bom_index_state: "stale", bom_index_stale: true, index_reason: "partial_refresh",
     log: `Refreshed xref index for ${discovered.hosts.length} host(s); root has ${summary.outgoing_count} outgoing edge(s).`,
   };
 }

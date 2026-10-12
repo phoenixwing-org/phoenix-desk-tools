@@ -31,6 +31,32 @@ describe("PartName first with selectable missing-name source", () => {
     expect(recommendPartName(rel, { label: "中文标签" }, "filename").value).toBe("PLATE");
     expect(recommendPartName(rel, { label: "  " }).value).toBe("PLATE");
   });
+  it.each(["Body", "Body001"])("uses a plain filename instead of the saved default Body label %s", objectName => {
+    const context = { objectName, typeId: "PartDesign::Body" };
+    expect(recommendPartName("测试盖板.FCStd", { label: objectName }, "label", context)).toEqual({ value: "测试盖板", source_note: "默认节点标签，从文件名补全" });
+    expect(recommendPartName(rel, { label: objectName }, "label", context).value).toBe("PLATE");
+    expect(recommendPartName(rel, { PartName: "自定义属性名称", label: objectName }, "label", context).value).toBe("自定义属性名称");
+    expect(() => recommendPartName(rel, { PartName: "S", label: objectName }, "label", context)).toThrow(/属性 PartName/);
+  });
+  it.each(["App::Part", "Assembly::AssemblyObject", "", undefined])("does not discard a custom Body label for other/unknown type %s", typeId => {
+    expect(recommendPartName(rel, { label: "Body" }, "label", { objectName: "Body", typeId }).value).toBe("Body");
+  });
+  it.each(["Body flange", "Body-Panel", "测试面板"])("preserves the custom Body label %s", label => {
+    expect(recommendPartName(rel, { label }, "label", { objectName: "Body", typeId: "PartDesign::Body" }).value).toBe(label);
+  });
+  it("requires exact default node identity, not just a Body-like display name", () => {
+    expect(recommendPartName(rel, { label: "Body" }, "label", { objectName: "Panel", typeId: "PartDesign::Body" }).value).toBe("Body");
+    expect(recommendPartName(rel, { label: "Body" }).value).toBe("Body");
+  });
+  it("allows an explicit row source to replace only the name recommendation", () => {
+    const current = { PartName: "已有名称", label: "720421.003-节点面板" };
+    expect(recommendPartName(rel, current, "filename", { explicitSource: true })).toEqual({ value: "PLATE", source_note: "文件名" });
+    expect(recommendPartName(rel, current, "label", { explicitSource: true })).toEqual({ value: "节点面板", source_note: "标签名" });
+    expect(current).toEqual({ PartName: "已有名称", label: "720421.003-节点面板" });
+    expect(() => recommendPartName(rel, { label: "Body" }, "label", { objectName: "Body", typeId: "PartDesign::Body", explicitSource: true })).toThrow(/节点标签为空或为默认 Body/);
+    expect(() => recommendPartName(rel, { label: "" }, "label", { explicitSource: true })).toThrow(/节点标签为空/);
+    expect(() => recommendPartName(rel, { label: "S" }, "label", { explicitSource: true })).toThrow(/仅为一个英文字母/);
+  });
   it("normalizes one assembly suffix and handles standard parts", () => {
     expect(recommendPartName("720421.003-H-DEMO-PLATE.ASSY.FCStd", { label: "720421.003-测试总成.ASSY.ASSY" }).value).toBe("测试总成");
     expect(recommendPartName("720421.003-S-M6-BOLT.FCStd", { label: "720421.003-S-M6-螺栓" }).value).toBe("M6-螺栓");

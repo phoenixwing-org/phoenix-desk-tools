@@ -4,6 +4,7 @@ import AutoImport from "unplugin-auto-import/vite";
 import Components from "unplugin-vue-components/vite";
 import { ElementPlusResolver } from "unplugin-vue-components/resolvers";
 import { resolve } from "path";
+import { localApiProxy } from "./config/localApiProxy";
 import {
   createPhoenixWingSourceAliases,
   LOCAL_WING_PACKAGE_NAMES,
@@ -70,22 +71,10 @@ export default defineConfig({
     strictPort: true,
     ...(localWingRoot ? { fs: { allow: [deskRoot, localWingRoot] } } : {}),
     proxy: {
-      "/api/caa/index": {
-        target: `http://127.0.0.1:${caaPort}`,
-        changeOrigin: true,
-      },
-      "/api/caa": {
-        target: `http://127.0.0.1:${caaPort}`,
-        changeOrigin: true,
-      },
-      "/api/cad": {
-        target: `http://127.0.0.1:${caaPort}`,
-        changeOrigin: true,
-      },
-      "/api": {
-        target: `http://127.0.0.1:${caaPort}`,
-        changeOrigin: true,
-      },
+      "/api/caa/index": localApiProxy(`http://127.0.0.1:${caaPort}`),
+      "/api/caa": localApiProxy(`http://127.0.0.1:${caaPort}`),
+      "/api/cad": localApiProxy(`http://127.0.0.1:${caaPort}`),
+      "/api": localApiProxy(`http://127.0.0.1:${caaPort}`),
     },
   },
 });

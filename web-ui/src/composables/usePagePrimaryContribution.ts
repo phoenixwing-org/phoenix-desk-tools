@@ -150,6 +150,7 @@ export type PagePrimaryContribution = {
   showContext?: boolean;
   summary?: PagePrimaryResolvable<string>;
   thumbnail?: PagePrimaryResolvable<{ src: string; alt: string } | null>;
+  thumbnailGeneration?: PagePrimaryResolvable<import("../types/thumbnail").ThumbnailGeneration | null>;
   sections?: PagePrimaryResolvable<readonly PagePrimarySection[]>;
   content?: PagePrimaryContent;
 };

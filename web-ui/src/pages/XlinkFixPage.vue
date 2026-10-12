@@ -534,7 +534,7 @@ onUnmounted(() => {
     <FcstdPropertyRepairResults v-if="checkProperties" v-model:selected="propertyRepair.selected" :analysis="propertyRepair.analysis" :result="propertyRepair.result" :error="propertyRepair.error" :busy="busy" @open="shell.openFileDetailForRel($event)" />
 
     <section v-if="analysis && checkLinks" class="card results-card">
-      <el-alert v-if="analysis.index_pending" title="链接检查尚未完成：请先在 KT Auto CAD 建立索引。属性检查可独立运行。" type="warning" :closable="false" />
+      <el-alert v-if="analysis.index_pending" title="链接检查尚未完成：请在「CAD 索引」更新索引。属性检查可独立运行。" type="warning" :closable="false" />
       <header class="results-head">
         <div class="results-head-row">
           <h2 class="card-title">问题链接</h2>
@@ -642,7 +642,7 @@ onUnmounted(() => {
                     >
                       <p v-if="candidatesLoading[issueRowKey(row)]" class="expand-hint">加载候选…</p>
                       <p v-else-if="!fcstdCandidates(issueRowKey(row)).length" class="expand-hint">
-                        该零件标识下无 present 的 FCStd，请先在 KT Auto CAD 扫描工作空间。
+                        该零件标识下无 present 的 FCStd，请在「CAD 索引」更新工作空间。
                       </p>
                       <ul v-else class="candidate-list">
                         <li v-for="file in fcstdCandidates(issueRowKey(row))" :key="file.id">

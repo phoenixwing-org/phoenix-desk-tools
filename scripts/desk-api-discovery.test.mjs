@@ -60,3 +60,21 @@ test("rejects a live incompatible protocol instead of starting a second API", as
     /协议版本/,
   );
 });
+
+test("local Wing refuses to reuse an old live API but can start when it is stopped", async (context) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "desk-api-local-wing-"));
+  context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(directory, "service.v1.json"), JSON.stringify({
+    schema_version: 1,
+    service: "phoenix-desk-tools",
+    protocol_version: 1,
+    host: "127.0.0.1",
+    port: 48_381,
+  }));
+  const env = { PHOENIX_DESK_TOOLS_REGISTRY_DIR: directory, PHOENIX_WING_MODE: "local" };
+  await assert.rejects(discoverDeskApi(env, async () => ({
+    ok: true,
+    async json() { return { service: "phoenix-node", protocol_version: 1 }; },
+  })), /请先停止该服务，再执行 pnpm wing/);
+  assert.equal(await discoverDeskApi(env, async () => { throw new Error("connection refused"); }), null);
+});

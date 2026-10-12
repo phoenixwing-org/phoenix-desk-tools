@@ -8,6 +8,7 @@ import {
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { reconcileFcstdPropertyCounts } from "./fcstdPropertyCounts.js";
 import { xmlAttribute } from "./fcstdLinkIdentity.js";
+import { fcstdBomSelectionXml } from "./fcstdBomSelection.js";
 
 export type FcstdEmbeddedBomWriteResult = {
   changed: boolean;
@@ -29,20 +30,43 @@ function escapeRegExp(value: string): string {
 function objectBlock(xml: string, objectName: string): { start: number; text: string } | null {
   // Modern FCStd keeps self-closing declarations in Objects and the actual
   // property containers in ObjectData. Never start a span at a declaration.
-  const data = /<ObjectData\b[^>]*>([\s\S]*?)<\/ObjectData>/i.exec(xml);
+  const semantic = xml.replace(/<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>/g, text => " ".repeat(text.length));
+  const data = /<ObjectData\b[^>]*>([\s\S]*?)<\/ObjectData>/i.exec(semantic);
   const offset = data?.index != null ? data.index + data[0].indexOf(">") + 1 : 0;
   const objectPattern = /<Object\b([^>]*?)(?<!\/)>([\s\S]*?)<\/Object>/gi;
-  for (const match of (data?.[1] ?? xml).matchAll(objectPattern)) {
+  for (const match of (data?.[1] ?? semantic).matchAll(objectPattern)) {
     if (match.index == null) continue;
     const nameMatch = /\bname\s*=\s*(["'])([\s\S]*?)\1/i.exec(match[1]);
-    if (nameMatch?.[2] === objectName) return { start: offset + match.index, text: match[0] };
+    if (nameMatch?.[2] === objectName) {
+      const start = offset + match.index;
+      return { start, text: xml.slice(start, start + match[0].length) };
+    }
   }
   return null;
 }
 
-function propertyOpening(block: string, propertyName: string): string | null {
+/** Read the saved TypeId, never the temporary App::Part selection probe. */
+function savedObjectTypeId(xml: string, objectName: string): string {
+  const semantic = xml.replace(/<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>/g, text => " ".repeat(text.length));
+  const declarations = /<Objects\b[^>]*>([\s\S]*?)<\/Objects>/i.exec(semantic)?.[1] || "";
+  const types = new Set<string>();
+  for (const [tag] of declarations.matchAll(/<Object\b[^>]*>/gi)) {
+    if (xmlAttribute(tag, "name") === objectName && xmlAttribute(tag, "type")) types.add(xmlAttribute(tag, "type"));
+  }
+  const opening = objectBlock(semantic, objectName)?.text.match(/^<Object\b[^>]*>/i)?.[0];
+  if (opening && xmlAttribute(opening, "type")) types.add(xmlAttribute(opening, "type"));
+  // Unknown or conflicting type declarations cannot justify a default-name exception.
+  return types.size === 1 ? [...types][0] : "";
+}
+
+function propertyOpeningMatch(block: string, propertyName: string): RegExpExecArray | null {
   const pattern = new RegExp(`<Property\\b[^>]*\\bname\\s*=\\s*(["'])${escapeRegExp(propertyName)}\\1[^>]*>`, "i");
-  return pattern.exec(block)?.[0] || null;
+  const semantic = block.replace(/<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>/g, text => " ".repeat(text.length));
+  return pattern.exec(semantic);
+}
+
+function propertyOpening(block: string, propertyName: string): string | null {
+  return propertyOpeningMatch(block, propertyName)?.[0] || null;
 }
 
 function ensureOpeningAttribute(opening: string, name: string, value: string): string {
@@ -73,8 +97,9 @@ function restoreFreeCadPropertyMetadata(
   if (!patched) return patchedXml;
   let nextBlock = patched.text;
   for (const propertyName of Object.keys(fields).map(key => key === "label" ? "Label" : key)) {
-    const patchedOpening = propertyOpening(nextBlock, propertyName);
-    if (!patchedOpening) continue;
+    const match = propertyOpeningMatch(nextBlock, propertyName);
+    if (!match) continue;
+    const patchedOpening = match[0];
     const originalOpening = original ? propertyOpening(original.text, propertyName) : null;
     let replacement = originalOpening || patchedOpening;
     const meta = FREECAD_DYNAMIC_STRING_PROPERTY_META[propertyName];
@@ -86,7 +111,7 @@ function restoreFreeCadPropertyMetadata(
       replacement = ensureOpeningAttribute(replacement, "hide", "0");
       replacement = ensureOpeningAttribute(replacement, "status", "2097152");
     }
-    nextBlock = nextBlock.replace(patchedOpening, replacement);
+    nextBlock = nextBlock.slice(0, match.index) + replacement + nextBlock.slice(match.index + patchedOpening.length);
   }
   return patchedXml.slice(0, patched.start)
     + nextBlock
@@ -146,14 +171,15 @@ export async function readFcstdDocumentXmlAsync(filePath: string): Promise<strin
 
 export function readFcstdEmbeddedBomFields(filePath: string): PnwCadEmbeddedBomFields | null {
   const xml = readFcstdDocumentXml(filePath);
-  return xml ? pnwExtractEmbeddedBomFieldsFromDocumentXml(xml) : null;
+  return xml ? extractFcstdEmbeddedBomSnapshot(xml).fields : null;
 }
 
 /** Keep explicitly empty properties distinct from absent ones when merging UI hints. */
 export function extractFcstdEmbeddedBomSnapshot(xml: string) {
-  const fields = pnwExtractEmbeddedBomFieldsFromDocumentXml(xml);
-  const selected = pnwPatchEmbeddedBomFieldsInDocumentXml(xml, {});
-  const block = selected ? objectBlock(xml, selected.objectName) : null;
+  const selection = fcstdBomSelectionXml(xml);
+  const fields = pnwExtractEmbeddedBomFieldsFromDocumentXml(selection.xml);
+  const selected = pnwPatchEmbeddedBomFieldsInDocumentXml(selection.xml, {});
+  const block = selected ? objectBlock(selection.xml, selected.objectName) : null;
   const present = new Set<keyof PnwCadEmbeddedBomFields>();
   if (fields && block) for (const key of [...Object.keys(FREECAD_DYNAMIC_STRING_PROPERTY_META), "label"] as (keyof PnwCadEmbeddedBomFields)[]) {
     const propertyName = key === "label" ? "Label" : key;
@@ -163,24 +189,55 @@ export function extractFcstdEmbeddedBomSnapshot(xml: string) {
     if (key === "label") {
       const property = new RegExp(`<Property\\b[^>]*\\bname\\s*=\\s*(["'])Label\\1[^>]*>([\\s\\S]*?)<\\/Property>`, "i").exec(block.text);
       const stringTag = property?.[2].match(/<String\b[^>]*>/i)?.[0];
-      if (stringTag) fields.label = xmlAttribute(stringTag, "value");
+      fields.label = "";
+      if (stringTag && /\bvalue\s*=/.test(stringTag)) fields.label = xmlAttribute(stringTag, "value");
+      else if (stringTag) {
+        const text = /<String\b[^>]*>([^<]*)<\/String>/i.exec(property?.[2] || "")?.[1] || "";
+        fields.label = xmlAttribute(`value="${text.replaceAll('"', "&quot;")}"`, "value").trim();
+      }
     }
   }
-  return { fields, present };
+  // A missing Label is not an existing business name. Wing's internal-name
+  // display fallback must not outrank a valid filename recommendation.
+  if (fields && !present.has("label")) fields.label = "";
+  return { fields, present, objectName: selected?.objectName || "", typeId: selected ? savedObjectTypeId(xml, selected.objectName) : "" };
 }
 
 export async function readFcstdEmbeddedBomFieldsAsync(
   filePath: string,
 ): Promise<PnwCadEmbeddedBomFields | null> {
   const xml = await readFcstdDocumentXmlAsync(filePath);
-  return xml ? pnwExtractEmbeddedBomFieldsFromDocumentXml(xml) : null;
+  return xml ? extractFcstdEmbeddedBomSnapshot(xml).fields : null;
 }
 
 /** Wing 负责根 BOM 对象与字段补丁；Node 负责 ZIP/I/O 及旧版序列化兼容。 */
 export function patchFcstdEmbeddedBomDocumentXml(originalXml: string, fields: Partial<PnwCadEmbeddedBomFields>) {
-  const result = pnwPatchEmbeddedBomFieldsInDocumentXml(originalXml, fields);
-  if (!result) throw new Error("未找到可写的 BOM 根对象");
-  const restoredXml = restoreFreeCadPropertyMetadata(originalXml, result.xml, result.objectName, fields);
+  const selection = fcstdBomSelectionXml(originalXml);
+  const target = pnwPatchEmbeddedBomFieldsInDocumentXml(selection.xml, {});
+  if (!target || !/^[A-Za-z_]\w*$/.test(target.objectName)) throw new Error("未找到可写的 BOM 根对象");
+  const originalBlock = objectBlock(originalXml, target.objectName);
+  if (!originalBlock) throw new Error("根对象属性容器不可读，未改写文件");
+  // Keep comments/CDATA byte-for-byte without letting example Property/Object
+  // text inside them participate in Wing's compact field matcher.
+  let marker = "PNW_BOM_OPAQUE_";
+  while (originalBlock.text.includes(marker)) marker += "_";
+  const opaque: string[] = [];
+  const protectedBlock = originalBlock.text.replace(/<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>/g, text => `<!--${marker}${opaque.push(text) - 1}-->`);
+  // The declaration is a temporary single-target scope, not a new Part node.
+  const scopedXml = `<Document><Objects><Object name="${target.objectName}" type="App::Part"/></Objects><ObjectData>${protectedBlock}</ObjectData></Document>`;
+  const result = pnwPatchEmbeddedBomFieldsInDocumentXml(scopedXml, fields);
+  if (!result || result.objectName !== target.objectName) throw new Error("属性写入目标不一致，未改写文件");
+  const patchedBlock = objectBlock(result.xml, result.objectName);
+  if (!patchedBlock) throw new Error("根对象属性容器不可读，未改写文件");
+  // A shared whole-property rewrite cannot preserve opaque content *inside*
+  // an edited field. Refuse that exceptional layout instead of losing data.
+  if (opaque.some((_, index) => !patchedBlock.text.includes(`<!--${marker}${index}-->`))) {
+    throw new Error("待写属性内部含注释或 CDATA，无法安全保留该特殊结构；本次未修改文件，请确认该属性");
+  }
+  const restoredBlock = patchedBlock.text.replace(new RegExp(`<!--${marker}(\\d+)-->`, "g"), (_, index) => opaque[Number(index)]);
+  // Never persist a selection probe: it may omit/mask unrelated objects.
+  const patchedXml = originalXml.slice(0, originalBlock.start) + restoredBlock + originalXml.slice(originalBlock.start + originalBlock.text.length);
+  const restoredXml = restoreFreeCadPropertyMetadata(originalXml, patchedXml, result.objectName, fields);
   const xml = reconcileFcstdPropertyCounts(restoredXml, result.objectName).xml;
   return { xml, changed: xml !== originalXml, objectName: result.objectName };
 }
@@ -266,15 +323,20 @@ export function inspectFcstdBatchTarget(xml: string) {
   // Joint containers/constraints are assembly infrastructure, never BOM roots.
   // Match serialized types, not the user-editable name "Joints". This is a
   // read-only selection probe: retain all real objects and constraints on write.
-  const selectionXml = xml.replace(/<Object\b[^>]*>/g, tag => tag.replace(
+  const selection = fcstdBomSelectionXml(xml);
+  const selectionXml = xml.replace(/<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>/g, text => " ".repeat(text.length)).replace(/<Object\b[^>]*>/g, tag => tag.replace(
     /\btype\s*=\s*(["'])Assembly::(?:JointGroup|Joint)\1/, 'type="App::Feature"',
   ));
-  const root = pnwPatchEmbeddedBomFieldsInDocumentXml(selectionXml, {});
-  const current = pnwExtractEmbeddedBomFieldsFromDocumentXml(selectionXml);
+  const root = pnwPatchEmbeddedBomFieldsInDocumentXml(selection.xml, {});
+  const snapshot = extractFcstdEmbeddedBomSnapshot(xml);
+  const current = snapshot.fields;
   if (!root || !current || !/^[A-Za-z_][\w]*$/.test(root.objectName)) throw new Error("没有明确可写的根对象，请在文件详情检查");
   const excluded = batchImportedBaseSources(xml, root.objectName); excluded.add(root.objectName);
   const withoutRootType = selectionXml.replace(/<Object\b[^>]*>/g, tag => {
     const name = /\bname\s*=\s*(["'])(.*?)\1/.exec(tag)?.[2];
+    // The document's unique native assembly is the explicit write target.
+    // Sibling Bodies remain untouched; this is not an ownership inference.
+    if (selection.nativeAssembly && /\btype\s*=\s*(["'])PartDesign::Body\1/.test(tag)) return tag.replace(/\btype\s*=\s*(["'])[\s\S]*?\1/, 'type="App::Feature"');
     if (!name || !excluded.has(name)) return tag;
     if (/\btype\s*=/.test(tag)) return tag.replace(/\btype\s*=\s*(["'])[\s\S]*?\1/, 'type="App::Feature"');
     return tag.replace(/(\/?>)$/, ' type="App::Feature"$1');
@@ -288,7 +350,7 @@ export function inspectFcstdBatchTarget(xml: string) {
     const opening = propertyOpening(block.text, key);
     if (opening) types[key] = /\btype\s*=\s*(["'])(.*?)\1/.exec(opening)?.[2] || "unknown";
   }
-  return { objectName: root.objectName, current, types };
+  return { objectName: root.objectName, typeId: snapshot.typeId, current, types };
 }
 
 export function writeFcstdEmbeddedBomFields(

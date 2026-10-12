@@ -7,6 +7,7 @@ import { shellRoutes } from "./routes/shell.js";
 import { documentSyncRoutes } from "./features/document-sync/routes.js";
 import { drawingResearchRoutes } from "./features/drawing-research/routes.js";
 import { renameTaskRoutes } from "./features/batch-rename/routes.js";
+import { workspaceRecoveryRoutes } from "./features/workspace-recovery/routes.js";
 import { isAllowedPhoenixUiOrigin } from "./lib/localApiOrigin.js";
 
 export function createPhoenixServerApp(): Hono {
@@ -32,6 +33,7 @@ export function createPhoenixServerApp(): Hono {
   app.route("/api/document-sync", documentSyncRoutes);
   app.route("/api/rename-tasks", renameTaskRoutes);
   app.route("/api/drawing-research", drawingResearchRoutes);
+  app.route("/api/workspace-recovery", workspaceRecoveryRoutes);
   app.route("/", shellRoutes);
 
   app.all("/api/*", (c) => c.json({

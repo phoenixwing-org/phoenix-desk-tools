@@ -106,3 +106,14 @@ export function pdtWithWorkbenchLayoutState(
     layoutState,
   }, display);
 }
+
+/** Explicit error/output reveal overrides a hidden Bottom without resetting other blocks. */
+export function pdtRevealWorkbenchBottom(
+  display: PnwWorkbenchDisplayPreferences,
+): PnwWorkbenchDisplayPreferences {
+  if (display.layoutState.visibility.bottom) return display;
+  return pdtWithWorkbenchLayoutState(display, {
+    ...display.layoutState,
+    visibility: { ...display.layoutState.visibility, bottom: true },
+  });
+}

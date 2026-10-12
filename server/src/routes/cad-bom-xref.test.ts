@@ -63,8 +63,9 @@ function createBomXrefFixture(workspace: string) {
       value TEXT NOT NULL
     );
 
-    CREATE TABLE phoenix_cad_scan (id INTEGER PRIMARY KEY);
-    INSERT INTO phoenix_cad_scan(id) VALUES (1);
+    CREATE TABLE phoenix_cad_scan (id INTEGER PRIMARY KEY, scan_uuid TEXT, scanned_at TEXT, scan_root TEXT,
+      stats_json TEXT, status TEXT, phase TEXT, started_at TEXT, finished_at TEXT);
+    INSERT INTO phoenix_cad_scan(id,status) VALUES (1,'done');
 
     CREATE TABLE phoenix_cad_file_asset (
       id INTEGER PRIMARY KEY,

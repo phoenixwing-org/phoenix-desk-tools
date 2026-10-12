@@ -50,9 +50,27 @@ export type BomApplyPrefs = {
   };
 };
 
-export type BomXrefCounts = {
+/** Read-side status is not a BOM delivery authorization; export must recheck a complete snapshot. */
+export type CadIndexReadState = {
+  index_state?: "ready" | "missing" | "incomplete" | "stale";
+  index_pending?: boolean;
+  index_stale?: boolean;
+  index_reason?: string;
+  bom_index_state?: "ready" | "missing" | "incomplete" | "stale";
+  bom_index_pending?: boolean;
+  bom_index_stale?: boolean;
+  scan_id?: number | null;
+  /** A file-scoped check does not certify the whole workspace for BOM delivery. */
+  freshness_scope?: "file" | "workspace";
+};
+
+export type BomXrefCounts = CadIndexReadState & {
+  /** Serialized reference edge count, not target-file or recursive BOM quantity. */
   outgoing_count: number;
   direct_incoming_count: number;
+  outgoing?: number;
+  incoming?: number;
+  flat_lines?: number;
 };
 
 export type BomPreview = {
@@ -74,7 +92,7 @@ export type BomPreview = {
   bom_readonly?: boolean;
   bom_source_rel?: string | null;
   bom_readonly_reason?: string | null;
-  /** 打开文件时附带：出向 + 直接入向计数（单条 SQL） */
+  /** 打开文件时附带：出向引用条数 + 直接入向宿主数及索引状态。 */
   xref_counts?: BomXrefCounts;
   /** 引用表尚未构建（不会在打开文件时自动全量重建） */
   xref_index_pending?: boolean;
@@ -151,8 +169,10 @@ export type CadIndexDiagnostics = {
   expectedSchemaVersion: number;
   totalEntries: number;
   missingEntries: number;
+  failedEntries?: number;
+  failures?: Array<{ rel: string; message: string }>;
   lastScanAt: string;
-  latestScan: { status: string; root: string; at: string } | null;
+  latestScan: { id?: number; status: string; root: string; at: string } | null;
 };
 
 export type BatchBomField = "PartNumber" | "PartVersion" | "TypeCode" | "ModelSeries" | "PartName";
@@ -191,7 +211,8 @@ export function fetchCadIndexDiagnostics(workspace: string): Promise<CadIndexDia
 export type CadIndexScanJob = {
   id: string; workspace: string; state: "running" | "done" | "failed" | "cancelled";
   phase: string; scanned: number; message: string;
-  result?: { scanId: number; files: number; parsedFiles: number; references: number; bomLines: number };
+  result?: { scanId: number; files: number; parsedFiles: number; references: number; bomLines: number;
+    partial?: boolean; failed_count?: number; failures?: Array<{ rel: string; message: string }> };
 };
 export function startCadIndexScan(workspace: string) {
   return jsonFetch<CadIndexScanJob>(`/api/cad/index/scan/start?workspace=${encodeURIComponent(workspace)}`, {
@@ -515,8 +536,9 @@ export function fetchBomPrefs() {
   return jsonFetch<BomApplyPrefs>("/api/cad/bom/prefs");
 }
 
-export function fetchBom(rel: string) {
-  return jsonFetch<BomPreview>(`/api/cad/bom/file?rel=${encodeURIComponent(rel)}`);
+export function fetchBom(rel: string, workspacePath?: string) {
+  const workspace = workspacePath ? `&workspace=${encodeURIComponent(workspacePath)}` : "";
+  return jsonFetch<BomPreview>(`/api/cad/bom/file?rel=${encodeURIComponent(rel)}${workspace}`);
 }
 
 export function saveBom(rel: string, fields: Partial<BomFields>) {
@@ -540,13 +562,14 @@ export function recommendBomField(
   fields: Partial<BomFields>,
   kindFilters: BomKindFilters,
   name_source: import("./utils/bomNameSource").BomNameSource = "label",
+  explicitNameSource = false,
 ) {
   return jsonFetch<BomFieldRecommendResult>(
     `/api/cad/bom/recommend-field?rel=${encodeURIComponent(rel)}&field=${encodeURIComponent(field)}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...bomBody(fields), kind_filters: kindFilters, name_source }),
+      body: JSON.stringify({ ...bomBody(fields), kind_filters: kindFilters, name_source, explicit_name_source: explicitNameSource }),
     },
   );
 }
@@ -978,7 +1001,7 @@ export function fetchBomXrefOutgoing(rel: string, limit?: number, refreshDisk = 
 }
 
 /** 文件详情「引用」Tab：入向 + 出向一次返回（懒加载） */
-export type FileDetailXrefsPayload = {
+export type FileDetailXrefsPayload = CadIndexReadState & {
   rel: string;
   index_pending?: boolean;
   incoming: {

@@ -6,7 +6,7 @@ Owner：Desk Tools maintainers
 
 适用版本：Desk Tools 0.5.x / Wing 0.8.0
 
-最后核验：2026-10-07
+最后核验：2026-10-11
 
 ## 目标
 
@@ -19,6 +19,8 @@ phoenix/
 ```
 
 根目录 `pnpm dev` 固定使用 Registry Wing。`pnpm wing` 是本地联调入口：先严格验证并构建 `../phoenix-wing`，再同时启动 Node Server 与 Vite Web；同级仓库不存在或结构不完整时直接停止。不会自动退回 npm 包，因为静默回退会让开发者误以为刚修改的 Wing 已经生效。
+
+`pnpm wing` 消费本地仓库当前检出的代码，不负责 Git fetch、切换分支或 pull。更新 Wing 后应停止旧服务再执行此命令。如果发现已有 API 正在运行，本地入口会提示先停止它，不会静默复用可能仍加载旧代码的进程，也不会自动关闭现有服务。
 
 ## 命令
 
@@ -103,3 +105,16 @@ Node 22.23.1、pnpm 9.15.9 下完成以下点检：
 - `pnpm wing:check-local` 与模式解析回归通过。本轮未重建或改写并列 Wing；本地完整构建与 Windows、Tauri 发行制品、真实 FreeCAD 写入验收不在本次 Registry 适配范围内。
 
 保留的非阻断警告：发布包部分 sourcemap 源文件缺失、既有 Vitest UI peer 版本提示，以及构建时 VueUse PURE 注释和大 chunk 提示。未通过修改 `node_modules` 或扩大依赖升级范围掩盖这些提示。
+
+## 2026-10-11 本地 fix 消费适配
+
+并列 Wing 检出 `fix`，对应远端 `gitee/fix` 的 `933dfab800ce58c89b7cdc3ed63d3674941e2d2b`。该提交的 manifest 仍为 0.8.0，候选说明标记为 0.8.1；它不是一次 Registry 发布。Desk 的依赖清单、锁文件和安装目录均未切换成本地依赖。
+
+- Workspace 适配器区分准备阶段与实际变更阶段：准备失败不重新载入当前工作空间，避免干扰草稿；后台已经切换但响应失败时仍恢复原空间。取消后使用有效恢复信号，并核对恢复身份。
+- API 仍由 Desk 单例适配器负责关闭与恢复，不把 Wing 的 `host.close(previous)` 直接映射为关闭当前后台空间。
+- `pnpm test:local-wing`：双端 typecheck 通过，Server 80 文件 / 495 项、CAA Core 11 / 67、Web 111 / 770，共 1,332 项通过。工作空间适配器 8 项在 Registry 0.8.0 对照下亦通过，Registry Web typecheck 通过。
+- `pnpm build:local-wing` 的 Web 与 Server bundle 通过；`pnpm verify:wing-dependencies` 确认 7 处依赖仍为精确 Registry 版本。
+- 隔离临时配置和服务登记启动 `pnpm wing`，确认 Server、Web 分别输出 `[Wing][LOCAL][server]`、`[Wing][LOCAL][web]`。启动发现逻辑新增已运行 API 拒绝复用回归；不自动停止任何已有后台。
+- 使用独立构造的临时样本，浏览器验证详情缩略图与控制项、改名弹窗尺寸、Esc 关闭与焦点返回，以及工作空间取消关闭/确认关闭；控制台未发现警告或错误。未执行改名或属性写入。
+
+本轮不发布、不升级正式版本、不推进 Auto CAD 退役实施，也不写入个人 CAD 工程。

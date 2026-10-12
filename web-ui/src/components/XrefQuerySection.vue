@@ -112,7 +112,7 @@ async function onSearch() {
         text:
           resultCount.value > 0
             ? text
-            : `${text}。若预期应有引用，请确认 KT Auto CAD 索引与引用表已构建。`,
+            : `${text}。若预期应有引用，请在「CAD 索引」检查索引与扫描状态。`,
       };
       logIncoming(text);
       setStatus(text);

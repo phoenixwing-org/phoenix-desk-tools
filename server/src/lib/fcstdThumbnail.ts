@@ -13,7 +13,12 @@ export function extractFcstdThumbnail(archive: Uint8Array) {
   } });
   const png = files["thumbnails/Thumbnail.png"];
   if (!png) return null;
+  return readThumbnailPng(png);
+}
+
+export function readThumbnailPng(png: Uint8Array) {
   const bytes = Buffer.from(png);
+  if (bytes.length > 4 * 1024 * 1024) throw new Error("缩略图超过 4 MiB 上限");
   if (bytes.length < 33 || !bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) || bytes.toString("ascii", 12, 16) !== "IHDR") throw new Error("内嵌缩略图不是有效 PNG");
   const width = bytes.readUInt32BE(16), height = bytes.readUInt32BE(20);
   if (!width || !height || width > 4096 || height > 4096) throw new Error("缩略图尺寸超出安全范围");

@@ -141,25 +141,35 @@ function pdtCreateRecentStore(api: PdtWorkspaceApi) {
 function pdtCreateLifecycleParticipant(
   api: PdtWorkspaceApi,
   lifecycle: PdtWorkspaceLifecycle,
+  transition: { mutated: boolean },
 ): PnwWorkspaceLifecycleParticipant {
   async function restore(context: PnwWorkspaceTransitionContext): Promise<void> {
-    if (context.kind !== "close" && !context.target) return;
-    if (pdtSameWorkspace(context.current, context.target)) return;
+    // New Wing also rolls back a participant whose prepare throws. At that point
+    // the singleton and page drafts are still intact: do not reopen/reload them.
+    if (!transition.mutated) return;
+    if (pdtSameWorkspace(context.current, context.target)) { transition.mutated = false; return; }
+    // Registry 0.8.0 may pass the cancelled request signal; recovery must still run.
+    const signal = context.signal.aborted ? new AbortController().signal : context.signal;
     if (context.current) {
-      const restored = pdtWorkspaceDescriptor(await api.setWorkspace(context.current.rootPath));
+      const restored = pdtWorkspaceDescriptor(await api.setWorkspace(context.current.rootPath, signal));
+      if (!pdtSameWorkspace(restored, context.current)) throw new Error("工作空间恢复身份不一致，请重新选择目录");
       await lifecycle.applyOpened(restored);
+      transition.mutated = false;
       return;
     }
-    await api.closeWorkspace();
+    await api.closeWorkspace(signal);
     await lifecycle.applyClosed();
+    transition.mutated = false;
   }
 
   return {
     id: "phoenix-desk-workspace",
     async prepare(context) {
+      transition.mutated = false;
       await lifecycle.prepare?.(context);
     },
     async commit(context) {
+      transition.mutated = true;
       if (context.kind === "close") {
         await api.closeWorkspace(context.signal);
         await lifecycle.applyClosed();
@@ -180,6 +190,7 @@ function pdtCreateLifecycleParticipant(
 export function pdtCreateWorkspaceController(
   options: PdtWorkspaceControllerOptions,
 ): PnwWorkspaceController {
+  const transition = { mutated: false };
   let initial = options.initialWorkspace
     ? pdtWorkspaceDescriptor(options.initialWorkspace)
     : undefined;
@@ -195,11 +206,14 @@ export function pdtCreateWorkspaceController(
           initial = undefined;
           return descriptor;
         }
+        // The server may switch before the response fails or is cancelled, so a
+        // missing target descriptor does not prove that no recovery is needed.
+        transition.mutated = true;
         return pdtWorkspaceDescriptor(await options.api.setWorkspace(request.rootPath, request.signal));
       },
       // Desk API 是进程级单例；previous/target 的关闭语义由 lifecycle participant 适配。
     },
-    participants: [pdtCreateLifecycleParticipant(options.api, options.lifecycle)],
+    participants: [pdtCreateLifecycleParticipant(options.api, options.lifecycle, transition)],
     recentStore: pdtCreateRecentStore(options.api),
     onError: options.onError,
   });

@@ -1,11 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { strToU8, zipSync } from "fflate";
 import { pnwCreateDb } from "@phoenix-wing/db-node";
 import { scanCadWorkspaceIndex, startCadIndexScan, getCadIndexScan, cancelCadIndexScan, previewCadIndexReset, resetCadIndex } from "./cadIndexScanService.js";
 import { phoenixDatabasePath } from "./phoenixDatabaseService.js";
+import { galleryOptions, startGalleryJob, galleryJob, loadGallery } from "../features/part-gallery/service.js";
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
@@ -54,6 +56,31 @@ describe("explicit shared CAD index service", () => {
     expect(readRows(root)[1][0]).toMatchObject({ part_name: "Embedded bracket", file_status: "present" });
     expect(readRows(root)[0][0]).toMatchObject({ status: "done", phase: "ts-light-index" });
   });
+  it("commits archive content and actual document-role proofs without changing Schema v13", async () => {
+    const { root, part } = fixture();
+    const drawing = path.join(root, "UnmarkedSheet.FCStd");
+    fs.writeFileSync(drawing, zipSync({ "Document.xml": strToU8(`<Document><Objects><Object name="Page" type="TechDraw::DrawPage"/></Objects><ObjectData><Object name="Page"><Properties/></Object></ObjectData></Document>`) }));
+    await scanCadWorkspaceIndex(root);
+    const db = pnwCreateDb(phoenixDatabasePath(root));
+    try {
+      expect(db.get("SELECT value FROM phoenix_meta WHERE key='schema_version'")).toEqual({ value: "13" });
+      for (const file of [part, drawing]) {
+        const row = db.get<{ bom_json: string }>("SELECT bom_json FROM phoenix_cad_file_asset WHERE filename=?", [path.basename(file)])!;
+        expect(JSON.parse(row.bom_json)).toMatchObject({ source_sha256: `sha256:${createHash("sha256").update(fs.readFileSync(file)).digest("hex")}`,
+          document_role: file === drawing ? "drawing" : "model" });
+      }
+    } finally { db.close(); }
+  });
+  it("replaces a prior content proof after a fresh complete scan", async () => {
+    const { root, part } = fixture();
+    await scanCadWorkspaceIndex(root);
+    const before = JSON.parse((readRows(root)[1][0] as { bom_json: string }).bom_json).source_sha256;
+    fs.writeFileSync(part, zipSync({ "Document.xml": strToU8("<Document/>") }));
+    await scanCadWorkspaceIndex(root);
+    const after = JSON.parse((readRows(root)[1][0] as { bom_json: string }).bom_json).source_sha256;
+    expect(after).not.toBe(before);
+    expect(after).toBe(`sha256:${createHash("sha256").update(fs.readFileSync(part)).digest("hex")}`);
+  });
   it("can update again after external property edits and rebuilds rule labels from target attributes", async () => {
     const { root, part } = fixture();
     const writeTarget = (name: string) => fs.writeFileSync(part, zipSync({ "Document.xml": strToU8(
@@ -81,10 +108,87 @@ describe("explicit shared CAD index service", () => {
   it("preserves a successful index on parse failure and cancellation", async () => {
     const { root } = fixture(); await scanCadWorkspaceIndex(root); const before = readRows(root);
     fs.writeFileSync(path.join(root, "broken.FCStd"), "not a ZIP");
-    await expect(scanCadWorkspaceIndex(root)).rejects.toThrow(/原索引保持不变/);
+    await expect(scanCadWorkspaceIndex(root, { continueOnParseError: false })).rejects.toThrow(/原索引保持不变/);
     const controller = new AbortController(); controller.abort(new Error("cancelled"));
     await expect(scanCadWorkspaceIndex(root, { signal: controller.signal })).rejects.toThrow("cancelled");
     expect(readRows(root)).toEqual(before);
+  });
+  it("builds a usable partial index from healthy files even on the first scan", async () => {
+    const { root, part } = fixture();
+    const broken = path.join(root, "Broken.FCStd");
+    fs.writeFileSync(broken, "not a ZIP");
+    const bytes = [fs.readFileSync(part), fs.readFileSync(broken)];
+    const result = await scanCadWorkspaceIndex(root);
+    expect(result).toMatchObject({ files: 2, parsedFiles: 1, partial: true, failed_count: 1 });
+    expect(result.failures).toMatchObject([{ rel: "Broken.FCStd" }]);
+    const [scans, assets] = readRows(root);
+    expect(scans[0]).toMatchObject({ status: "partial" });
+    expect(assets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ file_status: "present", part_name: "Embedded bracket" }),
+      expect.objectContaining({ file_status: "error", filename: "Broken.FCStd" }),
+    ]));
+    expect(JSON.parse((assets.find(asset => (asset as { file_status: string }).file_status === "present") as { bom_json: string }).bom_json))
+      .toMatchObject({ document_role: "model", source_sha256: expect.stringMatching(/^sha256:[a-f0-9]{64}$/) });
+    expect(JSON.parse((assets.find(asset => (asset as { file_status: string }).file_status === "error") as { bom_json: string }).bom_json))
+      .not.toHaveProperty("source_sha256");
+    expect(galleryOptions(root).indexed_files).toBe(1);
+    const job = startGalleryJob(root);
+    for (let i = 0; i < 100 && galleryJob(root, job.id).state === "running"; i++) await new Promise(resolve => setTimeout(resolve, 5));
+    // The synthetic healthy CAD intentionally has no embedded image: its card
+    // is still usable, with the ordinary missing-thumbnail attention state.
+    expect(galleryJob(root, job.id).state).toBe("attention");
+    expect(loadGallery(root).rows).toHaveLength(1);
+    expect([fs.readFileSync(part), fs.readFileSync(broken)]).toEqual(bytes);
+    fs.writeFileSync(broken, zipSync({ "Document.xml": strToU8("<Document/>") }));
+    const repaired = await scanCadWorkspaceIndex(root);
+    expect(repaired).toMatchObject({ partial: false, parsedFiles: 2, failed_count: 0, failures: [] });
+    expect(readRows(root)[0].at(-1)).toMatchObject({ status: "done" });
+    expect(galleryOptions(root).indexed_files).toBe(2);
+  });
+  it("still rejects changed failed-file snapshots and unsafe discovery instead of committing partial coverage", async () => {
+    const { root } = fixture();
+    await scanCadWorkspaceIndex(root);
+    const before = readRows(root);
+    const broken = path.join(root, "Broken.FCStd");
+    fs.writeFileSync(broken, "bad ZIP");
+    await expect(scanCadWorkspaceIndex(root, { onProgress(progress) {
+      if (progress.phase === "checking") fs.appendFileSync(broken, "changed");
+    } })).rejects.toThrow(/改变/);
+    expect(readRows(root)).toEqual(before);
+    fs.symlinkSync("missing-target", path.join(root, "Unsafe.FCStd"));
+    await expect(scanCadWorkspaceIndex(root)).rejects.toThrow(/符号链接/);
+    expect(readRows(root)).toEqual(before);
+  });
+  it("indexes drawing XSource lists as dependencies without physical BOM rows", async () => {
+    const { root, part } = fixture();
+    const drawing = path.join(root, "Sheet.Drawing.FCStd");
+    const xml = `<Document><Objects><Object name="Model" type="App::Link"/>
+      <Object name="Group" type="TechDraw::DrawProjGroup"/><Object name="Front" type="TechDraw::DrawProjGroupItem"/>
+      <Object name="Side" type="TechDraw::DrawProjGroupItem"/></Objects><ObjectData>
+      <Object name="Model"><Properties><Property name="LinkedObject" type="App::PropertyXLink"><XLink file="100.001-S-Bracket.FCStd" name="Body"/></Property></Properties></Object>
+      ${["Group", "Front", "Side"].map(name => `<Object name="${name}"><Properties><Property name="XSource" type="App::PropertyXLinkList"><XLink file="100.001-S-Bracket.FCStd" name="Body"/></Property></Properties></Object>`).join("")}
+      </ObjectData></Document>`;
+    fs.writeFileSync(drawing, zipSync({ "Document.xml": strToU8(xml) }));
+    const before = [fs.readFileSync(part), fs.readFileSync(drawing)];
+    expect(await scanCadWorkspaceIndex(root)).toMatchObject({ files: 2, references: 1, bomLines: 0 });
+    const db = pnwCreateDb(phoenixDatabasePath(root));
+    try {
+      const rows = db.all<{ detail_json: string; target_repo_rel_path: string }>("SELECT detail_json,target_repo_rel_path FROM phoenix_cad_bom_xref");
+      expect(rows).toHaveLength(1);
+      expect(rows[0].target_repo_rel_path).toBe("100.001-S-Bracket.FCStd");
+      expect(JSON.parse(rows[0].detail_json)).toMatchObject({ basic_bom: false, reference_role: "drawing_source" });
+      expect(JSON.parse(rows[0].detail_json)).not.toHaveProperty("quantity");
+      expect(db.all("SELECT * FROM phoenix_cad_bom_line")).toEqual([]);
+      expect(db.all("SELECT * FROM phoenix_cad_xref_flat")).toHaveLength(1);
+    } finally { db.close(); }
+    expect([fs.readFileSync(part), fs.readFileSync(drawing)]).toEqual(before);
+    const index = readRows(root);
+    fs.writeFileSync(path.join(root, "Array.Drawing.FCStd"), zipSync({ "Document.xml": strToU8(
+      `<Document><Objects><Object name="Page" type="TechDraw::DrawPage"/><Object name="Array" type="App::Link"/></Objects><ObjectData>
+      <Object name="Array"><Properties><Property name="LinkedObject" type="App::PropertyXLinkList"><XLink file="100.001-S-Bracket.FCStd" name="Body"/></Property></Properties></Object></ObjectData></Document>`,
+    ) }));
+    await expect(scanCadWorkspaceIndex(root, { continueOnParseError: false })).rejects.toThrow(/multi-target.*unsupported/);
+    expect(readRows(root)).toEqual(index);
   });
   it("rejects a late workspace switch or changed file snapshot", async () => {
     const { root, part } = fixture(); await scanCadWorkspaceIndex(root); const before = readRows(root);

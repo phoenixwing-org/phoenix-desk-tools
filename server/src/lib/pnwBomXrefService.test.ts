@@ -49,8 +49,9 @@ function createBomXrefFixture(workspace: string) {
       value TEXT NOT NULL
     );
 
-    CREATE TABLE phoenix_cad_scan (id INTEGER PRIMARY KEY);
-    INSERT INTO phoenix_cad_scan(id) VALUES (1);
+    CREATE TABLE phoenix_cad_scan (id INTEGER PRIMARY KEY, scan_uuid TEXT, scanned_at TEXT, scan_root TEXT,
+      stats_json TEXT, status TEXT, phase TEXT, started_at TEXT, finished_at TEXT);
+    INSERT INTO phoenix_cad_scan(id,status) VALUES (1,'done');
 
     CREATE TABLE phoenix_cad_file_asset (
       id INTEGER PRIMARY KEY,
@@ -64,8 +65,15 @@ function createBomXrefFixture(workspace: string) {
       part_name TEXT,
       label TEXT,
       file_status TEXT NOT NULL DEFAULT 'present',
+      bom_json TEXT,
       updated_at TEXT
     );
+
+    CREATE TABLE phoenix_cad_bom_line (id INTEGER PRIMARY KEY, assembly_rel TEXT, part_rel TEXT, quantity INTEGER);
+    INSERT INTO phoenix_cad_bom_line VALUES (1,'./asm/Root.ASSY.FCStd','./asm/Sub.ASSY.FCStd',1),
+      (2,'./asm/Root.ASSY.FCStd','./parts/Bolt.FCStd',1),
+      (3,'./asm/Root.ASSY.FCStd','Missing.FCStd',1),
+      (4,'./asm/Sub.ASSY.FCStd','./parts/Bolt.FCStd',1);
 
     CREATE TABLE phoenix_cad_bom_xref (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -122,6 +130,10 @@ function createBomXrefFixture(workspace: string) {
   db.run(edgeSql, [1, 1, "./asm/Root.ASSY.FCStd", "xlink_file_attr", "Document.xml", "Sub.ASSY.FCStd", "Old Sub", "100002.001-Sub Assembly", "Sub.ASSY.FCStd", 2, "./asm/Sub.ASSY.FCStd", "100002", "001", "A", "SUB", "Sub Assembly", "Sub Assembly", "resolved", JSON.stringify({ object: "SubLink" }), now]);
   db.run(edgeSql, [1, 2, "./asm/Sub.ASSY.FCStd", "xlink_file_attr", "Document.xml", "../parts/Bolt.FCStd", "Old Bolt", "100003.001-Bolt", "Bolt.FCStd", 3, "./parts/Bolt.FCStd", "100003", "001", "H", "", "Bolt", "Bolt", "resolved", JSON.stringify({ object: "BoltLink" }), now]);
   db.run(edgeSql, [1, 1, "./asm/Root.ASSY.FCStd", "xlink_file_attr", "Document.xml", "Missing.FCStd", "", "", "Missing.FCStd", null, null, "", "", "", "", "", "", "missing", null, now]);
+  for (const row of db.all<{ id: number; repo_rel_path: string }>("SELECT id,repo_rel_path FROM phoenix_cad_file_asset")) {
+    const stat = fs.statSync(path.join(workspace, row.repo_rel_path));
+    db.run("UPDATE phoenix_cad_file_asset SET bom_json=? WHERE id=?", [JSON.stringify({ size_bytes: stat.size, mtime_ms: Math.trunc(stat.mtimeMs) }), row.id]);
+  }
   db.close();
 }
 
@@ -204,6 +216,7 @@ describe("pnwBomXrefService", () => {
       UPDATE phoenix_cad_bom_xref
       SET target_repo_rel_path = substr(target_repo_rel_path, 3)
       WHERE target_repo_rel_path LIKE './%';
+      UPDATE phoenix_cad_bom_line SET assembly_rel = substr(assembly_rel,3);
     `);
     db.close();
 

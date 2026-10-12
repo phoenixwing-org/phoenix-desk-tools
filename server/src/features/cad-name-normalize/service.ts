@@ -102,7 +102,7 @@ export async function previewNames(workspace: string, body: { batch_dir?: string
       if (row.kind === "drawing") throw new Error("图纸不参与模型名称规则；请切换到图纸名称同步");
       const target = inspectFcstdBatchTarget(archive.xml);
       Object.assign(row, { object_name: target.objectName, current_name: target.current.PartName, current_label: target.current.label });
-      const proposal = proposeNameNormalization(rel, target.current, target.types, readBomBatchHints(root, rel), nameSource);
+      const proposal = proposeNameNormalization(rel, target.current, target.types, readBomBatchHints(root, rel), nameSource, target);
       Object.assign(row, { proposed_name: proposal.PartName, proposed_label: proposal.label, target_rel: proposal.targetRel, warnings: proposal.warnings,
         attributes_changed: target.current.PartName !== proposal.PartName || target.current.label !== proposal.label,
         rename_changed: rel !== proposal.targetRel });

@@ -9,7 +9,7 @@ describe("file detail default tab", () => {
     }
   });
   it("preserves explicit destinations and restored session tabs", () => {
-    for (const tab of ["overview", "edit", "xref", "assembly"] as const) {
+    for (const tab of ["overview", "edit", "xref", "assembly", "drawing", "objects"] as const) {
       expect(normalizeFileDetailSubTab(tab)).toBe(tab);
     }
   });

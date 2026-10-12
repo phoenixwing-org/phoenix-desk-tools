@@ -44,6 +44,61 @@ afterEach(() => {
 });
 
 describe("bomAttributeService", () => {
+  it.each(["missing", "explicitly empty"])("uses the plain filename when the real root Label is %s, not stale index or internal name hints", labelState => {
+    const root = makeTempRoot(); const rel = "测试盖板.FCStd"; const filename = path.join(root, rel);
+    const label = labelState === "missing" ? "" : '<Property name="Label" type="App::PropertyString"><String value=""/></Property>';
+    // Independently generated metadata-only Body; no BOM fields or model geometry.
+    const xml = `<Document><Objects><Object name="Body" type="PartDesign::Body"/></Objects><ObjectData><Object name="Body"><Properties Count="${labelState === "missing" ? 0 : 1}">${label}</Properties></Object></ObjectData></Document>`;
+    fs.writeFileSync(filename, zipSync({ "Document.xml": strToU8(xml) }));
+    const db = pnwCreateDb(ensurePhoenixDatabase(root));
+    try {
+      db.run("INSERT INTO phoenix_cad_file_asset(repo_rel_path,filename,part_name,label,updated_at) VALUES (?,?,?,?,?)",
+        [rel, rel, "Synthetic stale name", "Synthetic stale label", "before"]);
+    } finally { db.close(); }
+    const before = fs.readFileSync(filename);
+    const preview = loadBomPreview(root, rel);
+    expect(preview.fields).toMatchObject({ PartName: "", label: "" });
+    for (const values of [{}, preview.fields]) {
+      expect(recommendBomField(root, rel, "PartName", values)).toMatchObject({ value: "测试盖板", source_note: "标签为空，从文件名补全", filled: true });
+      const all = recommendBomFieldsAll(root, rel, values);
+      expect(all.results.PartName).toMatchObject({ value: "测试盖板", source_note: "标签为空，从文件名补全", filled: true });
+      expect(all.filled_keys).toContain("PartName");
+    }
+    expect(fs.readFileSync(filename)).toEqual(before);
+  });
+  it.each(["Body", "Body001"])("keeps the saved Label %s visible but recommends from the filename for a default Body", objectName => {
+    const root = makeTempRoot(); const rel = "测试盖板.FCStd"; const filename = path.join(root, rel);
+    fs.writeFileSync(filename, zipSync({ "Document.xml": strToU8(`<Document><Objects><Object name="${objectName}" type="PartDesign::Body"/></Objects><ObjectData><Object name="${objectName}"><Properties Count="1"><Property name="Label" type="App::PropertyString"><String value="${objectName}"/></Property></Properties></Object></ObjectData></Document>`) }));
+    const before = fs.readFileSync(filename); const preview = loadBomPreview(root, rel);
+    expect(preview.fields).toMatchObject({ PartName: "", label: objectName });
+    expect(recommendBomField(root, rel, "PartName", preview.fields)).toMatchObject({ value: "测试盖板", source_note: "默认节点标签，从文件名补全" });
+    expect(recommendBomFieldsAll(root, rel, preview.fields).results.PartName.value).toBe("测试盖板");
+    expect(recommendBomField(root, rel, "PartName", { ...preview.fields, name_source: "filename" }).value).toBe("测试盖板");
+    expect(() => recommendBomField(root, rel, "PartName", { ...preview.fields, name_source: "label", explicit_name_source: true })).toThrow(/默认 Body/);
+    expect(fs.readFileSync(filename)).toEqual(before);
+  });
+  it("uses each explicit PartName source independently of the property and unsaved label, without writes", () => {
+    const root = makeTempRoot(); const rel = "720421.003-H-DEMO-PLATE.FCStd"; const filename = path.join(root, rel);
+    const xml = '<Document><Objects><Object name="Body" type="PartDesign::Body"/></Objects><ObjectData><Object name="Body"><Properties><Property name="PartName" type="App::PropertyString"><String value="已有属性名称"/></Property><Property name="Label" type="App::PropertyString"><String value="720421.003-节点面板"/></Property></Properties></Object></ObjectData></Document>';
+    fs.writeFileSync(filename, zipSync({ "Document.xml": strToU8(xml) }));
+    const before = fs.readFileSync(filename); const preview = loadBomPreview(root, rel);
+    const values = { ...preview.fields, label: "尚未保存的标签", explicit_name_source: true };
+    expect(recommendBomField(root, rel, "PartName", { ...values, name_source: "filename" })).toMatchObject({ value: "PLATE", source_note: "文件名", filled: true });
+    expect(recommendBomField(root, rel, "PartName", { ...values, name_source: "label" })).toMatchObject({ value: "节点面板", source_note: "标签名", filled: true });
+    expect(recommendBomField(root, rel, "PartName", { ...preview.fields, name_source: "filename" }).value).toBe("已有属性名称");
+    expect(() => recommendBomField(root, rel, "label", values)).toThrow(/仅用于零件名称/);
+    expect(() => recommendBomField(root, rel, "PartName", { explicit_name_source: "true" })).toThrow(/布尔值/);
+    expect(fs.readFileSync(filename)).toEqual(before);
+    expect(loadBomPreview(root, rel).fields).toEqual(preview.fields);
+  });
+  it.each(["label", "filename"])("keeps an existing valid PartName before %s fallback despite a missing root Label", name_source => {
+    const root = makeTempRoot(); const rel = "测试盖板.FCStd"; const filename = path.join(root, rel);
+    fs.writeFileSync(filename, zipSync({ "Document.xml": strToU8('<Document><Objects><Object name="Body" type="PartDesign::Body"/></Objects><ObjectData><Object name="Body"><Properties Count="1"><Property name="PartName" type="App::PropertyString"><String value="独立属性名称"/></Property></Properties></Object></ObjectData></Document>') }));
+    const before = fs.readFileSync(filename); const values = { ...loadBomPreview(root, rel).fields, name_source };
+    expect(recommendBomField(root, rel, "PartName", values)).toMatchObject({ value: "独立属性名称", source_note: "属性 PartName" });
+    expect(recommendBomFieldsAll(root, rel, values).results.PartName.value).toBe("独立属性名称");
+    expect(fs.readFileSync(filename)).toEqual(before);
+  });
   it("preserves explicitly cleared properties after save/reload despite filename, alias, memory and index hints", async () => {
     const root = makeTempRoot(); const rel = "720421.003-H-DEMO-PLATE.FCStd";
     const props = { PartNumber: "720421", PartVersion: "003", TypeCode: "H", ModelSeries: "DEMO", PartName: "测试面板", Label: "测试标签" };
@@ -72,6 +127,8 @@ describe("bomAttributeService", () => {
     expect(loadBomPreview(root, source).bom_readonly).toBe(false);
     expect(readBomDocumentKinds(root, rel).document_kinds.drawing).toBe(true);
     expect(() => recommendBomField(root, rel, "PartName", {})).toThrow(/独立图纸/);
+    expect(() => recommendBomField(root, rel, "filename", { explicit_name_source: true })).toThrow(/仅用于零件名称/);
+    expect(() => recommendBomField(root, rel, "filename", { explicit_name_source: "true" })).toThrow(/布尔值/);
     expect(() => recommendBomFieldsAll(root, rel)).toThrow(/独立图纸/);
     await expect(writeBomToFcstd(root, rel, { PartName: "不能写入图纸" })).rejects.toThrow(/独立图纸/);
     const target = "720422.003-H-DEMO-Frame.Drawing.FCStd";

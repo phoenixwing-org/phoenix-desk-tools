@@ -32,7 +32,7 @@ describe("tools Ribbon presentation", () => {
     },
   );
 
-  it.each(["cad_index", "part_catalog", "file_detail", "part_key_detail"])(
+  it.each(["cad_index", "part_catalog", "bom_delivery", "file_detail", "part_key_detail"])(
     "keeps existing CAD page %s in tools", (page) => {
       expect(setup(page, ["cad"]).activeTab.value).toBe("cad");
     },

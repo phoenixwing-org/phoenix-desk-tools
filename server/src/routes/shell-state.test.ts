@@ -79,16 +79,24 @@ describe("shell state routes", () => {
       total: 2,
     });
 
-    const recreated = await shellRoutes.request("/api/phoenix/database/recreate", { method: "POST" });
-    expect(recreated.status).toBe(200);
-    await expect(recreated.json()).resolves.toMatchObject({
-      status: "recreated",
-      removed_files: ["phoenix-workspace.sqlite"],
-      schema_version: 13,
+    const database = path.join(workspace, ".phoenix", "phoenix-workspace.sqlite");
+    const originalDatabase = fs.readFileSync(database);
+    const outbox = path.join(workspace, ".phoenix", "outbox");
+    fs.mkdirSync(outbox);
+    fs.writeFileSync(path.join(outbox, "opaque-receipt.bin"), Buffer.from([0, 255, 42]));
+    const recreated = await shellRoutes.request("/api/phoenix/database/recreate", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ confirmed: true, backup_verified: true, proof: "untrusted-client-proof" }),
     });
+    expect(recreated.status).toBe(409);
+    await expect(recreated.json()).resolves.toMatchObject({
+      code: "PHOENIX_DATABASE_RECREATE_DISABLED",
+      detail: expect.stringContaining("原位重建已禁用"),
+    });
+    expect(fs.readFileSync(database)).toEqual(originalDatabase);
+    expect(fs.readFileSync(path.join(outbox, "opaque-receipt.bin"))).toEqual(Buffer.from([0, 255, 42]));
     await expect((await shellRoutes.request("/api/workbench/session")).json()).resolves.toMatchObject({
-      session: null,
-      updated_at: null,
+      session: { active_tab_id: "tab-1" },
     });
 
     vi.useFakeTimers();

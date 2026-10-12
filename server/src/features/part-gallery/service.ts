@@ -2,12 +2,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { setImmediate as yieldToHost } from "node:timers/promises";
-import { extractFcstdThumbnail } from "../../lib/fcstdThumbnail.js";
-import { pnwExtractEmbeddedBomFieldsFromDocumentXml, pnwExtractXlinksFromDocumentXml, pnwInferBomFieldsFromFilename, pnwInferBomDocumentKinds } from "@phoenix-wing/cad-core";
+import { extractFcstdThumbnail, readThumbnailPng } from "../../lib/fcstdThumbnail.js";
+import { pnwExtractXlinksFromDocumentXml, pnwInferBomFieldsFromFilename, pnwInferBomDocumentKinds } from "@phoenix-wing/cad-core";
+import { extractFcstdEmbeddedBomSnapshot } from "../../lib/fcstdDocumentXmlService.js";
 import type { PnwDbAdapter } from "@phoenix-wing/db-node";
 import { fcstdFingerprint, fcstdWorkspace, readFcstdBatchArchive, safeFcstdPath } from "../../lib/fcstdBatchFiles.js";
+import { cadPathExcludedFromDiscovery } from "../../lib/cadIndexScanScope.js";
 import { cachedRow, decodeRow, fileStamp, imagePath, indexFiles, openGalleryDb, relativeFile, reusableImageBytes, safeDirectory, saveRow, tableExists } from "./storage.js";
 import type { GalleryIssue, GalleryJob, GalleryResult, GalleryRow } from "./types.js";
+import { withGeometry } from "./geometryStorage.js";
 
 const jobs = new Map<string, { root: string; data: GalleryJob }>();
 const clean = (root: string, error: unknown) => (error instanceof Error ? error.message : String(error)).split(root).join("[工作空间]");
@@ -22,7 +25,7 @@ function inspect(root: string, rel: string, db: PnwDbAdapter): { row: GalleryRow
     if (old.status !== "ready" || (() => { try { reusableImageBytes(root, db, old); return true; } catch { return false; } })()) return { row: old, reused: true };
   }
   const archive = readFcstdBatchArchive(filename);
-  const inferred = pnwInferBomFieldsFromFilename(rel), fields = pnwExtractEmbeddedBomFieldsFromDocumentXml(archive.xml);
+  const inferred = pnwInferBomFieldsFromFilename(rel), fields = extractFcstdEmbeddedBomSnapshot(archive.xml).fields;
   const kinds = pnwInferBomDocumentKinds(rel);
   const row: GalleryRow = { rel, part_number: fields?.PartNumber || inferred.PartNumber,
     part_version: fields?.PartVersion || inferred.PartVersion, part_name: fields?.PartName || inferred.PartName || path.basename(rel),
@@ -42,6 +45,26 @@ function inspect(root: string, rel: string, db: PnwDbAdapter): { row: GalleryRow
   saveRow(db, row); return { row, reused: false };
 }
 
+/** Publish an explicitly rendered PNG into the same cache used by details and the gallery. */
+export function cacheRenderedThumbnail(workspace: string, rel: string, png: Uint8Array, expectedHash: string, embedded = false) {
+  const root = fcstdWorkspace(workspace), key = relativeFile(rel), filename = sourcePath(root, key);
+  const thumbnail = readThumbnailPng(png), archive = readFcstdBatchArchive(filename);
+  if (fcstdFingerprint(archive.bytes) !== expectedHash) throw new Error("源文件已变化，请重新生成");
+  const db = openGalleryDb(root, true)!;
+  try {
+    const { row } = inspect(root, key, db);
+    const hash = fcstdFingerprint(thumbnail.bytes), dir = safeDirectory(root, ".phoenix/thumbnail-cache", true);
+    const destination = path.join(dir, `${hash}.png`);
+    if (!fs.existsSync(destination)) fs.writeFileSync(destination, thumbnail.bytes, { flag: "wx" });
+    else if (fcstdFingerprint(fs.readFileSync(imagePath(root, hash))) !== hash) throw new Error("图片缓存校验失败");
+    if (fcstdFingerprint(readFcstdBatchArchive(filename).bytes) !== expectedHash) throw new Error("源文件已变化，请重新生成");
+    saveRow(db, { ...row, status: "ready", width: thumbnail.width, height: thumbnail.height, image_hash: hash,
+      source_stamp: fileStamp(filename), source_hash: expectedHash, updated_at: new Date().toISOString(),
+      message: embedded ? "单件重新渲染缩略图（已写入 FCStd）" : "单件重新渲染缩略图（未修改 FCStd）" });
+    return thumbnail;
+  } finally { db.close(); }
+}
+
 export function galleryOptions(workspace: string) {
   const root = fcstdWorkspace(workspace), files = indexFiles(root);
   return { products: files.filter(rel => /\.assy\.fcstd$/i.test(rel)).sort(), indexed_files: files.length };
@@ -50,15 +73,17 @@ export function loadGallery(workspace: string, product = ""): GalleryResult {
   const root = fcstdWorkspace(workspace), key = productKey(product), db = openGalleryDb(root);
   const empty: GalleryResult = { product: key, updated_at: "", rows: [], issues: [] };
   try {
-    if (!db || !tableExists(db, "desk_cad_gallery_scope")) return empty;
+    if (cadPathExcludedFromDiscovery(key) || !db || !tableExists(db, "desk_cad_gallery_scope")) return empty;
     const scope = db.get<{ updated_at: string; issues_json: string }>("SELECT * FROM desk_cad_gallery_scope WHERE product=?", [key]);
     if (!scope) return empty;
-    const rows = db.all("SELECT t.* FROM desk_cad_gallery_member m JOIN desk_cad_thumbnail t ON t.rel=m.rel WHERE m.product=? ORDER BY t.rel", [key]).map(decodeRow);
+    const rows = db.all("SELECT t.* FROM desk_cad_gallery_member m JOIN desk_cad_thumbnail t ON t.rel=m.rel WHERE m.product=? ORDER BY t.rel", [key])
+      .filter(row => typeof row.rel === "string" && !cadPathExcludedFromDiscovery(row.rel)).map(decodeRow);
     for (const row of rows) {
       try { if (row.source_stamp && fileStamp(sourcePath(root, row.rel)) !== row.source_stamp) { row.status = "stale"; row.message = "源文件已变化，请更新图册"; } }
       catch { row.status = "error"; row.message = "源文件缺失或不可访问"; }
     }
-    return { product: key, updated_at: scope.updated_at, rows, issues: JSON.parse(scope.issues_json) };
+    const issues: GalleryIssue[] = JSON.parse(scope.issues_json);
+    return { product: key, updated_at: scope.updated_at, rows: rows.map(row => withGeometry(root, db, row)), issues: issues.filter(issue => !cadPathExcludedFromDiscovery(issue.rel)) };
   } finally { db?.close(); }
 }
 export function thumbnailBytes(workspace: string, rel: string): Buffer {
@@ -71,7 +96,9 @@ export function thumbnailBytes(workspace: string, rel: string): Buffer {
   } finally { db?.close(); }
 }
 export function startGalleryJob(workspace: string, product = "") {
-  const root = fcstdWorkspace(workspace), key = productKey(product);
+  const root = fcstdWorkspace(workspace);
+  if (cadPathExcludedFromDiscovery(product)) throw new Error("默认图册范围不包含隐藏目录、node_modules 或 __pycache__ 中的文件");
+  const key = productKey(product);
   if (key) sourcePath(root, key);
   const seeds = key ? [key] : indexFiles(root);
   if (!seeds.length) throw new Error("CAD 索引中没有 FCStd 文件，请先更新 CAD 索引或指定产品总成");
@@ -98,7 +125,10 @@ export function startGalleryJob(workspace: string, product = "") {
           const targets: string[] = [];
           for (const file of row.refs) {
             try {
-              const target = relativeFile(path.relative(root, path.resolve(path.dirname(sourcePath(root, rel)), file.replace(/\\/g, "/"))).replace(/\\/g, "/"));
+              const resolved = path.relative(root, path.resolve(path.dirname(sourcePath(root, rel)), file.replace(/\\/g, "/"))).replace(/\\/g, "/");
+              // Excluded directories are outside discovery, not missing dependencies.
+              if (cadPathExcludedFromDiscovery(resolved)) continue;
+              const target = relativeFile(resolved);
               sourcePath(root, target); targets.push(target);
               if (key && !queued.has(target)) {
                 if (queue.length >= 5000) throw new Error("引用范围超过 5000 个文件");

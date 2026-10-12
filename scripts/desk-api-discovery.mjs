@@ -64,5 +64,13 @@ export async function probeDeskApi(registration, fetchImpl = globalThis.fetch) {
 }
 
 export async function discoverDeskApi(env = process.env, fetchImpl = globalThis.fetch) {
-  return probeDeskApi(readDeskApiRegistration(env), fetchImpl);
+  const api = await probeDeskApi(readDeskApiRegistration(env), fetchImpl);
+  // A live process may still contain the previous checkout's modules, even when
+  // it was originally started in local mode. Never mix it with freshly built UI.
+  if (api && env.PHOENIX_WING_MODE === "local") {
+    throw new Error(
+      `pnpm wing 需要重新启动本地 Wing Server；检测到已运行的 Desk API ${api.origin}。请先停止该服务，再执行 pnpm wing；不会复用无法确认最新真源的后台，也不会自动关闭现有服务。`,
+    );
+  }
+  return api;
 }

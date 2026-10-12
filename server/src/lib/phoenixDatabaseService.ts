@@ -208,28 +208,11 @@ export function getPhoenixDatabaseStatus(workspace: string): PhoenixDatabaseStat
   };
 }
 
-function removeDatabaseFamily(filename: string): boolean {
-  const existed = fs.existsSync(filename);
-  for (const suffix of ["", "-wal", "-shm"]) {
-    const target = `${filename}${suffix}`;
-    if (fs.existsSync(target)) fs.unlinkSync(target);
-  }
-  return existed;
-}
+export const PHOENIX_DATABASE_RECREATE_DISABLED = "PHOENIX_DATABASE_RECREATE_DISABLED";
 
-export function recreatePhoenixDatabase(workspace: string) {
-  const resolved = assertWorkspace(workspace);
-  const databasePath = phoenixDatabasePath(resolved);
-  const removedFiles: string[] = [];
-  for (const filename of [...legacyPaths(resolved), databasePath]) {
-    if (removeDatabaseFamily(filename)) removedFiles.push(path.basename(filename));
-  }
-  ensurePhoenixDatabase(resolved);
-  return {
-    status: "recreated",
-    removed_files: removedFiles,
-    database_path: databasePath,
-    schema_version: PHOENIX_SCHEMA_VERSION,
-    recreated_at: new Date().toISOString(),
-  };
+/** Kept as a refusing compatibility entry point; client confirmation is not recovery proof. */
+export function recreatePhoenixDatabase(_workspace: string): never {
+  throw Object.assign(new Error(
+    "原位重建已禁用：请先备份数据库与 outbox，并在新目录恢复验证。原数据保持不变；备份包不授予覆盖或删除权限。",
+  ), { code: PHOENIX_DATABASE_RECREATE_DISABLED });
 }

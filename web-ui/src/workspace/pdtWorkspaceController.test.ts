@@ -109,7 +109,7 @@ describe("Desk Workspace controller adapter", () => {
     expect(host.active()).toBe("/work/a");
     expect(controller.getSnapshot().current?.rootPath).toBe("/work/a");
     expect(host.mock.setWorkspace).toHaveBeenNthCalledWith(1, "/work/b", expect.any(AbortSignal));
-    expect(host.mock.setWorkspace).toHaveBeenNthCalledWith(2, "/work/a");
+    expect(host.mock.setWorkspace).toHaveBeenNthCalledWith(2, "/work/a", expect.any(AbortSignal));
     expect(applied).toEqual(["/work/a", "/work/b", "/work/a"]);
   });
 
@@ -129,5 +129,77 @@ describe("Desk Workspace controller adapter", () => {
     await controller.removeRecent(entry!.workspaceId);
     expect(host.mock.removeRecentWorkspace).toHaveBeenCalledWith("/work/a");
     expect(controller.getSnapshot().recent).toEqual([]);
+  });
+
+  it("does not reopen or rehydrate the current workspace when close preparation fails", async () => {
+    const host = api(), opened = vi.fn(async () => {}), closed = vi.fn(async () => {});
+    const controller = pdtCreateWorkspaceController({
+      api: host.mock, initialWorkspace: { path: "/work/a", name: "a" },
+      lifecycle: {
+        prepare(context) { if (context.kind === "close") throw new Error("session save failed"); },
+        applyOpened: opened, applyClosed: closed,
+      },
+    });
+    await controller.initialize(); await controller.requestOpen({ rootPath: "/work/a" });
+    opened.mockClear();
+    await expect(controller.requestClose()).resolves.toMatchObject({ status: "rejected" });
+    expect(host.mock.setWorkspace).not.toHaveBeenCalled();
+    expect(host.mock.closeWorkspace).not.toHaveBeenCalled();
+    expect(opened).not.toHaveBeenCalled(); expect(closed).not.toHaveBeenCalled();
+    expect(controller.getSnapshot().current?.rootPath).toBe("/work/a");
+  });
+
+  it("restores the singleton even when opening mutates it but returns no target", async () => {
+    const host = api(), set = host.mock.setWorkspace, opened = vi.fn(async () => {});
+    const performSet = vi.mocked(set).getMockImplementation()!;
+    vi.mocked(host.mock.setWorkspace).mockImplementationOnce(async (path, signal) => {
+      // A transport failure can happen after the server has changed its current workspace.
+      await performSet(path, signal);
+      throw new Error("response interrupted");
+    });
+    const controller = pdtCreateWorkspaceController({
+      api: host.mock, initialWorkspace: { path: "/work/a", name: "a" },
+      lifecycle: { applyOpened: opened, async applyClosed() {} },
+    });
+    await controller.initialize(); await controller.requestOpen({ rootPath: "/work/a" });
+    opened.mockClear();
+    await expect(controller.requestSwitch({ rootPath: "/work/b" })).resolves.toMatchObject({ status: "rejected" });
+    expect(set).toHaveBeenNthCalledWith(2, "/work/a", expect.any(AbortSignal));
+    expect(opened).toHaveBeenCalledWith(expect.objectContaining({ rootPath: "/work/a" }));
+    expect(host.active()).toBe("/work/a");
+  });
+
+  it("uses a live recovery signal after close is cancelled following a server mutation", async () => {
+    const host = api(), performClose = vi.mocked(host.mock.closeWorkspace).getMockImplementation()!;
+    const abort = new AbortController(), opened = vi.fn(async () => {});
+    vi.mocked(host.mock.closeWorkspace).mockImplementationOnce(async signal => {
+      await performClose(signal); abort.abort(); throw new Error("close response cancelled");
+    });
+    const controller = pdtCreateWorkspaceController({
+      api: host.mock, initialWorkspace: { path: "/work/a", name: "a" },
+      lifecycle: { applyOpened: opened, async applyClosed() {} },
+    });
+    await controller.initialize(); await controller.requestOpen({ rootPath: "/work/a" });
+    opened.mockClear();
+    await expect(controller.requestClose({ signal: abort.signal })).resolves.toMatchObject({ status: "cancelled" });
+    const recoverySignal = vi.mocked(host.mock.setWorkspace).mock.calls[0][1];
+    expect(recoverySignal).toBeInstanceOf(AbortSignal); expect(recoverySignal?.aborted).toBe(false);
+    expect(host.active()).toBe("/work/a"); expect(opened).toHaveBeenCalledOnce();
+  });
+
+  it("reports a recovery identity mismatch instead of applying another workspace", async () => {
+    const host = api(), opened = vi.fn(async () => {}), onError = vi.fn();
+    vi.mocked(host.mock.setWorkspace)
+      .mockRejectedValueOnce(new Error("open failed"))
+      .mockResolvedValueOnce({ path: "/work/unexpected", name: "unexpected" });
+    const controller = pdtCreateWorkspaceController({
+      api: host.mock, initialWorkspace: { path: "/work/a", name: "a" }, onError,
+      lifecycle: { applyOpened: opened, async applyClosed() {} },
+    });
+    await controller.initialize(); await controller.requestOpen({ rootPath: "/work/a" });
+    opened.mockClear();
+    await expect(controller.requestSwitch({ rootPath: "/work/b" })).resolves.toMatchObject({ status: "rejected" });
+    expect(opened).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining("恢复身份不一致") }));
   });
 });

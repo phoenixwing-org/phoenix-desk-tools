@@ -53,6 +53,29 @@ async function prepare(root: string) {
 }
 afterEach(() => { vi.restoreAllMocks(); vi.clearAllMocks(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
 
+it.each(["Body", "Body001"])("name normalization preview forwards saved default %s identity and derives the plain filename name without writes", async objectName => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "desk-name-default-body-")); roots.push(root);
+  const rel = "candidates/测试盖板.FCStd";
+  // Independent metadata-only model; identity fields allow the existing naming
+  // policy to run, while the business name is absent and Label stays authentic.
+  const savedXml = model(objectName, "101001", "").replaceAll('name="Body"', `name="${objectName}"`);
+  save(root, rel, savedXml); const original = bytes(root, rel);
+  const plan = await previewNames(root, { batch_dir: "candidates" });
+  expect(plan.errors).toEqual([]); expect(plan.rows).toHaveLength(1);
+  expect(plan.rows[0]).toMatchObject({
+    object_name: objectName, current_name: "", current_label: objectName,
+    proposed_name: "测试盖板", proposed_label: "101001.001-测试盖板",
+    target_rel: "candidates/101001.001-H-DEMO-测试盖板.FCStd",
+    attributes_changed: true, rename_changed: true, eligible: true, status: "needs_fix",
+    warnings: [expect.stringContaining("默认节点标签，从文件名补全")],
+  });
+  expect(bytes(root, rel)).toEqual(original);
+  expect(readFcstdEmbeddedBomFields(path.join(root, rel))).toMatchObject({ PartName: "", label: objectName });
+  expect(fs.existsSync(path.join(root, plan.rows[0].target_rel))).toBe(false);
+  expect(fs.existsSync(path.join(root, ".phoenix"))).toBe(false);
+  expect(startCadIndexScan).not.toHaveBeenCalled();
+});
+
 it.each([
   ["S", "710101.001-S"], ["a", "710101.001-有效标签"], ["", "710101.001-S"], ["", "710101.001-"],
 ])("marks invalid name %j / label %j for review and prevents writes and renames", async (name, label) => {

@@ -2,7 +2,7 @@
 
 > [文档索引](../文档索引.md)
 
-Phoenix「属性回写」将可编辑 BOM 字段写入 **`.FCStd` ZIP** 内的 **`Document.xml`**：**按顺序挂载**到 **首个 `PartDesign::Body`**；若无 Body 则 **`Object.type` 中含 ``assembly`` 的对象（总成/装配）**，再否则 **`App::Part`**。属性写在对应对象的 ``<Properties>/<Property/>``，与手写 **`TempKevin`** 等同层。键名与 **`FcstdMapEntry`**、`fcstd_map.json` 一致。
+Phoenix「属性回写」将可编辑 BOM 字段写入 **`.FCStd` ZIP** 内的 **`Document.xml`**。存在唯一根级原生 **`Assembly::AssemblyObject`** 时，读取、推荐、索引和写回均使用该现有装配节点，即使旁边另有 Body；不会新增 Part 或迁移、清除 Body 上的属性。没有原生装配根时沿用 Wing 的 Body / Part 等根对象选择规则。`Assembly::JointGroup`、`Assembly::Joint` 不作为 BOM 对象，名称或图标不作为类型依据。多个原生装配根或装配结构不完整时拒绝写入；批量还拒绝独立的其他 Part 等候选。属性仅写到目标对象的 `<Properties>/<Property/>`，键名保持现有 BOM 契约。
 
 ## 1. 存储
 
@@ -12,8 +12,10 @@ Phoenix「属性回写」将可编辑 BOM 字段写入 **`.FCStd` ZIP** 内的 *
 | 主存储 | **`Document.xml`**：**挂载对象**（见上文顺序）上的自定义字符串 **``PartNumber``** … **``PartName``** …（组 **CustomDefine**），以及表单 **``label``** ↔ **Label** |
 | UI 字段 `label` | 写入 FreeCAD **`Label`**（`App::PropertyString`） |
 | 旧版侧车 | 根路径 **`FcdeskBomAttrs.xml`**：**保存时会删除并完成迁移**；读取时若在 Document 尚无对应字段，则临时沿用侧车值 |
-| 写回 | Node/TypeScript ZIP adapter 调用 Wing cad-core 选择根对象和修改字段，再整包原子替换；不以旧 Python 为运行时真源 |
+| 写回 | Node/TypeScript ZIP adapter 为唯一原生装配根建立只读/补丁目标范围，调用 Wing cad-core 修改字段，再仅移植目标对象并整包原子替换；不保存裁剪过的选择范围，不以旧 Python 为运行时真源 |
 | 占用 | 文档被占用时重写常失败 |
+
+只更新现有目标对象，其他对象、非 Document ZIP 条目及未写字段保持原样。若拟写属性内部含注释/CDATA 等无法安全保留的特殊结构，拒绝该次写入并提示，不以丢弃内容换取成功。
 
 若文档中 **既没有 Body、也没有 type 中含 assembly 的对象、也没有 ``App::Part``**，则当前实现无法挂载（会报错并列出部分 ``Object.type`` 供排查）。
 
@@ -25,7 +27,7 @@ Phoenix「属性回写」将可编辑 BOM 字段写入 **`.FCStd` ZIP** 内的 *
 | `extra` | 扩展 dict，不写 `Document.xml` |
 
 **`EDITABLE_ENTRY_ATTRS`**：**`PartNumber`、`PartVersion`、`TypeCode`、`ModelSeries`、`PartName`、`label`**。  
-不写 Document：`repo_rel_path`、`filename`。详情页读取到真实对象时，缺失的 **`PartName`** 显示为空，不把索引或文件名推断冒充已有属性。推荐时已有 PartName 优先；为空才按「标签名（默认）/文件名」补全，空标签回退文件名。PartName 使用纯名称，不包含末尾 `.ASSY`；装配 Label 和文件名分别保留一个 `.ASSY`、`.ASSY.FCStd`。推荐只填草稿，确认写入才修改 Document，详见 [CAD 批量工具](CAD批量工具.md#名称统一)。
+不写 Document：`repo_rel_path`、`filename`。详情页读取到真实对象时，缺失的 **`PartName`**、**`Label`** 显示为空，不把索引或文件名推断冒充已有属性。默认推荐时已有 PartName 优先；为空才按「标签名（默认）/文件名」补全，缺失或明确清空的标签回退文件名，不能把内部对象名当作真实标签。真实 `PartDesign::Body` 的 Label 与生成型内部名 `Body` / `Body001…` 完全相同时，也回退文件名；未知/其它类型和自定义标签不丢弃。普通无编号文件名去掉 `.FCStd` 后可补全零件名。零件名行可明确从文件名或保存的节点标签生成草稿（允许替换该字段草稿）；空/default Body 节点来源只提示，不填入。PartName 使用纯名称，不包含末尾 `.ASSY`；装配 Label 和文件名分别保留一个 `.ASSY`、`.ASSY.FCStd`。推荐只填草稿，确认写入才修改 Document，详见 [CAD 批量工具](CAD批量工具.md#名称统一)。
 
 ### 2.1 `TypeCode`（类型码）
 

@@ -10,10 +10,13 @@ import { useAppShell } from "../composables/useAppShell";
 import { usePageSession } from "../composables/usePageSession";
 import { usePagePrimaryContribution } from "../composables/usePagePrimaryContribution";
 import { cadIndexProgress } from "../models/cadIndexProgress";
+import CadIndexSearchSection from "../features/cad-index-search/CadIndexSearchSection.vue";
+import { cadIndexSearchRefreshToken } from "../features/cad-index-search/diagnosticRevision";
 
 const props = defineProps<{ workbenchTabId?: string }>();
 const shell = useAppShell();
 const data = ref<CadIndexDiagnostics | null>(null);
+const searchRefreshToken = computed(() => cadIndexSearchRefreshToken(data.value));
 const loading = ref(false);
 const error = ref("");
 const job = ref<CadIndexScanJob | null>(null);
@@ -21,23 +24,35 @@ const confirming = ref(false);
 const cleanupMessage = ref("");
 const scanning = computed(() => confirming.value || job.value?.state === "running");
 const canScan = computed(() => data.value?.scanSupported === true && !scanning.value && !loading.value);
+const currentResult = computed(() => {
+  const result = job.value?.result, latest = data.value?.latestScan?.id;
+  return result && (latest == null || result.scanId >= latest) ? result : null;
+});
+const partial = computed(() => currentResult.value?.partial === true || data.value?.latestScan?.status === "partial");
+const failedEntries = computed(() => currentResult.value?.partial
+  ? currentResult.value.failed_count ?? currentResult.value.failures?.length ?? 0
+  : data.value?.latestScan?.status === "partial" ? data.value.failedEntries ?? data.value.failures?.length ?? 0 : 0);
+const failures = computed(() => (currentResult.value?.partial
+  ? currentResult.value.failures ?? [] : data.value?.latestScan?.status === "partial" ? data.value.failures ?? [] : []).slice(0, 100));
 const scanStateLabel = computed(() => {
   if (!job.value) return "尚未开始";
+  if (job.value.result?.partial === true) return "部分可用";
   if (job.value.state !== "running") return { done: "已完成", failed: "失败（未提交）", cancelled: "已取消" }[job.value.state];
   return { reading: "正在读取", checking: "核对快照", committing: "正在提交" }[job.value.phase] || "正在扫描";
 });
 const scanDescription = computed(() => job.value?.state === "running"
-  ? "每 10 个文件更新进度；完整扫描成功后才提交索引。"
+  ? "每 10 个文件更新进度；正常文件统一提交，解析失败单独记录为部分可用。"
   : cleanupMessage.value || job.value?.message || "手动更新完整工作空间索引，不修改 FCStd 文件。");
 let pollTimer: ReturnType<typeof setTimeout> | undefined;
 let scanEpoch = 0;
 let requestId = 0;
+let loggedPartialRevision = "";
 const stateLabels = { missing: "尚未建立", incompatible: "Schema 不兼容", unreadable: "读取失败", empty: "尚未完成扫描", attention: "需要检查", ready: "可读取" };
-const stateLabel = computed(() => data.value ? stateLabels[data.value.state] : "尚未读取");
+const stateLabel = computed(() => data.value?.latestScan?.status === "partial" ? "部分可用" : data.value ? stateLabels[data.value.state] : "尚未读取");
 const latestScanLabel = computed(() => {
   const status = data.value?.latestScan?.status;
   if (!status) return "暂无";
-  const labels: Record<string, string> = { done: "已完成", cleared: "已清理，待重建", running: "进行中", failed: "失败", cancelled: "已取消" };
+  const labels: Record<string, string> = { done: "已完成", partial: "部分可用", cleared: "已清理，待重建", running: "进行中", failed: "失败", cancelled: "已取消" };
   return labels[status] || status;
 });
 const lastScanTime = computed(() => {
@@ -53,10 +68,22 @@ async function refresh() {
   try {
     if (!workspace) throw new Error("请先打开工作空间");
     const next = await fetchCadIndexDiagnostics(workspace);
-    if (id === requestId) data.value = next;
+    if (id === requestId) { data.value = next; reportPartialFailures(workspace, next); }
   } catch (e) {
     if (id === requestId) error.value = String(e);
   } finally { if (id === requestId) loading.value = false; }
+}
+function reportPartialFailures(workspace: string, diagnostics: Pick<CadIndexDiagnostics, "latestScan" | "failedEntries" | "failures">) {
+  if (diagnostics.latestScan?.status !== "partial") return;
+  const revision = JSON.stringify([workspace, diagnostics.latestScan.id ?? diagnostics.latestScan.at]);
+  if (loggedPartialRevision === revision) return;
+  loggedPartialRevision = revision;
+  const count = diagnostics.failedEntries ?? diagnostics.failures?.length ?? 0;
+  const entries = (diagnostics.failures ?? []).slice(0, 100);
+  const lines = [`[CAD 索引] 索引部分可用：${count} 个文件未成功读取；图册可用，BOM 不完整。`,
+    ...entries.map(entry => `${entry.rel}：${entry.message}`)];
+  if (count > entries.length) lines.push(`其余 ${count - entries.length} 项未在此列出（最多显示 100 项）。`);
+  shell.appendLog(lines.join("\n"), { source: "cad_index", open: true });
 }
 function open(pageId: string) { shell.openTab({ pageId }); }
 usePageSession(props.workbenchTabId, {
@@ -69,7 +96,14 @@ async function pollScan(workspace: string, id: string, epoch: number) {
     if (epoch !== scanEpoch) return;
     job.value = next;
     if (next.state === "running") pollTimer = setTimeout(() => { void pollScan(workspace, id, epoch); }, 500);
-    else await refresh();
+    else {
+      if (next.result?.partial) reportPartialFailures(workspace, {
+        latestScan: { id: next.result.scanId, status: "partial", at: "", root: workspace },
+        failedEntries: next.result.failed_count, failures: next.result.failures,
+      });
+      if (next.state === "failed") shell.appendLog(`[CAD 索引] ${next.message}`, { source: "cad_index", open: true });
+      await refresh();
+    }
   } catch (e) {
     if (epoch !== scanEpoch) return;
     error.value = `读取扫描状态失败：${String(e)}。可以取消后重试。`;
@@ -82,7 +116,7 @@ async function scan() {
   const epoch = ++scanEpoch;
   confirming.value = true;
   try {
-    const answer = await pnwPromptChoice({ title: "更新 CAD 索引", message: `扫描整个工作空间：${workspace}。更新文件、引用和基础 BOM 索引，不修改 FCStd；人工零件字段与关联保留。解析失败或范围不完整时保留旧索引。`,
+    const answer = await pnwPromptChoice({ title: "更新 CAD 索引", message: `扫描整个工作空间：${workspace}。更新文件、引用和基础 BOM 索引，不修改 FCStd；人工零件字段与关联保留。正常文件可提交，解析失败单独列出；有失败时图册可用，但 BOM 不完整。范围不完整、取消或文件在扫描中变化时保留旧索引。`,
       choices: [{ id: "scan", label: "开始扫描", variant: "primary" }, { id: "cancel", label: "取消" }] });
     if (answer.choiceId !== "scan" || workspace !== shell.workspacePath.value || epoch !== scanEpoch) return;
     error.value = ""; cleanupMessage.value = "";
@@ -118,14 +152,14 @@ async function cancel() {
   catch (e) { error.value = String(e); }
 }
 function invalidateScan() {
-  scanEpoch++; clearTimeout(pollTimer); confirming.value = false; cleanupMessage.value = "";
+  scanEpoch++; clearTimeout(pollTimer); confirming.value = false; cleanupMessage.value = ""; loggedPartialRevision = "";
   const previous = job.value; job.value = null;
   if (previous?.state === "running") void cancelCadIndexScan(previous.workspace, previous.id).catch(() => {});
 }
 usePagePrimaryContribution("cad_index", props.workbenchTabId, {
   showContext: false,
   summary: computed(() => error.value || stateLabel.value),
-  sections: [{ id: "scope", title: "索引维护", progress: computed(() => cadIndexProgress(job.value)), description: scanDescription, readonlyLayout: "properties", controls: [
+  sections: [{ id: "scope", title: "索引维护", progress: computed(() => ({ ...cadIndexProgress(job.value), ...(job.value?.result?.partial ? { state: "warning" as const } : {}) })), description: scanDescription, readonlyLayout: "properties", controls: [
     { id: "workspace", kind: "readonly", label: "工作空间", value: shell.workspacePath },
     { id: "owner", kind: "readonly", label: "扫描核心", value: "Wing 共享索引 · 完整工作空间" },
     { id: "scan-state", kind: "readonly", label: "本次扫描", value: scanStateLabel },
@@ -133,6 +167,7 @@ usePagePrimaryContribution("cad_index", props.workbenchTabId, {
     { id: "database", kind: "readonly", label: "数据库位置", value: ".phoenix/phoenix-workspace.sqlite" },
     { id: "schema", kind: "readonly", label: "Schema 实际 / 预期", value: computed(() => data.value ? `${data.value.schemaVersion ?? "未知"} / ${data.value.expectedSchemaVersion}` : "—") },
     { id: "entries", kind: "readonly", label: "条目 / 缺失", value: computed(() => data.value ? `${data.value.totalEntries} / ${data.value.missingEntries}` : "—") },
+    { id: "failed-entries", kind: "readonly", label: "读取失败", value: failedEntries },
     { id: "last-scan", kind: "readonly", label: "最后成功扫描", value: lastScanTime },
     { id: "latest-state", kind: "readonly", label: "最近扫描状态", value: latestScanLabel },
     { id: "latest-scope", kind: "readonly", label: "最近扫描范围", value: computed(() => data.value?.latestScan?.root || "暂无") },
@@ -169,10 +204,18 @@ onUnmounted(() => { requestId++; invalidateScan(); });
         <p class="index-layout-hint">左侧查看工作空间、扫描进度与索引属性；页头右侧执行维护操作。下方按使用场景说明操作步骤。</p>
       </section>
       <el-alert v-if="data && !data.scanSupported" title="当前 Wing 尚未提供共享索引接口，请使用本地 Wing 开发模式。正式包发布后再升级依赖。" type="info" :closable="false" />
-      <p v-if="job?.result">已索引 {{ job.result.files }} 个文件 · {{ job.result.references }} 条引用 · {{ job.result.bomLines }} 行基础 BOM</p>
+      <p v-if="currentResult?.partial" role="status">索引部分可用：已索引 {{ currentResult.parsedFiles }} 个正常文件 · 失败 {{ failedEntries }} 个；图册可用，BOM 不完整。</p>
+      <p v-else-if="currentResult">已索引 {{ currentResult.files }} 个文件 · {{ currentResult.references }} 条引用 · {{ currentResult.bomLines }} 行基础 BOM</p>
       <el-alert v-if="error" :title="error" type="error" :closable="false" />
       <p v-else-if="loading" role="status">正在读取索引状态…</p>
       <el-alert v-else-if="data" :title="stateLabel" :description="data.message" :type="data.state === 'ready' ? 'success' : 'warning'" :closable="false" />
+      <details v-if="partial" class="index-failures">
+        <summary>读取失败清单（{{ failedEntries }} 项）</summary>
+        <ul v-if="failures.length"><li v-for="(failure, index) in failures" :key="index"><strong>{{ failure.rel }}</strong>：{{ failure.message }}</li></ul>
+        <p v-else>此扫描未保留逐文件错误详情；请重新更新索引获取原因。</p>
+        <p v-if="failedEntries > failures.length">另有 {{ failedEntries - failures.length }} 项未显示，清单最多显示 100 项。</p>
+      </details>
+      <CadIndexSearchSection :workspace="shell.workspacePath.value" :can-update="canScan" :refresh-token="searchRefreshToken" @open="shell.openFileDetailForRel" @update="scan" @refresh="refresh" />
       <div class="index-guide-block">
       <SidebarBlock title="如何维护" variant="card">
         <p>日常只需检查、更新、查询；不必先清理旧索引。</p>
@@ -184,7 +227,7 @@ onUnmounted(() => { requestId++; invalidateScan(); });
           </li>
           <li>
             <span class="step-number" aria-hidden="true">2</span>
-            <div><h3>新增、改名或删除文件后更新</h3><p>点击「更新索引」，确认后扫描完整工作空间。左侧每 10 个文件更新进度，全部成功后提交；失败或取消保留原索引。</p></div>
+            <div><h3>新增、改名或删除文件后更新</h3><p>点击「更新索引」，确认后扫描完整工作空间。左侧每 10 个文件更新进度；正常文件可提交，解析失败单独列出并标记「部分可用」。取消或范围不完整时保留原索引。</p></div>
             <el-button size="small" type="primary" plain :disabled="!canScan" :loading="scanning" @click="scan">更新索引</el-button>
           </li>
           <li>
@@ -210,9 +253,9 @@ onUnmounted(() => { requestId++; invalidateScan(); });
       <div class="index-guide-block index-boundaries">
       <SidebarBlock title="范围与注意事项" variant="card">
         <ul>
-          <li><strong>共享算法：</strong>与 KT Auto CAD 共用 Wing 索引核心，无需同时启动 VS Code。另一宿主正在写入或扫描批次已过期时，等待其完成后重新扫描。</li>
-          <li><strong>完整范围：</strong>不受批量工具的搜索目录限制，最多处理 5000 个 FCStd；跳过 .git、.phoenix、node_modules、.venv、__pycache__，这些目录中已有记录保持不变。</li>
-          <li><strong>安全提交：</strong>超限、符号链接、解析失败或文件在扫描中发生变化，均不提交新索引。普通更新保留人工零件字段与关联；显式清理不保留文件关联。</li>
+          <li><strong>共享算法：</strong>由 Desk CAD 索引入口调用 Wing 共享索引核心，无需启动旧扩展。另一宿主正在写入或扫描批次已过期时，等待其完成后重新扫描。</li>
+          <li><strong>完整范围：</strong>不受批量工具的搜索目录限制，最多处理 5000 个 FCStd；默认跳过点开头的目录及 node_modules、__pycache__ 等缓存目录，不删除其中的文件或人工资料。</li>
+          <li><strong>安全提交：</strong>超限、符号链接、范围不完整或文件在扫描中发生变化，不提交新索引。解析失败时提交正常文件并持久化失败清单；图册可用，但 BOM 不完整，不作为完整数量依据。普通更新保留人工零件字段与关联；显式清理不保留文件关联。</li>
           <li><strong>结果含义：</strong>基础 BOM 来自 XML 引用关系，不代表几何实例或制造数量。备份为整库快照，恢复前须停止所有写库宿主并核对恢复范围。</li>
         </ul>
       </SidebarBlock>
@@ -238,6 +281,8 @@ onUnmounted(() => { requestId++; invalidateScan(); });
 .index-boundaries li + li { margin-top: 8px; }
 .cad-index-page strong { color: var(--text); }
 .index-guide-block { min-width: 0; }
+.index-failures { border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; overflow-wrap: anywhere; }
+.index-failures summary { cursor: pointer; color: var(--phoenix-warning-text, var(--el-color-warning-dark-2)); font-size: .85rem; }
 .recovery-row:first-child { border-top: 0; padding-top: 0; }
 @media (max-width: 760px) {
   .maintenance-steps > li { grid-template-columns: 26px minmax(0, 1fr); }

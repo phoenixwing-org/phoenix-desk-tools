@@ -11,6 +11,12 @@ if ($env:OS -ne "Windows_NT") {
     throw "The Windows release gate must run on Windows"
 }
 
+# Intentionally fail closed before reads, builds, installation, cleanup, or receipts.
+# The native Windows isolation profile still lacks file-ID and ACL ownership proof.
+# SkipBuild/ReceiptPath do not bypass this gate. Keep the installer carry below
+# unreachable until isolation and the current installed-app contract are verified.
+throw "WINDOWS_ISOLATION_UNSUPPORTED: native Windows file-ID and ACL ownership checks are not implemented. Build/install/uninstall and passed receipts are disabled; no installer or application will be started."
+
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $Package = Get-Content (Join-Path $RepoRoot "package.json") -Raw | ConvertFrom-Json
 $TauriConfig = Get-Content (Join-Path $RepoRoot "src-tauri\tauri.conf.json") -Raw | ConvertFrom-Json

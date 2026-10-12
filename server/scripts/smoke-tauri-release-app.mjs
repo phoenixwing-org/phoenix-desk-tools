@@ -1,374 +1,229 @@
+import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { zipSync } from "fflate";
+import { freezeInstalledInputs, verifyInstalledInputs } from "./tauri-smoke-inputs.mjs";
+import { verifyBuildProof } from "./tauri-smoke-build-proof.mjs";
+import { createIsolatedLaunch, readOwnedHandoff, writeOwnedQuit, prepareOwnedRestart, verifyIsolatedLaunch } from "./tauri-smoke-host.mjs";
+import { createRecoveryFixture, runRecoveryJourney } from "./workspace-recovery-journey.mjs";
 
-if (!["darwin", "win32"].includes(process.platform)) {
-  throw new Error("The Tauri release app smoke currently supports macOS and Windows only");
-}
-
-const serverRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const repoRoot = path.resolve(serverRoot, "..");
-const packageVersion = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8")).version;
-const macApp = path.join(
-  repoRoot,
-  "src-tauri",
-  "target",
-  "release",
-  "bundle",
-  "macos",
-  "Phoenix Desktop Tools.app",
-);
-const configuredExecutable = String(process.env.PHOENIX_TAURI_EXECUTABLE || "").trim();
-const executable = configuredExecutable || (process.platform === "darwin"
-  ? path.join(macApp, "Contents", "MacOS", "phoenix-desktop")
-  : "");
-const installRoot = path.resolve(String(process.env.PHOENIX_TAURI_INSTALL_ROOT || (
-  process.platform === "darwin" ? macApp : path.dirname(executable)
-)));
-const infoPlist = process.platform === "darwin" ? path.join(macApp, "Contents", "Info.plist") : "";
-const fixtureXml = path.join(
-  repoRoot,
-  "tests",
-  "fixtures",
-  "workspaces",
-  "minimal",
-  "document-xml",
-  "图纸-通过link来创建-Document.xml",
-);
-const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-tauri-app-smoke-"));
-const home = path.join(tempRoot, "home");
-const workspace = path.join(tempRoot, "workspace");
-const registrationDirectory = path.join(home, "desk-tools-registration");
-const serviceRegistrationPath = path.join(registrationDirectory, "service.v1.json");
-const output = [];
-let child;
-let port = 0;
-let origin = "";
+// Non-Unix file identity/ACL isolation remains unproven. Do not trial-launch
+// unknown installations to discover whether they support the safe profile.
+assert.equal(process.platform, "darwin", "isolated installed-host verification supports macOS only; Windows remains pending");
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const expectedVersion = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8")).version;
+const installRoot = path.resolve(String(process.env.PHOENIX_TAURI_INSTALL_ROOT || path.join(repoRoot, "src-tauri/target/release/bundle/macos/Phoenix Desktop Tools.app")));
+const executable = path.resolve(String(process.env.PHOENIX_TAURI_EXECUTABLE || path.join(installRoot, "Contents/MacOS/phoenix-desktop")));
+const infoPlist = path.join(installRoot, "Contents/Info.plist");
+const versionResult = spawnSync("/usr/bin/plutil", ["-extract", "CFBundleShortVersionString", "raw", "-o", "-", infoPlist], { encoding: "utf8", timeout: 5000, shell: false });
+assert.equal(versionResult.status, 0, "cannot read the selected installation's actual version");
+const appVersion = String(versionResult.stdout).trim();
+const snapshot = freezeInstalledInputs({ installRoot, executable, expectedVersion, appVersion, platform: process.platform, arch: process.arch });
+const proofPath = String(process.env.PHOENIX_TAURI_BUILD_PROOF_PATH || "").trim();
+assert(proofPath && path.isAbsolute(proofPath), "an explicit trusted local native build proof is required before launching any app");
+const buildProof = verifyBuildProof({ repoRoot, proofPath, snapshot });
+// Freeze and verify everything before the first native child is spawned.
+verifyInstalledInputs(snapshot);
+const tempRoot = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "desk-installed-recovery-")));
+fs.chmodSync(tempRoot, 0o700);
+const launch = createIsolatedLaunch(tempRoot, randomUUID());
+const fixtureRoot = path.join(tempRoot, "recovery");
+fs.mkdirSync(fixtureRoot, { mode: 0o700 });
+const fixture = createRecoveryFixture(fixtureRoot);
+const modelName = "IndependentBlock.FCStd";
+// Independent XML archive: a packaged reader check, not real CAD geometry.
+fs.writeFileSync(path.join(fixture.workspace, modelName), zipSync({
+  "Document.xml": new TextEncoder().encode('<?xml version="1.0"?><Document SchemaVersion="4" FileVersion="1"><Objects Count="1"><Object type="PartDesign::Body" name="Body" id="1"/></Objects><ObjectData Count="1"><Object name="Body"><Properties Count="1"><Property name="Label" type="App::PropertyString"><String value="Independent block"/></Property></Properties></Object></ObjectData></Document>'),
+  "GuiDocument.xml": new TextEncoder().encode('<?xml version="1.0"?><GuiDocument/>'),
+}, { level: 6 }), { flag: "wx", mode: 0o600 });
+let child, handoff, latestHealth;
+let output = "";
+const ownedChildren = [];
 
 try {
-  for (const required of [executable, fixtureXml, ...(infoPlist ? [infoPlist] : [])]) assertFile(required);
-  fs.mkdirSync(home, { recursive: true });
-  fs.mkdirSync(workspace, { recursive: true });
-  writeFcstdFixture();
-
-  child = spawn(executable, [], {
-    cwd: workspace,
-    env: {
-      ...process.env,
-      HOME: home,
-      USERPROFILE: home,
-      CFFIXED_USER_HOME: home,
-      PHOENIX_TAURI_USER_DATA_DIR: path.join(home, "user-data"),
-      PHOENIX_DESK_TOOLS_REGISTRY_DIR: registrationDirectory,
-      APPDATA: path.join(home, "AppData", "Roaming"),
-      LOCALAPPDATA: path.join(home, "AppData", "Local"),
-      TMPDIR: tempRoot,
-      TEMP: tempRoot,
-      TMP: tempRoot,
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  child.stdout?.on("data", (chunk) => output.push(chunk.toString()));
-  child.stderr?.on("data", (chunk) => output.push(chunk.toString()));
-
-  await waitForServiceRegistration();
-  const health = await waitForHealth();
-  const launcher = await api("/api/config/launcher");
-  const launcherConfigPath = path.resolve(String(launcher.launcher_config_path || ""));
-  assertUnder(tempRoot, launcherConfigPath, "Tauri user data");
-
-  const activeWorkspace = await api("/api/workspace", {
-    method: "POST",
-    body: { path: workspace },
-  });
-  assert(activeWorkspace.path === workspace, "release app did not activate the isolated workspace");
-
-  const runtimeManifest = [
-    path.join(installRoot, "Contents", "Resources", "runtime", "runtime-manifest.json"),
-    path.join(installRoot, "runtime", "runtime-manifest.json"),
-  ].find((candidate) => fs.existsSync(candidate));
-  assert(runtimeManifest, "packaged TypeScript runtime manifest is missing");
-  assertUnder(installRoot, runtimeManifest, "runtime manifest");
-  assertFile(runtimeManifest);
-  const runtimeDirectory = path.dirname(runtimeManifest);
-  assert(!fs.existsSync(path.join(runtimeDirectory, "bin")), "release runtime still contains a CAD native bin directory");
-  assert(!fs.existsSync(path.join(runtimeDirectory, "native-provider.json")), "release runtime still contains native-provider.json");
-
+  await start();
+  const launcher = await successful("/api/config/launcher");
+  assertUnder(launch.userData, path.resolve(String(launcher.launcher_config_path || "")), "launcher configuration");
+  await setWorkspace(fixture.workspace);
   const retiredCodeRoutes = await verifyRetiredCodeRoutes();
-
-  const bom = await api(`/api/cad/bom/file?rel=${encodeURIComponent("730201.001-H-DEMO-TestBlock.FCStd")}`);
-  assert(bom.is_fcstd === true && bom.file_size_bytes > 0, "release CAD route did not read the real FCStd archive");
-  assert(
-    String(bom.source_note || "").includes("TypeScript FCStd reader"),
-    "release CAD route did not use the packaged TypeScript FCStd reader",
-  );
-
-  const version = process.platform === "darwin"
-    ? plistValue("CFBundleShortVersionString")
-    : String(process.env.PHOENIX_TAURI_EXPECTED_VERSION || "").trim();
-  assert(version === packageVersion, `unexpected app version: ${version || "missing"}; expected ${packageVersion}`);
-  const binarySha256 = sha256(fs.readFileSync(executable));
-  const manifestSha256 = sha256(fs.readFileSync(runtimeManifest));
-
-  gracefulQuit();
-  await waitForExit(child, 10_000);
-  await waitForPortRelease();
-
+  const bom = await successful("/api/cad/bom/file?rel=" + encodeURIComponent(modelName));
+  assert(bom.is_fcstd === true && bom.file_size_bytes > 0, "packaged CAD route did not read the independent FCStd archive");
+  assert(String(bom.source_note || "").includes("TypeScript FCStd reader"), "CAD route did not use the packaged TypeScript reader");
+  const recoveryChecks = await runRecoveryJourney({ fixture, request, setWorkspace, restart: async () => { await stop(); await start(); } });
+  fixture.unchanged();
+  assert.equal((await successful("/api/workspace")).path, fixture.workspace);
+  verifyInstalledInputs(snapshot);
+  assert.equal(verifyBuildProof({ repoRoot, proofPath, snapshot }).proofSha256, buildProof.proofSha256, "native build proof bytes changed after freeze");
+  await stop();
+  fixture.unchanged();
+  verifyInstalledInputs(snapshot);
+  assert.equal(verifyBuildProof({ repoRoot, proofPath, snapshot }).proofSha256, buildProof.proofSha256, "native build proof bytes changed after freeze");
+  recoveryChecks.push("owned-native-host-and-sidecar-shutdown");
   const receipt = {
-    kind: "phoenix.desk.tauri-release-app-smoke",
-    schemaVersion: 2,
-    platform: `${process.platform}-${process.arch}`,
-    appVersion: version,
-    executable: displayPath(executable),
-    binarySha256,
-    runtimeManifestSha256: manifestSha256,
-    health,
-    userDataIsolated: true,
-    cadRuntime: "typescript",
-    retiredCodeRoutes,
-    flows: {
-      launch: true,
-      workspaceActivation: true,
-      runtimeResources: true,
-      retiredCodeRoutes404: true,
-      realFcstdRead: true,
-      gracefulExit: true,
-      sidecarReleased: true,
-    },
+    kind: "phoenix.desk.tauri-release-app-smoke", schemaVersion: 3,
+    platform: process.platform + "-" + process.arch, appVersion,
+    binarySha256: snapshot.executableSha256, runtimeManifestSha256: snapshot.manifestSha256,
+    payloadInventorySha256: snapshot.payloadInventorySha256, payloadFiles: snapshot.payload.length,
+    payloadBytes: snapshot.payloadBytes, nativeBuildProof: buildProof,
+    health: latestHealth, userDataIsolated: true, inputFilesUnchanged: true, cadRuntime: "typescript",
+    retiredCodeRoutes, recoveryChecks,
+    isolation: { profileVersion: 1, isolatedLaunchVersion: 1, managedHandoffValidated: true, ownedQuit: true },
+    flows: { launch: true, workspaceActivation: true, runtimeResources: true, retiredCodeRoutes404: true,
+      realFcstdRead: true, workspaceRecovery: true, restartInvalidatesInspections: true, gracefulExit: true, sidecarReleased: true },
   };
-  const serialized = `${JSON.stringify(receipt, null, 2)}\n`;
+  const serialized = JSON.stringify(receipt, null, 2) + "\n";
   const receiptPath = String(process.env.PHOENIX_TAURI_RECEIPT_PATH || "").trim();
   if (receiptPath) {
-    fs.mkdirSync(path.dirname(path.resolve(receiptPath)), { recursive: true });
-    fs.writeFileSync(receiptPath, serialized, "utf8");
+    assert(path.isAbsolute(receiptPath), "receipt path must be absolute");
+    const receiptParent = path.dirname(receiptPath);
+    assert.equal(fs.realpathSync(receiptParent), receiptParent, "receipt parent must be canonical; symlink aliases are forbidden");
+    assert(!isUnder(repoRoot, receiptPath), "private installed-host evidence must stay outside the repository");
+    const descriptor = fs.openSync(receiptPath, "wx", 0o600);
+    try { fs.writeFileSync(descriptor, serialized); fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
   }
   process.stdout.write(serialized);
-  process.stdout.write(`[q2] ${process.platform} Tauri ${version} release app smoke passed\n`);
+  process.stdout.write("[M4] macOS Tauri " + appVersion + " isolated installed-host journey passed\n");
 } finally {
   await cleanup();
 }
 
+async function start() {
+  verifyInstalledInputs(snapshot);
+  assert.equal(verifyBuildProof({ repoRoot, proofPath, snapshot }).proofSha256, buildProof.proofSha256, "native build proof bytes changed after freeze");
+  output = "";
+  child = spawn(executable, [], { cwd: fixture.workspace, env: launch.environment, stdio: ["ignore", "pipe", "pipe"], shell: false });
+  ownedChildren.push(child);
+  child.stdout?.on("data", appendOutput); child.stderr?.on("data", appendOutput);
+  let spawnError;
+  child.once("error", error => { spawnError = error; });
+  const deadline = Date.now() + 30000;
+  handoff = undefined;
+  while (Date.now() < deadline) {
+    if (spawnError) throw spawnError;
+    assert(child.exitCode == null && child.signalCode == null, "owned native host exited before handoff\n" + output);
+    try { handoff = readOwnedHandoff(launch, child, expectedVersion); break; }
+    catch (error) { if (error?.code !== "ENOENT") throw error; }
+    await delay(100);
+  }
+  assert(handoff, "owned native host did not publish its handoff\n" + output);
+  latestHealth = await successful("/api/health");
+  assert.equal(latestHealth.status, "ok"); assert.equal(latestHealth.service, "phoenix-node");
+  assert.equal(latestHealth.protocol_version, 1); assert.equal(latestHealth.app_version, expectedVersion);
+}
+
+async function request(route, body, headers, method = body === undefined ? "GET" : "POST") {
+  // A stale port/registration cannot authorize an HTTP call or mutation.
+  const identity = readOwnedHandoff(launch, child, expectedVersion);
+  const response = await fetch(identity.api_origin + route, { method, redirect: "error", signal: AbortSignal.timeout(10000),
+    headers: { ...(body === undefined ? {} : { "content-type": "application/json" }), ...headers },
+    body: body === undefined ? undefined : JSON.stringify(body) });
+  const parts = [];
+  let size = 0;
+  for await (const chunk of response.body || []) {
+    size += chunk.byteLength;
+    assert(size <= 2 * 1024 * 1024, "owned endpoint response exceeded its smoke budget");
+    parts.push(chunk);
+  }
+  const raw = Buffer.concat(parts).toString("utf8");
+  let result;
+  try { result = raw ? JSON.parse(raw) : {}; } catch { throw new Error(route + " returned non-JSON, HTTP " + response.status); }
+  return { status: response.status, body: result };
+}
+async function successful(route, body) {
+  const result = await request(route, body);
+  assert(result.status >= 200 && result.status < 300, route + " returned HTTP " + result.status + ": " + String(result.body?.code || "unexpected response"));
+  return result.body;
+}
+async function setWorkspace(workspace) {
+  assert([fixture.workspace, fixture.other].includes(workspace), "smoke workspace must belong to this independent fixture");
+  assert.equal((await successful("/api/workspace", { path: workspace })).path, workspace);
+}
+
+async function stop() {
+  const stopped = child, ownedHandoff = writeOwnedQuit(launch, stopped, expectedVersion);
+  await waitForExit(stopped, 10000);
+  assert.equal(stopped.exitCode, 0, "owned native host did not exit normally\n" + output);
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
+    if (!fs.existsSync(path.join(launch.registrationDirectory, "service.v1.json"))
+      && !fs.existsSync(path.join(launch.registrationDirectory, "instance.v1.lock"))
+      && !(await canConnect(new URL(ownedHandoff.api_origin).port))) break;
+    await delay(100);
+  }
+  assert(!(await canConnect(new URL(ownedHandoff.api_origin).port)), "owned sidecar port did not release");
+  prepareOwnedRestart(launch, stopped, ownedHandoff);
+}
+
 async function verifyRetiredCodeRoutes() {
-  // Check the original methods as well as paths: a GET-only check can miss a
-  // still-active write endpoint. A redirect or SPA fallback must not pass.
+  // Carry every original method/path; GET alone could hide active write routes.
   const routes = [
-    ["GET", "/api/code/index"],
-    ["GET", "/api/code/index/catdlg"],
-    ["POST", "/api/code/index/scan"],
-    ["GET", "/api/code/index/entries"],
-    ["GET", "/api/code/index/extension-discovery"],
-    ["GET", "/api/code/index/extra-extensions"],
-    ["PUT", "/api/code/index/extra-extensions"],
-    ["POST", "/api/code/index/purge-missing"],
-    ["POST", "/api/code/index/export-json"],
-    ["GET", "/api/code/codegen/documents"],
-    ["POST", "/api/code/codegen/open"],
-    ["POST", "/api/code/codegen/document-state"],
-    ["PUT", "/api/code/codegen/document"],
-    ["POST", "/api/code/codegen/preflight"],
-    ["POST", "/api/code/codegen/apply"],
-    ["POST", "/api/code/codegen/source-preview"],
-    ["POST", "/api/code/codegen/source-states"],
-    ["GET", "/api/code/rename/prefs"],
-    ["PUT", "/api/code/rename/prefs"],
-    ["POST", "/api/code/rename/preview"],
-    ["POST", "/api/code/rename/apply"],
-    ["POST", "/api/code/uuid/scan"],
-    ["POST", "/api/code/uuid/apply"],
-    ["GET", "/api/code/reorder-members/prefs"],
-    ["PUT", "/api/code/reorder-members/prefs"],
-    ["POST", "/api/code/reorder-members/resolve"],
-    ["POST", "/api/code/reorder-members/run"],
-    ["POST", "/api/code/reorder-members/self-test"],
-    ["GET", "/api/code/reorder-members/top-level"],
+    ["GET", "/api/code/index"], ["GET", "/api/code/index/catdlg"], ["POST", "/api/code/index/scan"],
+    ["GET", "/api/code/index/entries"], ["GET", "/api/code/index/extension-discovery"],
+    ["GET", "/api/code/index/extra-extensions"], ["PUT", "/api/code/index/extra-extensions"],
+    ["POST", "/api/code/index/purge-missing"], ["POST", "/api/code/index/export-json"],
+    ["GET", "/api/code/codegen/documents"], ["POST", "/api/code/codegen/open"],
+    ["POST", "/api/code/codegen/document-state"], ["PUT", "/api/code/codegen/document"],
+    ["POST", "/api/code/codegen/preflight"], ["POST", "/api/code/codegen/apply"],
+    ["POST", "/api/code/codegen/source-preview"], ["POST", "/api/code/codegen/source-states"],
+    ["GET", "/api/code/rename/prefs"], ["PUT", "/api/code/rename/prefs"],
+    ["POST", "/api/code/rename/preview"], ["POST", "/api/code/rename/apply"],
+    ["POST", "/api/code/uuid/scan"], ["POST", "/api/code/uuid/apply"],
+    ["GET", "/api/code/reorder-members/prefs"], ["PUT", "/api/code/reorder-members/prefs"],
+    ["POST", "/api/code/reorder-members/resolve"], ["POST", "/api/code/reorder-members/run"],
+    ["POST", "/api/code/reorder-members/self-test"], ["GET", "/api/code/reorder-members/top-level"],
     ["GET", "/api/code/reorder-members/top-dirs"],
   ];
   const checks = [];
   for (const [method, route] of routes) {
-    const response = await fetch(`${origin}${route}`, {
-      method,
-      redirect: "error",
-      headers: method === "GET" ? undefined : { "content-type": "application/json" },
-      body: method === "GET" ? undefined : "{}",
-    });
-    const text = await response.text();
-    assert(response.status === 404, `retired ${method} ${route} returned HTTP ${response.status}, expected 404: ${text}`);
+    const identity = readOwnedHandoff(launch, child, expectedVersion);
+    const response = await fetch(identity.api_origin + route, { method, redirect: "error", signal: AbortSignal.timeout(10000),
+      headers: method === "GET" ? undefined : { "content-type": "application/json" }, body: method === "GET" ? undefined : "{}" });
+    assert.equal(response.status, 404, "retired " + method + " " + route + " returned HTTP " + response.status);
+    await response.body?.cancel();
     checks.push({ method, path: route, status: response.status });
   }
   return checks;
 }
 
-function writeFcstdFixture() {
-  fs.writeFileSync(path.join(workspace, "730201.001-H-DEMO-TestBlock.FCStd"), zipSync({
-    "Document.xml": fs.readFileSync(fixtureXml),
-    "GuiDocument.xml": new TextEncoder().encode("<?xml version=\"1.0\"?><GuiDocument/>"),
-  }, { level: 6 }));
-}
-
-async function api(route, options = {}) {
-  const response = await fetch(`${origin}${route}`, {
-    method: options.method || "GET",
-    headers: options.body ? { "content-type": "application/json" } : undefined,
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
-  const text = await response.text();
-  let body;
-  try {
-    body = text ? JSON.parse(text) : {};
-  } catch {
-    throw new Error(`${route} returned invalid JSON: ${text}`);
-  }
-  if (!response.ok) throw new Error(`${route} returned HTTP ${response.status}: ${text}`);
-  return body;
-}
-
-async function waitForHealth() {
-  const deadline = Date.now() + 30_000;
-  while (Date.now() < deadline) {
-    if (child.exitCode != null) {
-      throw new Error(`Tauri release app exited early (${child.exitCode})\n${output.join("")}`);
-    }
-    try {
-      const body = await api("/api/health");
-      if (body.status === "ok" && body.service === "phoenix-node" && body.protocol_version === 1) return body;
-    } catch {
-      // The release app starts its packaged Node service before the endpoint is ready.
-    }
-    await delay(100);
-  }
-  throw new Error(`Tauri release app did not become healthy\n${output.join("")}`);
-}
-
-function gracefulQuit() {
-  const command = process.platform === "darwin" ? "osascript" : "powershell.exe";
-  const args = process.platform === "darwin"
-    ? ["-e", 'tell application id "com.phoenix.desktools" to quit']
-    : [
-        "-NoLogo",
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        `$process = Get-Process -Id ${child.pid} -ErrorAction Stop; if (-not $process.CloseMainWindow()) { exit 2 }`,
-      ];
-  const result = spawnSync(command, args, { encoding: "utf8", timeout: 10_000 });
-  if (result.error) throw result.error;
-  if (result.status !== 0) {
-    throw new Error(`cannot quit the Tauri release app: ${String(result.stderr).trim()}`);
-  }
-}
-
-async function waitForExit(processToWait, timeoutMs) {
-  if (processToWait.exitCode != null) return;
-  await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("Tauri release app did not exit gracefully")), timeoutMs);
-    processToWait.once("exit", () => {
-      clearTimeout(timer);
-      resolve();
-    });
+function appendOutput(chunk) { output = (output + chunk.toString()).slice(-16384); }
+function waitForExit(processToWait, timeout) {
+  if (processToWait.exitCode != null || processToWait.signalCode != null) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const done = () => { clearTimeout(timer); resolve(); };
+    const timer = setTimeout(() => { processToWait.off("exit", done); reject(new Error("owned native host exit timed out")); }, timeout);
+    processToWait.once("exit", done);
   });
 }
-
-async function waitForServiceRegistration() {
-  const deadline = Date.now() + 30_000;
-  while (Date.now() < deadline) {
-    if (child.exitCode != null) throw new Error(`Tauri release app exited before service registration\n${output.join("")}`);
-    try {
-      const registration = JSON.parse(fs.readFileSync(serviceRegistrationPath, "utf8"));
-      if (registration.service === "phoenix-desk-tools"
-          && registration.protocol_version === 1
-          && registration.host === "127.0.0.1"
-          && Number.isInteger(registration.port)) {
-        port = registration.port;
-        origin = `http://127.0.0.1:${port}`;
-        return;
-      }
-    } catch {
-      // The managed service has not published its atomic registration yet.
-    }
-    await delay(100);
-  }
-  throw new Error(`Tauri release app did not publish ${serviceRegistrationPath}\n${output.join("")}`);
-}
-
-async function waitForPortRelease() {
-  const deadline = Date.now() + 5_000;
-  while (Date.now() < deadline) {
-    if (!(await canConnect())) return;
-    await delay(100);
-  }
-  throw new Error(`the packaged Node service still owns port ${port} after the app exited`);
-}
-
-function canConnect() {
-  return new Promise((resolve) => {
-    const socket = net.createConnection({ host: "127.0.0.1", port });
-    const done = (connected) => {
-      socket.destroy();
-      resolve(connected);
-    };
-    socket.setTimeout(250, () => done(false));
-    socket.once("connect", () => done(true));
-    socket.once("error", () => done(false));
+function canConnect(port) {
+  return new Promise(resolve => {
+    const socket = net.createConnection({ host: "127.0.0.1", port: Number(port) });
+    const done = connected => { socket.destroy(); resolve(connected); };
+    socket.setTimeout(250, () => done(false)); socket.once("connect", () => done(true)); socket.once("error", () => done(false));
   });
 }
-
-function plistValue(key) {
-  const result = spawnSync("plutil", ["-extract", key, "raw", "-o", "-", infoPlist], {
-    encoding: "utf8",
-    timeout: 5_000,
-  });
-  if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error(`cannot read ${key} from Info.plist`);
-  return String(result.stdout).trim();
-}
-
-function displayPath(filename) {
-  const relative = path.relative(repoRoot, filename);
-  return relative && !relative.startsWith("..") && !path.isAbsolute(relative)
-    ? relative.replaceAll(path.sep, "/")
-    : path.basename(filename);
-}
-
 async function cleanup() {
-  if (await canConnect()) {
-    try {
-      await fetch(`${origin}/api/shutdown`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: "{}",
-      });
-    } catch { /* best effort */ }
+  for (const owned of ownedChildren) {
+    if (owned.exitCode != null || owned.signalCode != null) continue;
+    try { writeOwnedQuit(launch, owned, expectedVersion); await waitForExit(owned, 10000); }
+    catch {
+      // No bundle ID/global name/stale API shutdown: only our spawn handle.
+      owned.kill();
+      try { await waitForExit(owned, 5000); } catch { /* retain unresolved live scope */ }
+    }
   }
-  if (child?.exitCode == null) child.kill();
-  if (process.env.PHOENIX_KEEP_TAURI_APP_SMOKE === "1") {
-    process.stdout.write(`[q2] kept ${tempRoot}\n`);
-  } else {
-    fs.rmSync(tempRoot, { recursive: true, force: true });
-  }
+  // Always keep local evidence. A matched path or copied marker is not an
+  // atomic authorization to recursively delete a directory after GUI exit.
+  verifyIsolatedLaunch(launch);
+  process.stdout.write("[M4] retained local smoke evidence: " + tempRoot + "\n");
 }
-
-function assertUnder(root, candidate, label) {
-  const relative = path.relative(path.resolve(root), candidate);
-  assert(relative && !relative.startsWith("..") && !path.isAbsolute(relative), `${label} escaped ${root}: ${candidate}`);
+function isUnder(root, candidate) {
+  const relative = path.relative(path.resolve(root), path.resolve(candidate));
+  return relative === "" || (relative !== ".." && !relative.startsWith(".." + path.sep) && !path.isAbsolute(relative));
 }
-
-function assertFile(file) {
-  assert(fs.existsSync(file) && fs.statSync(file).isFile(), `required file is missing: ${file}`);
-}
-
-function assert(condition, message) {
-  if (!condition) throw new Error(message);
-}
-
-function sha256(bytes) {
-  return createHash("sha256").update(bytes).digest("hex");
-}
-
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+function assertUnder(root, candidate, label) { assert(isUnder(root, candidate) && candidate !== root, label + " escaped the owned user-data scope"); }
+function delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }

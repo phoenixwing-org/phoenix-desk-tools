@@ -25,7 +25,7 @@ import PlaceholderPage from "../pages/PlaceholderPage.vue";
 import { PAGE_COMPONENTS, preloadPageComponent } from "./pageRegistry";
 import { pageSideBlockComponent } from "./pageSideBlockRegistry";
 import { createAsyncViewSwitchController } from "./asyncViewSwitch";
-import { fetchPhoenixDatabaseStatus, recreatePhoenixDatabase } from "../api";
+import { fetchPhoenixDatabaseStatus } from "../api";
 import { provideAppShell } from "../composables/useAppShell";
 import { WORKBENCH_IDLE_PAGE } from "../constants/workbench";
 import { usePnwDocumentTitle } from "phoenix-wing";
@@ -41,7 +41,7 @@ import { buildRibbonTabs } from "./ribbon/ribbonConfig";
 import { ribbonIconFor } from "./ribbon/ribbonIcons";
 import GiteeIcon from "../components/icons/GiteeIcon.vue";
 import { PROJECT_GITEE_HOME } from "../constants/projectLinks";
-import { pdtWithWorkbenchLayoutState } from "../workbench/PdtWorkbenchDisplayPreferences";
+import { pdtRevealWorkbenchBottom, pdtWithWorkbenchLayoutState } from "../workbench/PdtWorkbenchDisplayPreferences";
 import type { WorkbenchTab } from "../types/workbench";
 import WorkspaceDockableToolContent from "../components/workspace/WorkspaceDockableToolContent.vue";
 import {
@@ -57,9 +57,7 @@ const loading = ref(true);
 const loadError = ref("");
 const legacyDbBanner = ref(false);
 const legacyDbReasons = ref<string[]>([]);
-const legacyDbRecreating = ref(false);
 const legacyDbError = ref("");
-const legacyDbExpectedSchema = ref(13);
 
 function readWorkspaceToolState(): PnwDockableToolState {
   try {
@@ -94,7 +92,12 @@ const pnwBottomPanel = usePdtWorkbenchBottomPanel(shell);
 const activeTab = computed(() => shell.activeTab());
 const pnwActiveBottomTabId = ref("output");
 const bottomPanelState = useWorkbenchBottomPanelState();
-watch(bottomPanelState.outputRevealRevision, () => { pnwActiveBottomTabId.value = "output"; });
+watch(bottomPanelState.outputRevealRevision, () => {
+  pnwActiveBottomTabId.value = "output";
+  const current = uiPrefs.workbenchDisplayPreferences;
+  const revealed = pdtRevealWorkbenchBottom(current);
+  if (revealed !== current) uiPrefs.setWorkbenchDisplayPreferences(revealed);
+});
 const displayedTab = shallowRef<WorkbenchTab>();
 const pendingViewLabel = ref("");
 const viewLoadError = ref("");
@@ -239,29 +242,9 @@ async function refreshLegacyDatabaseBanner() {
     const status = await fetchPhoenixDatabaseStatus();
     legacyDbBanner.value = status.needs_recreate;
     legacyDbReasons.value = status.reasons;
-    legacyDbExpectedSchema.value = status.expected_schema_version;
     legacyDbError.value = "";
   } catch (e) {
     legacyDbError.value = String(e);
-  }
-}
-
-async function confirmRecreateLegacyDatabase() {
-  const ok = window.confirm(
-    `将删除当前工作空间数据库并创建空的 phoenix-workspace.sqlite（schema v${legacyDbExpectedSchema.value}）。\n`
-      + "遗留文件（cad-database.sqlite / phoenix-cad.sqlite）与含旧表名的库也会被清除。\n"
-      + "CAD 索引、BOM 引用与改名历史将清空；之后需在 KT Auto CAD 重新扫描。\n\n确定继续？",
-  );
-  if (!ok) return;
-  legacyDbRecreating.value = true;
-  legacyDbError.value = "";
-  try {
-    await recreatePhoenixDatabase();
-    window.location.reload();
-  } catch (e) {
-    legacyDbError.value = String(e);
-  } finally {
-    legacyDbRecreating.value = false;
   }
 }
 
@@ -294,20 +277,26 @@ onUnmounted(() => {
     >
       <template #workbench="{ showWelcome }">
         <div class="desk-gated-workbench">
-          <div v-if="legacyDbBanner" class="legacy-db-banner" role="alert">
+          <div v-if="legacyDbBanner || legacyDbError" class="legacy-db-banner" role="alert">
             <div class="legacy-db-banner-text">
-              <strong>工作空间数据库需要重建</strong>
-              <span>检测到旧文件、旧表或 schema 版本不匹配。重建后才能继续使用索引与 BOM 功能。</span>
+              <strong>工作空间数据库兼容需核对</strong>
+              <span>原数据保持不变。先备份并在新目录恢复验证；当前禁止原位重建。</span>
               <span v-if="legacyDbReasons.length" class="legacy-db-reasons">{{ legacyDbReasons.join(" · ") }}</span>
               <span v-if="legacyDbError" class="legacy-db-error">{{ legacyDbError }}</span>
             </div>
             <button
               type="button"
               class="legacy-db-action"
-              :disabled="legacyDbRecreating"
-              @click="confirmRecreateLegacyDatabase"
+              disabled
             >
-              {{ legacyDbRecreating ? "重建中…" : "确认重建数据库" }}
+              原位重建已禁用
+            </button>
+            <button
+              type="button"
+              class="legacy-db-recovery-action"
+              @click="onPnwActivate('workspace_recovery')"
+            >
+              打开备份与恢复
             </button>
           </div>
           <PnwWorkbenchShell
@@ -592,7 +581,8 @@ onUnmounted(() => {
   color: #b45309;
 }
 
-.legacy-db-action {
+.legacy-db-action,
+.legacy-db-recovery-action {
   flex-shrink: 0;
   padding: 6px 12px;
   border: 1px solid #d97706;

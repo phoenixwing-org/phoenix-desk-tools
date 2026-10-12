@@ -5,7 +5,7 @@
 > [文档索引](../文档索引.md) · 历史决策：[CAD数据库表结构-重命名规划.md](CAD数据库表结构-重命名规划.md)  
 > DDL 真源：`phoenix/freecad/phoenix_schema.py` · 访问：`phoenix_store.connect`
 
-最后更新：2026-06
+最后更新：2026-10-12（安全说明；v10 表清单仍为历史快照）
 
 ---
 
@@ -15,7 +15,7 @@
 | --- | --- |
 | 路径 | `<工作空间根>/.phoenix/phoenix-workspace.sqlite` |
 | 版本 | `phoenix_meta.schema_version` = **10** |
-| 旧文件 | `cad-database.sqlite`、`phoenix-cad.sqlite` **不再使用**；`connect()` 与状态 API 会**自动删除**遗留文件名；若 `phoenix-workspace.sqlite` 内仍为旧表名则删库重建路径（不迁移数据） |
+| 旧文件 | `cad-database.sqlite`、`phoenix-cad.sqlite` 为历史文件名；发现旧文件、旧表或版本不匹配时应保留原数据并核对兼容性，不得按本文删除或原位重建 |
 
 ---
 
@@ -60,8 +60,9 @@ BOM 数据流与字段说明见原文档各节逻辑；`phoenix_cad_bom_xref` �
 
 ## 4. 运维
 
-- 升级代码后：遗留库文件通常会在首次连接或打开 Web 时**自动删除**；若需手动清空可点 **确认重建数据库** 或 `POST /api/phoenix/database/recreate`，再 **CAD 索引 → 工程内搜索** 全量重扫。
-- 手动清空：`POST /api/phoenix/database/recreate` 或配置/Web 顶部「确认重建数据库」。
+- 升级代码后：数据库兼容需核对，原数据保持不变。旧库提示不是删除授权；当前禁止原位重建，Web 不提供确认删除或自动重扫动作。
+- 安全处理：先取得可验证的完整备份，再在新建隔离目录恢复验证；不得覆盖原目录、用局部索引备份冒充全库恢复，或以全量重扫替代人工字段、历史与交付回执的恢复。本页不表示恢复功能或迁移门禁已经完成。
+- `POST /api/phoenix/database/recreate` 仅保留兼容拒绝入口（409），不得作为运维清空步骤。
 - API JSON 字段名（如 `file_asset` 逻辑概念）**未改**，仅 SQLite 表名变更。
 
 ---

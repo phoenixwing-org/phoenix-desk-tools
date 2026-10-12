@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { pnwCreateDb, type PnwDbAdapter } from "@phoenix-wing/db-node";
 import { fcstdFingerprint, safeFcstdPath } from "../../lib/fcstdBatchFiles.js";
+import { cadPathExcludedFromDiscovery } from "../../lib/cadIndexScanScope.js";
 import type { GalleryRow } from "./types.js";
 
 export function relativeFile(value: string): string {
@@ -94,6 +95,7 @@ export function indexFiles(root: string): string[] {
   try {
     if (!db || !tableExists(db, "phoenix_cad_file_asset")) return [];
     // asset_kind describes CAD semantics (part/assembly/drawing), not the extension.
-    return [...new Set(db.all<{ repo_rel_path: string }>("SELECT repo_rel_path FROM phoenix_cad_file_asset WHERE lower(repo_rel_path) LIKE '%.fcstd' AND file_status='present'").map(r => relativeFile(r.repo_rel_path)))];
+    return [...new Set(db.all<{ repo_rel_path: string }>("SELECT repo_rel_path FROM phoenix_cad_file_asset WHERE lower(repo_rel_path) LIKE '%.fcstd' AND file_status='present'")
+      .filter(row => !cadPathExcludedFromDiscovery(row.repo_rel_path)).map(r => relativeFile(r.repo_rel_path)))];
   } finally { db?.close(); }
 }

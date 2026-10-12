@@ -46,7 +46,7 @@ export async function previewBatchAttributes(workspace: string, opts: { batch_di
       const index = normalize(hints.index[field]); const hint = normalize(hints.filename[field]);
       let name: ReturnType<typeof recommendPartName> | null = null;
       if (field === "PartName") {
-        try { name = recommendPartName(rel, target.current, nameSource); }
+        try { name = recommendPartName(rel, target.current, nameSource, target); }
         catch (error) {
           if (!(error instanceof InvalidPartNameError)) throw error;
           return { field, current, proposed: "", source: error.sourceNote, eligible: false, reason: "invalid_name", note: error.message };
@@ -119,7 +119,7 @@ export function applyBatchAttributes(workspace: string, opts: { plan_id?: string
       let indexUpdated = false;
       try { indexUpdated = updateCadIndexEntryAfterBomWrite(root, selection.rel, values, selection.fields as Field[]); }
       catch { /* The file is already committed; report index failure separately. */ }
-      results.push({ rel: selection.rel, status: "written", message: `已写入 ${new Set(selection.fields).size} 个字段到 ${planned.objectName}${indexUpdated ? "，已更新已有索引投影" : "；索引未更新，请在 KT Auto CAD 刷新"}` });
+      results.push({ rel: selection.rel, status: "written", message: `已写入 ${new Set(selection.fields).size} 个字段到 ${planned.objectName}${indexUpdated ? "，已更新已有索引投影" : "；索引未更新，请在「CAD 索引」更新"}` });
     } catch (error) { results.push({ rel: selection.rel, status: "failed", message: error instanceof Error ? error.message : String(error) }); }
   }
   return { results };

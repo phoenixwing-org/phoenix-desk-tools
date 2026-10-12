@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onScopeDispose, ref, watch } from "vue";
 import type { BomXrefEdge, BomXrefHost, FileDetailXrefsPayload } from "../../api";
 import {
   cancelBomXrefHostRefresh,
@@ -17,6 +17,7 @@ import {
 } from "../../utils/bomFieldLabels";
 import { basenameFromRel, normalizeRepoRelForApi, repoDirFromRel } from "../../utils/workspaceFileQuery";
 import { logReferenceLabelApply } from "../../utils/referenceLabelLog";
+import { cadIndexReadStateWarning, xrefCountsFromPayload } from "../../utils/cadIndexState";
 import XlinkReplaceDialog from "../XlinkReplaceDialog.vue";
 
 const emit = defineEmits<{ "busy-change": [busy: boolean] }>();
@@ -36,6 +37,8 @@ const outgoingRefs = ref<BomXrefEdge[]>([]);
 const outgoingLabelMismatchCount = ref(0);
 const directCount = ref(0);
 const indexPending = ref(false);
+const indexReadState = ref<import("../../api").CadIndexReadState | null>(null);
+const indexWarning = computed(() => cadIndexReadStateWarning(indexReadState.value));
 /** 避免 onMounted 与 watch 并发时较早的空结果覆盖较新数据 */
 let loadSeq = 0;
 const incomingCount = computed(() => ctx.incomingCount.value);
@@ -151,6 +154,11 @@ function applyIncomingPayload(data: FileDetailXrefsPayload) {
 }
 
 function applyXrefPayload(data: FileDetailXrefsPayload) {
+  indexPending.value = Boolean(data.index_pending);
+  indexReadState.value = data;
+  if (ctx.preview.value) {
+    ctx.preview.value = { ...ctx.preview.value, xref_counts: xrefCountsFromPayload(data), xref_index_pending: data.index_pending };
+  }
   if (data.outgoing) applyOutgoingPayload(data);
   if (data.incoming) applyIncomingPayload(data);
 }
@@ -178,54 +186,41 @@ async function loadTables(manual = false, refreshDisk = false) {
   }
 
   const seq = ++loadSeq;
+  const workspace = shell.workspacePath.value;
+  const current = () => seq === loadSeq && rel === ctx.rel.value.trim() && workspace === shell.workspacePath.value;
   loading.value = true;
   loadingIncoming.value = true;
   if (manual) {
     shell.appendLog(`[文件详情] 刷新引用关系 ${rel}…`, { source: "file_detail", open: true });
   }
   try {
-    const outData = await fetchFileDetailXrefs({
+    const data = await fetchFileDetailXrefs({
       rel,
-      scope: "outgoing",
+      scope: "both",
+      transitive: includeTransitive.value,
       limit: 500,
       refreshDisk,
     });
-    if (seq !== loadSeq) return;
-    indexPending.value = Boolean(outData.index_pending);
-    if (outData.index_pending) {
+    if (!current()) return;
+    applyXrefPayload(data);
+    if (data.index_pending) {
       clearTables();
       return;
     }
-    applyOutgoingPayload(outData);
-    loading.value = false;
-
-    const inData = await fetchFileDetailXrefs({
-      rel,
-      scope: "incoming",
-      transitive: includeTransitive.value,
-      limit: 500,
-    });
-    if (seq !== loadSeq) return;
-    applyIncomingPayload(inData);
-    const merged: FileDetailXrefsPayload = {
-      rel,
-      incoming: inData.incoming,
-      outgoing: outData.outgoing,
-    };
-    ctx.xrefCacheByRel.value = { ...ctx.xrefCacheByRel.value, [cacheKey]: merged };
+    ctx.xrefCacheByRel.value = { ...ctx.xrefCacheByRel.value, [cacheKey]: data };
     if (manual) {
       shell.appendLog(
-        `[文件详情] 入向 ${inData.incoming.count} · 出向 ${outData.outgoing.count}`,
+        `[文件详情] 入向 ${data.incoming.count} · 出向 ${data.outgoing.count}`,
         { source: "file_detail" },
       );
     }
   } catch (e) {
-    if (seq !== loadSeq) return;
+    if (!current()) return;
     ctx.pageError.value = String(e);
     clearTables();
     if (manual) shell.appendLog(String(e), { source: "file_detail" });
   } finally {
-    if (seq === loadSeq) {
+    if (current()) {
       loading.value = false;
       loadingIncoming.value = false;
     }
@@ -233,11 +228,15 @@ async function loadTables(manual = false, refreshDisk = false) {
 }
 
 watch(
-  () => ctx.rel.value,
-  (host) => {
-    if (!host.trim()) clearTables();
+  () => [ctx.rel.value, shell.workspacePath.value],
+  () => {
+    loadSeq++;
+    clearTables();
+    indexPending.value = false;
+    indexReadState.value = null;
   },
 );
+onScopeDispose(() => { loadSeq++; });
 
 watch(
   () => [ctx.rel.value, ctx.activeSubTab.value] as const,
@@ -269,14 +268,15 @@ async function onRefreshIndex() {
     () => refreshUI.state.value?.status,
     async (status) => {
       if (status === "done") {
-        await loadTables(false, false);
+        ctx.notifyXrefMutation(ctx.rel.value);
+        await loadTables(true, false);
+        await ctx.refreshXrefCounts();
         const missing = outgoingRefs.value.filter(r => r.resolve_status === "missing").length;
         const ambiguous = outgoingRefs.value.filter(r => r.resolve_status === "ambiguous").length;
         const resolved = outgoingRefs.value.filter(r => r.resolve_status === "resolved" || r.resolve_status === "self").length;
         indexSummary.value = `已刷新 · 出向 ${outgoingRefs.value.length} 条（已解析 ${resolved} · 缺失 ${missing} · 歧义 ${ambiguous}）`;
         shell.setStatus(indexSummary.value);
         shell.appendLog(indexSummary.value, { source: "file_detail" });
-        ctx.notifyXrefMutation(ctx.rel.value);
         refreshing.value = false;
         unwatch();
       } else if (status === "error" || status === "cancelled") {
@@ -396,8 +396,9 @@ async function onSyncIncomingLabels() {
     </header>
     <p v-if="loading && !outgoingRefs.length" class="empty muted">载入出向引用…</p>
     <p v-else-if="indexPending" class="banner warn">
-      引用表尚未构建。请先在「CAD 索引」或 KT Auto CAD 更新工作空间索引，再回到本页局部刷新当前文件。
+      引用表尚未构建。请先在「CAD 索引」更新工作空间索引，再回到本页局部刷新当前文件。
     </p>
+    <p v-if="!indexPending && indexWarning" class="banner warn" role="status">{{ indexWarning }}</p>
     <p v-if="indexSummary" class="index-summary">{{ indexSummary }}</p>
 
     <section class="block">
@@ -580,9 +581,9 @@ async function onSyncIncomingLabels() {
     />
 
     <p class="hint muted">
-      本页只读取 KT Auto CAD 索引中的入向/出向关系。「局部刷新本文件引用」仅更新当前文件及所选子装配的引用边；
+      本页读取共享 CAD 索引中的入向/出向关系。「局部刷新本文件引用」仅更新当前文件及所选子装配的引用边；
       <strong>缺失</strong>表示索引中无目标或路径无法解析。单条 XLink 写回用出向表「改链接」；
-      批量改名写回请用「改名」Tab；整库扫描与正式 BOM 推送请使用 KT Auto CAD。
+      文件改名从右上角打开，整库扫描在「CAD 索引」。正式 BOM 交付尚在迁移，旧扩展交付入口暂时保留。
     </p>
   </div>
 </template>

@@ -618,7 +618,7 @@ function buildFileTree(base: string, rel: string, exts: string[]): TreeNode | nu
   const children: TreeNode[] = [];
   try {
     for (const entry of fs.readdirSync(full)) {
-      if (entry.startsWith(".")) continue;
+      if (entry.startsWith(".") || entry === "__pycache__") continue;
       const child = buildFileTree(base, rel ? `${rel}/${entry}` : entry, exts);
       if (child) children.push(child);
     }
@@ -864,7 +864,7 @@ shellRoutes.post("/api/phoenix/database/recreate", (c) => {
   try {
     return c.json(recreatePhoenixDatabase(currentWorkspace()));
   } catch (e: any) {
-    return c.json({ detail: e.message || String(e) }, 409);
+    return c.json({ detail: e.message || String(e), code: e.code || "PHOENIX_DATABASE_RECREATE_DISABLED" }, 409);
   }
 });
 
