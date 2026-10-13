@@ -38,11 +38,6 @@ async function selectTask(id: string) { if (!busy.value && await guardChanges())
 async function createTask(copy = false) { if (!busy.value && await guardChanges()) await rename.create(copy); }
 async function reloadTasks() { if (!busy.value && await guardChanges()) await rename.load(); }
 function attemptTime(at: string) { const value = new Date(at); return Number.isNaN(value.getTime()) ? at : value.toLocaleString("zh-CN", { hour12: false }); }
-function setDirectoryMode(value: unknown) {
-  rename.draft.directories = Boolean(value);
-  if (value) { rename.draft.filenames = false; rename.draft.contents = false; }
-}
-function selectFileScope(value: unknown) { if (value) rename.draft.directories = false; }
 function addDirectory() {
   const value = directoryInput.value.trim();
   if (!busy.value && value && !rename.draft.roots.includes(value) && rename.draft.roots.length < 12) rename.draft.roots.push(value);
@@ -88,7 +83,7 @@ watch(() => [busy.value, shell.activeTabId.value, shell.getTab(props.workbenchTa
 usePageSession(props.workbenchTabId, { serialize: () => ({}), hydrate: () => true, isDirty: () => rename.dirty, isBusy: () => busy.value, flush: () => rename.save(), refresh: reloadTasks });
 usePagePrimaryContribution("rename_tasks", props.workbenchTabId, {
   title: "批量改名", summary: computed(() => rename.error || rename.phase || rename.active?.name || "选择或新建改名任务"),
-  sections: [{ id: "quick-rename", title: "普通改名", description: "沿用右侧处理目录与勾选范围，新建 A→B 任务并预览。文件名和内容可同时勾选；文件夹暂单独执行。", controls: [
+  sections: [{ id: "quick-rename", title: "普通改名", description: "沿用右侧处理目录与勾选范围，新建 A→B 任务并预览。文件名、文件夹名、内容可独立勾选并联合执行。", controls: [
     { id: "old", kind: "text", label: "查找 A", modelValue: quickOld, disabled: busy, onUpdate: value => { quickOld.value = value; } },
     { id: "target", kind: "text", label: "替换为 B", modelValue: quickTarget, disabled: busy, onUpdate: value => { quickTarget.value = value; } },
   ], actions: [{ id: "quick-preview", label: "预览 A→B", tone: "primary", disabled: computed(() => busy.value || !shell.workspacePath.value || !quickOld.value.trim() || !quickTarget.value.trim() || quickOld.value === quickTarget.value || !(rename.draft.directories || rename.draft.filenames || rename.draft.contents)), run: quickPreview }] }, { id: "task", title: "任务", actions: [
@@ -97,7 +92,7 @@ usePagePrimaryContribution("rename_tasks", props.workbenchTabId, {
   ] }, { id: "run", title: "处理", progress: computed(() => ({ label: "批量改名", state: rename.busy ? "running" as const : rename.results ? (rename.results.failed ? "warning" as const : "done" as const) : "idle" as const, detail: rename.phase || `${rename.draft.mappings.filter(row => row.enabled).length} 条规则 · ${rename.draft.roots.length} 个目录` })), actions: [
     { id: "preview", label: "搜索预览", disabled: computed(() => busy.value || !rename.canPreview), run: search },
     { id: "apply", label: "应用勾选", tone: "primary", disabled: computed(() => busy.value || !rename.canApply), run: confirmApply },
-  ] }, { id: "help", title: "说明", description: "任务包含改名列表、目录列表和匹配选项，保存到当前工作空间 SQLite；可以新建多个任务或复制后尝试。保存任务不改目标文件，搜索前自动保存当前配置。\n普通文本与文件名按字面、区分大小写、最长匹配一次替换；不使用正则。连续 A→B→C 须先整理为最终映射；冲突、循环和交换规则会单独列出并跳过，其余规则继续处理。\n沿用 Code 忽略规则；保留 UTF-8/BOM/GBK 编码，二进制内容不替换。文件夹模式不改处理根目录，包含 CAD 关联模型、符号链接或内部工程数据的文件夹需另行处理。FCStd 文件名仍走 CAD 专用入口。\n预览 30 分钟有效；任务配置改变、服务重启或提交应用后必须重新预览。首次预览默认不选文件，不会自动应用。\n点击应用勾选后直接执行，不自动备份；由用户自行备份。失败项不阻止其他安全项。最近 30 次尝试保存在任务中；不自动提交 Git 或运行 CAD/Code 索引。" }],
+  ] }, { id: "help", title: "说明", description: "任务包含改名列表、目录列表和匹配选项，保存到当前工作空间 SQLite；可以新建多个任务或复制后尝试。保存任务不改目标文件，搜索前自动保存当前配置。\n普通文本与文件名按字面、区分大小写、最长匹配一次替换；不使用正则。连续 A→B→C 须先整理为最终映射；冲突、循环和交换规则会单独列出并跳过，其余规则继续处理。\n三个范围可联合执行，先修改选中文件内容和文件名，再从内到外修改选中文件夹名。不改处理根目录；目录改名会移动所有子项，但未选文件不修改自身名称或内容。包含 CAD 关联模型、符号链接或内部工程数据的文件夹需另行处理。\n沿用 Code 忽略规则；保留 UTF-8/BOM/GBK 编码，二进制内容不替换。FCStd 文件名仍走 CAD 专用入口。\n预览 30 分钟有效；任务配置改变、服务重启或提交应用后必须重新预览。首次预览默认不选文件，不会自动应用。\n点击应用勾选后直接执行，不自动备份；由用户自行备份。失败项不阻止其他安全项。最近 30 次尝试保存在任务中；不自动提交 Git 或运行 CAD/Code 索引。" }],
 });
 </script>
 <template>
@@ -132,7 +127,8 @@ usePagePrimaryContribution("rename_tasks", props.workbenchTabId, {
         <template #actions><div class="header-actions"><el-button size="small" :disabled="busy || rename.draft.roots.length >= 12" @click="pickDirectory">选择目录…</el-button><el-button size="small" :disabled="busy || !rename.canPreview" @click="search">搜索预览</el-button></div></template>
         <div class="inline-row"><el-input v-model="directoryInput" :disabled="busy" aria-label="添加处理目录" placeholder="绝对路径，可来自不同 Git 仓库" @keyup.enter="addDirectory" /><el-button size="small" :disabled="busy || !directoryInput.trim() || rename.draft.roots.length >= 12" @click="addDirectory">添加</el-button></div>
         <div v-for="(root, index) in rename.draft.roots" :key="root" class="directory-row"><code>{{ root }}</code><el-button size="small" link :disabled="busy" @click="rename.draft.roots.splice(index, 1)">移除</el-button></div>
-        <div class="inline-row"><el-checkbox :model-value="rename.draft.directories === true" :disabled="busy" @change="setDirectoryMode">文件夹名</el-checkbox><el-checkbox v-model="rename.draft.filenames" :disabled="busy" @change="selectFileScope">文件名</el-checkbox><el-checkbox v-model="rename.draft.contents" :disabled="busy" @change="selectFileScope">文件内容</el-checkbox><el-checkbox v-model="rename.draft.include_stem" :disabled="busy">同时匹配不含扩展名的名称</el-checkbox><small>此选项只补充列表中没有的去扩展名规则；已导入列表的规则始终按启用状态参与。</small></div>
+        <div class="inline-row"><el-checkbox v-model="rename.draft.directories" :disabled="busy">文件夹名</el-checkbox><el-checkbox v-model="rename.draft.filenames" :disabled="busy">文件名</el-checkbox><el-checkbox v-model="rename.draft.contents" :disabled="busy">文件内容</el-checkbox><el-checkbox v-model="rename.draft.include_stem" :disabled="busy">同时匹配不含扩展名的名称</el-checkbox><small>此选项只补充列表中没有的去扩展名规则；已导入列表的规则始终按启用状态参与。</small></div>
+        <small>文件名、文件夹名、内容可联合执行。目录改名会移动全部子项；未选文件不改自身名称或内容，目录取消勾选不改变子文件勾选。</small>
         <small>STEP/STP、CATDrawing 勾选后只改文件名，内部内容及引用保持不变；CATPart、CATProduct 等需在 CATIA 中改名，FCStd 使用 CAD 专用入口。</small>
       </WingBlock>
       <WingBlock v-model:expanded="expanded.preview" title="搜索预览与结果" variant="card" class="rename-block">
@@ -143,7 +139,7 @@ usePagePrimaryContribution("rename_tasks", props.workbenchTabId, {
           <el-button size="small" :disabled="busy || !rename.canPreview" @click="search">重新预览</el-button>
           <el-button size="small" type="primary" :disabled="busy || !rename.canApply" @click="confirmApply">应用勾选</el-button>
         </div></template>
-        <RenameExtensionFilter v-if="!rename.draft.directories" :filters="extensions.filters" :disabled="busy || rename.consumed" @toggle="extensions.toggle" />
+        <RenameExtensionFilter :filters="extensions.filters" :disabled="busy || rename.consumed" @toggle="extensions.toggle" />
         <RenamePreviewTable v-if="rename.preview" v-model:selected="rename.selected" :preview="{ ...rename.preview, rows: extensions.visibleRows }" :results="rename.results" :consumed="rename.consumed" :total-rows="rename.preview.rows.length" :all-rows="rename.preview.rows" :disabled="busy || rename.consumed" />
         <p v-else class="empty">先搜索预览，再勾选需要修改的文件并应用。编辑任务后需重新预览。</p>
       </WingBlock>

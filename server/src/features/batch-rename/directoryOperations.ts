@@ -3,7 +3,8 @@ import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { pnwCodeReplaceStringByRules } from "@phoenix-wing/code-core";
 import { effectiveCodeIgnorePatterns, isIgnoredName } from "../../lib/codeIgnoreService.js";
-import { activeRoots, directory, safePath, validFilename, type RenameRules, type SyncPreview, type SyncRow, type SyncResult } from "./fileOperations.js";
+import { activeRoots, directory, safePath, validFilename, type FileMutation, type RenameRules, type SyncPreview, type SyncRow, type SyncResult } from "./fileOperations.js";
+import { planRenameBasename } from "./pathPlan.js";
 
 const TTL = 30 * 60 * 1000, LIMIT = 256 * 1024 * 1024;
 const key = (value: string) => value.normalize("NFC").toLowerCase();
@@ -13,7 +14,7 @@ type TreeEntry = { rel: string; mode: number; hash?: string };
 const treeDigest = (tree: TreeEntry[]) => createHash("sha256").update(JSON.stringify([...tree].sort((a, b) => a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0))).digest("hex");
 type Snapshot = { digest: string; tree: TreeEntry[]; bytes: number; ino: number; dev: number };
 type Entry = { row: SyncRow; snapshot?: Snapshot };
-type Plan = { workspace: string; owner: string; expires: number; preview: SyncPreview; entries: Entry[] };
+type Plan = { workspace: string; owner: string; expires: number; preview: SyncPreview; entries: Entry[]; retained?: number };
 const plans = new Map<string, Plan>();
 
 /** Inspect all descendants, even ignored files: moving a parent moves them too. */
@@ -56,25 +57,29 @@ export function previewDirectoryChanges(workspace: string, body: { roots: string
   const roots = body.roots.map(directory);
   if (roots.some((root, i) => roots.some((other, j) => i !== j && contains(root, other)))) throw new Error("处理目录有重复或包含关系");
   const now = Date.now();
-  for (const [id, plan] of plans) if (plan.expires < now) plans.delete(id);
-  if (plans.size >= 8) plans.delete(plans.keys().next().value!);
+  for (const [id, plan] of plans) if (!plan.retained && plan.expires < now) plans.delete(id);
+  if (plans.size >= 8) { const removable = [...plans].find(([, plan]) => !plan.retained); if (!removable) throw new Error("预览任务正被执行，请稍后重试"); plans.delete(removable[0]); }
   const preview: SyncPreview = { plan_id: randomUUID(), expires_at: new Date(now + TTL).toISOString(), roots, excluded_rules: rules.excluded_rules, mappings: rules.mappings, conflicts: rules.conflicts, rows: [], warnings: [], scanned: 0, skipped: 0 };
   const entries: Entry[] = []; let visited = 0;
   if (!rules.conflicts.length) for (const root of roots) {
     const patterns = effectiveCodeIgnorePatterns(root), stack = [""];
     while (stack.length) {
       const relDir = stack.pop()!;
-      for (const item of fs.readdirSync(relDir ? safePath(root, relDir) : root, { withFileTypes: true })) {
+      const siblings = fs.readdirSync(relDir ? safePath(root, relDir) : root, { withFileTypes: true });
+      const pathEntries = siblings.map(item => ({ relativePath: path.posix.join(relDir, item.name), kind: item.isDirectory() ? "dir" as const : "file" as const }));
+      for (const item of siblings) {
         if (++visited > 20000) throw new Error("扫描超过 20000 项，请缩小范围");
         if (item.isSymbolicLink() || isIgnoredName(item.name, patterns)) { preview.skipped++; continue; }
         if (!item.isDirectory()) continue;
         const rel = path.posix.join(relDir, item.name); stack.push(rel); preview.scanned++;
         const name = pnwCodeReplaceStringByRules(item.name, rules.rules).output;
         if (name === item.name) continue;
-        const row: SyncRow = { kind: "directory", id: randomUUID(), root, rel, target: path.posix.join(relDir, name), occurrences: 0, binary: false, eligible: true, message: "待改文件夹名（包含全部子项路径，不修复内容引用）", diffs: [], truncated: false };
+        const planned = planRenameBasename(rel, item.name, name, "dir", pathEntries);
+        const row: SyncRow = { kind: "directory", id: randomUUID(), root, rel, target: planned.target, occurrences: 0, binary: false, eligible: true, message: "待改文件夹名（包含全部子项路径；仅按勾选修改内容）", diffs: [], truncated: false };
         const entry: Entry = { row };
         try {
           if (!validFilename(name) || name.startsWith(".")) throw new Error("目标文件夹名无效或为隐藏目录");
+          if (planned.problem) throw new Error(planned.problem);
           freeTarget(root, row.target); entry.snapshot = snapshot(root, rel);
         } catch (error) { row.eligible = false; row.message = errorText(error); }
         entries.push(entry); preview.rows.push(row);
@@ -88,16 +93,40 @@ export function previewDirectoryChanges(workspace: string, body: { roots: string
   plans.set(preview.plan_id, { workspace: ws, owner, expires: now + TTL, preview, entries });
   return preview;
 }
-export function applyDirectoryChanges(workspace: string, body: { plan_id: string; ids: string[]; confirmed: boolean }, owner: string) {
+export function retainDirectoryChanges(workspace: string, id: string, owner: string) {
+  const plan = plans.get(id);
+  if (!plan || plan.workspace !== directory(workspace) || plan.owner !== owner || plan.expires < Date.now()) throw new Error("目录预览已失效，请重新预览");
+  plan.retained = (plan.retained || 0) + 1;
+  return () => { plan.retained!--; if (!plan.retained && plan.expires < Date.now()) plans.delete(id); };
+}
+
+/** Only absorb receipts from our own successful writes, never a fresh disk snapshot. */
+export function trackDirectoryFileMutation(workspace: string, planId: string, ids: readonly string[], mutation: FileMutation, owner: string) {
+  const plan = plans.get(planId);
+  if (!plan || plan.workspace !== directory(workspace) || plan.owner !== owner || (!plan.retained && plan.expires < Date.now())) throw new Error("联合目录计划已失效");
+  const updates: Array<{ entry: Entry; snapshot: Snapshot }> = [];
+  for (const entry of plan.entries) {
+    const { row, snapshot: expected } = entry;
+    if (!ids.includes(row.id) || !expected || row.root !== mutation.root || !mutation.rel.startsWith(row.rel + "/")) continue;
+    const source = mutation.rel.slice(row.rel.length + 1), target = mutation.target.slice(row.rel.length + 1);
+    const node = expected.tree.find(item => item.rel === source);
+    if (!node || node.hash !== mutation.beforeHash || node.mode !== mutation.mode || !mutation.target.startsWith(row.rel + "/")) throw new Error("联合目录校验与本次文件操作不一致，未放宽目录保护");
+    const tree = expected.tree.map(item => item === node ? { ...item, rel: target, hash: mutation.afterHash } : item);
+    updates.push({ entry, snapshot: { ...expected, tree, digest: treeDigest(tree) } });
+  }
+  for (const update of updates) update.entry.snapshot = update.snapshot;
+}
+
+export function applyDirectoryChanges(workspace: string, body: { plan_id: string; ids: string[]; confirmed: boolean }, owner: string, ports: { rootsLocked?: boolean } = {}) {
   const ws = directory(workspace), plan = plans.get(body.plan_id);
-  if (!plan || plan.workspace !== ws || plan.owner !== owner || plan.expires < Date.now()) throw new Error("预览已失效，请重新预览");
+  if (!plan || plan.workspace !== ws || plan.owner !== owner || (!plan.retained && plan.expires < Date.now())) throw new Error("预览已失效，请重新预览");
   if (body.confirmed !== true || !Array.isArray(body.ids) || !body.ids.length || plan.preview.conflicts.length) throw new Error("请勾选有效文件夹并确认应用");
   const selected = [...new Set(body.ids)].map(id => plan.entries.find(entry => entry.row.id === id));
   if (selected.some(entry => !entry?.row.eligible || !entry.snapshot)) throw new Error("选择包含无效文件夹");
   const entries = selected as Array<Entry & { snapshot: Snapshot }>;
   const roots = [...new Set(entries.map(entry => entry.row.root))];
-  if (roots.some(root => [...activeRoots].some(other => contains(root, other) || contains(other, root)))) throw new Error("处理目录正有任务执行");
-  plans.delete(body.plan_id); roots.forEach(root => activeRoots.add(root));
+  if (!ports.rootsLocked && roots.some(root => [...activeRoots].some(other => contains(root, other) || contains(other, root)))) throw new Error("处理目录正有任务执行");
+  plans.delete(body.plan_id); if (!ports.rootsLocked) roots.forEach(root => activeRoots.add(root));
   const results: SyncResult[] = [], prepared: Array<{ entry: typeof entries[number]; result: SyncResult }> = [];
   try {
     // Validate selected subtrees before any path changes. User manages backups.
@@ -140,6 +169,6 @@ export function applyDirectoryChanges(workspace: string, body: { plan_id: string
       }
     }
 
-  } finally { roots.forEach(root => activeRoots.delete(root)); }
+  } finally { if (!ports.rootsLocked) roots.forEach(root => activeRoots.delete(root)); }
   return { results, applied: results.filter(row => row.status === "applied").length, failed: results.filter(row => row.status === "failed").length };
 }

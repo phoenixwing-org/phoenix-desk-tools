@@ -74,18 +74,19 @@ function setupPage() {
   return vm.$.setupState as Setup;
 }
 describe("BOM delivery migrated shell and server-owned workflow", () => {
-  it("renders the real SFC with all three headers, disabled migration actions, and no automatic preview", async () => {
+  it("renders only the offline preflight/export block with no migration placeholders or automatic preview", async () => {
     const html = await render();
-    for (const title of ["BOM交付", "1. 预检与导出", "2. 推送与审核", "3. 历史与重试", "迁移中 · 未开放"]) expect(html).toContain(title);
+    for (const title of ["BOM 离线导出", "1. 预检与导出"]) expect(html).toContain(title);
+    expect(html).not.toMatch(/推送|审核|历史|迁移中|尚待适配|未开放/);
     expect(html).toContain("不自动扫描或创建目录"); expect(html).toContain("整个工作空间");
     const buttons = [...html.matchAll(/<button([^>]*)>([\s\S]*?)<\/button>/g)].map(match => ({ disabled: /\sdisabled(?:\s|$)/.test(match[1]), label: match[2].replace(/<[^>]*>/g, "").trim() }));
-    expect(buttons).toContainEqual({ disabled: true, label: "推送" }); expect(buttons).toContainEqual({ disabled: true, label: "重试推送" });
+    expect(buttons).toContainEqual({ disabled: false, label: "预检预览" }); expect(buttons).toContainEqual({ disabled: true, label: "确认导出" });
     expect(state.preview).not.toHaveBeenCalled(); expect(state.export).not.toHaveBeenCalled();
   });
   it("registers explicit Primary scope/actions/progress without borrowing batch tool navigation", async () => {
     await render();
     const c = state.contribution!;
-    expect(c.title).toBe("BOM交付");
+    expect(c.title).toBe("BOM 离线导出");
     const sections = toValue(c.sections)!;
     expect(sections.map(section => section.id)).toEqual(["scope", "help"]);
     expect(sections[0].actions?.map(action => action.id)).toEqual(["preview", "export", "cancel", "index"]);
@@ -105,15 +106,19 @@ describe("BOM delivery migrated shell and server-owned workflow", () => {
   });
   it("stores only workspace target/directory/collapse, rejecting another workspace and ignoring injected handles", async () => {
     const page = setupPage(); await page.delivery.runPreview(); await page.delivery.runExport();
-    page.delivery.targetSetting = "/example/result.json"; page.delivery.directorySetting = "/output"; page.expanded.push = true;
+    page.delivery.targetSetting = "/example/result.json"; page.delivery.directorySetting = "/output"; page.expanded.preflight = false;
     const snapshot = state.session!.serialize();
     expect(Object.keys(snapshot).sort()).toEqual(["directory", "expanded", "target", "workspace"]);
+    expect(snapshot.expanded).toEqual({ preflight: false });
     expect(JSON.stringify(snapshot)).not.toContain(syntheticPreview().preview_id); expect(JSON.stringify(snapshot)).not.toContain("payloadHash"); expect(JSON.stringify(snapshot)).not.toContain("receipt");
     expect(state.session!.hydrate({ ...snapshot, workspace: "/other" })).toBe(false);
     expect(state.session!.hydrate({ ...snapshot, preview_id: syntheticPreview().preview_id, envelope: syntheticPreview().envelope })).toBe(true);
     expect(state.session!.serialize()).toEqual(snapshot); expect(state.session!.isDirty()).toBe(false);
     expect(state.prompt.mock.calls[0][0]).toMatchObject({ defaultChoiceId: "cancel", title: "确认离线 BOM 导出" });
     expect(state.prompt.mock.calls[0][0].message).toContain("不覆盖已有不同内容");
+    expect(state.prompt.mock.calls[0][0].message).toContain("整个工作空间 /example");
+    expect(state.prompt.mock.calls[0][0].message).toContain(syntheticPreview().envelope.payloadHash);
+    expect(state.export).toHaveBeenCalledExactlyOnceWith("/example", syntheticPreview().preview_id, expect.stringContaining("/.phoenix/outbox/"), expect.any(AbortSignal));
   });
   it("consumes this tab's saved settings once on real mount without previewing, exporting or restoring forged handles", async () => {
     const consume = state.shell.consumeTabPageState as ReturnType<typeof vi.fn>;
@@ -121,7 +126,8 @@ describe("BOM delivery migrated shell and server-owned workflow", () => {
     const page = setupPage(); await nextTick();
     expect(consume).toHaveBeenCalledExactlyOnceWith("example-tab");
     expect(page.delivery.targetSetting).toBe("/example/restored.json"); expect(page.delivery.directorySetting).toBe("/output");
-    expect(page.expanded).toEqual({ preflight: false, push: true, history: true });
+    expect(page.expanded).toEqual({ preflight: false });
+    expect(state.session!.serialize().expanded).toEqual({ preflight: false });
     expect(page.delivery.preview).toBeNull(); expect(page.delivery.receipt).toBeNull(); expect(page.delivery.canExport).toBe(false);
     expect(state.preview).not.toHaveBeenCalled(); expect(state.export).not.toHaveBeenCalled(); expect(state.release).not.toHaveBeenCalled();
     activeTab.value = "other-tab"; await nextTick(); activeTab.value = "example-tab"; await nextTick(); expect(consume).toHaveBeenCalledTimes(1);
@@ -130,24 +136,33 @@ describe("BOM delivery migrated shell and server-owned workflow", () => {
     const consume = state.shell.consumeTabPageState as ReturnType<typeof vi.fn>;
     consume.mockReturnValue({ workspace: "/other", target: "/other/not-restored.json", directory: "/foreign-output", expanded: { preflight: false, push: true, history: true }, preview: syntheticPreview(), receipt: syntheticReceipt() });
     const page = setupPage(); await nextTick();
-    expect(page.delivery.targetSetting).toBe(""); expect(page.delivery.directorySetting).toBe(""); expect(page.expanded).toEqual({ preflight: true, push: false, history: false });
+    expect(page.delivery.targetSetting).toBe(""); expect(page.delivery.directorySetting).toBe(""); expect(page.expanded).toEqual({ preflight: true });
     expect(page.delivery.preview).toBeNull(); expect(page.delivery.receipt).toBeNull(); expect(state.preview).not.toHaveBeenCalled(); expect(state.export).not.toHaveBeenCalled(); expect(state.release).not.toHaveBeenCalled();
   });
   it("respects the public prompt result object; decline cannot export", async () => {
     state.prompt.mockResolvedValue({ choiceId: "cancel" }); const page = setupPage(); await page.delivery.runPreview(); await page.delivery.runExport(); expect(state.export).not.toHaveBeenCalled();
   });
   it("remembers block collapse only within each workspace", () => {
-    const page = setupPage(); page.expanded.push = true; page.expanded.preflight = false;
-    workspace.value = "/other"; expect(page.expanded).toEqual({ preflight: true, push: false, history: false });
-    workspace.value = "/example"; expect(page.expanded).toEqual({ preflight: false, push: true, history: false }); expect(state.preview).not.toHaveBeenCalled();
+    const page = setupPage(); page.expanded.preflight = false;
+    workspace.value = "/other"; expect(page.expanded).toEqual({ preflight: true });
+    workspace.value = "/example"; expect(page.expanded).toEqual({ preflight: false }); expect(state.preview).not.toHaveBeenCalled();
   });
-  it("parses the SFC and binds three collapsible Wing blocks with header-right actions", () => {
+  it("ignores legacy push/history collapse without creating handles or export requests", () => {
+    const page = setupPage();
+    expect(state.session!.hydrate({ workspace: "/example", target: "/example/offline.json", directory: "/output", expanded: { push: true, history: true } })).toBe(true);
+    expect(page.expanded).toEqual({ preflight: true });
+    expect(state.session!.serialize()).toEqual({ workspace: "/example", target: "/example/offline.json", directory: "/output", expanded: { preflight: true } });
+    expect(page.delivery.preview).toBeNull(); expect(page.delivery.receipt).toBeNull(); expect(page.delivery.canExport).toBe(false);
+    expect(state.preview).not.toHaveBeenCalled(); expect(state.export).not.toHaveBeenCalled(); expect(state.release).not.toHaveBeenCalled();
+  });
+  it("parses the SFC and binds one collapsible Wing block with header-right actions", () => {
     const source = fs.readFileSync(new URL("./BomDeliveryPage.vue", import.meta.url), "utf8"), parsed = parse(source);
     expect(parsed.errors).toEqual([]); expect(parsed.descriptor.template).toBeTruthy();
-    expect(source.match(/<WingBlock /g)).toHaveLength(3); expect(source.match(/<template #actions>/g)).toHaveLength(3);
-    for (const key of ["preflight", "push", "history"]) expect(source).toContain(`v-model:expanded="expanded.${key}"`);
+    expect(source.match(/<WingBlock /g)).toHaveLength(1); expect(source.match(/<template #actions>/g)).toHaveLength(1);
+    expect(source).toContain('v-model:expanded="expanded.preflight"');
+    expect(source).not.toMatch(/expanded\.(push|history)|v-model:expanded="expanded\.(push|history)"/);
     expect(source).toContain("const pageSize = 50"); expect(source).toContain("直接数量 qty（非递归）");
     expect(source).not.toMatch(/v-html|localStorage|switchWorkspace|cadBatchToolsSection/);
-    expect(source).toContain("Desk producer 接收端尚待适配，推送/历史重试未开放");
+    expect(parsed.descriptor.template!.content).not.toMatch(/推送|审核|历史|迁移中|尚待适配|未开放/);
   });
 });

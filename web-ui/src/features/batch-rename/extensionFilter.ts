@@ -27,7 +27,7 @@ export function useRenameExtensionFilter(workspace: Ref<string>, preview: Ref<Re
     if (!preview.value || !workspace.value) return;
     const touched: Scope[] = [];
     for (const root of preview.value.roots) {
-      const extensions = [...new Set(preview.value.rows.filter(row => row.root === root).map(fileExtension))];
+      const extensions = [...new Set(preview.value.rows.filter(row => row.root === root && row.kind !== "directory").map(fileExtension))];
       const previous = scopeFor(root);
       if (previous) for (const extension of extensions) if (!previous.known.includes(extension)) discovered.value.add(extension);
       touched.push({ workspace: workspace.value, root, known: [...new Set([...(previous?.known || []), ...extensions])].slice(0, 2000), disabled: previous?.disabled || [] });
@@ -38,14 +38,17 @@ export function useRenameExtensionFilter(workspace: Ref<string>, preview: Ref<Re
   const visibleRows = computed(() => preview.value?.rows.filter(allowed) || []);
   const filters = computed(() => {
     const groups = new Map<string, RenameRow[]>();
-    for (const row of preview.value?.rows || []) { const extension = fileExtension(row); groups.set(extension, [...(groups.get(extension) || []), row]); }
+    for (const row of preview.value?.rows || []) {
+      if (row.kind === "directory") continue;
+      const extension = fileExtension(row); groups.set(extension, [...(groups.get(extension) || []), row]);
+    }
     return [...groups].sort(([a], [b]) => a.localeCompare(b)).map(([extension, rows]) => {
       const count = rows.filter(allowed).length, name = rows[0]!.rel.split("/").pop()!;
       return { extension, label: extension ? name.slice(name.lastIndexOf(".")) : "无后缀", count: rows.length, checked: count === rows.length, mixed: count > 0 && count < rows.length, isNew: discovered.value.has(extension) };
     });
   });
   function toggle(extension: string, checked: boolean) {
-    for (const root of new Set(preview.value?.rows.filter(row => fileExtension(row) === extension).map(row => row.root))) {
+    for (const root of new Set(preview.value?.rows.filter(row => row.kind !== "directory" && fileExtension(row) === extension).map(row => row.root))) {
       const scope = scopeFor(root);
       if (scope) scope.disabled = checked ? scope.disabled.filter(item => item !== extension) : [...new Set([...scope.disabled, extension])];
     }

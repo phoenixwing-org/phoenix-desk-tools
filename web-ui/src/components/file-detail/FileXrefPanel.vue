@@ -583,7 +583,7 @@ async function onSyncIncomingLabels() {
     <p class="hint muted">
       本页读取共享 CAD 索引中的入向/出向关系。「局部刷新本文件引用」仅更新当前文件及所选子装配的引用边；
       <strong>缺失</strong>表示索引中无目标或路径无法解析。单条 XLink 写回用出向表「改链接」；
-      文件改名从右上角打开，整库扫描在「CAD 索引」。正式 BOM 交付尚在迁移，旧扩展交付入口暂时保留。
+      文件改名从右上角打开，整库扫描在「CAD 索引」。离线导出入口已在 Desk；远程交付另行开发。
     </p>
   </div>
 </template>

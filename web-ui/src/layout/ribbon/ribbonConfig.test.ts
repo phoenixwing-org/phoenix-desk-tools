@@ -89,6 +89,7 @@ describe("Ribbon navigation contract", () => {
     expect(byPage.get("workspace_recovery")?.ribbonGroup).toBe("索引");
     expect(byPage.get("bom_delivery")?.module).toBe("cad");
     expect(byPage.get("bom_delivery")?.ribbonGroup).toBe("交付");
+    expect(byPage.get("bom_delivery")?.label).toBe("BOM 离线导出");
     expect(byPage.get("name_normalize")?.module).toBe("cad");
     expect(byPage.get("name_normalize")?.ribbonGroup).toBeUndefined();
     expect(byPage.get("code_ignore")?.module).toBe("code");

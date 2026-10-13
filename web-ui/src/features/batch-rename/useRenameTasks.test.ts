@@ -117,3 +117,43 @@ it("clears stale phase and errors when the workspace is closed", async () => {
     expect(rename.phase.value).toBe(""); expect(rename.error.value).toBe(""); expect(rename.busy.value).toBe(false);
   } finally { scope.stop(); }
 });
+it("saves and restores all three independent scopes without auto-selecting preview rows", async () => {
+  const { scope, rename } = await setup();
+  try {
+    rename.draft.value.directories = true;
+    expect(rename.draft.value).toMatchObject({ directories: true, filenames: true, contents: true });
+    const saved = { ...structuredClone(task), directories: true, revision: 2 };
+    vi.mocked(saveTask).mockResolvedValue(saved);
+    vi.mocked(loadTasks).mockResolvedValue({ tasks: [saved] });
+    vi.mocked(previewTask).mockResolvedValue(plan);
+    await rename.search();
+    expect(saveTask).toHaveBeenCalledWith("/workspace", expect.objectContaining({ directories: true, filenames: true, contents: true }), "task-a", 1);
+    expect(previewTask).toHaveBeenCalledWith("/workspace", saved);
+    expect(rename.selected.value).toEqual([]);
+    await rename.load();
+    expect(rename.draft.value).toMatchObject({ directories: true, filenames: true, contents: true });
+    expect(rename.preview.value).toBeNull();
+    await rename.search(); rename.selected.value = ["selected"];
+    rename.draft.value.filenames = false;
+    expect(rename.draft.value).toMatchObject({ directories: true, filenames: false, contents: true });
+    expect(rename.preview.value).toBeNull(); expect(rename.selected.value).toEqual([]); expect(rename.canApply.value).toBe(false);
+  } finally { scope.stop(); }
+});
+it("keeps joint scopes isolated between tasks and restores their saved configurations", async () => {
+  const joint = { ...structuredClone(task), directories: true };
+  const other = { ...structuredClone(task), id: "task-b", name: "Other", directories: false, filenames: false, contents: true };
+  vi.mocked(loadTasks).mockResolvedValue({ tasks: [joint, other] });
+  const { scope, rename } = await setup();
+  try {
+    expect(rename.draft.value).toMatchObject({ directories: true, filenames: true, contents: true });
+    rename.draft.value.contents = false;
+    const updated = { ...joint, contents: false, revision: 2 };
+    vi.mocked(saveTask).mockResolvedValue(updated); await rename.save();
+    rename.choose("task-b");
+    expect(rename.draft.value).toMatchObject({ directories: false, filenames: false, contents: true });
+    expect(rename.dirty.value).toBe(false);
+    rename.choose("task-a");
+    expect(rename.draft.value).toMatchObject({ directories: true, filenames: true, contents: false });
+    expect(rename.dirty.value).toBe(false);
+  } finally { scope.stop(); }
+});

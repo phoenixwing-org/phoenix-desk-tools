@@ -164,13 +164,13 @@ export const PAGE_HELP: Record<string, PageHelpContent> = {
     ],
   },
   bom_delivery: {
-    title: "BOM交付",
+    title: "BOM 离线导出",
     bullets: [
       "进入页面不扫描、不创建目录；点击预检读取整个工作空间的完整且新鲜索引，部分可用或过期索引须先更新。",
       "直接 BOM 的 qty 不做递归展开；预览分页仅方便浏览，不改变交付范围。",
       "选择输出目标并确认后才导出，不覆盖不同内容、不修改 CAD；有效预览下，相同原字节可返回已存在。",
       "预览十分钟到期，切换空间或服务重启须重新预览；取消或失联可能已发布，请核对原目标，原因见 Bottom 日志。",
-      "Desk 生产者接收端尚待适配，推送、审核和历史重试未开放，本页不自动联网。",
+      "本页仅导出离线 JSON，不自动联网；不会修改 CAD 或激活其他工作空间。",
     ],
     docPath: "docs/cad/KT-Auto-CAD下线计划.md",
     tourSteps: [],

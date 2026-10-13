@@ -29,11 +29,19 @@ describe("page registry", () => {
   });
   it("registers the standalone CAD delivery view, explicit icon and offline help", () => {
     expect(PAGE_COMPONENT_IDS.has("bom_delivery")).toBe(true);
+    expect(PAGE_CONTRIBUTIONS.bom_delivery?.sideBlockLabel).toBe("BOM 离线导出 Primary");
     expect(RIBBON_PAGE_ICONS.bom_delivery).toBe(Upload);
     expect(ribbonIconFor("bom_delivery")).toBe(Upload);
     expect(PAGE_HELP.bom_delivery?.bullets.join("\n")).toContain("不自动联网");
+    expect(PAGE_HELP.bom_delivery?.title).toBe("BOM 离线导出");
+    expect(PAGE_HELP.bom_delivery?.bullets.join("\n")).not.toMatch(/推送|审核|历史重试|尚待适配|迁移中/);
     const config = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), "../phoenix/config/app_config.json"), "utf8"));
     expect(config.workbench.pages.bom_delivery).toEqual({ max_tabs: 1 });
+    const entries = config.navigation.filter((entry: { page: string }) => entry.page === "bom_delivery");
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ id: "bom_delivery", label: "BOM 离线导出", module: "cad" });
+    expect(entries[0].description).toContain("离线 JSON");
+    expect(entries[0].description).not.toMatch(/推送|审核|历史|迁移/);
   });
   it("owns every configured navigation and workbench page", () => {
     const configPath = path.resolve(process.cwd(), "../phoenix/config/app_config.json");

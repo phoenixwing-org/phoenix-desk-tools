@@ -51,11 +51,11 @@
             "description": "查询 PartKey 零件与关联文件；索引状态请打开 CAD 索引"
         }, {
             "id": "bom_delivery",
-            "label": "BOM交付",
+            "label": "BOM 离线导出",
             "page": "bom_delivery",
             "module": "cad",
             "ribbonGroup": "交付",
-            "description": "完整工作空间 BOM 只读预检与确认离线导出；不覆盖、不联网，推送与历史尚待迁移"
+            "description": "完整工作空间 BOM 只读预检与确认离线 JSON 导出；不覆盖、不联网、不修改 CAD"
         }, {
             "id": "part_key_detail",
             "label": "零件详情",

@@ -7,6 +7,7 @@ import { effectiveCodeIgnorePatterns, isIgnoredName } from "../../lib/codeIgnore
 import { decodeSourceBuffer, encodeSourceText } from "../../lib/sourceTextCodec.js";
 import type { pnwCodeResolveReplacementRules } from "@phoenix-wing/code-core";
 import { runtimeHomeDirectory } from "../../lib/appRuntimePaths.js";
+import { planRenameBasename } from "./pathPlan.js";
 
 const MAX_FILE = 64 * 1024 * 1024, MAX_TEXT = 4 * 1024 * 1024, MAX_PLAN = 32 * 1024 * 1024;
 const TTL = 30 * 60 * 1000;
@@ -21,7 +22,7 @@ const BINARY = /\.(?:fcstd\d*|fcbak|pdf|png|jpe?g|gif|webp|ico|bmp|tiff?|zip|gz|
 export type SyncRow = { kind?: "file" | "directory"; id: string; root: string; rel: string; target: string; occurrences: number; binary: boolean; eligible: boolean; message: string; diffs: Array<{ line: number; before: string; after: string }>; truncated: boolean };
 export type SyncPreview = { excluded_rules?: ExcludedRule[]; plan_id: string; expires_at: string; roots: string[]; mappings: SyncMapping[]; conflicts: string[]; rows: SyncRow[]; scanned: number; skipped: number; warnings: string[] };
 type FilePlan = { row: SyncRow; fingerprint: string; output?: Buffer; mode: number };
-type Plan = { workspace: string; owner: string; expires: number; files: FilePlan[]; preview: SyncPreview; consumed: boolean };
+type Plan = { workspace: string; owner: string; expires: number; files: FilePlan[]; preview: SyncPreview; consumed: boolean; retained?: number };
 const plans = new Map<string, Plan>();
 export const activeRoots = new Set<string>();
 const fingerprint = (raw: Buffer) => createHash("sha256").update(raw).digest("hex");
@@ -68,8 +69,8 @@ export async function previewFileChanges(workspace: string, body: FileOptions, r
     roots.push(root);
   }
   const now = Date.now();
-  for (const [id, plan] of plans) if (plan.expires < now || plan.consumed) plans.delete(id);
-  if (plans.size >= 8) plans.delete(plans.keys().next().value!);
+  for (const [id, plan] of plans) if (!plan.retained && (plan.expires < now || plan.consumed)) plans.delete(id);
+  if (plans.size >= 8) { const removable = [...plans].find(([, plan]) => !plan.retained); if (!removable) throw new Error("预览任务正被执行，请稍后重试"); plans.delete(removable[0]); }
   const plan_id = randomUUID();
   const preview: SyncPreview = { plan_id, expires_at: new Date(now + TTL).toISOString(), roots, excluded_rules: resolved.excluded_rules, mappings: resolved.mappings, conflicts: resolved.conflicts, rows: [], scanned: 0, skipped: 0, warnings: [] };
   const files: FilePlan[] = [];
@@ -80,7 +81,9 @@ export async function previewFileChanges(workspace: string, body: FileOptions, r
     while (stack.length) {
       const relDir = stack.pop()!;
       const dir = relDir ? safePath(root, relDir) : root;
-      for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const siblings = fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+      const pathEntries = siblings.map(entry => ({ relativePath: path.posix.join(relDir, entry.name), kind: entry.isDirectory() ? "dir" as const : "file" as const }));
+      for (const entry of siblings) {
         if (++visited > 20_000) throw new Error("目录超过 20000 项，请缩小范围后重新预览（未写入）");
         if (visited % 40 === 0) await setImmediate();
         if (entry.isSymbolicLink() || isIgnoredName(entry.name, patterns)) { preview.skipped++; continue; }
@@ -100,11 +103,13 @@ export async function previewFileChanges(workspace: string, body: FileOptions, r
           const replacement = decoded && !STEP.test(entry.name) && body.contents !== false && relevant.some(rule => rule.search !== rule.replace) ? pnwCodeReplaceTextByRules(decoded.text, relevant) : null;
           const changedText = replacement && replacement.output !== decoded!.text;
           if (name === entry.name && !changedText) continue;
-          const target = path.posix.join(path.posix.dirname(rel), name);
+          const planned = planRenameBasename(rel, entry.name, name, "file", pathEntries);
+          const target = planned.target;
           const row: SyncRow = { id: randomUUID(), root, rel, target, occurrences: changedText ? replacement.matches.filter(match => match.search !== match.replace).reduce((sum, match) => sum + match.occurrences, 0) : 0, binary: !decoded, eligible: true, message: "待应用", diffs: [], truncated: false };
           if (STEP.test(entry.name)) row.message = "待改文件名（STEP 内部内容保持不变）";
           if (CATIA_DRAWING.test(entry.name)) row.message = "待改文件名（CATDrawing 内部内容及引用不修改）";
           if (!validFilename(name)) { row.eligible = false; row.message = "目标文件名无效"; }
+          if (planned.problem) { row.eligible = false; row.message = planned.problem; }
           if ([entry.name, name].some(value => /\.fcstd\d*$/i.test(value))) { row.eligible = false; row.message = "FCStd 文件改名请走 CAD 改名入口，以同步引用"; }
           if (CATIA_DRAWING.test(entry.name) !== CATIA_DRAWING.test(name)) { row.eligible = false; row.message = "CATDrawing 仅允许保留图纸后缀的文件名修改"; }
           if (CATIA_LINKED.test(entry.name) || CATIA_LINKED.test(name)) { row.eligible = false; row.message = "CATIA 模型及关联文档请在 CATIA 中改名，以同步关联"; }
@@ -145,30 +150,46 @@ export async function previewFileChanges(workspace: string, body: FileOptions, r
 }
 
 export type SyncResult = { id: string; root: string; rel: string; target: string; status: "applied" | "failed"; message: string; backup?: string };
-export async function applyFileChanges(workspace: string, body: { plan_id?: string; ids?: string[]; confirmed?: boolean }, owner = "document-sync") {
+export type FileMutation = { root: string; rel: string; target: string; beforeHash: string; afterHash: string; mode: number };
+export type FileApplyPorts = { rootsLocked?: boolean; phased?: boolean; onMutation?: (mutation: FileMutation) => void };
+export function retainFileChanges(workspace: string, id: string, owner: string) {
+  const plan = plans.get(id);
+  if (!plan || plan.workspace !== directory(workspace) || plan.owner !== owner || plan.expires < Date.now() || plan.consumed) throw new Error("文件预览已失效，请重新预览");
+  plan.retained = (plan.retained || 0) + 1;
+  return () => { plan.retained!--; if (!plan.retained && (plan.consumed || plan.expires < Date.now())) plans.delete(id); };
+}
+export async function applyFileChanges(workspace: string, body: { plan_id?: string; ids?: string[]; confirmed?: boolean }, owner = "document-sync", ports: FileApplyPorts = {}) {
   const ws = directory(workspace), plan = plans.get(String(body.plan_id));
-  if (!plan || plan.workspace !== ws || plan.owner !== owner || plan.expires < Date.now() || plan.consumed) throw new Error("预览已失效或已应用，请重新搜索预览");
+  if (!plan || plan.workspace !== ws || plan.owner !== owner || (!plan.retained && plan.expires < Date.now()) || plan.consumed) throw new Error("预览已失效或已应用，请重新搜索预览");
   if (body.confirmed !== true || !Array.isArray(body.ids) || !body.ids.length) throw new Error("请勾选预览结果并确认应用");
   const ids = [...new Set(body.ids)];
   const files = ids.map(id => plan.files.find(file => file.row.id === id));
   if (files.some(file => !file?.row.eligible) || plan.preview.conflicts.length) throw new Error("选择包含无效或冲突项，请重新预览");
   const roots = [...new Set(files.map(file => file!.row.root))];
-  if (roots.some(root => [...activeRoots].some(other => inside(root, other) || inside(other, root)))) throw new Error("所选目录正有同步任务执行，请稍后重试");
+  if (!ports.rootsLocked && roots.some(root => [...activeRoots].some(other => inside(root, other) || inside(other, root)))) throw new Error("所选目录正有同步任务执行，请稍后重试");
   plan.consumed = true;
-  for (const root of roots) activeRoots.add(root);
-  const results: SyncResult[] = [];
+  if (!ports.rootsLocked) for (const root of roots) activeRoots.add(root);
+  const selected = files as FilePlan[];
+  const results: SyncResult[] = selected.map(({ row }) => ({ id: row.id, root: row.root, rel: row.rel, target: row.target, status: "failed", message: "" }));
+  const failed = new Set<string>();
+  const writtenContents = new Set<string>();
+  const phases = ports.phased ? ["text", "name"] as const : ["all"] as const;
   try {
-    for (const file of files as FilePlan[]) {
+    for (const phase of phases) for (let index = 0; index < selected.length; index++) {
+      const file = selected[index];
       const { row } = file;
-      const result: SyncResult = { id: row.id, root: row.root, rel: row.rel, target: row.target, status: "failed", message: "" };
+      const result = results[index];
+      if (failed.has(row.id) || (phase === "text" && !file.output)) continue;
       let temp = "", receipt = "";
       try {
-        const abs = safePath(row.root, row.rel), target = safePath(row.root, row.target, false);
+        const targetRel = phase === "text" ? row.rel : row.target;
+        const abs = safePath(row.root, row.rel), target = safePath(row.root, targetRel, false);
         const current = fs.statSync(abs);
-        if (!current.isFile() || current.size > MAX_FILE || current.nlink > 1) throw new Error("源文件状态已变化，请重新预览");
+        if (!current.isFile() || current.size > MAX_FILE || current.nlink > 1 || current.mode !== file.mode) throw new Error("源文件状态已变化，请重新预览");
         const raw = fs.readFileSync(abs);
         if (fingerprint(raw) !== file.fingerprint) throw new Error("文件在预览后已变化，本项未写入");
         if (target !== abs && fs.readdirSync(path.dirname(target)).some(name => filenameKey(name) === filenameKey(path.basename(target)))) throw new Error("目标文件已存在，本项未写入");
+        if (phase === "name" && target === abs) { result.status = "applied"; result.message = "已应用"; continue; }
         if (!owner.startsWith("task:")) {
         const backupRel = path.posix.join(owner === "document-sync" ? ".phoenix/document-sync-backups" : ".phoenix/rename-task-backups", body.plan_id!, `${row.id}.original`);
         const backup = safePath(row.root, backupRel, false);
@@ -180,10 +201,12 @@ export async function applyFileChanges(workspace: string, body: { plan_id?: stri
         fs.writeFileSync(receipt, JSON.stringify({ ...result, status: "prepared", mappings: plan.preview.mappings, created_at: new Date().toISOString() }, null, 2), { flag: "wx", mode: 0o600 });
         }
         temp = path.join(path.dirname(abs), `.document-sync-${randomUUID()}.tmp`);
-        fs.writeFileSync(temp, file.output || raw, { flag: "wx", mode: file.mode & 0o777 });
+        const output = phase === "name" ? raw : file.output || raw;
+        fs.writeFileSync(temp, output, { flag: "wx", mode: file.mode & 0o777 });
+        fs.chmodSync(temp, file.mode & 0o777);
         // Check again after backup, before replacing bytes. Other independent rows may continue on failure.
-        safePath(row.root, row.rel); safePath(row.root, row.target, false);
-        if (fingerprint(fs.readFileSync(abs)) !== file.fingerprint) throw new Error("应用前源文件变化，本项未写入");
+        safePath(row.root, row.rel); safePath(row.root, targetRel, false);
+        if (fingerprint(fs.readFileSync(abs)) !== file.fingerprint || fs.statSync(abs).mode !== file.mode) throw new Error("应用前源文件变化，本项未写入");
         if (target === abs) { fs.renameSync(temp, abs); temp = ""; }
         else {
           fs.linkSync(temp, target); // atomic create-if-absent, never overwrite another file
@@ -191,16 +214,19 @@ export async function applyFileChanges(workspace: string, body: { plan_id?: stri
           try { fs.unlinkSync(abs); }
           catch (error) { throw new Error(`新文件已生成，但旧文件未移除，请人工核对：${message(error)}`); }
         }
-        result.status = "applied"; result.message = owner.startsWith("task:") ? "已应用" : "已应用并备份";
-      } catch (error) { result.message = message(error); }
+        const nextHash = fingerprint(output);
+        if (phase === "text") writtenContents.add(row.id);
+        ports.onMutation?.({ root: row.root, rel: row.rel, target: targetRel, beforeHash: file.fingerprint, afterHash: nextHash, mode: file.mode });
+        file.fingerprint = nextHash;
+        if (phase !== "text") { result.status = "applied"; result.message = owner.startsWith("task:") ? "已应用" : "已应用并备份"; }
+      } catch (error) { failed.add(row.id); result.message = `${writtenContents.has(row.id) ? "内容已更新，但后续步骤失败；" : ""}${message(error)}`; }
       finally {
         if (temp) try { fs.unlinkSync(temp); } catch { /* preserve original error */ }
         if (receipt) try { fs.writeFileSync(receipt, JSON.stringify({ ...result, created_at: new Date().toISOString() }, null, 2)); }
         catch (error) { result.message += `；结果日志更新失败：${message(error)}`; }
       }
-      results.push(result);
       await setImmediate();
     }
-  } finally { for (const root of roots) activeRoots.delete(root); }
+  } finally { if (!ports.rootsLocked) for (const root of roots) activeRoots.delete(root); }
   return { results, applied: results.filter(row => row.status === "applied").length, failed: results.filter(row => row.status === "failed").length };
 }

@@ -32,6 +32,39 @@ it("shows the selected ancestor rename in a child folder's final path", async ()
   const html = await renderToString(createSSRApp(RenamePreviewTable, { preview: { ...preview, rows: [parent, child] }, results: null, disabled: false, selected: ["parent", "child"] }));
   expect(html).toContain("New/SubNew");
 });
+it("projects selected nested folder moves for file names and content-only rows", async () => {
+  const parent = { ...row("parent"), kind: "directory" as const, rel: "Old", target: "New" };
+  const child = { ...row("child"), kind: "directory" as const, rel: "Old/SubOld", target: "Old/SubNew" };
+  const file = { ...row("file"), kind: "file" as const, rel: "Old/SubOld/source.md", target: "Old/SubOld/target.md" };
+  const content = { ...row("content"), rel: "Old/SubOld/notes.txt", target: "Old/SubOld/notes.txt" };
+  const html = await renderToString(createSSRApp(RenamePreviewTable, { preview: { ...preview, rows: [parent, child, file, content] }, results: null, disabled: false, selected: ["parent", "child", "file"] }));
+  expect(html).toContain("New/SubNew/target.md"); expect(html).toContain("New/SubNew/notes.txt");
+});
+it("ignores unselected and blocked ancestors and prefers actual result paths after apply", async () => {
+  const parent = { ...row("parent"), kind: "directory" as const, rel: "Old", target: "New", eligible: false };
+  const child = { ...row("child"), kind: "directory" as const, rel: "Old/SubOld", target: "Old/SubNew" };
+  const file = { ...row("file"), rel: "Old/SubOld/source.md", target: "Old/SubOld/target.md" };
+  const data = { preview: { ...preview, rows: [parent, child, file] }, results: null, disabled: false, selected: ["parent", "file"] };
+  const before = await renderToString(createSSRApp(RenamePreviewTable, data));
+  expect(before).toContain("Old/SubOld/target.md"); expect(before).not.toContain("New/SubNew/target.md");
+  const after = await renderToString(createSSRApp(RenamePreviewTable, { ...data, selected: ["child", "file"], results: { applied: 1, failed: 1, results: [{ id: "file", root: "/docs", rel: file.rel, target: "Old/SubOld/target.md", status: "applied", message: "已应用；父目录未改名" }] } }));
+  expect(after).toContain("Old/SubOld/target.md"); expect(after).not.toContain("Old/SubNew/target.md");
+});
+it("uses the full preview for selected ancestor projection when a display subset is supplied", async () => {
+  const parent = { ...row("parent"), kind: "directory" as const, rel: "Old", target: "New" };
+  const file = { ...row("file"), rel: "Old/source.md", target: "Old/target.md" };
+  const html = await renderToString(createSSRApp(RenamePreviewTable, { preview: { ...preview, rows: [file] }, allRows: [parent, file], results: null, disabled: false, selected: ["parent", "file"] }));
+  expect(html).toContain("New/target.md");
+});
+it("shows unselected files under only successfully moved folders after partial apply", async () => {
+  const parent = { ...row("parent"), kind: "directory" as const, rel: "Old", target: "New" };
+  const file = { ...row("file"), rel: "Old/source.md", target: "Old/target.md" };
+  const data = { preview: { ...preview, rows: [parent, file] }, disabled: false, selected: ["parent"], consumed: true };
+  const applied = await renderToString(createSSRApp(RenamePreviewTable, { ...data, results: { applied: 1, failed: 0, results: [{ id: "parent", root: "/docs", rel: "Old", target: "New", status: "applied", message: "目录已改名" }] } }));
+  expect(applied).toContain("New/source.md"); expect(applied).not.toContain("New/target.md");
+  const failed = await renderToString(createSSRApp(RenamePreviewTable, { ...data, results: { applied: 0, failed: 1, results: [{ id: "parent", root: "/docs", rel: "Old", target: "Old", status: "failed", message: "目录发生变化" }] } }));
+  expect(failed).not.toContain("New/source.md"); expect(failed).not.toContain("Old/target.md");
+});
 
 it("retains original preview numbers when extension filters hide earlier rows", async () => {
   const html = await renderToString(createSSRApp(RenamePreviewTable, { preview: { ...preview, rows: [preview.rows[2]!] }, allRows: preview.rows, results: null, disabled: false, selected: [] }));

@@ -77,7 +77,7 @@ export function useRenameTasks(workspace: Ref<string>, report: (text: string, er
   async function apply() {
     if (!canApply.value) return;
     const token = ++epoch, ws = workspace.value, task = clone(active.value!), plan = preview.value!, ids = [...selected.value];
-    busy.value = true; consumed.value = true; phase.value = "备份并逐文件应用"; error.value = "";
+    busy.value = true; consumed.value = true; phase.value = "逐项应用改名"; error.value = "";
     try {
       const result = await applyTask(ws, task, plan.plan_id, ids);
       report(`任务「${task.name}」：已应用 ${result.applied} 个，失败 ${result.failed} 个\n${result.results.map(row => `${row.root}/${row.rel} → ${row.target}：${row.message}${row.backup ? `\n备份：${row.backup}` : ""}`).join("\n")}`, result.failed > 0);

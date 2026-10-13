@@ -58,3 +58,25 @@ it("removes ineligible, hidden and duplicate selections even during initial hydr
   expect(selected.value).toEqual([]);
   scope.stop();
 });
+it("filters only files in joint previews while keeping folders visible and selected", () => {
+  const scope = effectScope(), directory = { ...row("Folder.md"), kind: "directory" as const, target: "Renamed.md" };
+  const file = row("Folder.md/file.md"), other = row("Folder.md/file.txt");
+  const preview = ref<RenamePreview | null>(plan([directory, file, other]));
+  const selected = ref([directory.id, file.id, other.id]);
+  const filter = scope.run(() => useRenameExtensionFilter(ref("/workspace"), preview, selected))!;
+  expect(filter.filters.value.map(item => [item.extension, item.count])).toEqual([[".md", 1], [".txt", 1]]);
+  filter.toggle(".md", false);
+  expect(filter.visibleRows.value.map(item => item.id)).toEqual([directory.id, other.id]);
+  expect(selected.value).toEqual([directory.id, other.id]);
+  filter.toggle(".txt", false);
+  expect(filter.visibleRows.value).toEqual([directory]); expect(selected.value).toEqual([directory.id]);
+  scope.stop();
+});
+it("does not discover file suffixes from a folders-only preview", () => {
+  const scope = effectScope(), directory = { ...row("Folder.data"), kind: "directory" as const };
+  const preview = ref<RenamePreview | null>(plan([directory]));
+  const filter = scope.run(() => useRenameExtensionFilter(ref("/workspace"), preview, ref([directory.id])))!;
+  expect(filter.filters.value).toEqual([]); expect(filter.visibleRows.value).toEqual([directory]);
+  expect([...cache.values()].join(" ")).not.toContain(".data");
+  scope.stop();
+});

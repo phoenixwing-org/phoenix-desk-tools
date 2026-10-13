@@ -17,11 +17,11 @@ const delivery = reactive(useCadBomDelivery(shell.workspacePath, {
   appendLog: shell.appendLog,
   confirmExport: async message => (await pnwPromptChoice({ title: "确认离线 BOM 导出", message, defaultChoiceId: "cancel", choices: [{ id: "export", label: "确认导出（不覆盖）", variant: "primary" }, { id: "cancel", label: "取消" }] })).choiceId === "export",
 }, active));
-const expanded = reactive({ preflight: true, push: false, history: false });
+const expanded = reactive({ preflight: true });
 const collapseByWorkspace = new Map<string, typeof expanded>();
 watch(shell.workspacePath, (workspace, previous) => {
-  collapseByWorkspace.set(previous, { ...expanded });
-  Object.assign(expanded, collapseByWorkspace.get(workspace) ?? { preflight: true, push: false, history: false });
+  collapseByWorkspace.set(previous, { preflight: expanded.preflight });
+  Object.assign(expanded, collapseByWorkspace.get(workspace) ?? { preflight: true });
 }, { flush: "sync" });
 const dataTab = ref<"boms" | "parts">("boms"), bomPage = ref(1), itemPage = ref(1), partPage = ref(1), selectedBom = ref(0);
 const pageSize = 50;
@@ -37,7 +37,7 @@ function browseBom(index: number) { selectedBom.value = index; itemPage.value = 
 const stateLabel = computed(() => ({ idle: "待预览", ready: "预检通过", expired: "预览已到期", published: "已发布", failed: "需处理", cancelled: "已取消", unconfirmed: "结果未确认" })[delivery.status]);
 const progress = computed<PagePrimaryProgress>(() => ({ label: "离线交付", state: delivery.busy ? "running" : delivery.status === "published" ? delivery.receipt?.warnings.length || delivery.receipt?.directorySync === "failed" ? "warning" : "done" : delivery.status === "failed" ? "failed" : delivery.status === "cancelled" ? "cancelled" : delivery.status === "unconfirmed" || delivery.status === "expired" ? "warning" : "idle", stages: ["预检", "确认", "导出"], activeStage: delivery.phase === "exporting" ? 2 : delivery.phase === "confirming" ? 1 : 0, detail: delivery.error || stateLabel.value }));
 usePagePrimaryContribution("bom_delivery", props.workbenchTabId, {
-  title: "BOM交付", showContext: false, summary: computed(() => delivery.error || "整个工作空间 → 只读预检 → 确认离线导出"),
+  title: "BOM 离线导出", showContext: false, summary: computed(() => delivery.error || "整个工作空间 → 只读预检 → 确认离线导出"),
   sections: [{ id: "scope", title: "预检与导出", progress, controls: [
     { id: "workspace", kind: "readonly", label: "范围", value: computed(() => `整个工作空间：${shell.workspacePath.value}`), mono: true },
     { id: "counts", kind: "readonly", label: "预览", value: computed(() => `${delivery.counts.parts} 零件 · ${delivery.counts.boms} 直接 BOM · ${delivery.counts.items} 直接行`) },
@@ -46,7 +46,7 @@ usePagePrimaryContribution("bom_delivery", props.workbenchTabId, {
     { id: "export", label: "确认导出", tone: "primary", disabled: computed(() => !delivery.canExport), loading: computed(() => delivery.phase === "exporting"), run: delivery.runExport },
     { id: "cancel", label: "取消 / 释放预览", disabled: computed(() => !delivery.busy && !delivery.preview), run: delivery.cancel },
     { id: "index", label: "打开 CAD 索引", run: () => { shell.openTab({ pageId: "cad_index" }); } },
-  ] }, { id: "help", title: "说明", description: "只交付当前工作空间的完整索引，不做产品或文件筛选。预检不扫描、不修改 CAD；索引缺失、部分可用或过期时请先更新 CAD 索引。直接数量不是递归展开数量。\n默认写入 .phoenix/outbox；自选目录须已存在。不覆盖不同内容、不自动联网。取消或失联时可能已发布，需核对目标。\nDesk producer 接收端尚待适配，推送/历史重试未开放。" }],
+  ] }, { id: "help", title: "说明", description: "只导出当前工作空间的完整索引，不做产品或文件筛选。预检不扫描、不修改 CAD；索引缺失、部分可用或过期时请先更新 CAD 索引。直接数量不是递归展开数量。\n默认写入 .phoenix/outbox；自选目录须已存在。不覆盖不同内容、不自动联网。取消或失联时可能已发布，需核对目标。" }],
 });
 function hydrateSettings(snapshot: Record<string, unknown>): boolean {
   if (snapshot.workspace !== shell.workspacePath.value) return false;
@@ -54,11 +54,12 @@ function hydrateSettings(snapshot: Record<string, unknown>): boolean {
   delivery.targetSetting = typeof snapshot.target === "string" ? snapshot.target : "";
   delivery.directorySetting = typeof snapshot.directory === "string" ? snapshot.directory : "";
   const saved = snapshot.expanded && typeof snapshot.expanded === "object" ? snapshot.expanded as Record<string, unknown> : {};
-  for (const key of ["preflight", "push", "history"] as const) expanded[key] = typeof saved[key] === "boolean" ? saved[key] : key === "preflight";
+  // Legacy push/history settings are deliberately ignored, like volatile handles.
+  expanded.preflight = typeof saved.preflight === "boolean" ? saved.preflight : true;
   return true;
 }
 usePageSession(props.workbenchTabId, {
-  serialize: () => ({ workspace: shell.workspacePath.value, target: delivery.targetSetting, directory: delivery.directorySetting, expanded: { ...expanded } }),
+  serialize: () => ({ workspace: shell.workspacePath.value, target: delivery.targetSetting, directory: delivery.directorySetting, expanded: { preflight: expanded.preflight } }),
   hydrate: hydrateSettings, isDirty: () => false, isBusy: () => delivery.busy, refresh: delivery.cancel,
 });
 onMounted(() => {
@@ -69,8 +70,8 @@ onMounted(() => {
 watch(() => [delivery.targetSetting, delivery.directorySetting, ...Object.values(expanded)], () => shell.scheduleWorkbenchSave(), { deep: true });
 </script>
 <template>
-  <PageLayout title="BOM交付" class="desk-page-layout bom-delivery-page">
-    <template #header><PageHeader title="BOM交付"><template #right>
+  <PageLayout title="BOM 离线导出" class="desk-page-layout bom-delivery-page">
+    <template #header><PageHeader title="BOM 离线导出"><template #right>
       <el-button size="small" :disabled="!delivery.canPreview" :loading="delivery.phase === 'previewing'" @click="delivery.runPreview">预检预览</el-button>
       <el-button size="small" type="primary" :disabled="!delivery.canExport" :loading="delivery.phase === 'exporting'" @click="delivery.runExport">确认导出</el-button>
       <el-button size="small" :disabled="!delivery.busy && !delivery.preview" @click="delivery.cancel">取消</el-button>
@@ -89,7 +90,7 @@ watch(() => [delivery.targetSetting, delivery.directorySetting, ...Object.values
       <p v-if="delivery.targetPath && !delivery.targetValid" role="alert" class="notice error">输出路径必须是绝对路径，以 .json 结尾，且不能包含 . 或 .. 路径段。</p>
       <p v-if="delivery.error" role="alert" class="notice error">{{ delivery.error }}</p>
       <p v-if="delivery.expired" class="notice">预览已失效，必须重新预览。不会自动重复导出。</p>
-      <p v-if="!delivery.preview" class="empty">点击“预检预览”读取整个工作空间的交付快照；这里没有自动联网或推送。</p>
+      <p v-if="!delivery.preview" class="empty">点击“预检预览”读取整个工作空间的离线导出快照；不自动联网。</p>
       <template v-else>
         <dl class="metadata"><dt>交付 ID</dt><dd>{{ delivery.preview.envelope.transferId }}</dd><dt>载荷哈希</dt><dd>{{ delivery.preview.envelope.payloadHash }}</dd><dt>生产者</dt><dd>phoenix-desk-tools {{ delivery.preview.envelope.producer.version }}</dd><dt>扫描</dt><dd>{{ delivery.preview.envelope.workspace.scanId }} · {{ delivery.preview.envelope.workspace.scannedAt }}</dd><dt>预览到期</dt><dd>{{ delivery.preview.expires_at }}</dd><dt>载荷</dt><dd>{{ delivery.preview.bytes }} bytes · {{ delivery.counts.parts }} 零件 · {{ delivery.counts.boms }} 直接 BOM · {{ delivery.counts.items }} 直接行</dd></dl>
         <div class="actions"><el-button size="small" :disabled="!delivery.canExport" type="primary" @click="delivery.runExport">确认导出</el-button><el-button size="small" :disabled="!delivery.canPreview" @click="delivery.runPreview">重新预览</el-button><el-button size="small" @click="delivery.cancel">释放预览</el-button></div>
@@ -103,9 +104,6 @@ watch(() => [delivery.targetSetting, delivery.directorySetting, ...Object.values
       </template>
       <section v-if="delivery.receipt" class="receipt"><h3>最近已确认回执：{{ delivery.receipt.status === 'created' ? '已发布' : '已存在相同字节' }}</h3><p><code>{{ delivery.receipt.targetPath }}</code></p><p>{{ delivery.receipt.transferId }} · {{ delivery.receipt.bytes }} bytes</p><p>{{ delivery.receipt.payloadHash }}</p><p v-if="delivery.receipt.directorySync === 'failed'" class="notice">文件已发布，但目录同步未确认；不保证断电耐久。</p><p v-for="warning in delivery.receipt.warnings" :key="warning" class="notice">{{ warning }}</p></section>
     </WingBlock>
-    <WingBlock v-model:expanded="expanded.push" title="2. 推送与审核" variant="card" class="delivery-block"><template #suffix>迁移中 · 未开放</template><template #actions><el-button size="small" disabled>推送</el-button><el-button size="small" disabled>查看审核</el-button></template><p>Desk producer 接收端尚待适配，推送与审核未开放；本页面不会自动联网，不会伪装旧生产者。</p><el-button size="small" disabled>推送到接收端（迁移中）</el-button></WingBlock>
-    <WingBlock v-model:expanded="expanded.history" title="3. 历史与重试" variant="card" class="delivery-block"><template #suffix>迁移中 · 未开放</template><template #actions><el-button size="small" disabled>刷新历史</el-button><el-button size="small" disabled>重试推送</el-button></template><p>历史与远程重试尚未迁移；此处不展示伪造记录。离线导出可在有效预览下重试，只有已有原字节相同才返回“已存在”。</p><el-button size="small" disabled>重试推送（迁移中）</el-button></WingBlock>
-    <p class="muted">Desk producer 接收端尚待适配，推送/历史重试未开放。</p>
   </PageLayout>
 </template>
 <style scoped>

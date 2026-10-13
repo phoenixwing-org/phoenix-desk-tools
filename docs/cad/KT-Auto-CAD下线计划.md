@@ -1,16 +1,72 @@
 # KT Auto CAD 下线计划
 
-状态：current（计划已确认，离线交付、手动恢复、隔离宿主与普通构建点检已接通；接收契约、正式安装和停用仍未完成）
+状态：current（2026-10-13 已按用户确认收口为本地 CAD 退役；保留离线 BOM 导出，BOM Web 联动另立批次；旧源码和历史保留）
 
 Owner：Desk Tools / KT Auto CAD maintainers
 
-最后核验：2026-10-12（本地归档复核；先实施 M1，后续依退出门禁推进）
+最后核验：2026-10-13（离线页收口与 Code 旧 CAD 接点压缩合入主库；实际环境切换和发布仍独立待验）
 
-目标是将 KT Auto CAD 的产品能力全部收敛到 Phoenix Desk Tools 的 CAD 模块，完成替代验收后退役旧扩展。已有能力合并，不重建一套索引或界面；缺失能力补迁，不因旧入口停用而默默丢失功能。当前最大的缺口是 Phoenix BOM 交付链路，其次是深度对象信息与旧宿主接点的收口。
+目标是将仍需保留的本地 CAD 能力收敛到 Phoenix Desk Tools 的 CAD 模块，完成本地替代与安全切换后退役旧入口。已有能力合并，不重建一套索引或界面。用户明确允许不用或未完成的 BOM Web 联动不再承接本轮；这属于范围变更，不记为已迁移。
 
 用户于 2026-10-11 确认本计划并授权开始执行。先实施 M1 的检索、静态对象信息、引用计数/新鲜度和只读诊断；验证使用独立构造样本，不改个人工程。后续按退出门禁推进，旧扩展停用、正式发布和生产数据切换仍需最终验收与授权；进度统一从 [当前 TODO](../TODO.md) 跟踪。
 
-## 基线与切换节点
+## 当前执行范围（2026-10-13 用户确认，优先于历史全量计划）
+
+用户选择“按本地 CAD 收口，保留离线导出”，并确认其他页面可以简化或暂不迁移，待与 BOM Web 联合开发时再做；旧代码仍在，不急于删除或归档旧仓库。下面的 M0–M5、旧命令和跨仓风险继续保留为历史盘点与后续参考；其中联网交付、原生发行和完整旧宿主等价条件不再串成当前退役的前置链。
+
+| 本轮处理 | 范围与边界 |
+| --- | --- |
+| 保留本地 CAD | 索引/检索、详情/属性、静态对象与轻量读取、引用/诊断，以及既有批量、改名、图纸同步、图册和转换入口；不重做已经可用的页面 |
+| 保留离线 BOM | `bom_delivery` 显示为“BOM 离线导出”，只提供预检、用户确认导出和释放预览；page ID、API、目录和 envelope 身份不变。完整/新鲜快照、直接数量、hash、源终检和原子不覆盖仍为强制门禁 |
+| 移出本轮 | A10–A12 的 BOM Web 登录/凭据、推送、审核、历史队列/自动重试，以及接收端 producer/幂等兼容；后续另立联合开发，不展示“迁移中”占位，也不把离线成功称为远程接收成功 |
+| 独立后续增强 | 工作空间外单文件许可、同步解析硬中断、WAL/崩溃/跨 OS 完整等价、Tauri GUI/安装及原生发行；未支持的输入保持明确拒绝，不删除安全回归，不称为已验收 |
+| 始终保留 | 模型、SQLite、人工字段、改名记录、旧 opaque 包/回执、备份与源码/Git 历史。不导出旧秘密，不重写历史包；切换只保留一个索引写入方 |
+
+当前收口分三组工作，不再按原来四个远程命令逐个迁页；第 1/2 组本轮增量已完成，第 3 组 Code 源码接点已从 working 压缩合入主库，实际运行环境切换仍待确认：
+
+1. 本地 CAD 与离线导出最终收口：精简页面/帮助/旧提示，复核实际入口、配置恢复与失败保护。
+2. 本地整理与隐私复核：只归档本任务，保留可恢复输入；源码、历史范围及实际 Web/Server 输出分别检查。不能用关键词无命中替代内容审阅。
+3. 旧接点切换：清理 Auto Code 的 CAD 专属安装/联调/发布建议，验证 Code 无 CAD 仍正常，再受控停止旧入口/发布流程。旧源码留存；不以重建整套旧 Extension Host、删除旧仓库或完成新原生安装器为前提。
+
+已有隔离备份/恢复和普通构建点检继续可复用。未完成的原生编译隐私增强已可恢复地移到仓外，不混入本轮本地收口提交；其候选构建缺少有效成功 proof，不能发布或复用旧 proof。原生正式发行仍须独立解决编译路径隐私并重新验收。
+
+### 本地范围收口回执（2026-10-13）
+
+本批基于 Desk `3b3cdc9e12e1c8aeaf8a3a9a09fa6a0685ebb6d0`，只改离线页、注册/帮助、一个引用提示及对应独立测试和两份计划文档。API/controller、后端领域与快照/发布逻辑、依赖 manifest/lockfile 均未改；暂缓的原生三份 tracked proof 文件逐字节恢复到该输入，六份未提交 helper/test 可恢复保留在 Git 外。
+
+| 本轮实际门禁 | 回执 |
+| --- | --- |
+| Registry / LOCAL Web 定向 | 各 7 文件 / 96 项通过；实际 SFC/SSR、会话/取消/确认、API、注册/菜单和引用提示覆盖 |
+| Registry / LOCAL 后端定向 | 各 7 文件 / 471 项通过：6 组离线 BOM 共 387 项，原 proof 验证器 84 项；仅验证恢复后的基线，不生成或授权原生制品 |
+| 类型 / 生产构建 | 两种模式的 Server/Web typecheck 和 Web/Server bundle 均实际 exit 0；没有重建 Wing、启动/退出用户服务或操作个人模型 |
+| 本地 Wing 输入 | `188d813c12abfc97a1b2db8404d213354e9ecd39`，clean；已有 src/dist/manifests 共 907 项前后逐字节指纹一致。早先未固定 Wing 输入的 LOCAL 页面回执不冒称旧提交证明，最终已限定复跑 |
+| 依赖 / 架构 | Registry 精确 7 包和无本地 overrides 门禁通过；471 source files、5 pure graphs、1 view root 通过；版本、lockfile 和生成声明不变 |
+| 增量隐私 | 逐段复核本轮差异及实际 HTML/SVG、离线编译块与 Server 挂载/导出；仅 preview/export/release，无远程接收端或凭据/重试代码，未夹带个人工程、测试/DB/CAD/恢复包/日志/源码 map。原始日志与路径映射留 Git 外 |
+
+只承接当前本地 API 部署的离线能力，不声称整个 Desk 网络隔离。预检会读取 SQLite/FCStd 并取得临时 read lease，“不扫描”指不执行索引写扫描、不改 CAD/索引、不创建 outbox，不是零 IO。普通构建的大 chunk 警告保留；完整默认并行 CI、全历史/最终发布隐私、原生/GUI/系统安装和实际旧入口停用均不因本批通过。旧仓库源码与用户现有安装没有修改。
+
+### Code 旧 CAD 开发接点清理回执（2026-10-13）
+
+Auto Code 从 clean `92ba161ff594375473e850d8a093e7d46965f0de` / 0.9.4 在固定 working 检出实施，25 个任务文件归档为 `048df34bcb63598bb2bcfbf653d0639efd0931a5`，范围文案澄清另归档 `2974bf9c3222d47c8773f9fb61e78a3cfa3e087f`，现行文档边界补齐归档 `1e854f707281f7bf32e41d4f59dd4707ae5931e6`。随后按用户“合为一个节点”授权，主库 `v0.9.4` 已压缩合入为 `780e4c2d8e8df9c7873ec28b34ec030cc52154ad`；版本仍为 0.9.4。未更新已安装 VSIX、停用旧扩展或发布，源码与 Git 历史继续保留。
+
+主库合入复核：新节点唯一父提交为上述 `92ba161`，目标树 `e15cab78bf4cf17f12fc98a44889e198e917e07f` 与固定 working `1e854f7` 完全一致，恰好 35 个任务文件；原 working 三节点未改写。Node 22.23.1 / Registry 在合入检出重新执行 276 文件、2067 项测试通过、1 项跳过，typecheck、Code-only prepare 构建、六包依赖边界、280 源码/27 pure graphs/27 view roots 和 134 份文档检查均实际 exit 0。暂存增量逐段隐私复核通过；不是全历史或发行包放行。没有重建 Wing、启动用户 Host、推送或发布。
+
+用户另确认旧 CAD 已推送到远程 working 分支作后续参考；本轮只保留这份人类归档回执，不 fetch 核验远程节点或改写其历史。本地旧 CAD 源码 `96b6a846b49fc0f29fc1f3da017cb055cedafafc` / `v0.2.0` 只读核对，未改动或删除。
+
+| 清理或实际验收 | 回执与边界 |
+| --- | --- |
+| 推荐安装 | Welcome 仅推荐/许可 Code；伪造旧 CAD 或未知安装请求明确报错，安装动作 0，不改变当前工具/MRU |
+| 开发与启动 | 默认本地开发、F5、launch 及兼容别名均 Code-only；旧 dual/cad-root 参数在文件/进程动作前拒绝。旧 resolver/跨仓烟测保留无 IO 拒绝薄入口，不再重建或加载旧 CAD |
+| 现行文档 | 文档索引、项目调查、路线与发布说明不再把旧 CAD 当安装/双仓开发前置；原三形态双 VSIX 方案分类为 superseded，CAA 当前交接与旧 CAD 读取历史隔离，归属/Ignore 只调整现行消费者。10 份文档/清单无运行源码变化，Node22 docs:check 实际通过 134 份；历史日期、版本、制品 hash 与命令块保留，未重新运行旧宿主或冒称新手工验收 |
+| 通用接口保全 | lock、moduleState/moduleTools/Shell API v2、extension、CAA/Desk/机器设置兼容、两份打包脚本、制品来源/验证、忽略边界及 esbuild 共 15 个保护文件逐字节未变；包仅改旧烟测脚本，版本/依赖/contributes 不变。不是通用模块拒绝名单 |
+| 全量与构建 | Node 22.23.1；Registry / LOCAL 各 276 文件、2067 项通过、1 项跳过；双模式类型与 Code bundle exit 0。Registry 原 loopback/工作树权限失败日志保留，授权同门禁重跑通过，不删用例或提高超时 |
+| LOCAL 真源 | Wing `188d813c12abfc97a1b2db8404d213354e9ecd39`，clean；实际 `ext:dev:prepare` 六包重建、Marker/Run cleanup 自检及 metafile 门禁通过，consumer `node_modules` 命中 0；727 tracked 输入前后逐字节一致 |
+| 架构与宿主 | 280 source files、27 pure graphs、27 view roots；Code docs 134 / Registry 六包门禁通过。Registry / LOCAL 隔离合成工作空间的真实 Code-only Host 各 16 个流程通过；已提交源码的 Registry 复构建 bundle SHA 与先前核验副本完全一致。空白快照预览已发起，机器锁屏，界面未人工确认 |
+| 增量隐私 | 逐段审读源码/测试/文档和双模式实际 27 个运行 JS；无私人 CAD 清单/几何/编号、秘密或新增截图/日志。Registry 无内嵌本地绝对路径；LOCAL 合法开发真源不能用于正式发行。maps/测试/历史 dist 目录不计入运行 payload，不把增量审查当成全历史/完整 VSIX 放行 |
+
+当前常规安装目录只发现 Code、未发现旧 CAD，属于只读身份线索，不证明所有旧 Development Host 已停止。源码提交也不会自动更新已加载 bundle。主库合入已完成；下一步仍需在用户指定的环境核验旧入口/发布流程停用、唯一 CAD 索引写入方与回退输入；没有自动卸载、读取 SecretStorage、关闭用户窗口或改动个人模型/数据库。原始路径、日志、逐项 SHA、不可变构建副本和宿主回执留 Git 外。
+
+## 基线与切换节点（历史输入保留）
 
 | 仓库 | 固定输入 | 用途与保护边界 |
 | --- | --- | --- |
@@ -63,7 +119,7 @@ M4 恢复演练分别保留原 VSIX、固定 `5b1c8a33` 重建的独立候选和
 | 层 | 保留责任 |
 | --- | --- |
 | Wing | 已共享的 CAD 命名、XML 投影、引用解析、索引计划与事务、workspace schema；稳定且有真实多端需求的交换 DTO/校验再评估提炼 |
-| Desk CAD | 文件与 SQLite IO、任务、确认/预览/应用、进度与底部日志、页面、outbox、HTTP 交付与宿主凭据端口 |
+| Desk CAD | 文件与 SQLite IO、任务、确认/预览/应用、进度与底部日志、页面、离线包；远程 HTTP 交付与凭据端口移出本轮 |
 | Phoenix BOM | envelope 接收规则、服务端数据权限、审核、冲突裁决、原子提交与幂等回执；不迁入本地 CAD 模块 |
 | Auto CAD | 迁移期间的只读金样本和最后可恢复扩展；验收后停止承担 CAD 产品入口 |
 | Auto Code | 通用扩展宿主和 Code 功能；最后只清理 CAD 专属目录依赖/安装建议，不改通用可选模块协议 |
@@ -72,7 +128,7 @@ M4 恢复演练分别保留原 VSIX、固定 `5b1c8a33` 重建的独立候选和
 
 ## 能力迁移台账
 
-“已有”表示目标实现存在，不等于与旧扩展完整等价已验收；“需合并”必须比较双方的具体默认值、字段和错误语义；“未迁移”必须补实现后才能停用旧能力。
+“已有”表示目标实现存在，不等于与旧扩展完整等价已验收；“需合并”必须比较双方的具体默认值、字段和错误语义。“未迁移”保留事实；用户明确移出本轮的项目不再要求补实现才能退役本地旧入口。
 
 | 单元 | Auto CAD 真源 | Desk 现状与目标入口 | 判定及下一步 |
 | --- | --- | --- | --- |
@@ -84,14 +140,14 @@ M4 恢复演练分别保留原 VSIX、固定 `5b1c8a33` 重建的独立候选和
 | A06 XLink 诊断 | `xlinkDiagnostics.ts` | `xlink_fix` 及详情引用页，已有分析与写回 | **已有且更完整**；迁诊断分类/拒绝规则，不退回旧扩展的只读小界面 |
 | A07 CAD/Schema 诊断 | `cadDiagnostics`、`nativeProtocol.ts` | CAD 索引诊断、健康状态、底部运行日志 | **M1 已补只读诊断与提示**；缺失/旧 Schema/读失败/未完成扫描提供准确动作；不自动创建、升级、重建数据库，不要求旧 Shell/provider |
 | A08 深度对象信息 | `nativeRead.ts`，native v1 document DTO | 文件详情新增只读“对象信息”页，静态 Document.xml 输出共享 document DTO | **M1 已实现静态字段契约，验收见下文**；不恢复 Rust provider，不宣称所有 FreeCAD 格式/几何运行态等价 |
-| A09 BOM 确定性交付包 | `bomTransfer.ts` | Desk envelope/source/snapshot/export 与 `bom_delivery` 页面、预览/导出/释放 API 已接入 | **离线阶段已接通，整体未完成**；页面最终回执见 M2.3，接收端 producer 兼容尚缺；质量门禁、一致快照、新鲜度、排序/hash、scanId、8 MiB 限制与原子 no-replace 见 M2.2 |
-| A10 BOM 推送与审核 | `phoenixBomClient.ts`、`bomDelivery.ts` | 尚无 prepare/status/commit 和审核跳转 | **未迁移**；先兼容 Desk producer，再接服务端预检/审核/提交；不自动裁决差异 |
-| A11 离线重试与回执 | `bomDelivery.ts` | 尚无 BOM outbox 管理 | **未迁移**；接管不可变包、待重试/待审核/已提交/已作废状态及终态回执；保持幂等 |
-| A12 账号与凭据 | `phoenixBomClient.ts`、VS Code SecretStorage | 无 Phoenix BOM 专用凭据端口 | **需宿主适配**；非秘密连接设置与秘密分离，旧秘密不自动搬运，Desk 重新登录 |
+| A09 BOM 确定性交付包 | `bomTransfer.ts` | Desk envelope/source/snapshot/export 与 `bom_delivery` 页面、预览/导出/释放 API 已接入 | **本轮保留的离线能力已接通**；质量门禁、一致快照、新鲜度、排序/hash、scanId、8 MiB 限制与原子 no-replace 见 M2.2/M2.3；不含接收端兼容 |
+| A10 BOM 推送与审核 | `phoenixBomClient.ts`、`bomDelivery.ts` | 无 prepare/status/commit 和审核跳转 | **未迁移，用户确认移出本轮**；后续 BOM Web 联合开发再确定接收兼容与审核/提交，不自动裁决差异 |
+| A11 离线重试与回执 | `bomDelivery.ts` | 无远程 outbox 管理 | **未迁移，用户确认移出本轮**；历史原包/回执原样保留，后续定义不可变包、队列和幂等，不把默认导出目录当自动队列 |
+| A12 账号与凭据 | `phoenixBomClient.ts`、VS Code SecretStorage | 无 Phoenix BOM 专用凭据端口 | **未迁移，用户确认移出本轮**；后续安全端口另做，旧秘密不读取、不搬运 |
 | A13 当前文件/模块可见性/进度 | `extension.ts`、Shell API v2 | Desk 工作空间树、预览 Tab、模块开关、Primary 进度和底部日志 | **用 Desk 宿主替代**；保留能打开文件、取消、查看结果和错误的操作结果，不复制 VS Code 外壳 |
 | A14 native provider 选择/握手 | `nativeProtocol.ts`、`selectDeskToolsProvider` | Desk 当前不发布旧 native provider；Wing 最新也已移除 Rust source | **旧机制随退役收口**；先确保 A08 的业务字段有去向。若 TS 确有缺口，单列受控 FreeCAD adapter，不因机制退役删除功能 |
 
-Desk 已有的单个/批量属性、名称统一、图纸命名同步、装配标签、关联文档同步、改名任务、图册/缩略图、零件查重、STEP→FCStd 和 SolidWorks→STEP 保持原入口与测试。这些不是 Auto CAD 的遗漏迁移项，不重做，也不以它们数量多来抵消 A09–A12 的缺口。
+Desk 已有的单个/批量属性、名称统一、图纸命名同步、装配标签、关联文档同步、改名任务、图册/缩略图、零件查重、STEP→FCStd 和 SolidWorks→STEP 保持原入口与测试。这些不是 Auto CAD 的遗漏迁移项，不重做，也不以它们数量多把移出的 A10–A12 计为已迁移。
 
 A03 的旧查询是单一关键词跨六字段 OR、按相对路径排序、最多 200 行。Desk 已有的多词 AND 路径筛选继续保留；合并时明确区分字段范围与词间关系，端到端测试每个字段单独命中、组合条件、零结果与上限。使用一次参数化索引查询，不以前端并发多次搜索后合并分页掩盖差异。
 
@@ -135,12 +191,15 @@ A03 的旧查询是单一关键词跨六字段 OR、按相对路径排序、最�
 | `block.scan`、`scanWorkspace`、`searchWorkspaceIndex`；`cadScan` | CAD 索引、目录检索；A02/A03 |
 | `block.read`、`block.provider`、`readFcstdLight`、`readFcstd`、`selectDeskToolsProvider`；`cadRead` | 文件详情，必要时新增只读对象信息区；A04/A08/A14 |
 | `block.query`、`queryWorkspaceDatabase`；`cadQuery` | 文件详情引用/装配与 BOM 交付入口；A05/A09 |
-| `exportBomTransfer`、`pushBomTransfer`、`retryBomTransfer` | 新 BOM 交付页；A09–A11 |
-| `configurePhoenixBom`、`clearPhoenixBomCredentials` | BOM 连接设置/退出登录；A12 |
+| `exportBomTransfer` | BOM 离线导出页；A09 |
+| `pushBomTransfer`、`retryBomTransfer` | 用户确认移出本轮；后续 BOM Web 联合开发 |
+| `configurePhoenixBom`、`clearPhoenixBomCredentials` | 用户确认移出本轮；不读取或搬运旧秘密 |
 | `block.diagnostics`、`diagnostics`；`cadDiagnostics` | CAD 诊断与底部日志；A07 |
 | `module.show`、`module.hide` | Desk 模块显隐；旧扩展停用时不保留第二套可见性真源 |
 
-## BOM 交付的关键兼容点
+## BOM 交付的关键兼容点（联网部分为后续参考）
+
+2026-10-13 范围调整后，本轮只保留下面的确定性/快照和不覆盖文件约束。接收端、审核、连接和幂等冲突记录留待后续联合开发，不代表当前有推送接口，也不阻塞本地离线导出退出。
 
 1. **producer 身份**：旧生成器/重试解析器和 Phoenix BOM 的 TypeScript/JSON Schema 均硬编码 `kt-auto-cad`。先让接收端允许新的 `phoenix-desk-tools` 身份，同时继续接收旧 v1 包；新包不能冒充旧扩展，旧包重试不能修改 producer、transferId、payloadHash 或重新生成字节。是否增加 schema 版本由接收契约兼容测试决定，不能仅改一个字符串。
 2. **确定性与快照**：旧 `transferId` 来自完成扫描的 `scanId`，payload 只按规定字段 canonicalize/hash。先保持整工作空间交付语义；按选中产品导出属于后续扩展，不能改变同一 transferId 的载荷。最新扫描未完成、引用缺失/歧义、循环、资产解析失败或 size/mtime 缺失/变化必须阻断。
@@ -161,10 +220,10 @@ A03 的旧查询是单一关键词跨六字段 OR、按相对路径排序、最�
 | --- | --- |
 | `.phoenix/phoenix-workspace.sqlite` | 已共享 Schema v13，不新建第二套 CAD 库。先备份并验证可恢复，再对照扫描、资产、xref/BOM 和人工 PartKey/关联；不自动 reset/升级不兼容库 |
 | 索引写入 | 迁移验证阶段保留现状；真实切换窗口明确唯一写入方。不能让旧扩展和 Desk 同时重建同一工作空间索引 |
-| `.phoenix/outbox/phoenix-bom-*.json` | 默认原位发现，预览后接管；`.receipt.json`、`.cancelled.json` 原样保留。自选目录导出的包通过用户选择导入，不全盘搜索 |
-| 旧包/回执 | 保留旧 schema/producer/hash 和来源，不覆盖同名文件，不把未知/损坏格式当成可提交任务；重试应绑定明确服务器，不能静默转投另一个目标 |
-| serverUrl/webUrl/username | 展示候选非秘密设置，由用户确认后写入 Desk 配置；机器路径/地址不进入公开样本或工程 Git |
-| 密码、access/refresh token | 不读取或批量导出 VS Code SecretStorage；Desk 重新认证。Tauri/Node 采用宿主安全存储端口；未具备安全存储时只允许会话内使用或保持推送不可用，不退化为 SQLite/localStorage 明文 |
+| `.phoenix/outbox/phoenix-bom-*.json` | 默认离线输出目录，不是自动队列；旧包、`.receipt.json`、`.cancelled.json` 原样保留。当前不自动发现/导入/重试，不全盘搜索 |
+| 旧包/回执 | 备份/恢复按 opaque 原字节保留旧 schema/producer/hash 和来源，不覆盖同名文件；未来远程重试另定义明确服务器绑定，不能静默转投 |
+| serverUrl/webUrl/username | 本轮不接管远程连接设置；未来由用户确认，机器路径/地址不进入公开样本或工程 Git |
+| 密码、access/refresh token | 不读取或批量导出 VS Code SecretStorage，本轮不实现登录；未来安全存储另验收，不退化为 SQLite/localStorage 明文 |
 | 扫描、过滤、展开等 UI 状态 | 复用 Desk 的工作空间偏好/Pinia；不是完整搬运 VS Code workspaceState |
 | 旧 provider 配置 | 展示不再适用的原因，不尝试执行陈旧机器路径；完成 A08 后不迁移旧二进制选择器 |
 
@@ -174,14 +233,16 @@ Desk SQLite 和 Phoenix BOM 服务端数据库保持分离，只交换版本化�
 
 - `cad_index`：继续负责扫描、索引搜索入口和状态，不新建第二个扫描页。
 - `file_detail`：继续负责属性、引用、装配和命名；A08 缺失的对象信息以只读区/子页补入，不替换现有编辑表单。
-- 新 `bom_delivery`：建议显示名 **BOM 交付**，挂在 CAD 模块。三个可折叠 block 为“预检与导出”“推送与审核”“历史与重试”，header right 提供对应动作；Primary 放目标、范围、进度，错误输出到 bottom block。已有包可直接进入重试，不强制重新扫描或重新生成包。
-- 服务建议落在 `server/src/features/cad-bom-delivery/`，UI 落在 `web-ui/src/features/cad-bom-delivery/`，API 预留 `/api/cad/bom-delivery/*`。这是计划名，当前没有占位成功接口。
+- `bom_delivery`：显示名 **BOM 离线导出**，挂在 CAD 模块。只保留“预检与导出”可折叠 block 与 header right 动作；Primary 放范围、进度和说明，错误输出到 bottom block。删除推送/历史占位；旧会话只恢复本工作空间的路径/预检折叠，不恢复句柄、回执或旧 push/history 状态。
+- 服务已落在 `server/src/features/cad-bom-delivery/`，UI 在 `web-ui/src/features/cad-bom-delivery/`；稳定 `/api/cad/bom-delivery/*` 仅开放 preview/export/release，其余动作仍拒绝，不改 ID/目录/DTO 来迁就显示名。
 - 纯导出/校验规则和宿主 IO 分离。先保持可测试的 feature domain；仅有明确公共消费者和版本契约的部分进入 Wing，不为旧扩展即将退役而新增长期共享 UI。
-- Phoenix BOM 的 producer guard/schema/contract tests 同批修改；Auto Code 的安装建议、联合启动和 smoke 清理最后执行。跨仓只走公共 API/包，不运行时 import 相邻仓库源码。
+- Phoenix BOM 的 producer guard/schema/contract tests 移至后续联合开发；Auto Code 的 CAD 专属安装建议、联合启动和 smoke 清理仍最后执行。跨仓只走公共 API/包，不运行时 import 相邻仓库源码。
 
 上述是允许的 UI 差异：使用 Desk 的导航、Primary/底部日志、文件选择和页面；保留业务字段、默认值、排序、数量、错误分类、确认和取消含义。未核实差异不以“适配新界面”一笔带过。
 
-## 分阶段实施
+## 分阶段实施（原全量计划，历史阶段编号保留）
+
+以下是最初全量迁移的依赖图，实际执行以本文顶部的三组本地收口工作为准。M3 和原生发行/旧宿主全等价不再作为本轮停旧入口的前置；历史证据不能倒写成新范围的完成证据。
 
 | 阶段 | 工作与依赖 | 退出条件 |
 | --- | --- | --- |
@@ -192,7 +253,7 @@ Desk SQLite 和 Phoenix BOM 服务端数据库保持分离，只交换版本化�
 | M4 旧数据接管与发行验收 | 原位 outbox/旧配置、Schema/扫描新鲜度、备份恢复；最终 Registry 依赖和真实安装态 | 历史包与人工数据不丢；真实浏览器/安装态通过；隐私/制品门禁通过 |
 | M5 切换与退役 | 清理 Auto Code CAD 专属安装/联调/smoke；停用旧扩展和发布流程；保留恢复入口 | 用户确认切换窗口；Desk 为唯一 CAD 入口/索引写入方；Code 无 CAD 仍正常；观察期后再确认仓库归档 |
 
-优先顺序是 **M1 对照与缺口修补 → M2 可离线导出 → M3 完整交付 → M4 接管与发行 → M5 停用**。M1 的索引安全验收是 M2 的前置；BOM 身份兼容和安全凭据未就绪前不开放推送。不能先卸载旧扩展再补缺失能力。
+原顺序是 **M1 → M2 → M3 → M4 → M5**；2026-10-13 已由用户调整为本地能力/离线导出收口、整理与安全复核、旧 CAD 接点切换。索引安全仍为离线导出的前置；推送不开放。不得以范围精简删除数据或冒称未做能力已迁移。
 
 ### M1 可执行批次与验收输入
 
@@ -635,18 +696,20 @@ Windows 尚未实现文件 ID/ACL 与原生隔离验收，入口在任何读取�
 | `readFcstdLight` | 文件详情独立轻量摘要、原始 XML 字节＋去重源链接/内嵌字段；`POST /api/cad/light-info` | 工作空间内 32 MiB 只读承接；外部单文件许可及其他 carry 未退出 |
 | `readFcstd` | `POST /api/cad/object-info`；引用诊断另走索引 | 静态实现，非旧进程等价，M1.2 |
 | `queryWorkspaceDatabase` | `GET /api/file-detail/xrefs`（`refresh_disk=false`）、`/api/cad/bom/xref/*`、`/api/cad/bom/tree` | 查询承接，M1 |
-| `exportBomTransfer` | `bom_delivery` / `/api/cad/bom-delivery` 预览、确认导出、释放 | 离线接入 M2.3；接收兼容尚待 M2 |
-| `pushBomTransfer` | 尚无 outbox/prepare/status/commit 或审核出口 | 未迁，M2 前置＋M3 |
-| `retryBomTransfer` | 尚无原包重试/回执管理 | 未迁，M3/M4 |
-| `configurePhoenixBom` | 尚无专用连接/安全凭据端口；FreeCAD 配置不是替代 | 未迁，M3 |
-| `clearPhoenixBomCredentials` | 尚无退出/删除秘密动作 | 未迁，M3；不能因旧机制退役删除该业务能力 |
+| `exportBomTransfer` | `bom_delivery` / `/api/cad/bom-delivery` 预览、确认导出、释放 | 本轮保留的离线能力已接入 M2.3；接收兼容另做 |
+| `pushBomTransfer` | 无 outbox/prepare/status/commit 或审核出口 | 未迁，用户确认移出本轮 |
+| `retryBomTransfer` | 无原包远程重试/回执管理 | 未迁，用户确认移出本轮；旧字节保留 |
+| `configurePhoenixBom` | 无专用连接/安全凭据端口；FreeCAD 配置不是替代 | 未迁，用户确认移出本轮 |
+| `clearPhoenixBomCredentials` | 无退出/删除秘密动作 | 未迁，用户确认移出本轮；不操作旧秘密 |
 | `scanWorkspace` | `cad_index`；`POST /api/cad/index/scan/start`、GET progress、POST cancel | 单空间宿主承接，M1 |
 | `searchWorkspaceIndex` | `GET /api/cad/index/search` → 打开详情 | 已新增；无缓存时不回退，M1.1 |
 | `selectDeskToolsProvider` | 不恢复 manifest 选择/握手；业务读取由对象信息承接 | 旧机制 obsolete，仍以 A08 退出门禁为前提 |
 
-汇总为 16 项有业务/宿主出口（含差异），4 项远程交付/凭据动作未迁，1 项 provider 选择机制 obsolete；不等于 21 项已全部迁移。`bom_apply` 和 `/api/cad/bom/file` 是模型属性工作流，不是 Phoenix BOM 交付。
+汇总为 16 项有业务/宿主出口（含差异），4 项远程交付/凭据动作未迁且用户确认移出本轮，1 项 provider 选择机制 obsolete；不等于 21 项已全部迁移。`bom_apply` 和 `/api/cad/bom/file` 是模型属性工作流，不是 Phoenix BOM 交付。
 
-### M2/M3 可执行批次与跨仓门禁
+### M2/M3 可执行批次与跨仓门禁（后续联合开发参考）
+
+下表中的接收端/认证/联网条件自 2026-10-13 起移出本轮，本地 M2.1–M2.3 已完成部分仍保留；不再要求先取得 BOM 仓库写入权限才能完成本地退役。
 
 下表是整批退出条件；M2.1 的 Desk 纯领域边界、M2.2 后端快照/离线发布和 M2.3 离线页面/API 已接通，接收端兼容仍缺。BOM 接收端变更属于跨仓实施范围，开始前须确认该仓写入权限、dirty 所有权及实际 Host 基线；不以当前仅可读的环境假定有权修改或发布。
 
@@ -661,7 +724,9 @@ Windows 尚未实现文件 ID/ACL 与原生隔离验收，入口在任何读取�
 
 旧导出在读事务关闭后只进行一次文件 stat，不足以证明预览至发布全程绑定；M2.2 增加发布边界核验，使用确定性 hook 覆盖竞争。M3 的真实目标/账号和生产切换不由本地默认值推断；实现批准不等于登录外部服务、发布或操作生产数据的授权。
 
-## 测试语义和验收
+## 测试语义和验收（历史全量门禁，按当前范围选取）
+
+本轮必保本地索引/读取/诊断、离线确认/快照/不覆盖、上下文隔离、错误日志与备份恢复测试。下面涉及远程 HTTP、审核/凭据和原生安装的条目仍未完成，归后续独立批次；不删原测试来伪造完整通过。
 
 | 旧测试 | 分类与目标 |
 | --- | --- |
@@ -689,15 +754,15 @@ Windows 尚未实现文件 ID/ACL 与原生隔离验收，入口在任何读取�
 - [ ] 包体不含私人样本/机器路径/账号秘密，复核最终历史范围；安装/退出/卸载不清工程数据。
 - [ ] 备份恢复和 outbox 接管演练通过，Registry 安装制品可恢复，用户确认后才执行停用。
 
-当前已进入 M1 实施，A09–A12 和安装/恢复/切换仍未完成，**不报告完整迁移百分比**。分别统计可见入口覆盖、可点击路由覆盖、完整能力验收；主体迁移与发布就绪分开。历史 1305 项测试和本轮消费端总量都不能替代逐项跨端等价或退役验收。
+当前按顶部本地范围收口，A10–A12 和原生安装/发行移出本轮，最终旧接点切换仍待完成，**不报告完整迁移百分比**。分别统计可见入口覆盖、可点击路由覆盖、完整能力验收；主体迁移与发布就绪分开。历史测试总量不能替代逐项验收。
 
 ## 切换与回退
 
-切换时冻结旧插件写操作/自动扫描，完成数据库与 outbox 备份，再让 Desk 接管。恢复演练必须证明数据库、回执、待重试包和人工字段可恢复；不能假定只切 Git 提交就能回退数据。M5 前重新固定切换前的完整代码、安装制品和数据恢复输入，保护后来独立增量；不能直接回到历史 `438c62d567` 而丢失缩略图、Wing 适配等非迁移修改。原项目文件不因插件退役而删除。
+切换时冻结旧插件写操作/自动扫描，完成数据库与 opaque outbox 备份，再让 Desk 接管。已有隔离恢复演练证明原字节保留，不要求为本轮恢复一套联网队列或旧宿主；不能假定只切 Git 提交就能回退数据。M5 前重新固定切换前的完整代码与数据恢复输入，保护后来独立增量；不能直接回到历史 `438c62d567` 而丢失缩略图、Wing 适配等非迁移修改。原项目文件不因插件退役而删除，正式安装制品的回退另属发行门禁。
 
-Auto Code 需要清理的具体位置包括 `sidebarViewProvider.ts` 的 CAD 安装建议、`cad-sibling-resolution.mjs`、完整联合 `ext:dev`/`ext:test:host:cad`、launch/smoke 的 CAD 专用断言和旧 provider 文案。保留通用 Shell API 与 Code-only 开发/发行；CAA handoff 和 Desk 集成不是 CAD 扩展专属，不能连带移除。
+Auto Code 上述 working 提交已处理 `sidebarViewProvider.ts` 的 CAD 安装建议、`cad-sibling-resolution.mjs`、完整联合 `ext:dev`/`ext:test:host:cad`、launch/smoke 的 CAD 专用断言和现行文档接点，并已压缩合入主库；实际运行环境接管仍另验。保留通用 Shell API 与 Code-only 开发/发行；CAA handoff 和 Desk 集成不是 CAD 扩展专属，不能连带移除。
 
-旧扩展的 Marketplace 下架/弃用说明、停止发布、用户机器停用及仓库归档属于最后的外部动作；由用户确认范围与时机后执行，不自动卸载，不删除 Git 历史。观察期长度和回退负责人在 M5 前确定。旧数据有未完成任务、A08 缺口或 BOM 交付未闭环时，不宣称 Auto CAD 已退役。
+旧扩展的 Marketplace 下架/弃用说明、用户机器停用及仓库归档属于外部动作；由用户确认范围与时机后执行，不自动卸载，不删除 Git 历史。仓库内停止发布接点与外部下架分开处理。观察期长度和回退负责人在实际切换前确定。用户已将 BOM Web 闭环和未支持的完整等价移出本轮，不再因这些项目未实现阻塞本地入口退役；真实接点停用、数据保护和唯一写入方仍需核验，不能仅凭文档宣称完成。
 
 ## 代码依据
 
