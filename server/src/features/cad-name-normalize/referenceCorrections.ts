@@ -1,9 +1,7 @@
 import fs from "node:fs";
-import path from "node:path";
-import { pnwCreateDb } from "@phoenix-wing/db-node";
-import { analyzeRenameReferences, applyRenameCorrections } from "../../lib/pnwRenameService.js";
-import { fcstdFingerprint, readFcstdBatchArchive, safeFcstdPath } from "../../lib/fcstdBatchFiles.js";
-import { drawingLinkLabelAttributes } from "../../lib/fcstdDrawing.js";
+import { analyzeRenameReferences, applyRenameCorrections, inspectIncomingRenameLabels } from "../../lib/pnwRenameService.js";
+import { fcstdFingerprint, safeFcstdPath } from "../../lib/fcstdBatchFiles.js";
+import { verifyIncomingLabelSources, verifyIncomingObjectLabels, type IncomingObjectLabelPlan } from "../../lib/renameObjectLabelPlan.js";
 
 export type RenameOptions = { fixXref: boolean; syncLabels: boolean; fixBasename: boolean };
 export function renameOptions(raw?: Partial<RenameOptions>): RenameOptions {
@@ -29,8 +27,12 @@ export function correctRenamedReferences(root: string, logId: number, targetRel:
     throw new Error("改名后的宿主集合与确认计划不一致，已停止自动修正，请重新分析");
   }
   let xlinkPatches = 0; let labelPatches = 0;
-  const labelAttrs = new Map<string, Set<string> | null>();
+  const expectedLabels = new Map<string, IncomingObjectLabelPlan>();
+  let labelsPending = false;
   const notes: string[] = [];
+  const labelHosts: string[] = [];
+  // Repair all direct paths of THIS renamed file before projecting labels.
+  // A host's sibling numbering can traverse another selected host's links.
   for (const host of direct) {
     try {
       const filename = safeFcstdPath(root, host);
@@ -42,34 +44,50 @@ export function correctRenamedReferences(root: string, logId: number, targetRel:
         failed.push(...result.failed);
         // Preserve the baseline of a completed path write even if label repair fails next.
         fingerprints.set(host, fcstdFingerprint(fs.readFileSync(filename)));
+        if (result.failed.length) continue;
       }
+      labelHosts.push(host);
+    } catch (error) { failed.push({ host_repo_rel_path: host, error: error instanceof Error ? error.message : String(error) }); }
+  }
+  // Labels remain JIT and host-scoped, not a transaction across sources. A
+  // failed path host is excluded; other safely preflighted hosts can continue.
+  for (const host of labelHosts) {
+    try {
+      const filename = safeFcstdPath(root, host);
+      if (fcstdFingerprint(fs.readFileSync(filename)) !== fingerprints.get(host)) throw new Error("宿主在引用路径修正后已变化，未自动覆盖");
+      const args = { rename_log_id: logId, host_repo_rel_paths: [host], transitive: false };
       if (options.syncLabels) {
+        const labels = inspectIncomingRenameLabels(root, logId, host, targetRel);
+        expectedLabels.set(host, labels);
+        verifyIncomingLabelSources(root, labels);
         const result = applyRenameCorrections(root, { ...args, labels_only: true, label_scope: "incoming" });
         labelPatches += result.label_patches;
         failed.push(...result.failed);
         if ("skipped" in result) notes.push(...result.skipped.map(item => `${item.host_repo_rel_path}：${item.reason}`));
+      } else {
+        // A disabled write is not a failed write. Inspect only to distinguish
+        // already-correct labels from changes that still need confirmation.
+        try {
+          const labels = inspectIncomingRenameLabels(root, logId, host, targetRel);
+          if (labels.patches.length) labelsPending = true;
+          notes.push(...labels.skipped.map(item => `${item.host_repo_rel_path}：${item.reason}`));
+        } catch (error) {
+          labelsPending = true;
+          notes.push(`${host}：未请求同步标签，标签仍待确认：${error instanceof Error ? error.message : String(error)}`);
+        }
       }
-      labelAttrs.set(host, drawingLinkLabelAttributes(host, readFcstdBatchArchive(filename).xml));
       // Account for this batch's own writes when a host references several renamed files.
       fingerprints.set(host, fcstdFingerprint(fs.readFileSync(filename)));
     } catch (error) { failed.push({ host_repo_rel_path: host, error: error instanceof Error ? error.message : String(error) }); }
   }
   const remaining = analyzeRenameReferences(root, { rename_log_id: logId, transitive: true });
-  // Re-read the index refreshed by the shared patcher; a skipped/missing Label is not success.
-  let labelsPending = false;
-  if (direct.length) {
-    const db = pnwCreateDb(path.join(root, ".phoenix/phoenix-workspace.sqlite"));
-    try {
-      const edges = db.all<{ host_repo_rel_path: string; target_repo_rel_path: string; target_basename: string; xlink_file_attr: string; link_label: string; rule_label: string }>("SELECT host_repo_rel_path, target_repo_rel_path, target_basename, xlink_file_attr, link_label, rule_label FROM phoenix_cad_bom_xref");
-      for (const edge of edges) {
-        if (!direct.includes(normalized(edge.host_repo_rel_path))) continue;
-        if (normalized(edge.target_repo_rel_path || "") !== targetRel && edge.target_basename !== path.posix.basename(targetRel)) continue;
-        const attrs = labelAttrs.get(normalized(edge.host_repo_rel_path));
-        if (attrs && !attrs.has(edge.xlink_file_attr)) continue;
-        if (!options.syncLabels) labelsPending = true;
-        else if (!edge.rule_label || edge.link_label !== edge.rule_label) failed.push({ host_repo_rel_path: normalized(edge.host_repo_rel_path), error: "引用标签尚未与规则名一致，请打开引用分析确认" });
-      }
-    } finally { db.close(); }
+  // The index aggregates file edges. It cannot certify labels of named
+  // subobjects or .001/.002 siblings; verify the confirmed live identities.
+  // Source bytes were guarded during each host's own write. Later legitimate
+  // host writes may change those sources; this is not a batch-wide source lock.
+  if (options.syncLabels) for (const [host, plan] of expectedLabels) {
+    try { verifyIncomingObjectLabels(root, host, plan.expectations); }
+    catch (error) { failed.push({ host_repo_rel_path: host, error: error instanceof Error ? error.message : String(error) }); }
   }
   return { xlink_patches: xlinkPatches, label_patches: labelPatches, failed_hosts: failed,
     notes,

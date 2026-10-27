@@ -53,6 +53,60 @@ async function prepare(root: string) {
 }
 afterEach(() => { vi.restoreAllMocks(); vi.clearAllMocks(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
 
+it.each([false, true])("certifies object-level numbered incoming labels, or repairs them alone after a label failure (failFirst=%s)", async failFirst => {
+  const root = await fixture({ noHosts: true });
+  const host = "other/Named.ASSY.FCStd";
+  const link = (name: string, file = `../${part}`) => `<Object name="${name}"><Properties><Property name="Label" type="App::PropertyString"><String value="keep old"/></Property><Property name="LinkedObject" type="App::PropertyXLink"><XLink file="${file}" name="Body" stamp="kept"/></Property></Properties></Object>`;
+  save(root, host, `<Document><Objects><Object name="Root" type="App::Part"/><Object name="Second" type="App::Link"/><Object name="First" type="App::Link"/><Object name="Unrelated" type="App::Link"/></Objects><ObjectData><Object name="Root"><Properties><Property name="Label" type="App::PropertyString"><String value="host"/></Property><Property name="Group" type="App::PropertyLinkList"><LinkList><Link value="First"/><Link value="Second"/><Link value="Unrelated"/></LinkList></Property></Properties></Object>${link("Second")}${link("First")}${link("Unrelated", "../unrelated/Missing.FCStd")}</ObjectData></Document>`);
+  await scanCadWorkspaceIndex(root);
+  const { written } = await prepare(root);
+  const analysis = analyzeNames(root, { prepared_id: written.prepared_id! });
+  const actual = renameService.applyRenameCorrections;
+  const spy = vi.spyOn(renameService, "applyRenameCorrections").mockImplementation((workspace, body) => {
+    if (failFirst && body.labels_only) throw new Error("synthetic label failure");
+    return actual(workspace, body);
+  });
+  const result = await renameNames(root, { analysis_id: analysis.analysis_id, rels: [part], confirmed: true });
+  expect(result.results[0]).toMatchObject({ status: failFirst ? "references_pending" : "renamed", xlink_patches: 2, label_patches: failFirst ? 0 : 2 });
+  expect(xml(root, host)).toContain(`file="../${partTarget}"`);
+  if (failFirst) {
+    expect(result.results[0].failed_hosts).toEqual(expect.arrayContaining([expect.objectContaining({ error: "synthetic label failure" })]));
+    const sourceAfterRename = bytes(root, partTarget);
+    spy.mockRestore();
+    const repaired = renameService.applyRenameCorrections(root, { rename_log_id: result.results[0].rename_log_id, host_repo_rel_paths: [host], labels_only: true, label_scope: "incoming" });
+    expect(repaired).toMatchObject({ failed: [], label_patches: 2, xlink_patches: 0 });
+    expect(bytes(root, partTarget)).toEqual(sourceAfterRename);
+    expect(renameService.listRenameLogs(root).entries).toHaveLength(1);
+    expect(fs.existsSync(path.join(root, part))).toBe(false);
+  } else expect(result.results[0].failed_hosts).toEqual([]);
+  const labels = xml(root, host);
+  expect(labels).toContain('value="710101.001-测试侧板.001"');
+  expect(labels).toContain('value="710101.001-测试侧板.002"');
+  expect(labels).toContain(link("Unrelated", "../unrelated/Missing.FCStd"));
+  expect(startCadIndexScan).toHaveBeenCalledTimes(1);
+});
+
+it("certifies batch labels when an earlier host's numbering projection reads a later host that this batch then updates", async () => {
+  const root = await fixture({ noHosts: true }), earlier = "other/First.ASSY.FCStd", later = "other/Second.ASSY.FCStd";
+  const label = (value: string) => `<Property name="Label" type="App::PropertyString"><String value="${value}"/></Property>`;
+  const link = (name: string, file: string, target: string) => `<Object name="${name}"><Properties>${label("leave old")}<Property name="LinkedObject" type="App::PropertyXLink"><XLink file="${file}" name="${target}"/></Property></Properties></Object>`;
+  const doc = (names: string[], objects: string) => `<Document><Objects><Object name="Root" type="App::Part"/>${names.map(name => `<Object name="${name}" type="App::Link"/>`).join("")}</Objects><ObjectData><Object name="Root"><Properties>${label("Host")}<Property name="Group" type="App::PropertyLinkList"><LinkList>${names.map(name => `<Link value="${name}"/>`).join("")}</LinkList></Property></Properties></Object>${objects}</ObjectData></Document>`;
+  save(root, earlier, doc(["Direct", "Projected"], link("Projected", "Second.ASSY.FCStd", "Direct") + link("Direct", `../${part}`, "Body")));
+  save(root, later, doc(["Direct"], link("Direct", `../${part}`, "Body")));
+  await scanCadWorkspaceIndex(root);
+  const { written } = await prepare(root);
+  const sourceBefore = bytes(root, part);
+  const analysis = analyzeNames(root, { prepared_id: written.prepared_id! });
+  const result = await renameNames(root, { analysis_id: analysis.analysis_id, rels: [part], confirmed: true });
+  expect(result.results[0]).toMatchObject({ status: "renamed", failed_hosts: [], xlink_patches: 2, label_patches: 2 });
+  expect(xml(root, earlier)).toContain('value="710101.001-测试侧板.001"');
+  expect(xml(root, later)).toContain('value="710101.001-测试侧板"');
+  expect(xml(root, earlier)).toContain(link("Projected", "Second.ASSY.FCStd", "Direct"));
+  expect(bytes(root, partTarget)).toEqual(sourceBefore);
+  expect(renameService.listRenameLogs(root).entries).toHaveLength(1);
+  expect(startCadIndexScan).toHaveBeenCalledTimes(1);
+});
+
 it.each(["Body", "Body001"])("name normalization preview forwards saved default %s identity and derives the plain filename name without writes", async objectName => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "desk-name-default-body-")); roots.push(root);
   const rel = "candidates/测试盖板.FCStd";
@@ -171,6 +225,27 @@ it("binds disabled correction options to analysis and does not call that fully r
   const result = await renameNames(root, { analysis_id: analysis.analysis_id, rels: [part], confirmed: true });
   expect(result.results[0]).toMatchObject({ status: "references_pending", label_patches: 0 });
   expect(xml(root, outside)).toContain('value="old link label"');
+});
+
+it.each(["missing_named_target", "repeated_nameless"])("keeps path success separate from unrequested unsafe label recommendations (%s)", async condition => {
+  const root = await fixture({ noHosts: true });
+  const host = "other/Unconfirmed.ASSY.FCStd";
+  const count = condition === "repeated_nameless" ? 2 : 1;
+  const names = Array.from({ length: count }, (_, i) => `Instance${i}`);
+  const target = condition === "missing_named_target" ? ' name="Missing"' : "";
+  save(root, host, `<Document><Objects><Object name="Root" type="App::Part"/>${names.map(name => `<Object name="${name}" type="App::Link"/>`).join("")}</Objects><ObjectData><Object name="Root"><Properties><Property name="Label" type="App::PropertyString"><String value="host"/></Property><Property name="Group" type="App::PropertyLinkList"><LinkList>${names.map(name => `<Link value="${name}"/>`).join("")}</LinkList></Property></Properties></Object>${names.map(name => `<Object name="${name}"><Properties><Property name="Label" type="App::PropertyString"><String value="leave label unchanged"/></Property><Property name="LinkedObject" type="App::PropertyXLink"><XLink file="../${part}"${target}/></Property></Properties></Object>`).join("")}</ObjectData></Document>`);
+  await scanCadWorkspaceIndex(root);
+  const { written } = await prepare(root);
+  const analysis = analyzeNames(root, { prepared_id: written.prepared_id!, options: { syncLabels: false } });
+  const spy = vi.spyOn(renameService, "applyRenameCorrections");
+  const result = await renameNames(root, { analysis_id: analysis.analysis_id, rels: [part], confirmed: true });
+  expect(result.results[0]).toMatchObject({ status: "references_pending", xlink_patches: count, label_patches: 0, failed_hosts: [],
+    message: expect.stringContaining("未请求同步标签，标签仍待确认") });
+  expect(xml(root, host).match(/value="leave label unchanged"/g)).toHaveLength(count);
+  expect(xml(root, host).match(new RegExp(`file="../${partTarget.replaceAll(".", "\\.")}"`, "g"))).toHaveLength(count);
+  expect(spy.mock.calls.some(([, body]) => body.labels_only)).toBe(false);
+  expect(fs.existsSync(path.join(root, part))).toBe(false);
+  expect(startCadIndexScan).toHaveBeenCalledTimes(1);
 });
 
 it("keeps rename results when starting the final index refresh fails", async () => {

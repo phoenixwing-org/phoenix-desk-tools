@@ -21,6 +21,11 @@ export type DeskToolsServiceRegistration = {
   readonly started_at: string;
   readonly health_path: "/api/caa/health";
   readonly caa_open_path: "/api/caa/dialog/open";
+  /** Additive opt-in fields. Old API-only hosts do not advertise a Web URL. */
+  readonly browser_host_protocol?: 1;
+  readonly identity_path?: "/api/desk-service";
+  readonly web_url?: string;
+  readonly runtime_id?: string;
 };
 
 export type DeskToolsRegistrationHandle = {
@@ -191,8 +196,12 @@ export function registerDeskToolsRuntime(
   env: NodeJS.ProcessEnv = process.env,
   now = new Date(),
   instanceId: string = randomUUID(),
+  browser?: { readonly webUrl: string; readonly runtimeId: string },
 ): DeskToolsRegistrationHandle {
   if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error(`无效 Desk Tools 端口：${port}`);
+  if (browser && (browser.webUrl !== `http://127.0.0.1:${port}/` || !/^[A-Za-z0-9._:-]{1,256}$/.test(browser.runtimeId))) {
+    throw new Error("无效 Desk Web 同源地址或运行身份");
+  }
   const directory = deskToolsRegistrationDirectory(env);
   const servicePath = path.join(directory, "service.v1.json");
   const service: DeskToolsServiceRegistration = {
@@ -207,6 +216,7 @@ export function registerDeskToolsRuntime(
     started_at: now.toISOString(),
     health_path: "/api/caa/health",
     caa_open_path: "/api/caa/dialog/open",
+    ...(browser ? { browser_host_protocol: 1 as const, identity_path: "/api/desk-service" as const, web_url: browser.webUrl, runtime_id: browser.runtimeId } : {}),
   };
   atomicWriteJson(servicePath, service);
 

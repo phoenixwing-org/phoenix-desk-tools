@@ -106,6 +106,7 @@ export const DEFAULT_PAGE_ICONS: Record<string, string> = {
   config: "⚙",
   xlink_fix: "⎘",
   step_batch: "⇩",
+  drawing_batch: "▤",
   sw_step_export: "▣",
   bom_apply: "✎",
   file_rename: "↦",

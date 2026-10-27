@@ -56,7 +56,7 @@
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.5.x",
-      "lastVerified": "2026-08-17"
+      "lastVerified": "2026-10-26"
     },
     {
       "path": "docs/archive/TODO-2026-07-17.md",
@@ -352,6 +352,15 @@
       "reason": "旧迁移、旧 schema、旧桌面或完成态实现记录"
     },
     {
+      "path": "docs/cad/CAD伴随文档兼容规划.md",
+      "status": "draft",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.5.x",
+      "lastVerified": "2026-10-26",
+      "sourceOfTruth": "docs/TODO.md",
+      "reason": "分期能力与验收边界；不代表全部实现或正式发布"
+    },
+    {
       "path": "docs/cad/CAD改名与装配标签-点检隐私审查-归档.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
@@ -368,11 +377,29 @@
       "lastVerified": "2026-08-17"
     },
     {
+      "path": "docs/cad/CAD后续能力实施规划.md",
+      "status": "draft",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.5.x",
+      "lastVerified": "2026-10-26",
+      "sourceOfTruth": "docs/TODO.md",
+      "reason": "分期能力与验收边界；不代表全部实现或正式发布"
+    },
+    {
       "path": "docs/cad/CAD目录与索引职责拆分.md",
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.5.x",
       "lastVerified": "2026-08-17"
+    },
+    {
+      "path": "docs/cad/CAD批量动作接入清单.md",
+      "status": "draft",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.5.x",
+      "lastVerified": "2026-10-26",
+      "sourceOfTruth": "docs/TODO.md",
+      "reason": "分期能力与验收边界；不代表全部实现或正式发布"
     },
     {
       "path": "docs/cad/CAD批量工具.md",
@@ -640,6 +667,13 @@
       "reason": "2026-10-04 Desk 收敛 Code 产品范围，只保留忽略设定与 CAA；旧实现与复刻计划不再推进"
     },
     {
+      "path": "docs/drawing-maintenance.md",
+      "status": "current",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.5.x",
+      "lastVerified": "2026-10-26"
+    },
+    {
       "path": "docs/phoenix-wing升级计划.md",
       "status": "archived",
       "owner": "Desk Tools maintainers",
@@ -690,6 +724,15 @@
       "reason": "尚未晋升为当前操作契约的方案或研究"
     },
     {
+      "path": "docs/platform/统一批量任务管理任务书与实施规划.md",
+      "status": "draft",
+      "owner": "Desk Tools maintainers",
+      "appliesTo": "0.5.x",
+      "lastVerified": "2026-10-26",
+      "sourceOfTruth": "docs/TODO.md",
+      "reason": "分期能力与验收边界；不代表全部实现或正式发布"
+    },
+    {
       "path": "docs/platform/统一运行日志窗口-规划讨论.md",
       "status": "draft",
       "owner": "Desk Tools maintainers",
@@ -712,7 +755,7 @@
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.5.x",
-      "lastVerified": "2026-08-17"
+      "lastVerified": "2026-10-26"
     },
     {
       "path": "docs/platform/FileWorkset-规划.md",
@@ -1100,7 +1143,7 @@
       "status": "current",
       "owner": "Desk Tools maintainers",
       "appliesTo": "0.5.x",
-      "lastVerified": "2026-08-17"
+      "lastVerified": "2026-10-26"
     },
     {
       "path": "docs/user/快速开始.md",

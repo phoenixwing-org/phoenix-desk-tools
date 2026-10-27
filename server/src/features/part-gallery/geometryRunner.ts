@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { runtimeUserDataDir } from "../../lib/appRuntimePaths.js";
 import { buildFreecadChildEnvironment, resolveFreecadCommand } from "../../lib/freecadProcessSecurity.js";
+import { acquireDrawingExecution, type DrawingExecutionLease } from "../drawing-research/executionGate.js";
 
 export type GeometryInput = { rel: string; filename: string; node: string };
 export type GeometryResult = { rel: string; bounding_box: { x_mm: number; y_mm: number; z_mm: number } | null; message: string };
@@ -46,6 +47,9 @@ const READ_FAILURE_MESSAGES = new Set([
   "最终边界盒报告与进度不一致",
   "隔离读取模型边界盒失败，请确认 FreeCADCmd 可用后重试",
   "边界盒隔离临时目录清理失败",
+  "边界盒读取已取消，未启动原生程序",
+  "边界盒读取已取消，已等待自有进程关闭",
+  "已有原生 CAD 任务运行中，请等待完成后重试",
 ]);
 const RESULT_FAILURE_MESSAGES = new Set(Object.entries(MESSAGES).filter(([code]) => code !== "ready").map(([, message]) => message));
 const CONFIGURATION_MESSAGES = {
@@ -187,65 +191,104 @@ function configuredCommand() {
   throw new GeometryConfigurationError(explicit ? "freecad_configuration_invalid" : "freecad_not_found");
 }
 
-/** Inputs are already workspace-validated; no directory discovery or shape inference. */
-export async function readGeometryBatch(inputs: GeometryInput[], onItem?: (item: GeometryResult) => void): Promise<GeometryResult[]> {
+/**
+ * Inputs are already workspace-validated; no directory discovery or shape inference.
+ * The process-wide CAD lease is held until the owned child's actual close event.
+ * This is not a cross-host/process lock or a unified queue execution ticket.
+ */
+export async function readGeometryBatch(inputs: GeometryInput[], onItem?: (item: GeometryResult) => void, options: { signal?: AbortSignal } = {}): Promise<GeometryResult[]> {
+  if (options.signal?.aborted) throw new GeometryFailure("边界盒读取已取消，未启动原生程序");
+  if (Array.isArray(inputs) && inputs.length === 0) return [];
+  let release: DrawingExecutionLease;
+  try { release = acquireDrawingExecution("geometry:" + randomUUID()); }
+  catch { throw new GeometryFailure("已有原生 CAD 任务运行中，请等待完成后重试"); }
+  try { return await readGeometryBatchOwned(inputs, release, onItem, options.signal); }
+  finally { release(); }
+}
+async function readGeometryBatchOwned(inputs: GeometryInput[], release:DrawingExecutionLease, onItem?: (item: GeometryResult) => void, signal?: AbortSignal): Promise<GeometryResult[]> {
   const sources = validateInputs(inputs);
   if (!sources.length) return [];
   const command = configuredCommand(); let folder: string;
   try { folder = fs.mkdtempSync(path.join(os.tmpdir(), "desk-gallery-geometry-")); }
   catch { throw new GeometryFailure("边界盒隔离临时目录不可用"); }
   try {
+    // -u/-s select configuration files, not the application data/cache roots.
+    // FreeCAD's getCustomPaths requires these directories to exist; never
+    // inherit a user's add-ons, macros, cache or configured temporary root.
+    const privatePaths = Object.fromEntries(["FREECAD_USER_HOME", "FREECAD_USER_DATA", "FREECAD_USER_TEMP"].map((key, index) => {
+      const directory = path.join(folder, ["native-config", "native-data", "native-temp"][index]);
+      fs.mkdirSync(directory, { mode: 0o700 });
+      return [key, directory];
+    }));
     const report = path.join(folder, "report.json"), job = path.join(folder, "job.json"), script = path.join(folder, "read.py");
     fs.writeFileSync(job, JSON.stringify({ report, items: sources.map(({ stamp: _stamp, ...input }) => input) }), { flag: "wx" });
     fs.writeFileSync(script, `JOB_PATH = ${JSON.stringify(job)}\n${PYTHON}`, { flag: "wx" });
     const streamed: WireRow[] = [];
     await new Promise<void>((resolve, reject) => {
-      const child = spawn(command, ["-u", path.join(folder, "user.cfg"), "-s", path.join(folder, "system.cfg"), script], {
-        cwd: folder, env: buildFreecadChildEnvironment(process.env), stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
+      const child = release.spawn(command, ["-u", path.join(folder, "user.cfg"), "-s", path.join(folder, "system.cfg"), script], {
+        cwd: folder, env: { ...buildFreecadChildEnvironment(process.env), ...privatePaths }, stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
       });
       let text = "", bytes = 0, stopped = "", settled = false;
       let grace: ReturnType<typeof setTimeout> | undefined;
       const decoder = new TextDecoder("utf-8", { fatal: true });
       const finish = (reason?: string) => {
         if (settled) return; settled = true; clearTimeout(timer); if (grace) clearTimeout(grace);
+        signal?.removeEventListener("abort", aborted);
         child.stdout?.removeListener("data", data); child.removeListener("error", error); child.removeListener("close", close);
         if (reason) reject(new GeometryFailure(reason)); else resolve();
       };
       const stop = (reason: string) => {
         if (stopped || settled) return; stopped = reason;
-        grace = setTimeout(() => finish(reason), KILL_GRACE_MS);
-        try { child.kill("SIGKILL"); } catch { finish(reason); }
+        // A kill request (including a failed request) is not proof of exit.
+        // Never settle, clean the directory or release CAD ownership on a timer.
+        grace = setTimeout(() => { try { child.kill("SIGKILL"); } catch { /* Keep ownership until close. */ } }, KILL_GRACE_MS);
+        grace.unref();
+        try { child.kill("SIGTERM"); } catch { /* Wait for the owned close event. */ }
+      };
+      const progressStopped = () => {
+        if (signal?.aborted && !stopped && !settled) stop("边界盒读取已取消，已等待自有进程关闭");
+        return Boolean(stopped || settled || signal?.aborted);
       };
       const line = (value: string) => {
+        if (progressStopped()) return;
         if (!value.startsWith(PREFIX)) return; // Ignore bounded native startup chatter.
         let parsed: unknown;
         try { parsed = JSON.parse(value.slice(PREFIX.length)); } catch { throw new GeometryFailure("边界盒进度报告不是有效 JSON"); }
         const row = wireRow(parsed, sources, streamed.length);
         if (sourceStamp(sources[row.index].filename) !== sources[row.index].stamp) throw new GeometryFailure("读取期间模型文件已变化，请重新更新图册");
+        if (progressStopped()) return;
         streamed.push(row);
         if (onItem) try { onItem(result(row)); } catch { throw new GeometryFailure("边界盒进度处理失败"); }
+        if (progressStopped()) return;
       };
       const data = (chunk: Uint8Array) => {
-        if (stopped || settled) return;
+        if (progressStopped()) return;
         try {
           bytes += chunk.byteLength;
           if (bytes > MAX_REPORT_BYTES) throw new GeometryFailure("边界盒进程输出超过安全上限");
           text += decoder.decode(chunk, { stream: true });
           let end: number;
-          while ((end = text.indexOf("\n")) >= 0) { const current = text.slice(0, end).replace(/\r$/, ""); text = text.slice(end + 1); line(current); }
+          // A callback can synchronously abort while several rows share this
+          // chunk. Do not consume or publish its remaining buffered rows.
+          while (!progressStopped() && (end = text.indexOf("\n")) >= 0) { const current = text.slice(0, end).replace(/\r$/, ""); text = text.slice(end + 1); line(current); }
+          if (progressStopped()) return;
           if (Buffer.byteLength(text) > 16 * 1024) throw new GeometryFailure("边界盒进度行超过安全上限");
         } catch (cause) { stop(cause instanceof GeometryFailure ? cause.message : "无法读取边界盒进度报告"); }
       };
-      const error = () => finish("无法启动 FreeCADCmd 边界盒读取进程");
-      const close = (code: number | null) => {
+      const error = () => stop("无法启动 FreeCADCmd 边界盒读取进程");
+      const close = (code: number | null, exitSignal: NodeJS.Signals | null) => {
         if (stopped) { finish(stopped); return; }
-        if (code !== 0) { finish("FreeCADCmd 边界盒读取进程异常退出"); return; }
+        if (code !== 0 || exitSignal) { finish("FreeCADCmd 边界盒读取进程异常退出"); return; }
         try { text += decoder.decode(); if (text) line(text.replace(/\r$/, "")); finish(); }
         catch { finish("无法读取最终边界盒进度报告"); }
       };
       const timer = setTimeout(() => stop("边界盒读取超过 2 分钟，已终止本次隔离进程"), TIMEOUT_MS);
+      const aborted = () => stop("边界盒读取已取消，已等待自有进程关闭");
       child.stdout?.on("data", data); child.once("error", error); child.once("close", close);
+      signal?.addEventListener("abort", aborted, { once: true });
+      if (signal?.aborted) aborted();
     });
+    if (signal?.aborted) throw new GeometryFailure("边界盒读取已取消，已等待自有进程关闭");
     if (!fs.existsSync(report)) throw new GeometryFailure("FreeCADCmd 未返回有效边界盒报告");
     const reportStat = fs.lstatSync(report);
     if (!reportStat.isFile() || reportStat.isSymbolicLink() || reportStat.size > MAX_REPORT_BYTES) throw new GeometryFailure("FreeCADCmd 未返回有效边界盒报告");

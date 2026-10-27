@@ -34,7 +34,13 @@ function readFcstdXml(root: string, rel: string): string {
 }
 
 function createRenameFixture(workspace: string) {
-  writeFcstd(workspace, "parts/OldPart.FCStd", '<Document><ObjectData></ObjectData></Document>');
+  // A legacy nameless XLink must resolve to a unique real model root; the
+  // file-level DB label is not proof of the linked object's identity or Label.
+  writeFcstd(
+    workspace,
+    "parts/OldPart.FCStd",
+    '<Document><Objects><Object name="Body" type="PartDesign::Body"/></Objects><ObjectData><Object name="Body"><Properties><Property name="Label" type="App::PropertyString"><String value="New Part"/></Property></Properties></Object></ObjectData></Document>',
+  );
   writeFcstd(
     workspace,
     "asm/Assembly.FCStd",
@@ -66,7 +72,7 @@ function createRenameFixture(workspace: string) {
     id, repo_rel_path, filename, asset_kind, part_number, part_version,
     type_code, model_series, part_name, label, file_status, last_seen_at, updated_at
   ) VALUES (?, ?, ?, 'fcstd', ?, ?, '', '', ?, ?, 'present', datetime('now'), datetime('now'))`;
-  db.run(sql, [1, "./parts/OldPart.FCStd", "OldPart.FCStd", "100001", "001", "New Part", "New Part"]);
+  db.run(sql, [1, "./parts/OldPart.FCStd", "OldPart.FCStd", "100001", "001", "Stale indexed name", "Stale indexed label"]);
   db.run(sql, [2, "./asm/Assembly.FCStd", "Assembly.FCStd", "100002", "001", "Assembly", "Assembly"]);
   db.close();
   refreshBomXrefForHost(workspace, "asm/Assembly.FCStd", { recursive: true, maxHosts: 10 });
@@ -104,6 +110,7 @@ describe("file rename routes", () => {
     const home = makeTempRoot("shell-file-rename-home-");
     const workspace = makeTempRoot("shell-file-rename-ws-");
     createRenameFixture(workspace);
+    const sourceXml = readFcstdXml(workspace, "parts/OldPart.FCStd");
 
     const { shellRoutes, cadRoutes } = await importRoutes(home, workspace);
     const contextRes = await shellRoutes.request("/api/file-rename/context?rel=parts%2FOldPart.FCStd");
@@ -171,6 +178,7 @@ describe("file rename routes", () => {
     expect(labelRes.status).toBe(200);
     await expect(labelRes.json()).resolves.toMatchObject({ label_patches: 1, failed: [] });
     expect(readFcstdXml(workspace, "asm/Assembly.FCStd")).toContain('value="New Part"');
+    expect(readFcstdXml(workspace, "parts/NewPart.FCStd")).toBe(sourceXml);
 
     const loadRes = await cadRoutes.request(`/rename/load?rename_log_id=${renamed.rename_log_id}`);
     expect(loadRes.status).toBe(200);

@@ -1,0 +1,9 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {spawnSync} from 'node:child_process';
+import {expect,it} from 'vitest';
+import {ownedDrawingMacroGuard} from './ownedMacro.js';
+const python=['python3','python'].find(command=>spawnSync(command,['-c','import sys;sys.exit(0 if sys.version_info.major==3 else 1)'],{encoding:'utf8'}).status===0);
+it.skipIf(!python)('stops a forwarded macro before any native bridge action and reports only to its owned report',()=>{const folder=fs.mkdtempSync(path.join(os.tmpdir(),'owned-macro-guard-'));try{const config=path.join(folder,'job.json'),report=path.join(folder,'result.json'),marker=path.join(folder,'bridge-opened');fs.writeFileSync(config,JSON.stringify({expected_pid:-1,report}));const code=`JOB_PATH=${JSON.stringify(config)}\n`+ownedDrawingMacroGuard+`\nfrom pathlib import Path\nPath(${JSON.stringify(marker)}).write_text('unexpected')\n`;const result=spawnSync(python!,['-c',code],{encoding:'utf8'});expect(result.status).toBe(1);expect(fs.existsSync(marker)).toBe(false);expect(JSON.parse(fs.readFileSync(report,'utf8'))).toMatchObject({status:'failed',error:expect.stringContaining('未操作用户')});}finally{fs.rmSync(folder,{recursive:true,force:true});}});
+it.skipIf(!python)('accepts only a matching actual child PID before executing the continuation',()=>{const folder=fs.mkdtempSync(path.join(os.tmpdir(),'owned-macro-positive-'));try{const config=path.join(folder,'job.json'),marker=path.join(folder,'owned-action');const code=`import os,json\nfrom pathlib import Path\nJOB_PATH=${JSON.stringify(config)}\nPath(JOB_PATH).write_text(json.dumps({'expected_pid':os.getpid()}))\n`+ownedDrawingMacroGuard+`\nPath(${JSON.stringify(marker)}).write_text('owned')\n`;const result=spawnSync(python!,['-c',code],{encoding:'utf8'});expect(result.status).toBe(0);expect(fs.readFileSync(marker,'utf8')).toBe('owned');}finally{fs.rmSync(folder,{recursive:true,force:true});}});

@@ -8,6 +8,7 @@ export const CAD_BATCH_TOOLS = [
   { page: "document_sync", label: "关联文档同步", description: "选择并合并 CAD 改名记录，核对 A→B 后转入独立批量改名。" },
   { page: "assembly_labels", label: "总成链接标签修正", description: "每个 ASSY 一行，预览待修正标签数量，勾选后逐个应用；不改文件名或引用路径。" },
   { page: "part_gallery", label: "零件图册", description: "全库缩略图缓存，按产品查看和 A4 打印；PNG 可明确导出到 Git 目录。" },
+  { page: "drawing_batch", label: "图纸批量", description: "独立图纸校核、逐问题修正与串行生成初稿；先预览、再明确勾选确认。" },
   { page: "step_batch", label: "STEP → FCStd", description: "复用本机 FreeCADCmd 批量转换。" },
   { page: "sw_step_export", label: "SolidWorks → STEP", description: "Windows / SolidWorks COM 批量导出。" },
   { page: "part_dedup", label: "编号查重", description: "检查文件名及零件号、版本重复，不自动删除文件。" },
@@ -20,7 +21,7 @@ export function cadBatchNavigationPage(page: string): string {
 
 export function cadBatchToolsSection(shell: Pick<AppShellContext, "openTab">, current: string): PagePrimarySection {
   return {
-    id: "cad-batch-tools", title: "功能", description: "在右侧工作台打开独立 View，保留各工具参数。",
+    id: "cad-batch-tools", title: "功能",
     placement: "before-context", actionLayout: "grid",
     actions: [
       { id: "hub", label: "批量工具", disabled: current === "cad_batch_tools", run: () => { shell.openTab({ pageId: "cad_batch_tools" }); } },

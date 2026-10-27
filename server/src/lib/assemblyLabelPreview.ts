@@ -10,10 +10,11 @@ type TreeNode = {
   children?: TreeNode[];
   [key: string]: any;
 };
+export type AssemblyLabelReadPorts = { readDocumentXml?: (filename: string) => string | null };
 
 /** Read-only live object projection. The CAD index still owns file resolution;
  * a file-level rule is never used for a named subobject. */
-export function enrichAssemblyLabelPreview(workspace: string, currentHost: string, nodes: TreeNode[]): void {
+export function enrichAssemblyLabelPreview(workspace: string, currentHost: string, nodes: TreeNode[], ports: AssemblyLabelReadPorts = {}): void {
   const root = fs.realpathSync(workspace);
   const documents = new Map<string, ReturnType<typeof fcstdXmlObjects> | null>();
   const xmls = new Map<string, string>();
@@ -27,7 +28,7 @@ export function enrichAssemblyLabelPreview(workspace: string, currentHost: strin
     const safe = inside(filename);
     if (!safe) return null;
     if (!documents.has(safe)) {
-      const xml = readFcstdDocumentXml(safe);
+      const xml = (ports.readDocumentXml ?? readFcstdDocumentXml)(safe);
       documents.set(safe, xml ? fcstdXmlObjects(xml) : null);
       if (xml) xmls.set(safe, xml);
     }
@@ -126,7 +127,7 @@ export function enrichAssemblyLabelPreview(workspace: string, currentHost: strin
 /** Prefer the current document's actual Group hierarchy to the index's file
  * dependency graph. In particular, copied/projection children belong to THIS
  * host and must show its on-disk Labels, not the source assembly's Labels. */
-export function buildHostObjectAssemblyTree(workspace: string, currentHost: string, indexedNodes: TreeNode[]) {
+export function buildHostObjectAssemblyTree(workspace: string, currentHost: string, indexedNodes: TreeNode[], ports: AssemblyLabelReadPorts = {}) {
   const root = fs.realpathSync(workspace);
   const filename = path.resolve(root, currentHost);
   const relative = path.relative(root, filename);
@@ -134,7 +135,7 @@ export function buildHostObjectAssemblyTree(workspace: string, currentHost: stri
   let real: string;
   try { real = fs.realpathSync(filename); } catch { return null; }
   if (path.relative(root, real).startsWith("..")) return null;
-  const xml = readFcstdDocumentXml(real);
+  const xml = (ports.readDocumentXml ?? readFcstdDocumentXml)(real);
   if (!xml) return null;
   const objects = fcstdXmlObjects(xml);
   const links = fcstdLinkInstances(xml);
@@ -181,7 +182,7 @@ export function buildHostObjectAssemblyTree(workspace: string, currentHost: stri
   const roots = objects.filter(object => !owned.has(object.name)).map(object => build(object.name)).filter((node): node is TreeNode => !!node);
   // Omit the one local document-root wrapper, just as the file-detail title does.
   const nodes = roots.length === 1 && !roots[0].xlink_file_attr ? roots[0].children ?? [] : roots;
-  enrichAssemblyLabelPreview(workspace, currentHost, nodes);
+  enrichAssemblyLabelPreview(workspace, currentHost, nodes, ports);
   // Collapse only sibling leaves referring to the same actual part object.
   // Subassemblies with materialized children stay separate, preserving each
   // instance's distinct descendants and scope for numbering/writing.

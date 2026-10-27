@@ -5,6 +5,18 @@
   "appliesTo": "0.5.x",
   "rules": [
     {
+      "match": "^docs/(TODO|drawing-maintenance|文档索引|platform/Desk-API单实例与多宿主发现)\\.md$",
+      "status": "current",
+      "lastVerified": "2026-10-26"
+    },
+    {
+      "match": "^docs/(cad/CAD(伴随文档兼容规划|后续能力实施规划|批量动作接入清单)|platform/统一批量任务管理任务书与实施规划)\\.md$",
+      "status": "draft",
+      "lastVerified": "2026-10-26",
+      "sourceOfTruth": "docs/TODO.md",
+      "reason": "分期能力与验收边界；不代表全部实现或正式发布"
+    },
+    {
       "match": "^docs/(code/(Code三端共用算法与UI内核-执行计划|Code模块-工作空间索引|Code模块-批量改名-规划|KT-Codegen-.*|成员函数排序-reorder_members|成员变量字母序-规则与待实现|成员排序-锁定段与回归用例|跨产品共享整改执行计划)|platform/(Web壳层-页面参数与属性-MVC研讨|成员排序-变更Diff预览-待研究))\\.md$",
       "status": "superseded",
       "sourceOfTruth": "docs/code/Desk-Code功能退役.md",

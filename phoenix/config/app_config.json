@@ -23,6 +23,13 @@
             "description": "简介与功能入口"
         },
         {
+            "id": "batch_tasks",
+            "label": "批量任务管理",
+            "page": "batch_tasks",
+            "ribbonGroup": "任务",
+            "description": "多个持久任务、冻结预览与只读数据采集排队；关闭显示不取消"
+        },
+        {
             "id": "bom_apply",
             "label": "文件详情",
             "page": "file_detail",
@@ -109,6 +116,12 @@
             "module": "cad",
             "description": "全库缩略图缓存，按产品查看和打印，PNG 可归档到 Git"
         }, {
+            "id": "drawing_batch",
+            "label": "图纸批量",
+            "page": "drawing_batch",
+            "module": "cad",
+            "description": "独立图纸校核、逐问题修正与串行出图初稿；先预览再明确勾选确认"
+        }, {
             "id": "xlink_fix",
             "label": "错误修正",
             "page": "xlink_fix",
@@ -187,6 +200,9 @@
         "tab_bar": "main_content_top",
         "default_max_tabs": 1,
         "pages": {
+            "batch_tasks": {
+                "max_tabs": 1
+            },
             "bom_apply": {
                 "max_tabs": 8,
                 "tab_enabled": true
@@ -210,6 +226,9 @@
                 "max_tabs": 1
             },
             "bom_delivery": {
+                "max_tabs": 1
+            },
+            "drawing_batch": {
                 "max_tabs": 1
             },
             "xlink_fix": {

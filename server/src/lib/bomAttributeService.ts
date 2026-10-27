@@ -14,6 +14,7 @@ import {
 import { pnwCreateDb } from "@phoenix-wing/db-node";
 import { assertValidPartName, bomNameSource, bomRecommendationSuffix, recommendPartName } from "./bomNameRecommendation.js";
 import { isStandaloneDrawing, proposeDrawingName } from "./fcstdDrawing.js";
+import { readFcstdAssemblyState, type FcstdAssemblyLinkState, type FcstdAssemblyJointIssue } from "./fcstdAssemblyState.js";
 import {
   updateCadIndexEntryAfterBomWrite,
   updateCadIndexEntryAfterRename,
@@ -55,6 +56,9 @@ export type BomPreview = {
   bom_readonly?: boolean;
   bom_source_rel?: string | null;
   bom_readonly_reason?: string | null;
+  /** Saved per-instance Rigid intent; a normal load never writes CAD or the DB. */
+  assembly_links?: FcstdAssemblyLinkState[];
+  assembly_joint_issues?: FcstdAssemblyJointIssue[];
 };
 
 type BomPrefsStored = {
@@ -312,6 +316,7 @@ export function loadBomPreview(workspaceRoot: string, rel: string): BomPreview {
     fields.label = clean(embedded.label);
   }
   const stat = fs.existsSync(abs) ? fs.statSync(abs) : null;
+  const assemblyState = drawing.xml && !drawing.readonly ? readFcstdAssemblyState(drawing.xml) : { links: [], joint_issues: [] };
   return {
     rel_path: safeRel,
     fields,
@@ -327,6 +332,8 @@ export function loadBomPreview(workspaceRoot: string, rel: string): BomPreview {
     bom_readonly: drawing.readonly,
     bom_source_rel: sourceRel,
     bom_readonly_reason: readonlyReason,
+    assembly_links: assemblyState.links,
+    assembly_joint_issues: assemblyState.joint_issues,
   };
 }
 

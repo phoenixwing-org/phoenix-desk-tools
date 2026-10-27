@@ -13,14 +13,15 @@ const image = () => "data:image/png;base64,c3ludGhldGlj";
 const render = (rows: GalleryRow[], options?: Parameters<typeof galleryDocument>[4]) => galleryDocument(rows, "独立合成产品", "2026-01-01T00:00:00Z", image, options);
 
 describe("compact A4 gallery documents", () => {
-  it("puts twenty cards on each four-column, five-row A4 page", () => {
+  it("puts up to twenty cards on each four-column A4 page with content-sized rows", () => {
     const html = render(Array.from({ length: 21 }, (_, index) => row(index + 1)));
     const pages = html.split('<section class="sheet">').slice(1);
     expect(pages).toHaveLength(2);
     expect(pages[0].match(/<article class="card">/g)).toHaveLength(20);
     expect(pages[1].match(/<article class="card">/g)).toHaveLength(1);
     expect(html).toContain("grid-template-columns:repeat(4,minmax(0,1fr))");
-    expect(html).toContain("grid-template-rows:repeat(5,48mm)");
+    expect(html).toContain("grid-auto-rows:auto");
+    expect(html).toContain("align-items:stretch");
     expect(html).toContain("height:32mm");
     expect(html).toContain("size:A4 portrait");
     expect(html).toContain("<span>2 / 2</span>");
@@ -75,14 +76,14 @@ describe("compact A4 gallery documents", () => {
     expect(html).not.toContain(".name{overflow:hidden");
   });
 
-  it("fits the A4 height budget and three ordinary identity lines plus a filename", () => {
+  it("keeps five ordinary rows with three identity lines and a filename within A4", () => {
     const longName = "独立合成的通用连接支撑板用于演示长名称换行与紧凑图册布局";
     const html = render([row(1, { part_name: longName })], { showFilenames: true });
     expect(html).toContain(`<span class="name">${longName}</span>`);
-    // No CAD or browser state is needed: verify the declared physical page/card budget.
+    // Rows shrink with content; check that this ordinary maximum still fits five rows.
     const mmPerPx = 25.4 / 96;
-    expect(19 + 3 + 5 * 48 + 4 * 2 + 7).toBe(297 - 2 * 10);
-    const cardInnerHeight = 48 - 2 * 1.2 - 2 * mmPerPx;
+    const availableRowHeight = (297 - 2 * 10 - 19 - 3 - 4 * 2 - 7) / 5;
+    const cardInnerHeight = availableRowHeight - 2 * 1.2 - 2 * mmPerPx;
     const contentsHeight = 32 + .6 + 3 * 11 * 1.1 * mmPerPx + .3 + 8 * 1.1 * mmPerPx;
     expect(contentsHeight).toBeLessThan(cardInnerHeight);
   });

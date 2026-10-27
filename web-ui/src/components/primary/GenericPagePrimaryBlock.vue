@@ -5,6 +5,7 @@ import PrimarySection from "phoenix-wing/layout/PnwPrimarySection.vue";
 import PrimaryDirectoryControl from "./PrimaryDirectoryControl.vue";
 import PrimaryTaskProgress from "./PrimaryTaskProgress.vue";
 import PrimaryThumbnail from "./PrimaryThumbnail.vue";
+import { cadBatchNavigationPage } from "../../composables/cadBatchTools";
 import { useAppShell } from "../../composables/useAppShell";
 import {
   useRegisteredPagePrimaryContribution,
@@ -32,9 +33,20 @@ const primaryContribution = useRegisteredPagePrimaryContribution(
   () => props.pageId,
   () => props.workbenchTabId,
 );
+const compactToolContext = computed(() => cadBatchNavigationPage(props.pageId) === "cad_batch_tools");
+const helpSectionId = computed(() => {
+  const sections = primaryContribution.value?.sections ? toValue(primaryContribution.value.sections) : [];
+  return [...sections].reverse().find(section => /help|说明/.test(section.id + section.title))?.id || "tool-help";
+});
 const primarySections = computed(() => {
   const contribution = primaryContribution.value;
-  return contribution?.sections ? toValue(contribution.sections) : [];
+  const sections = contribution?.sections ? toValue(contribution.sections) : [];
+  if (!compactToolContext.value) return sections;
+  const help = sections.find(section => section.id === helpSectionId.value);
+  return [...sections.filter(section => section.id !== helpSectionId.value), {
+    ...help, id: helpSectionId.value, title: "使用说明",
+    description: [pageDescription.value, help?.description ? toValue(help.description) : "", `工作空间：${workspaceLabel.value}`].filter(Boolean).join("\n\n"),
+  }];
 });
 const panelBlocks = computed(() => primaryPanelBlocks(primarySections.value));
 const primaryContent = computed(() => primaryContribution.value?.content ?? null);
@@ -67,20 +79,19 @@ const workspaceLabel = computed(() => {
 });
 const pageDescription = computed(() => navItem.value?.description
   || "此页面尚未提供独立说明。中央 View 保留主要内容与操作结果。");
-const collapsedSections = reactive(new Set<string>());
+const sectionExpansions = reactive(new Map<string, boolean>());
 
 function sectionStateKey(sectionId: string): string {
   return primarySectionStateKey(props.pageId, props.workbenchTabId, sectionId);
 }
 
 function isSectionExpanded(sectionId: string): boolean {
-  return !collapsedSections.has(sectionStateKey(sectionId));
+  return sectionExpansions.get(sectionStateKey(sectionId)) ?? !(compactToolContext.value && sectionId === helpSectionId.value);
 }
 
 function setSectionExpanded(sectionId: string, expanded: boolean): void {
   const key = sectionStateKey(sectionId);
-  if (expanded) collapsedSections.delete(key);
-  else collapsedSections.add(key);
+  sectionExpansions.set(key, expanded);
 }
 
 function textValue(value: PagePrimaryResolvable<string>): string {
@@ -127,7 +138,7 @@ function actionType(action: PagePrimaryAction): "primary" | "danger" | undefined
     <template #suffix><span class="primary-badge">Primary</span></template>
 
     <template v-for="block in panelBlocks" :key="block.key">
-    <section v-if="block.kind === 'context' && primaryContribution?.showContext !== false" class="primary-context">
+    <section v-if="block.kind === 'context' && !compactToolContext && primaryContribution?.showContext !== false" class="primary-context">
       <div class="context-title-row">
         <strong :title="viewTitle">{{ viewTitle }}</strong>
         <span class="module-chip">{{ moduleLabel }}</span>
@@ -468,15 +479,16 @@ function actionType(action: PagePrimaryAction): "primary" | "danger" | undefined
 .primary-actions :deep(.el-button) { min-height: 25px; margin-left: 0; padding-inline: 8px; font-size: 0.64rem; }
 .primary-actions.is-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr));
-  grid-auto-rows: minmax(36px, auto);
-  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 5rem), 1fr));
+  grid-auto-rows: minmax(24px, auto);
+  gap: 3px;
 }
 .primary-actions.is-grid .primary-action {
-  width: 100%; min-width: 0; height: 100%; min-height: 36px;
-  margin: 0; padding: 7px 10px; font-size: 0.72rem; line-height: 1.35;
+  width: 100%; min-width: 0; height: 100%; min-height: 24px;
+  margin: 0; padding: 2px 4px; font-size: 0.68rem; line-height: 1.3;
 }
-.primary-actions.is-grid .primary-action-label { white-space: normal; overflow-wrap: anywhere; }
+.primary-actions.is-grid :deep(.el-button > span) { min-width: 0; max-width: 100%; white-space: normal; }
+.primary-actions.is-grid .primary-action-label { display: block; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 .empty-primary-note { display: grid; gap: 2px; padding: 12px 10px; color: var(--muted); }
 .empty-primary-note strong { color: var(--text); font-size: 0.68rem; }
 .empty-primary-note p { margin: 0; font-size: 0.62rem; line-height: 1.4; }

@@ -31,7 +31,7 @@ it("writes only the embedded thumbnail and publishes the new file hash into the 
   const root = fixture(), before = fs.readFileSync(path.join(root, "Demo.FCStd"));
   const render = vi.fn(async () => png);
   const result = await regenerateThumbnail(root, "Demo.FCStd", options, render);
-  expect(ensureSaveThumbnail).toHaveBeenCalled();
+  expect(ensureSaveThumbnail).not.toHaveBeenCalled();
   expect(render).toHaveBeenCalledWith(fs.realpathSync(path.join(root, "Demo.FCStd")), options);
   expect(readFileThumbnail(root, "Demo.FCStd")?.data_url).toBe(`data:image/png;base64,${png.toString("base64")}`);
   expect(thumbnailBytes(root, "Demo.FCStd")).toEqual(png);
@@ -48,12 +48,13 @@ it("reports the completed FCStd write truthfully when the derived cache cannot b
   expect(readFileThumbnail(root, "Demo.FCStd")?.data_url).toBe(`data:image/png;base64,${png.toString("base64")}`);
   expect(fs.readFileSync(path.join(root, result.backup))).toEqual(before);
 });
-it("does not render or modify the model when the connected preference cannot be persisted", async () => {
+it("renders without calling or depending on a connected user GUI preference operation", async () => {
   const root = fixture(), before = fs.readFileSync(path.join(root, "Demo.FCStd")), render = vi.fn(async () => png);
   vi.mocked(ensureSaveThumbnail).mockRejectedValueOnce(new Error("无法持久化保存缩略图"));
-  await expect(regenerateThumbnail(root, "Demo.FCStd", options, render)).rejects.toThrow(/无法持久化/);
-  expect(render).not.toHaveBeenCalled(); expect(fs.readFileSync(path.join(root, "Demo.FCStd"))).toEqual(before);
-  expect(fs.existsSync(path.join(root, ".phoenix"))).toBe(false);
+  const result=await regenerateThumbnail(root, "Demo.FCStd", options, render);
+  expect(ensureSaveThumbnail).not.toHaveBeenCalled();expect(render).toHaveBeenCalledWith(fs.realpathSync(path.join(root,"Demo.FCStd")),options);
+  expect(readFileThumbnail(root,"Demo.FCStd")?.data_url).toBe(`data:image/png;base64,${png.toString("base64")}`);
+  expect(fs.readFileSync(path.join(root,result.backup))).toEqual(before);
 });
 it("preserves a successful thumbnail on renderer failure or invalid PNG", async () => {
   const root = fixture(); await regenerateThumbnail(root, "Demo.FCStd", options, async () => png);
@@ -117,14 +118,14 @@ it("preflights legitimate quote-safe layouts and ignores opaque text without cha
   const before = ["models/A>B.FCStd", "models/A&gt;B.FCStd"].map(rel => fs.readFileSync(path.join(root, rel)));
   const render = vi.fn(async () => png);
   await expect(regenerateThumbnail(root, "Demo.FCStd", options, render)).resolves.toMatchObject({ width: 1 });
-  expect(ensureSaveThumbnail).toHaveBeenCalledOnce(); expect(render).toHaveBeenCalledOnce();
+  expect(ensureSaveThumbnail).not.toHaveBeenCalled(); expect(render).toHaveBeenCalledOnce();
   ["models/A>B.FCStd", "models/A&gt;B.FCStd"].forEach((rel, index) => expect(fs.readFileSync(path.join(root, rel))).toEqual(before[index]));
 });
 it("tracks quote-containing dependencies through rendering and refuses changed geometry before writing PNG", async () => {
   const root = fixture(); save(root, "", "A>B.FCStd"); save(root, xlink("file='A>B.FCStd' name='Body'"));
   const before = fs.readFileSync(path.join(root, "Demo.FCStd"));
   await expect(regenerateThumbnail(root, "Demo.FCStd", options, async () => { save(root, "<!-- synthetic change -->", "A>B.FCStd"); return png; })).rejects.toThrow(/已变化/);
-  expect(ensureSaveThumbnail).toHaveBeenCalledOnce(); expect(fs.readFileSync(path.join(root, "Demo.FCStd"))).toEqual(before);
+  expect(ensureSaveThumbnail).not.toHaveBeenCalled(); expect(fs.readFileSync(path.join(root, "Demo.FCStd"))).toEqual(before);
   expect(fs.existsSync(path.join(root, ".phoenix"))).toBe(false);
 });
 it.each([

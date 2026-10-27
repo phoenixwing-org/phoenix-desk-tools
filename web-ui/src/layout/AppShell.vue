@@ -44,6 +44,8 @@ import { PROJECT_GITEE_HOME } from "../constants/projectLinks";
 import { pdtRevealWorkbenchBottom, pdtWithWorkbenchLayoutState } from "../workbench/PdtWorkbenchDisplayPreferences";
 import type { WorkbenchTab } from "../types/workbench";
 import WorkspaceDockableToolContent from "../components/workspace/WorkspaceDockableToolContent.vue";
+import BatchTasksToolHost from "../features/batch-tasks/BatchTasksToolHost.vue";
+import { batchTasksController, batchTasksToolState, openBatchTasksTool } from "../features/batch-tasks/application";
 import {
   PDT_WORKSPACE_TOOL_DEFINITION,
   PDT_WORKSPACE_TOOL_STATE_KEY,
@@ -88,6 +90,19 @@ watch(workspaceToolState, (state) => {
 }, { deep: true });
 
 const uiPrefs = useUiPrefsStore();
+watch(shell.workspacePath, path => batchTasksController.setWorkspace(path), { immediate: true });
+watch(() => batchTasksToolState.value.mode, mode => {
+  if (mode !== "primary") return;
+  const current = uiPrefs.workbenchDisplayPreferences;
+  if (!current.layoutState.visibility.primary) uiPrefs.setWorkbenchDisplayPreferences(pdtWithWorkbenchLayoutState(current, {
+    ...current.layoutState, visibility: { ...current.layoutState.visibility, primary: true },
+  }));
+});
+watch(() => batchTasksController.state.error, error => {
+  if (error) shell.appendLog(`[批量任务] ${error}`, { source: "batch_tasks", open: true });
+});
+onMounted(() => batchTasksController.startPolling());
+onUnmounted(() => batchTasksController.stopPolling());
 const pnwBottomPanel = usePdtWorkbenchBottomPanel(shell);
 const activeTab = computed(() => shell.activeTab());
 const pnwActiveBottomTabId = ref("output");
@@ -165,7 +180,7 @@ const dockVis = computed(() => {
 });
 
 const pnwContributions = computed(() => ({
-  primary: Boolean(activePageBlockComponent.value || workspaceToolState.value.mode === "primary"),
+  primary: Boolean(activePageBlockComponent.value || workspaceToolState.value.mode === "primary" || batchTasksToolState.value.mode === "primary"),
   bottom: true,
   secondary: dockVis.value.rightVisible,
 }));
@@ -362,6 +377,7 @@ onUnmounted(() => {
         </button>
       </template>
       <template #header-actions>
+        <button type="button" class="desk-workbench-header-action" title="批量任务监控（关闭不取消）" aria-label="打开批量任务监控" @click="openBatchTasksTool"><PnwIcon name="list" :size="17" /></button>
         <button
           type="button"
           class="desk-workbench-header-action"
@@ -405,8 +421,9 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <template v-if="activePageBlockComponent || workspaceToolState.mode === 'primary'" #primary>
+      <template v-if="activePageBlockComponent || workspaceToolState.mode === 'primary' || batchTasksToolState.mode === 'primary'" #primary>
         <div class="desk-primary-stack">
+          <BatchTasksToolHost location="primary" />
           <PnwDockablePrimarySection
             :definition="PDT_WORKSPACE_TOOL_DEFINITION"
             :state="workspaceToolState"
@@ -458,6 +475,7 @@ onUnmounted(() => {
           >
             <WorkspaceDockableToolContent />
           </PnwDockableToolWindow>
+          <BatchTasksToolHost location="floating" :color-scheme="pnwDisplayPreferences.colorScheme" />
         </div>
       </template>
     </WelcomePage>

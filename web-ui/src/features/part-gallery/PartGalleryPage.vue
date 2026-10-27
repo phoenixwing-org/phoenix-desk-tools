@@ -9,6 +9,7 @@ import { cadBatchToolsSection } from "../../composables/cadBatchTools";
 import { archiveGallery, galleryDocument, thumbnailUrl } from "./api";
 import { usePartGallery } from "./usePartGallery";
 import { boundingBoxText, boundingBoxTitle, category, visibleGalleryRows } from "./viewModel";
+import { useBatchTaskCollection } from "../batch-tasks/collection";
 
 const props = defineProps<{ workbenchTabId?: string }>();
 const shell = useAppShell(), product = ref(""), query = ref(""), type = ref("");
@@ -22,6 +23,21 @@ consume(); onActivated(consume);
 const gallery = reactive(usePartGallery(shell.workspacePath, product, shell.appendLog));
 const busy = computed(() => gallery.busy || outputBusy.value);
 const visible = computed(() => visibleGalleryRows(gallery.result?.rows || [], query.value, type.value, assemblies.value, missing.value));
+const batchCollection = useBatchTaskCollection();
+const batchCollectionCount = computed(() => batchCollection.pathsFor(shell.workspacePath.value).length);
+const batchNotice = ref("");
+watch(shell.workspacePath, () => { batchNotice.value = ""; });
+function addVisibleToBatch() {
+  if (busy.value || !visible.value.length) return;
+  try {
+    const result = batchCollection.add(shell.workspacePath.value, visible.value.map(row => row.rel));
+    batchNotice.value = `本次加入 ${result.added} 个，重复 ${result.duplicates} 个；待选共 ${result.total} 个文件，尚未保存或执行。`;
+    shell.setStatus(batchNotice.value);
+  } catch (cause) {
+    batchNotice.value = cause instanceof Error ? cause.message : String(cause);
+    shell.appendLog(`[批次待选] ${batchNotice.value}`, { source: "batch_tasks", open: true });
+  }
+}
 const ready = computed(() => visible.value.filter(row => row.status === "ready").length);
 const stale = computed(() => gallery.result?.rows.some(row => row.status === "stale"));
 const productOptions = computed(() => [{ value: "", label: "全库 FCStd" }, ...[...new Set([...gallery.options, ...(product.value ? [product.value] : [])])].map(rel => ({ value: rel, label: rel }))]);
@@ -79,10 +95,11 @@ usePagePrimaryContribution("part_gallery", props.workbenchTabId, {
       <template #center><el-input v-model="query" clearable size="small" placeholder="搜索零件号 / 名称 / 文件名" aria-label="搜索图册" /></template>
       <template #right><el-button size="small" :disabled="busy || !shell.workspacePath.value" @click="gallery.update">更新缩略图</el-button><el-button size="small" :disabled="busy || !shell.workspacePath.value" @click="gallery.updateDimensions">更新尺寸</el-button><el-button size="small" :disabled="busy || !visible.length || stale" @click="preparePrint">A4 打印 / PDF</el-button><el-button size="small" :disabled="busy || !ready || stale" @click="archiveOpen = true">归档 PNG</el-button></template>
     </PageHeader></template>
-    <div class="scope-bar"><el-select v-model="product" filterable :empty-values="[null, undefined]" :disabled="busy" aria-label="产品总成" placeholder="选择产品总成"><el-option v-for="option in productOptions" :key="option.value" :label="option.label" :value="option.value" /></el-select><span class="muted">显示 {{ visible.length }} / {{ gallery.result?.rows.length || 0 }} 个文件 · {{ ready }} 张图片</span></div>
+    <div class="scope-bar"><el-select v-model="product" filterable :empty-values="[null, undefined]" :disabled="busy" aria-label="产品总成" placeholder="选择产品总成"><el-option v-for="option in productOptions" :key="option.value" :label="option.label" :value="option.value" /></el-select><span class="muted">显示 {{ visible.length }} / {{ gallery.result?.rows.length || 0 }} 个文件 · {{ ready }} 张图片</span><el-button size="small" :disabled="busy || !visible.length" @click="addVisibleToBatch">加入批次（{{ visible.length }}）</el-button><el-button v-if="batchCollectionCount" size="small" @click="shell.goToPage('batch_tasks')">打开批量任务 · 待选 {{ batchCollectionCount }}</el-button></div>
     <div class="filters"><el-radio-group v-model="type" size="small"><el-radio-button value="">全部</el-radio-button><el-radio-button value="H">一般件</el-radio-button><el-radio-button value="S">标准件</el-radio-button><el-radio-button value="R">虚拟件</el-radio-button></el-radio-group><el-checkbox v-model="assemblies">含总成</el-checkbox><el-checkbox v-model="missing">仅缺图 / 异常</el-checkbox><el-checkbox v-model="categories">显示标签</el-checkbox><el-checkbox v-model="dimensions">显示尺寸</el-checkbox><el-checkbox v-model="partNumbers">显示零件号</el-checkbox><el-checkbox v-model="filenames">显示文件名</el-checkbox></div>
     <p v-if="gallery.error || outputError" role="alert" class="notice error">{{ gallery.error || outputError }}</p>
     <p v-if="archived" role="status" class="notice">{{ archived }}</p>
+    <p v-if="batchNotice" role="status" class="notice">{{ batchNotice }}</p>
     <p v-if="gallery.job" role="status" class="muted">{{ gallery.job.message }}</p>
     <p v-if="!gallery.result?.updated_at && !gallery.busy" class="empty">选择产品或全库，点击「更新缩略图」读取已有图片，不启动 FreeCAD；点击「更新尺寸」才启动 FreeCAD 只读测量边界盒。</p>
     <p v-else-if="!visible.length && !gallery.busy" class="empty">当前筛选没有卡片。</p>

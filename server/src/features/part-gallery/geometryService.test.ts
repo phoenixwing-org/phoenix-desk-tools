@@ -1,3 +1,5 @@
+import {installPrivateNativeGateForTest} from "../../../test-support/native-gate.js";
+installPrivateNativeGateForTest();
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";

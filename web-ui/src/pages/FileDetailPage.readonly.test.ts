@@ -6,8 +6,9 @@ import { createRenderer, defineComponent, h, nextTick, ref, type Component, type
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { BomPreview } from "../api";
 import type { FileDetailContext } from "../composables/useFileDetailContext";
+import type { PagePrimaryContribution } from "../composables/usePagePrimaryContribution";
 
-const state = vi.hoisted(() => ({ shell: {} as Record<string, unknown>, context: undefined as FileDetailContext | undefined, bom: vi.fn(), full: vi.fn(), light: vi.fn(), xrefCounts: vi.fn() }));
+const state = vi.hoisted(() => ({ shell: {} as Record<string, unknown>, context: undefined as FileDetailContext | undefined, primary: undefined as PagePrimaryContribution | undefined, bom: vi.fn(), full: vi.fn(), light: vi.fn(), xrefCounts: vi.fn() }));
 vi.mock("vue", async original => ({ ...await original<typeof import("vue")>(), useSSRContext: () => ({ modules: new Set<string>() }) }));
 vi.mock("../api", async original => ({ ...await original<typeof import("../api")>(), fetchBom: state.bom, fetchBomXrefCounts: state.xrefCounts }));
 vi.mock("../features/cad-object-info/api", () => ({ fetchCadObjectInfo: state.full }));
@@ -15,7 +16,7 @@ vi.mock("../features/cad-light-info/api", () => ({ fetchCadLightInfo: state.ligh
 vi.mock("../composables/useAppShell", () => ({ useAppShell: () => state.shell }));
 vi.mock("../composables/useFileDetailContext", () => ({ provideFileDetailContext: (context: FileDetailContext) => { state.context = context; } }));
 vi.mock("../composables/usePageSession", () => ({ usePageSession: () => undefined }));
-vi.mock("../composables/usePagePrimaryContribution", () => ({ usePagePrimaryContribution: () => undefined }));
+vi.mock("../composables/usePagePrimaryContribution", () => ({ usePagePrimaryContribution: (_page: string, _tab: string, contribution: PagePrimaryContribution) => { state.primary = contribution; } }));
 vi.mock("../composables/useFileThumbnail", async () => ({ useFileThumbnail: () => (awaitedRef()) }));
 vi.mock("../composables/useThumbnailGeneration", async () => ({ useThumbnailGeneration: () => (awaitedRef()) }));
 
@@ -96,12 +97,30 @@ function text(el: HostNode): string { return [el.tag === "comment" ? "" : el.tex
 function elements(el: HostNode, accept: (value: HostNode) => boolean): HostNode[] { return [...accept(el) ? [el] : [], ...el.children.flatMap(child => elements(child, accept))]; }
 async function settle() { await Promise.resolve(); await nextTick(); await Promise.resolve(); await nextTick(); }
 beforeEach(() => {
-  vi.resetAllMocks(); workspace.value = "/synthetic-workspace"; state.context = undefined;
+  vi.resetAllMocks(); workspace.value = "/synthetic-workspace"; state.context = undefined; state.primary = undefined;
   state.bom.mockResolvedValue(preview()); state.light.mockResolvedValue(syntheticLightInfo()); state.xrefCounts.mockResolvedValue({ outgoing_count: 0, direct_incoming_count: 0 });
   state.shell = { workspacePath: workspace, consumeTabPayload: vi.fn().mockReturnValueOnce({ fileDetail: { rel: "components/model.FCStd" } }), consumeTabPageState: vi.fn(), getTab: vi.fn().mockReturnValue({ pageId: "file_detail", contextKey: "components/model.FCStd", subtitle: "components/model.FCStd" }),
     updateTab: vi.fn(), rerouteFileDetailTab: vi.fn(), scheduleWorkbenchSave: vi.fn(), setStatus: vi.fn(), setTabDirty: vi.fn(), registerPageMessages: vi.fn(), appendLog: vi.fn(), keepTab: vi.fn(), openFileDetailForRel: vi.fn() };
 });
 afterEach(() => { for (const app of mounted.splice(0)) app.unmount(); });
+
+it("contributes saved Rigid instances to ASSY Primary and clears them when opening a part", async () => {
+  const assy = preview("components/fixture.ASSY.FCStd"); assy.document_kinds!.assembly = true;
+  assy.assembly_links = [{ object_name: "Sub", label: "Sub stage", rigid: false, target_file: "Child.FCStd", target_object_name: "Assembly" }];
+  state.bom.mockResolvedValueOnce(assy).mockResolvedValueOnce(preview());
+  const page = mountPage(); await settle();
+  const sections = () => Vue.toValue(state.primary?.sections) || [];
+  expect(sections().find(section => section.id === "assembly-rigid")?.controls).toEqual([expect.objectContaining({ label: "Sub stage（Sub）", value: "否 · 柔性", kind: "readonly" })]);
+  await page.context.reloadFile("components/model.FCStd"); await settle();
+  expect(sections().some(section => section.id === "assembly-rigid")).toBe(false);
+});
+it("opens Bottom with the exact disconnected joint end, without attempting a repair", async () => {
+  const assy = preview("components/fixture.ASSY.FCStd"); assy.document_kinds!.assembly = true;
+  assy.assembly_joint_issues = [{ object_name: "Joint", label: "Pivot", reference: "Reference2", reason: "empty_reference", target_object_name: null }];
+  state.bom.mockResolvedValue(assy); mountPage(); await settle();
+  expect(state.shell.appendLog).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("Pivot（Joint）· Reference2：连接端为空"), { source: "file_detail", open: true });
+  expect(state.full).not.toHaveBeenCalled();
+});
 
 it("mounts the genuine light fallback after BOM selection rejects, without inventing a writable preview or auto-reading", async () => {
   const pending = deferred<BomPreview>(); state.bom.mockReturnValue(pending.promise); const page = mountPage();

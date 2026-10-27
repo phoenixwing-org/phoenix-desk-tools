@@ -39,8 +39,8 @@ importers:
         specifier: 0.7.0
         version: 0.7.0
       '@phoenix-wing/code-core':
-        specifier: 0.6.7
-        version: 0.6.7
+        specifier: 0.6.8
+        version: 0.6.8
       '@phoenix-wing/db-node':
         specifier: 0.6.3
         version: 0.6.3
@@ -100,8 +100,8 @@ importers:
         specifier: ^2.14.2
         version: 2.14.2(vue@3.5.35(typescript@5.7.3))
       phoenix-wing:
-        specifier: 0.8.0
-        version: 0.8.0(element-plus@2.14.2(vue@3.5.35(typescript@5.7.3)))(pinia@3.0.4(typescript@5.7.3)(vue@3.5.35(typescript@5.7.3)))(vue@3.5.35(typescript@5.7.3))
+        specifier: 0.8.1
+        version: 0.8.1(element-plus@2.14.2(vue@3.5.35(typescript@5.7.3)))(pinia@3.0.4(typescript@5.7.3)(vue@3.5.35(typescript@5.7.3)))(vue@3.5.35(typescript@5.7.3))
       pinia:
         specifier: ^3.0.4
         version: 3.0.4(typescript@5.7.3)(vue@3.5.35(typescript@5.7.3))
@@ -602,8 +602,8 @@ packages:
   '@phoenix-wing/cad-core@0.7.0':
     resolution: {integrity: sha512-jMo2MjyCALESTkQ5M/gu9GDN0z8zfw59qiGzuL+eQ67YX0UhtlCZkoM2XIR0uW/ipfWBYq+bskKmgskgGPDaSQ==}
 
-  '@phoenix-wing/code-core@0.6.7':
-    resolution: {integrity: sha512-EueXcxxKjQwHLhitCHESBxIHhyiFi18h3oR8gjm9USkEVa5An+SYD4MZnmLrqyWErdPWNZeo4ITjDrNO2RHzPw==}
+  '@phoenix-wing/code-core@0.6.8':
+    resolution: {integrity: sha512-f5y6K8nbu9ubBuCpc9rjMqJb5+++MoRWFl+mHojR3hgdrauHgYhDvr/CBJIA5fzFSx0AZ7t0Ml4IYkN/V0+94w==}
 
   '@phoenix-wing/db-node@0.6.3':
     resolution: {integrity: sha512-wX3IxX1iB4ulVZO1cmh5KZOl64lULTKhWmDieWc3RKGxVbXJPbAn0Yydq/9ZQdDpKuE6UaBrb4d/iTRvxONyYw==}
@@ -1179,8 +1179,8 @@ packages:
   perfect-debounce@1.0.0:
     resolution: {integrity: sha512-xCy9V055GLEqoFaHoC1SoLIaLmWctgCUaBaWxDZ7/Zx4CTyX7cJQLJOok/orfjZAh9kEYpjJa4d0KcJmCbctZA==}
 
-  phoenix-wing@0.8.0:
-    resolution: {integrity: sha512-Xvaz+A/rUvki/OYfQKQUU67+Kd6AAN9+ImDrbUP9cjkVWoOrPH+qz6JBE1meKGYkcmLtNjQyd8Rifw5AiySi0w==}
+  phoenix-wing@0.8.1:
+    resolution: {integrity: sha512-dx0EiAdXoTfG2g9qctusQFliT5KAyAAZG034DDvef3/57A4xEw8rtFcE2g8ASOkD5ynQl4RQLVpP16WwygEI2A==}
     peerDependencies:
       element-plus: ^2.0.0
       pinia: ^2.0.0 || ^3.0.0
@@ -1905,7 +1905,7 @@ snapshots:
 
   '@phoenix-wing/cad-core@0.7.0': {}
 
-  '@phoenix-wing/code-core@0.6.7': {}
+  '@phoenix-wing/code-core@0.6.8': {}
 
   '@phoenix-wing/db-node@0.6.3':
     dependencies:
@@ -2489,9 +2489,9 @@ snapshots:
 
   perfect-debounce@1.0.0: {}
 
-  phoenix-wing@0.8.0(element-plus@2.14.2(vue@3.5.35(typescript@5.7.3)))(pinia@3.0.4(typescript@5.7.3)(vue@3.5.35(typescript@5.7.3)))(vue@3.5.35(typescript@5.7.3)):
+  phoenix-wing@0.8.1(element-plus@2.14.2(vue@3.5.35(typescript@5.7.3)))(pinia@3.0.4(typescript@5.7.3)(vue@3.5.35(typescript@5.7.3)))(vue@3.5.35(typescript@5.7.3)):
     dependencies:
-      '@phoenix-wing/code-core': 0.6.7
+      '@phoenix-wing/code-core': 0.6.8
       '@phoenix-wing/db-node': 0.6.3
     optionalDependencies:
       element-plus: 2.14.2(vue@3.5.35(typescript@5.7.3))

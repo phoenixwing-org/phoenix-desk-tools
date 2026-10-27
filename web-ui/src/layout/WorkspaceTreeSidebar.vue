@@ -15,6 +15,7 @@ import { useFileWorksetsStore } from "../stores/fileWorksets";
 import { useWorkspaceTreeSearchStore } from "../stores/workspaceTreeSearch";
 import { countTreeFiles, filterTreeNode } from "../utils/workspaceTreeFilter";
 import { collectTreeFilePaths } from "../utils/treeFilePaths";
+import { useBatchTaskCollection } from "../features/batch-tasks/collection";
 import {
   applyProfileDefaults,
   ensureTreeFilterSelection,
@@ -55,6 +56,8 @@ const props = withDefaults(
 );
 
 const shell = useAppShell();
+const batchCollection = useBatchTaskCollection();
+const batchCollectionCount = computed(() => batchCollection.pathsFor(shell.workspacePath.value).length);
 
 const worksetStore = useFileWorksetsStore();
 const worksetBlockMode = computed(() => props.showWorksetBlock ?? false);
@@ -271,6 +274,20 @@ function onAddVisibleToWorkset() {
   const { added } = worksetStore.addPathsToActive(paths, "tree:visible");
   shell.setStatus(worksetStore.lastMessage);
   if (added > 0) sidebarTab.value = "workset";
+}
+
+function onAddVisibleToBatch() {
+  if (loading.value) return;
+  // This is exactly the existing filtered, file-only tree projection; no directory scan.
+  const paths = collectTreeFilePaths(displayTree.value);
+  if (!paths.length) { shell.setStatus("当前树中无明确文件可加入批次"); return; }
+  try {
+    const result = batchCollection.add(shell.workspacePath.value, paths);
+    shell.setStatus(`已加入 ${result.added} 个文件；批次待选 ${result.total} 个，尚未保存或执行。请打开「批量任务」。`);
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    shell.setStatus(message); shell.appendLog(`[批次待选] ${message}`, { source: "batch_tasks", open: true });
+  }
 }
 
 function onPickDir(rel: string) {
@@ -507,7 +524,9 @@ onUnmounted(() => {
             >
               +工作集
             </button>
+            <button type="button" class="mini" :disabled="loading || !displayFileCount" :title="`将当前筛选的 ${displayFileCount} 个明确文件加入批次待选，不自动运行`" @click="onAddVisibleToBatch">加入批次</button>
           </div>
+          <button v-if="batchCollectionCount" type="button" class="mini" @click="shell.goToPage('batch_tasks')">打开批量任务 · 待选 {{ batchCollectionCount }}</button>
         </div>
         <div class="ws-tree">
           <div v-if="displayTree" class="ws-tree-scroll">

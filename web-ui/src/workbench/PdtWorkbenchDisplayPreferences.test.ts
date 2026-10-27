@@ -17,6 +17,35 @@ function pdtMemoryStorage(initial?: Record<string, string>) {
 }
 
 describe("PdtWorkbenchDisplayPreferences", () => {
+  it("round-trips a wide Primary preference without the retired 560px ceiling", () => {
+    const initial = pdtDefaultWorkbenchDisplayPreferences("dark");
+    const storage = pdtMemoryStorage();
+    const updated = pdtWithWorkbenchLayoutState(initial, {
+      visibility: { primary: false, bottom: true, secondary: true },
+      sizes: { primaryWidth: 1400, secondaryWidth: 300, bottomHeight: 210 },
+    });
+
+    expect(updated.layoutState.sizes.primaryWidth).toBe(1400);
+    expect(initial.layoutState.sizes.primaryWidth).toBe(300);
+    pdtWriteWorkbenchDisplayPreferences(updated, initial, storage);
+    const restored = pdtReadWorkbenchDisplayPreferences(initial, storage);
+    expect(restored.layoutState).toEqual(updated.layoutState);
+    expect(restored.colorScheme).toBe("dark");
+    expect(restored.presentation).toBe(initial.presentation);
+  });
+
+  it("reveals output without overwriting a wide Primary preference", () => {
+    const initial = pdtDefaultWorkbenchDisplayPreferences();
+    const display = pdtWithWorkbenchLayoutState(initial, {
+      visibility: { primary: true, bottom: false, secondary: true },
+      sizes: { primaryWidth: 1400, secondaryWidth: 300, bottomHeight: 210 },
+    });
+    const revealed = pdtRevealWorkbenchBottom(display);
+    expect(revealed.layoutState.sizes).toEqual(display.layoutState.sizes);
+    expect(revealed.layoutState.sizes.primaryWidth).toBe(1400);
+    expect(revealed.layoutState.visibility.bottom).toBe(true);
+  });
+
   it("explicit output reveal opens only the hidden Bottom, preserving sizes and preferences", () => {
     const initial = pdtDefaultWorkbenchDisplayPreferences("dark");
     const hidden = pdtWithWorkbenchLayoutState(initial, {

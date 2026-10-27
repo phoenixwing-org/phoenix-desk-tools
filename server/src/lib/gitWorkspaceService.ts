@@ -40,6 +40,11 @@ const COMMIT_MESSAGE_MAX_LENGTH = 4096;
 function isPhoenixRuntimeDatabasePath(rawPath: string): boolean {
   const rel = String(rawPath || "").replace(/\\/g, "/").toLowerCase();
   return rel === ".phoenix/phoenix-workspace.sqlite"
+    || rel === ".phoenix/batch-tasks.sqlite"
+    || rel.startsWith(".phoenix/batch-tasks.sqlite-")
+    || rel.startsWith(".phoenix/batch-tasks.sqlite.")
+    || rel === ".phoenix/batch-task-migrations"
+    || rel.startsWith(".phoenix/batch-task-migrations/")
     || rel.startsWith(".phoenix/phoenix-workspace.sqlite-")
     || rel === ".phoenix/runtime-catalog.sqlite"
     || rel.startsWith(".phoenix/runtime-catalog.sqlite-");

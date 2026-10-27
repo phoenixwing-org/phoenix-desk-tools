@@ -33,6 +33,7 @@ export type PageSideBlockHostProps = {
  * Shell 只消费派生注册表，不感知具体业务页面。
  */
 const pageContributions = {
+  batch_tasks: { view: lazyPage(() => import("../features/batch-tasks/BatchTasksPage.vue")), sideBlock: genericPrimaryBlock, sideBlockLabel: "批量任务 Primary" },
   home: { view: lazyPage(() => import("../pages/HomePage.vue")), sideBlock: genericPrimaryBlock, sideBlockLabel: "主页 Primary" },
   audio_extract: { view: lazyPage(() => import("../features/audio-extractor/AudioExtractPage.vue")), sideBlock: genericPrimaryBlock, sideBlockLabel: "音频提取 Primary" },
   config: { view: lazyPage(() => import("../pages/ConfigPage.vue")), sideBlock: genericPrimaryBlock, sideBlockLabel: "配置 Primary" },
@@ -53,6 +54,7 @@ const pageContributions = {
   rename_tasks: { view: lazyPage(() => import("../features/batch-rename/RenameTasksPage.vue")), sideBlock: genericPrimaryBlock, sideBlockLabel: "改名任务 Primary" },
   assembly_labels: { view: lazyPage(() => import("../features/cad-assembly-labels/AssemblyLabelsPage.vue")), sideBlock: genericPrimaryBlock, sideBlockLabel: "批量工具 Primary" },
   part_gallery: { view: lazyPage(() => import("../features/part-gallery/PartGalleryPage.vue")), sideBlock: genericPrimaryBlock, sideBlockLabel: "图册 Primary" },
+  drawing_batch: { view: lazyPage(() => import("../features/drawing-batch/DrawingBatchPage.vue")), sideBlock: genericPrimaryBlock, sideBlockLabel: "图纸批量 Primary" },
   xlink_fix: { view: lazyPage(() => import("../pages/XlinkFixPage.vue")), sideBlock: genericPrimaryBlock, sideBlockLabel: "错误修正 Primary" },
   part_dedup: { view: lazyPage(() => import("../pages/PartDedupPage.vue")), sideBlock: genericPrimaryBlock, sideBlockLabel: "查重 Primary" },
   step_batch: { view: lazyPage(() => import("../pages/StepBatchPage.vue")), sideBlock: genericPrimaryBlock, sideBlockLabel: "STEP Primary" },

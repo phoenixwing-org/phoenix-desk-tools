@@ -11,6 +11,7 @@ import { fcstdFingerprint, fcstdWorkspace, readFcstdLightArchive, safeFcstdPath,
 import { phoenixDatabasePath } from "./phoenixDatabaseService.js";
 import { cadPathExcludedFromDiscovery } from "./cadIndexScanScope.js";
 import { writePartialCadWorkspaceIndex } from "./cadIndexPartialWriter.js";
+import type { FcstdAssemblyLinkState, FcstdAssemblyJointIssue } from "./fcstdAssemblyState.js";
 
 type Progress = { phase: "reading" | "checking" | "committing"; scanned: number };
 type Options = { signal?: AbortSignal; assertActive?: () => void; onProgress?: (progress: Progress) => void; continueOnParseError?: boolean };
@@ -18,6 +19,8 @@ type CadInstanceRecord = PnwCadIndexRecord & {
   bomXlinks: PnwCadIndexRecord["xlinks"];
   sourceSha256?: string;
   documentRole?: "model" | "drawing";
+  assemblyLinks?: FcstdAssemblyLinkState[];
+  assemblyJointIssues?: FcstdAssemblyJointIssue[];
 };
 function sameStat(a: fs.Stats, b: fs.Stats) {
   return a.isFile() && b.isFile() && a.size === b.size && a.mtimeMs === b.mtimeMs && a.ctimeMs === b.ctimeMs && a.ino === b.ino && a.dev === b.dev;
@@ -115,7 +118,8 @@ function finalizeDeskSourceProof(db: ReturnType<typeof pnwCreateDb>, records: re
     if (!asset || !record.sourceSha256 || !record.documentRole) throw new Error("CAD source proof is missing; index transaction cancelled");
     const metadata = JSON.parse(asset.bom_json);
     db.run("UPDATE phoenix_cad_file_asset SET bom_json=? WHERE id=?", [JSON.stringify({ ...metadata,
-      source_sha256: record.sourceSha256, document_role: record.documentRole }), asset.id]);
+      source_sha256: record.sourceSha256, document_role: record.documentRole,
+      assembly_links: record.assemblyLinks || [], assembly_joint_issues: record.assemblyJointIssues || [] }), asset.id]);
   }
 }
 
@@ -138,7 +142,7 @@ export async function scanCadWorkspaceIndex(workspace: string, options: Options 
   const snapshots = new Map<string, fs.Stats>();
   const discovery = await visitFcstdBatch(root, ".", async (rel, file) => {
     const before = fs.statSync(file);
-    let analysis: Pick<CadInstanceRecord, "objectCount" | "xlinks" | "bomXlinks" | "embeddedFields" | "parseError">;
+    let analysis: Pick<CadInstanceRecord, "objectCount" | "xlinks" | "bomXlinks" | "embeddedFields" | "parseError" | "assemblyLinks" | "assemblyJointIssues">;
     let sourceSha256: string | undefined;
     let documentRole: CadInstanceRecord["documentRole"];
     try {

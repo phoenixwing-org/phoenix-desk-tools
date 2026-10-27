@@ -8,7 +8,7 @@ const { rel, preview } = useFileDetailContext();
 const shell = useAppShell();
 const { canOpenSourceModel, openSourceModel } = useDrawingBomReadonly(preview);
 interface Inspection {
-  source: string; expected_drawing: string; coverage: string; warnings: string[];
+  source: string; expected_drawing: string; next_drawing: string; coverage: string; warnings: string[];
   nodes: Array<{name: string; label: string; type: string}>;
   drawings: Array<{rel: string; relation: string; pages: string[]; views: number; dimensions: number}>;
   pdfs: string[];
@@ -29,8 +29,23 @@ async function titleblockSync(apply=false) {
  } catch(e){if(!lifetime.signal.aborted)error.value=e instanceof Error?e.message:String(e);}
  finally{syncBusy.value=false;}
 }
-const defaults = reactive({creator:"",approval_person:"",company:"",material:"",tolerances:""});
-const saveScope = ref("workspace"); const job = ref<{id:string;status:string;error?:string;outputs?:string[];warnings?:string[]}>();
+interface MaintenancePreview {id:string;outputs:string[];material:string;dependencies:number}
+const maintenancePreview=ref<MaintenancePreview>();
+const maintenanceDestination=ref(rel.value.replace(/\.ASSY(?=\.Drawing\.FCStd$)/i,''));
+const maintenanceBusy=ref(false);const maintenanceMessage=ref('');
+async function maintainDrawing(apply=false){
+ if(maintenanceBusy.value)return;maintenanceBusy.value=true;error.value='';maintenanceMessage.value='';
+ if(!apply)maintenancePreview.value=undefined;
+ try{
+  const result=await jsonFetch<MaintenancePreview>(`/api/drawing-research/maintenance/${apply?'apply':'preview'}`,{signal:lifetime.signal,method:'POST',body:JSON.stringify({workspace:shell.workspacePath.value,rel:rel.value,destination:maintenanceDestination.value,id:maintenancePreview.value?.id})});
+  if(lifetime.signal.aborted)return;
+  if(apply){maintenancePreview.value=undefined;maintenanceMessage.value='图纸已整理并重导出 PDF，缩略图已更新。请检查图纸；原文件备份位于工作区 cache。';}
+  else maintenancePreview.value=result;
+ }catch(e){if(!lifetime.signal.aborted)error.value=e instanceof Error?e.message:String(e);}
+ finally{maintenanceBusy.value=false;}
+}
+const defaults = reactive({creator:"",approval_person:"",company:"",material:"",tolerances:"",contour_line_width_mm:0.5,dimension_line_width_mm:0.25});
+const saveScope = ref("workspace"); const job = ref<{id:string;status:string;error?:string;outputs?:string[];warnings?:string[];planned_outputs?:string[]}>();
 const lifetime = new AbortController();
 const submitting = ref(false);
 const settingsSaved = ref(false);
@@ -85,7 +100,8 @@ onMounted(async () => {
  try {
    const saved=await jsonFetch<typeof defaults & {template_root:string;template:string}>(`/api/drawing-research/defaults?${new URLSearchParams({workspace:shell.workspacePath.value})}`, {signal:lifetime.signal});
    if (lifetime.signal.aborted) return;
-   for (const key of Object.keys(defaults) as Array<keyof typeof defaults>) defaults[key] = saved[key];
+   for (const key of ['creator','approval_person','company','material','tolerances'] as const) defaults[key] = saved[key] ?? '';
+   for (const key of ['contour_line_width_mm','dimension_line_width_mm'] as const) if(typeof saved[key]==='number') defaults[key] = saved[key];
    templateRoot.value=saved.template_root;template.value=saved.template;
  } catch(e) { if (!lifetime.signal.aborted) error.value=e instanceof Error?e.message:String(e); }
  await inspect();
@@ -96,6 +112,12 @@ onMounted(async () => {
     <template v-if="canOpenSourceModel">
       <p>请从源零件或总成设置出图。当前是已有图纸。</p>
       <el-button @click="openSourceModel">打开源模型</el-button>
+      <h3>整理已有图纸</h3>
+      <p class="muted">请先保存并关闭当前图纸。整理页面和引用名称、3D 轴测 Fit、图纸缩略图并重导出 PDF。保留已填写图框、尺寸和技术要求；仅未指定材料使用工作区默认值。现支持单页图纸。</p>
+      <label>目标相对路径<el-input v-model="maintenanceDestination" @input="maintenancePreview=undefined" /></label>
+      <div class="actions"><el-button :loading="maintenanceBusy" :disabled="syncBusy" @click="maintainDrawing()">预览图纸整理</el-button><el-button type="primary" :disabled="maintenanceBusy || syncBusy || !maintenancePreview" @click="maintainDrawing(true)">应用整理</el-button></div>
+      <p v-if="maintenancePreview" class="muted">输出：{{ maintenancePreview.outputs.join('；') }}；缺省材料：{{ maintenancePreview.material || '保持未指定' }}。目标已有同名文件时不会覆盖。</p>
+      <el-alert v-if="maintenanceMessage" :title="maintenanceMessage" type="success" :closable="false" />
       <h3>同步标题栏</h3>
       <p class="muted">读取图纸文档、页面和来源模型属性；保留人工改过的字段。请先在FreeCAD中保存属性修改。同步后需重新导出PDF。</p>
       <div class="actions"><el-button :loading="syncBusy" @click="titleblockSync()">预览标题栏同步</el-button><el-button type="primary" :disabled="syncBusy || !syncReview?.pages.some(page => page.changes.length)" @click="titleblockSync(true)">应用可更新项</el-button></div>
@@ -123,6 +145,7 @@ onMounted(async () => {
         <h4>参考 PDF</h4><p v-if="!data.pdfs.length">未找到同编号 PDF。</p><ul v-else><li v-for="pdf in data.pdfs" :key="pdf" class="path">{{ pdf }}</li></ul>
         <p class="muted">{{ data.coverage }}</p>
         <h4>出图设置</h4>
+        <p class="path">新图纸：{{ job?.status === 'running' ? job.planned_outputs?.[0] : data.next_drawing }}</p>
         <label>模型节点<el-select v-model="sourceNode"><el-option v-for="node in data.nodes" :key="node.name" :label="`${node.label} (${node.type})`" :value="node.name" /></el-select></label>
         <label>模板目录<el-input v-model="templateRoot" placeholder="FreeCAD 默认目录或自定义 SVG 目录" @change="inspect" /></label>
         <label>模板<el-select v-model="template" filterable><el-option v-for="item in data.templates.items" :key="item.rel" :label="`${item.rel} · ${item.width} × ${item.height}`" :value="item.rel" /></el-select></label>
@@ -131,9 +154,12 @@ onMounted(async () => {
         <label>审批人<el-input v-model="defaults.approval_person" /></label>
         <label>材料默认值<el-input v-model="defaults.material" placeholder="优先读取模型材料；留空则待确认" /></label>
         <label>默认公差<el-input v-model="defaults.tolerances" placeholder="留空则待确认" /></label>
+        <label>轮廓线宽（mm）<el-input-number v-model="defaults.contour_line_width_mm" :min="0.01" :max="5" :step="0.05" controls-position="right" /></label>
+        <label>尺寸/尺寸界线宽（mm）<el-input-number v-model="defaults.dimension_line_width_mm" :min="0.01" :max="5" :step="0.05" controls-position="right" /></label>
+        <p class="muted">轮廓线宽应大于尺寸线宽；这些设置只用于新稿。已有图纸请在批量校核中逐项勾选，不自动覆盖人工样式。</p>
         <div class="actions"><el-select v-model="saveScope" style="width:150px"><el-option label="当前工作区" value="workspace" /><el-option label="本机默认" value="machine" /></el-select><el-button @click="saveDefaults">保存出图设置</el-button><el-button type="primary" :disabled="busy || submitting || !template || !sourceNode || job?.status === 'running'" :loading="submitting || job?.status === 'running'" @click="generate">生成单件初稿</el-button></div>
         <p v-if="settingsSaved" role="status">出图设置已保存。</p>
-        <p class="muted">生成同名 Drawing.FCStd、PDF 和 AI 续作说明。已有同名输出会保留。初稿包含两个正交视图、一个轴测视图及部分顶点间尺寸；圆弧外缘、孔径等尺寸需工程师补齐；审批人姓名不代表已审批。</p>
+        <p class="muted">生成同名 Drawing.FCStd、PDF 和 AI 续作说明。已有图纸或配套输出时，自动使用“初稿02、初稿03…”新名称，保留原文件；初稿序号不改变零件版本。初稿包含两个正交视图、一个轴测视图及部分顶点间尺寸；圆弧外缘、孔径等尺寸需工程师补齐；审批人姓名不代表已审批。</p>
         <el-alert v-if="job" :title="job.status === 'running' ? 'FreeCAD正在生成图纸…' : job.status === 'completed' ? '初稿已生成，请检查图纸与PDF' : (job.error || '生成失败')" :type="job.status === 'failed' ? 'error' : job.status === 'completed' ? 'success' : 'info'" :closable="false" />
         <ul v-if="job?.outputs"><li v-for="output in job.outputs" :key="output" class="path"><el-button v-if="/\.fcstd$/i.test(output)" link type="primary" class="file-link" @click="shell.openFileDetailForRel(output)">{{ output }}</el-button><span v-else>{{ output }}</span></li></ul>
         <p v-for="warning in job?.warnings" :key="warning" class="warning">{{ warning }}</p>

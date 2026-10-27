@@ -1,17 +1,20 @@
+import {makeFcstdIncludedNamesPortable} from '../../lib/fcstdArchiveNames.js';
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { zipSync } from "fflate";
+import { zipSync, strToU8 } from "fflate";
 import { fcstdFingerprint, fcstdWorkspace, readFcstdBatchArchive, safeFcstdPath } from "../../lib/fcstdBatchFiles.js";
 import { readThumbnailPng } from "../../lib/fcstdThumbnail.js";
 import { relativeFile, safeDirectory } from "../part-gallery/storage.js";
 
-/** Replace only the embedded PNG; never save a temporary recoloured GUI document. */
+/** Replace the preview, retaining embedded-resource order and content; canonicalize
+ * ambiguous resource names. Never save a temporary recoloured GUI document. */
 export function writeFcstdThumbnail(workspace: string, rel: string, png: Uint8Array, expectedHash: string) {
   const root = fcstdWorkspace(workspace), key = relativeFile(rel);
   const filename = safeFcstdPath(root, key), image = readThumbnailPng(png);
   const archive = readFcstdBatchArchive(filename, true);
   if (fcstdFingerprint(archive.bytes) !== expectedHash) throw new Error("源文件已变化，未写入缩略图，请重新生成");
+  archive.files['Document.xml']=strToU8(makeFcstdIncludedNamesPortable(archive.files,archive.xml).xml);
   archive.files["thumbnails/Thumbnail.png"] = image.bytes;
   if (Object.values(archive.files).reduce((sum, entry) => sum + entry.length, 0) > 256 * 1024 * 1024) throw new Error("新 FCStd 解压大小超过 256 MiB，未写入缩略图");
   const bytes = zipSync(archive.files, { level: 6 });

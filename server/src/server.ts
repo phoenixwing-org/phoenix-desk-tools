@@ -2,9 +2,13 @@ import { createAdaptorServer, type ServerType } from "@hono/node-server";
 import { refreshRuntimeCatalog } from "./routes/unit-tests.js";
 import { setShellShutdownHandler } from "./routes/shell.js";
 import { createPhoenixServerApp } from "./serverApp.js";
+import { closeBatchTaskServices } from "./features/batch-tasks/service.js";
 import { migrateLegacyRuntimeUserData } from "./lib/appRuntimePaths.js";
+import path from "node:path";
+import { configureDrawingExecutionBarrier } from "./features/drawing-research/executionGate.js";
 import {
   acquireDeskToolsInstanceLease,
+  deskToolsRegistrationDirectory,
   deskToolsPortCandidates,
   registerDeskToolsRuntime,
 } from "./lib/deskToolsRegistration.js";
@@ -69,6 +73,13 @@ async function startServer(): Promise<{ readonly server: ServerType; readonly po
 }
 
 const instanceLease = acquireDeskToolsInstanceLease();
+// Stable host scope, not instanceId/port/workspace: a server restart must see
+// any previous unclosed Native reservation. Ordinary read APIs stay available.
+try {
+  configureDrawingExecutionBarrier(path.join(deskToolsRegistrationDirectory(), "native-freecad-v1"));
+} catch {
+  console.error("[native] 持久执行门禁不可用，FreeCAD 原生任务保持禁用；普通读取服务继续启动");
+}
 let started: Awaited<ReturnType<typeof startServer>>;
 try {
   started = await startServer();
@@ -95,16 +106,12 @@ const disposeRegistration = (): void => {
   instanceLease.dispose();
 };
 process.once("exit", disposeRegistration);
-process.once("SIGINT", () => {
-  disposeRegistration();
-  server.close(() => process.exit(0));
-});
-process.once("SIGTERM", () => {
-  disposeRegistration();
-  server.close(() => process.exit(0));
-});
-
-setShellShutdownHandler(() => {
-  disposeRegistration();
-  server.close();
-});
+let stopping = false;
+function shutdown(exit: boolean) {
+  if (stopping) return;
+  stopping = true; disposeRegistration();
+  void closeBatchTaskServices().catch(error => console.error('[batch-tasks] shutdown:', error instanceof Error ? error.message : String(error))).finally(() => server.close(() => { if (exit) process.exit(0); }));
+}
+process.once("SIGINT", () => shutdown(true));
+process.once("SIGTERM", () => shutdown(true));
+setShellShutdownHandler(() => shutdown(false));

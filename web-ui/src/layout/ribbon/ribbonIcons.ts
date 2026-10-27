@@ -22,6 +22,7 @@ import {
 
 /** pageId → Element Plus 图标（Ribbon 工具按钮） */
 export const RIBBON_PAGE_ICONS: Record<string, Component> = {
+  batch_tasks: Operation,
   home: HomeFilled,
   audio_extract: Headset,
   config: Setting,
@@ -37,6 +38,7 @@ export const RIBBON_PAGE_ICONS: Record<string, Component> = {
   rename_analysis: Search,
   xlink_fix: Link,
   cad_batch_tools: Operation,
+  drawing_batch: DocumentCopy,
   part_dedup: DocumentCopy,
   step_batch: Upload,
   sw_step_export: Box,

@@ -1,3 +1,4 @@
+import { nextDrawingOutput } from './output-name.js';
 import fs from "node:fs";
 import path from "node:path";
 import { setImmediate } from "node:timers/promises";
@@ -5,7 +6,7 @@ import { pnwExtractXlinksFromDocumentXml } from "@phoenix-wing/cad-core";
 import { fcstdWorkspace, safeFcstdPath, readFcstdBatchArchive, fcstdFingerprint } from "../../lib/fcstdBatchFiles.js";
 import { fcstdXmlObjects, objectString, xmlAttribute } from "../../lib/fcstdLinkIdentity.js";
 import { isStandaloneDrawing } from "../../lib/fcstdDrawing.js";
-import { runtimeUserDataDir } from "../../lib/appRuntimePaths.js";
+import { resolveFreecadGuiRuntime } from "../../lib/freecadGuiRuntime.js";
 
 function objects(xml: string) {
   const clean = xml.replace(/<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>/g, "");
@@ -22,10 +23,7 @@ export function sourceNodes(xml: string) {
   return objects(xml).filter(o => /^(App::Part|Assembly::AssemblyObject|PartDesign::Body|Part::Feature(?:Python)?|App::Link)$/.test(o.type) && !grouped.has(o.name)).map(o => ({ ...o, label: objectString(data.find(d => d.name === o.name) || { name: o.name, properties: new Map() }, "Label") || o.name }));
 }
 function installationTemplates() {
-  let install = "";
-  try { install = String(JSON.parse(fs.readFileSync(path.join(runtimeUserDataDir(), "launcher-prefs.json"), "utf8")).freecad_dir || ""); } catch { /* optional launcher preference */ }
-  const candidates = [install && path.join(install, "Contents/Resources/share/Mod/TechDraw/Templates"), install && path.join(install, "data/Mod/TechDraw/Templates"), install && path.join(install, "Mod/TechDraw/Templates"), "/Applications/FreeCAD.app/Contents/Resources/share/Mod/TechDraw/Templates", "/usr/share/freecad/Mod/TechDraw/Templates", "/usr/share/freecad/data/Mod/TechDraw/Templates"];
-  return candidates.find(p => p && fs.existsSync(p)) || "";
+  try { return resolveFreecadGuiRuntime().templates; } catch { return ""; }
 }
 export function templateCatalog(requested = "") {
   const candidate = requested.trim() || installationTemplates();
@@ -81,6 +79,6 @@ export async function inspectDrawing(workspace: string, rel: string, templateRoo
       } catch (error) { warnings.push(`${candidate}：${error instanceof Error ? error.message : String(error)}`); }
     }
   }
-  return { source: sourceRel, source_hash: fcstdFingerprint(archive.bytes), nodes: sourceNodes(archive.xml), expected_drawing: expected, drawings, pdfs: pdfs.sort(), templates: templateCatalog(templateRoot), warnings, coverage: "当前工作空间：Drawing.FCStd 与同编号 FCStd；PDF 仅按名称列为候选，未确认版次" };
+  return { source: sourceRel, source_hash: fcstdFingerprint(archive.bytes), nodes: sourceNodes(archive.xml), expected_drawing: expected, next_drawing: path.relative(root, nextDrawingOutput(source)).replace(/\\/g, "/"), drawings, pdfs: pdfs.sort(), templates: templateCatalog(templateRoot), warnings, coverage: "当前工作空间：Drawing.FCStd 与同编号 FCStd；PDF 仅按名称列为候选，未确认版次" };
 }
 export type DrawingResearch = Awaited<ReturnType<typeof inspectDrawing>>;

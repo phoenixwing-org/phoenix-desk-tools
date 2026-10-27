@@ -6,8 +6,8 @@ it("opens existing independent views through Host commands, without duplicating 
   expect(section.placement).toBe("before-context");
   expect(section.actionLayout).toBe("grid");
   for (const action of section.actions!.slice(1)) action.run();
-  expect(openTab.mock.calls.map(([opts]) => opts.pageId)).toEqual(["xlink_fix", "batch_attributes", "name_normalize", "document_sync", "assembly_labels", "part_gallery", "step_batch", "sw_step_export", "part_dedup"]);
-  expect(CAD_BATCH_TOOLS).toHaveLength(9);
+  expect(openTab.mock.calls.map(([opts]) => opts.pageId)).toEqual(["xlink_fix", "batch_attributes", "name_normalize", "document_sync", "assembly_labels", "part_gallery", "drawing_batch", "step_batch", "sw_step_export", "part_dedup"]);
+  expect(CAD_BATCH_TOOLS).toHaveLength(10);
 });
 it("keeps hidden tool Views in the CAD navigation group without affecting other pages", () => {
   for (const tool of CAD_BATCH_TOOLS) expect(cadBatchNavigationPage(tool.page)).toBe("cad_batch_tools");

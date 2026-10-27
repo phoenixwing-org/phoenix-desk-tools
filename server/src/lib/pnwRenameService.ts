@@ -5,6 +5,8 @@ import { patchFcstdXlinkAttributes } from "./fcstdReferenceLabelService.js";
 import { patchBomLinkLabels, refreshBomXrefsForHosts } from "./pnwBomXrefService.js";
 import { drawingLinkLabelAttributes } from "./fcstdDrawing.js";
 import { fcstdWorkspace, readFcstdBatchArchive, safeFcstdPath } from "./fcstdBatchFiles.js";
+import { inspectIncomingObjectLabels, verifyIncomingLabelSources, verifyIncomingObjectLabels } from "./renameObjectLabelPlan.js";
+import type { ReferenceLabelChange } from "./fcstdReferenceLabelService.js";
 
 export type RenameLog = {
   id: number;
@@ -496,6 +498,17 @@ function fallbackRuleLabel(edge: RenameEdge): string {
   return filenameFrom(edge.target_basename || edge.target_repo_rel_path).replace(/\.fcstd$/i, "");
 }
 
+/** Internal read-only expectation used by batch postflight as well as the
+ * single-file incoming repair. It is not a new HTTP plan or write endpoint. */
+export function inspectIncomingRenameLabels(workspaceRoot: string, renameLogId: number, host: string, targetRel?: string) {
+  const terms = resolveRenameTerms(workspaceRoot, { rename_log_id: renameLogId });
+  if (targetRel && cleanRel(targetRel) !== terms.newTargetRel) throw new Error("改名记录与当前目标不一致，请重新分析");
+  const sources = labelEdgesForRename(loadRenameEdges(workspaceRoot), terms)
+    .filter(edge => edge.host_repo_rel_path === cleanRel(host));
+  return inspectIncomingObjectLabels(fcstdWorkspace(workspaceRoot), cleanRel(host), sources,
+    [terms.oldTargetRel, terms.newTargetRel].filter(Boolean));
+}
+
 function applyRenameLabels(
   workspaceRoot: string,
   body: any,
@@ -547,14 +560,42 @@ function applyRenameLabels(
       return false;
     }
   });
-  const patches = applicable.map((edge) => ({
+  const legacyPatches = applicable.map((edge) => ({
     host_repo_rel: cleanRel(edge.host_repo_rel_path),
     xlink_file_attr: edge.xlink_file_attr,
     link_label: fallbackRuleLabel(edge),
   })).filter((patch) => patch.link_label);
-  const patched = patches.length
-    ? patchBomLinkLabels(workspaceRoot, patches)
-    : { label_patches: 0, applied_hosts: [], failed: [], label_changes: [] };
+  let patched: {
+    label_patches: number; applied_hosts: string[];
+    failed: Array<{ host_repo_rel: string; error: string }>;
+    label_changes: Array<ReferenceLabelChange & { host_repo_rel: string }>;
+  } = { label_patches: 0, applied_hosts: [], failed: [], label_changes: [] };
+  if (labelScope === "incoming") for (const host of hostSet) {
+    const sources = applicable.filter(edge => cleanRel(edge.host_repo_rel_path) === host);
+    if (!sources.length) continue;
+    try {
+      const plan = inspectIncomingObjectLabels(root, host, sources, [terms.oldTargetRel, terms.newTargetRel].filter(Boolean));
+      skipped.push(...plan.skipped);
+      // An earlier selected host can itself be a source of this host's live
+      // projection. Read/guard/write/verify each host at its actual turn; do
+      // not hold all source proofs across our own preceding successful writes.
+      verifyIncomingLabelSources(root, plan);
+      if (plan.patches.length) {
+        const result = patchBomLinkLabels(workspaceRoot, plan.patches.map(patch => ({ host_repo_rel: host, ...patch })));
+        patched.label_patches += Number(result.label_patches || 0);
+        patched.applied_hosts.push(...(result.applied_hosts || []));
+        patched.failed.push(...(result.failed || []));
+        patched.label_changes.push(...(result.label_changes || []));
+      }
+      verifyIncomingLabelSources(root, plan);
+      verifyIncomingObjectLabels(root, host, plan.expectations);
+    } catch (error) {
+      failed.push({ host_repo_rel_path: host, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  // host_all is an explicitly separate legacy action. Keep its file-wide
+  // ambiguity guard; incoming repairs never stamp a file root on subobjects.
+  if (labelScope === "host_all" && legacyPatches.length) patched = patchBomLinkLabels(workspaceRoot, legacyPatches);
   failed.push(...(patched.failed || []).map((item: any) => ({
     host_repo_rel_path: cleanRel(item.host_repo_rel),
     error: String(item.error || "Label patch failed"),

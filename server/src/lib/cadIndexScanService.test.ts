@@ -24,6 +24,24 @@ function readRows(root: string) {
   finally { db.close(); }
 }
 describe("explicit shared CAD index service", () => {
+  it("stores distinct AssemblyLink Rigid states in bom_json and refreshes them without saving CAD", async () => {
+    const { root } = fixture(); const rel = "Synthetic.ASSY.FCStd"; const file = path.join(root, rel);
+    const model = (value: string) => `<Document><Objects><Object name="Assembly" type="Assembly::AssemblyObject"/><Object name="Stage" type="Assembly::AssemblyLink"/></Objects><ObjectData>
+      <Object name="Assembly"><Properties><Property name="Group" type="App::PropertyLinkList"><LinkList count="1"><Link value="Stage"/></LinkList></Property></Properties></Object>
+      <Object name="Stage"><Properties><Property name="Label" type="App::PropertyString"><String value="Stage"/></Property><Property name="Rigid" type="App::PropertyBool"><Bool value="${value}"/></Property></Properties></Object></ObjectData></Document>`;
+    const saved = () => {
+      const db = pnwCreateDb(phoenixDatabasePath(root));
+      try { return JSON.parse(db.get<{ bom_json: string }>("SELECT bom_json FROM phoenix_cad_file_asset WHERE filename=?", [rel])!.bom_json).assembly_links; }
+      finally { db.close(); }
+    };
+    for (const [value, expected] of [["true", true], ["false", false], ["invalid", null]] as const) {
+      fs.writeFileSync(file, zipSync({ "Document.xml": strToU8(model(value)) }));
+      const before = fs.readFileSync(file);
+      await scanCadWorkspaceIndex(root);
+      expect(saved()).toEqual([{ object_name: "Stage", label: "Stage", target_object_name: null, target_file: null, rigid: expected }]);
+      expect(fs.readFileSync(file)).toEqual(before);
+    }
+  });
   it("reports progress every ten files and flushes the final remainder", async () => {
     const { root, part } = fixture();
     for (let i = 1; i < 23; i++) fs.copyFileSync(part, path.join(root, `${i}.FCStd`));

@@ -25,7 +25,7 @@ const entries = files.map((file) => {
     status: rule.status,
     owner: rule.owner ?? policy.owner,
     appliesTo: rule.status === "archived" ? "historical" : policy.appliesTo,
-    lastVerified: policy.lastVerified,
+    lastVerified: rule.lastVerified ?? policy.lastVerified,
   };
   if (rule.sourceOfTruth) entry.sourceOfTruth = rule.sourceOfTruth;
   if (rule.reason) entry.reason = rule.reason;

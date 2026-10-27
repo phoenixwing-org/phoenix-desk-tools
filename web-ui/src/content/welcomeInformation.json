@@ -2,7 +2,7 @@
   "project": {
     "id": "desk-product",
     "title": "项目与运行方式",
-    "status": "v0.4.0",
+    "status": "v0.5.0（本地候选）",
     "defaultExpanded": true,
     "items": [
       {
@@ -13,8 +13,8 @@
       {
         "id": "hosts",
         "label": "使用入口",
-        "value": "Web / Tauri",
-        "note": "两个界面共用同一套 Web UI 和唯一 Desk API。"
+        "value": "浏览器 / 可选 Tauri",
+        "note": "Node 后台可独立运行；浏览器与可选桌面客户端共用 Web UI 和 Desk API。"
       },
       {
         "id": "api-protocol",

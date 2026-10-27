@@ -1,0 +1,22 @@
+import {Hono}from'hono';import {bodyLimit}from'hono/body-limit';
+import {batchTaskService}from'./service.js';
+export const batchTaskRoutes=new Hono();
+batchTaskRoutes.use('*',async(c,next)=>bodyLimit({maxSize:c.req.path.endsWith('/restore')?33*1024*1024:1024*1024,onError:c=>c.json({detail:'请求超过允许的安全上限'},413)})(c,next));
+batchTaskRoutes.onError((error,c)=>c.json({detail:error.message},400));
+const text=(v:unknown,name:string)=>{if(typeof v!=='string'||!v.trim()||v.length>200||/[\u0000-\u001f]/u.test(v))throw new Error(name+'无效');return v;};
+const revision=(v:unknown)=>{if(!Number.isSafeInteger(v)||Number(v)<1)throw new Error('任务版本无效');return Number(v);};
+async function body(c:any,keys:string[]){const value=await c.req.json();if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).some(k=>!keys.includes(k)))throw new Error('请求字段无效');return value as Record<string,unknown>;}
+const service=(c:any)=>batchTaskService(c.req.query('workspace')||'');
+batchTaskRoutes.get('/actions',c=>c.json({actions:service(c).catalog()}));
+batchTaskRoutes.get('/tasks',c=>c.json({tasks:service(c).listTasks()}));
+batchTaskRoutes.post('/tasks',async c=>{const b=await body(c,['id','expected_revision','draft','creation_id']);return c.json({task:service(c).save(b.draft,b.id===undefined?undefined:text(b.id,'任务ID'),b.id===undefined?undefined:revision(b.expected_revision),b.creation_id===undefined?undefined:text(b.creation_id,'创建标识'))});});
+batchTaskRoutes.post('/tasks/:id/archive',async c=>{const b=await body(c,['expected_revision','archived']);if(typeof b.archived!=='boolean')throw new Error('归档选项无效');return c.json({task:service(c).repository.archiveTask(text(c.req.param('id'),'任务ID'),revision(b.expected_revision),b.archived)});});
+batchTaskRoutes.post('/tasks/:id/preview',async c=>{const b=await body(c,['expected_revision']);return c.json({plan:await service(c).preview(text(c.req.param('id'),'任务ID'),revision(b.expected_revision),c.req.raw.signal)});});
+batchTaskRoutes.post('/runs',async c=>{const b=await body(c,['plan_id','digest','client_request_id','confirmed','protocol_version']);if(b.confirmed!==true||(b.protocol_version!==2&&b.protocol_version!==3))throw new Error('请显式确认本次冻结预览的协议版本2或3');return c.json({run:await service(c).accept(text(b.plan_id,'计划ID'),text(b.digest,'计划摘要'),text(b.client_request_id,'请求标识'),b.protocol_version)},202);});
+batchTaskRoutes.get('/runs',c=>c.json({runs:service(c).listRuns()}));
+batchTaskRoutes.get('/runs/by-request/:request',c=>{const run=service(c).repository.findRunByRequest(text(c.req.param('request'),'请求标识'));return run?c.json({run}):c.json({detail:'未查到接纳记录，请用原请求标识重试'},404);});
+batchTaskRoutes.get('/runs/:id/retry-drafts',c=>c.json(service(c).retryDrafts(text(c.req.param('id'),'运行ID'))));
+batchTaskRoutes.get('/runs/:id',c=>{const after=Number(c.req.query('after')||0);if(!Number.isSafeInteger(after)||after<0)throw new Error('事件游标无效');return c.json(service(c).detail(text(c.req.param('id'),'运行ID'),after));});
+batchTaskRoutes.post('/runs/:id/cancel',async c=>{await body(c,[]);return c.json({run:service(c).cancel(text(c.req.param('id'),'运行ID'))});});
+batchTaskRoutes.post('/backup',async c=>{await body(c,[]);return c.json(service(c).repository.exportBackup());});
+batchTaskRoutes.post('/restore',async c=>{const b=await body(c,['backup']);service(c).repository.restoreBackup(b.backup);return c.json({restored:true,message:'仅恢复任务数据；旧计划失效，未启动运行'});});

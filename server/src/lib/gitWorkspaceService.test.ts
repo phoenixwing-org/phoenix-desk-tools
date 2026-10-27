@@ -166,5 +166,9 @@ describe.skipIf(!gitAvailable)("git workspace service", () => {
       .rejects.toThrow("cannot exceed 4096 characters");
     await expect(gitWorkspaceStage(workspace, [".phoenix/phoenix-workspace.sqlite"]))
       .rejects.toThrow("runtime database cannot be changed");
+    for(const rel of ['.phoenix/batch-tasks.sqlite','.phoenix/batch-tasks.sqlite-journal','.phoenix/batch-tasks.sqlite.lock/owner','.phoenix/batch-task-migrations/original-v1.json']) {
+      await expect(gitWorkspaceStage(workspace,[rel])).rejects.toThrow('runtime database cannot be changed');
+      await expect(gitWorkspaceRestore(workspace,[rel],'untracked')).rejects.toThrow('runtime database cannot be changed');
+    }
   });
 });

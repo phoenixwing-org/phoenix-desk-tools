@@ -12,6 +12,7 @@ import FileXrefPanel from "../components/file-detail/FileXrefPanel.vue";
 import FileAssemblyPanel from "../components/file-detail/FileAssemblyPanel.vue";
 import CadObjectInfoPanel from "../features/cad-object-info/CadObjectInfoPanel.vue";
 import { cadIndexReadStateLabel } from "../utils/cadIndexState";
+import { assemblyRigidPrimary, assemblyJointIssueText } from "../models/assemblyRigidPrimary";
 import RenameDialog from "../components/RenameDialog.vue";
 import DrawingBomReadonlyBanner from "../components/file-detail/DrawingBomReadonlyBanner.vue";
 import { provideFileDetailContext } from "../composables/useFileDetailContext";
@@ -19,6 +20,7 @@ import { useDrawingBomReadonly } from "../composables/useDrawingBomReadonly";
 import { useFileThumbnail } from "../composables/useFileThumbnail";
 import { useThumbnailGeneration } from "../composables/useThumbnailGeneration";
 import { useAppShell } from "../composables/useAppShell";
+import { useBatchTaskCollection } from "../features/batch-tasks/collection";
 import { usePageSession } from "../composables/usePageSession";
 import type { FileDetailSubTab } from "../types/fileDetail";
 import { DEFAULT_FILE_DETAIL_SUB_TAB, normalizeFileDetailSubTab } from "../types/fileDetail";
@@ -35,6 +37,19 @@ const SESSION_V = 1;
 
 const shell = useAppShell();
 const rel = ref("");
+const batchFileWorkspace = ref("");
+const batchCollection = useBatchTaskCollection();
+const batchCollectionCount = computed(() => batchCollection.pathsFor(shell.workspacePath.value).length);
+function addCurrentFileToBatch() {
+  if (!rel.value || loading.value || !shell.workspacePath.value || batchFileWorkspace.value !== shell.workspacePath.value) return;
+  try {
+    const result = batchCollection.add(shell.workspacePath.value, [rel.value]);
+    shell.setStatus(`已加入 ${result.added} 个文件；批次待选 ${result.total} 个，尚未保存或执行。`);
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    shell.setStatus(message); shell.appendLog(`[批次待选] ${message}`, { source: "batch_tasks", open: true });
+  }
+}
 const thumbnailRel = ref("");
 const thumbnailRevision = ref(0);
 const thumbnail = useFileThumbnail(shell.workspacePath, thumbnailRel, thumbnailRevision);
@@ -183,6 +198,7 @@ async function reloadFile(targetRel?: string) {
   try {
     const data = await fetchBom(path, workspace);
     if (!isCurrent()) return;
+    batchFileWorkspace.value = workspace;
     rel.value = path;
     if (props.workbenchTabId && prevRel && prevRel !== path) {
       shell.rerouteFileDetailTab(prevRel, path, props.workbenchTabId);
@@ -211,12 +227,19 @@ async function reloadFile(targetRel?: string) {
       shell.scheduleWorkbenchSave();
     }
     shell.setStatus(data.embedded_warning ? `警告: ${data.embedded_warning}` : data.source_note);
+    const jointIssues = data.assembly_joint_issues || [];
+    if (jointIssues.length) {
+      shell.appendLog(`[关节检查] ${path}：${jointIssues.length} 个连接端需确认；不自动猜接或删除 Joint。\n` +
+        jointIssues.slice(0, 20).map(issue => `${issue.label}（${issue.object_name}）· ${issue.reference}：${assemblyJointIssueText(issue)}`).join("\n") +
+        (jointIssues.length > 20 ? "\n其余问题见 Primary。" : ""), { source: "file_detail", open: true });
+    }
   } catch (e) {
     if (!isCurrent()) return;
     pageError.value = String(e);
     preview.value = null;
     // A BOM/root-selection failure must not prevent an independent read-only
     // summary. Never synthesize a writable BomPreview from the failed read.
+    batchFileWorkspace.value = workspace;
     rel.value = path;
     form.value = {};
     baseline.value = {};
@@ -451,6 +474,7 @@ usePagePrimaryContribution("file_detail", props.workbenchTabId, {
         { id: "dirty", kind: "readonly", label: "未保存", value: computed(() => hasUnsavedEdits() ? "是" : "否") },
       ],
       actions: [
+        { id: "batch-add", label: "加入批次", disabled: computed(() => !rel.value || loading.value || batchFileWorkspace.value !== shell.workspacePath.value), run: addCurrentFileToBatch },
         {
           id: "reload",
           label: "重新载入",
@@ -467,6 +491,7 @@ usePagePrimaryContribution("file_detail", props.workbenchTabId, {
         },
       ],
     },
+    ...assemblyRigidPrimary(preview.value),
     ...(activeSubTab.value === "assembly" ? [{
       id: "assembly-help", title: "装配标签说明",
       description: "显示磁盘中的真实节点标签。\n推荐取目标零件显示名；同级重复件按树序加 .001 起编号。\n点击数量展开实例；悬停行可撤销或应用。\n推荐仅填入草稿，应用才写盘。\n只改当前总成标签，不改引用路径或源文件。\n目标文件为最终零件；经由总成见悬浮提示。",
@@ -520,6 +545,8 @@ onUnmounted(() => {
           </el-radio-group>
         </template>
         <template #right>
+          <el-button v-if="rel" size="small" :disabled="loading || batchFileWorkspace !== shell.workspacePath.value" @click="addCurrentFileToBatch">加入批次</el-button>
+          <el-button v-if="batchCollectionCount" size="small" @click="shell.goToPage('batch_tasks')">批量任务 · 待选 {{ batchCollectionCount }}</el-button>
           <el-button
             v-if="rel"
             size="small"

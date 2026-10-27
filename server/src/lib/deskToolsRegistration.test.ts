@@ -57,6 +57,16 @@ describe("Desk Tools registration", () => {
     expect(fs.existsSync(handle.servicePath)).toBe(false);
   });
 
+  it("advertises browser identity only for the explicit same-origin browser profile", () => {
+    const directory = temporaryDirectory(), env = { PHOENIX_DESK_TOOLS_REGISTRY_DIR: directory };
+    const plain = registerDeskToolsRuntime(48377, env);
+    expect(plain.service).not.toHaveProperty("web_url"); plain.dispose();
+    expect(() => registerDeskToolsRuntime(48377, env, new Date(), "independent", { webUrl: "https://external.invalid/", runtimeId: "candidate" })).toThrow("同源");
+    const browser = registerDeskToolsRuntime(48377, env, new Date(), "independent", { webUrl: "http://127.0.0.1:48377/", runtimeId: "sha256:independent" });
+    expect(browser.service).toMatchObject({ browser_host_protocol: 1, identity_path: "/api/desk-service", web_url: "http://127.0.0.1:48377/", runtime_id: "sha256:independent" });
+    browser.dispose();
+  });
+
   it("prevents a second live API and recovers a stale instance lock", () => {
     const directory = temporaryDirectory();
     const env = { PHOENIX_DESK_TOOLS_REGISTRY_DIR: directory, PHOENIX_DESK_HOST: "web" };

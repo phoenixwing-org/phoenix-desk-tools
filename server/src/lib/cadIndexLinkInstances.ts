@@ -2,6 +2,7 @@ import { pnwAnalyzeCadIndexDocumentXml, type PnwCadXlinkRef } from "@phoenix-win
 import { fcstdXmlObjects } from "./fcstdLinkIdentity.js";
 import { decodeCadXmlAttribute } from "../features/cad-object-info/document.js";
 import { extractFcstdEmbeddedBomSnapshot } from "./fcstdDocumentXmlService.js";
+import { readFcstdAssemblyState } from "./fcstdAssemblyState.js";
 
 function tags(fragment: string, name: string): string[] {
   // '>' is legal inside a quoted XML attribute; it is not a tag terminator.
@@ -111,7 +112,9 @@ export function analyzeCadIndexDocumentXmlWithInstances(xml: string) {
   // A physical instance and its cached drawing source must not count twice.
   const linkedFiles = new Set(xlinks.map(link => referenceFileKey(link.file)));
   for (const [file, link] of sources) if (!linkedFiles.has(file)) xlinks.push(link);
+  const assemblyState = readFcstdAssemblyState(xml);
   return { ...analysis, embeddedFields: Object.freeze(extractFcstdEmbeddedBomSnapshot(xml).fields || {}), xlinks, bomXlinks,
+    assemblyLinks: assemblyState.links, assemblyJointIssues: assemblyState.joint_issues,
     // Filename suffixes are display hints, not proof of manufacturing role.
     // Preserve the same object-type decision already used for link quantities.
     documentRole: standaloneDrawing ? "drawing" as const : "model" as const };

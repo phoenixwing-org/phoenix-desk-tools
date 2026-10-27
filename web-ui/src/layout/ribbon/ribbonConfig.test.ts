@@ -43,6 +43,7 @@ describe("Ribbon navigation contract", () => {
       "unit_tests",
     ]);
     expect(pages.cad).toEqual([
+      "batch_tasks",
       "cad_index",
       "workspace_recovery",
       "part_catalog",
@@ -64,9 +65,9 @@ describe("Ribbon navigation contract", () => {
   });
 
   it.each([
-    { enabled: ["code"], tools: ["rename_tasks", "code_ignore", "caa_dialog_home", "audio_extract"] },
-    { enabled: ["cad"], tools: ["cad_index", "workspace_recovery", "part_catalog", "bom_delivery", "file_rename", "cad_batch_tools", "rename_tasks", "audio_extract"] },
-    { enabled: [], tools: ["rename_tasks", "audio_extract"] },
+    { enabled: ["code"], tools: ["batch_tasks", "rename_tasks", "code_ignore", "caa_dialog_home", "audio_extract"] },
+    { enabled: ["cad"], tools: ["batch_tasks", "cad_index", "workspace_recovery", "part_catalog", "bom_delivery", "file_rename", "cad_batch_tools", "rename_tasks", "audio_extract"] },
+    { enabled: [], tools: ["batch_tasks", "rename_tasks", "audio_extract"] },
   ])("keeps the tools entry for $enabled preferences without exposing disabled domains", ({ enabled, tools }) => {
     // The production AppShell filters each original module before grouping.
     const navigation = navigationConfig();

@@ -3,11 +3,36 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { PAGE_COMPONENT_IDS, PAGE_CONTRIBUTIONS } from "./pageRegistry";
 import { RIBBON_PAGE_ICONS, ribbonIconFor } from "./ribbon/ribbonIcons";
-import { Coin, Upload } from "@element-plus/icons-vue";
+import { Coin, DocumentCopy, Upload } from "@element-plus/icons-vue";
 import { pnwResolveIcon } from "phoenix-wing";
 import { PAGE_HELP } from "../content/pageHelp";
 
 describe("page registry", () => {
+  it("registers generic batch tasks independent of CAD with one tab and explicit read-only boundaries", () => {
+    expect(PAGE_COMPONENT_IDS.has("batch_tasks")).toBe(true);
+    expect(PAGE_CONTRIBUTIONS.batch_tasks?.sideBlock).toBe(PAGE_CONTRIBUTIONS.cad_index?.sideBlock);
+    expect(PAGE_HELP.batch_tasks?.bullets.join("\n")).toContain("关闭 View");
+    const config = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), "../phoenix/config/app_config.json"), "utf8"));
+    expect(config.workbench.pages.batch_tasks).toEqual({ max_tabs: 1 });
+    expect(config.navigation.find((entry: { page: string }) => entry.page === "batch_tasks")).toMatchObject({ label: "批量任务管理", ribbonGroup: "任务" });
+    expect(config.navigation.find((entry: { page: string }) => entry.page === "batch_tasks").module).toBeUndefined();
+  });
+  it("registers the independent drawing-batch view under CAD with one tab, icon and safe help", () => {
+    expect(PAGE_COMPONENT_IDS.has("drawing_batch")).toBe(true);
+    expect(PAGE_CONTRIBUTIONS.drawing_batch?.sideBlock).toBe(PAGE_CONTRIBUTIONS.cad_index?.sideBlock);
+    expect(PAGE_CONTRIBUTIONS.drawing_batch?.sideBlockLabel).toBe("图纸批量 Primary");
+    expect(ribbonIconFor("drawing_batch")).toBe(DocumentCopy);
+    expect(PAGE_HELP.drawing_batch?.bullets.join("\n")).toContain("不自动修改文件");
+    const config = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), "../phoenix/config/app_config.json"), "utf8"));
+    expect(config.workbench.pages.drawing_batch).toEqual({ max_tabs: 1 });
+    expect(config.navigation.filter((entry: { page: string }) => entry.page === "drawing_batch")).toEqual([expect.objectContaining({ id: "drawing_batch", module: "cad", label: "图纸批量" })]);
+  });
+  it("keeps drawing-batch help explicit about task limits, material evidence, cancellation and joint safety", () => {
+    const help = PAGE_HELP.drawing_batch?.bullets.join("\n") ?? "";
+    for (const text of ["100个修正项", "500份文件", "旧图修正无材料证据不补推测牌号", "源属性、显式配置与待审建议", "不代表物性、质量计算或审批通过", "默认允许无参考PDF", "仅本次任务", "其余安全项继续", "停止后续文件", "只终止本任务自有进程", "不影响用户FreeCAD", "非TechDraw对象引用时拒绝", "不删除节点", "不猜接关节", "不往返切换Rigid", "外链源模型为装配不因此拒绝", "实际Page图框、PDF、PNG缩略图与实际尺寸值分别验收", "「初稿」序号新名称", "不覆盖原输出", "Bottom 日志"]) expect(help).toContain(text);
+    expect(help).not.toContain("45#");
+    expect(PAGE_HELP.drawing_batch?.docPath).toBe("docs/drawing-maintenance.md");
+  });
   it("registers one standalone recovery view with a real database icon, generic Primary and safe offline help", () => {
     expect(PAGE_COMPONENT_IDS.has("workspace_recovery")).toBe(true);
     expect(PAGE_CONTRIBUTIONS.workspace_recovery?.sideBlock).toBe(PAGE_CONTRIBUTIONS.cad_index?.sideBlock);

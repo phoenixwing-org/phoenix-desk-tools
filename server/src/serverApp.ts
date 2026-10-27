@@ -7,21 +7,27 @@ import { shellRoutes } from "./routes/shell.js";
 import { documentSyncRoutes } from "./features/document-sync/routes.js";
 import { drawingResearchRoutes } from "./features/drawing-research/routes.js";
 import { renameTaskRoutes } from "./features/batch-rename/routes.js";
+import { batchTaskRoutes } from "./features/batch-tasks/routes.js";
 import { workspaceRecoveryRoutes } from "./features/workspace-recovery/routes.js";
+import { drawingBatchRoutes } from "./features/drawing-batch/routes.js";
 import { isAllowedPhoenixUiOrigin } from "./lib/localApiOrigin.js";
+import { createBrowserHost, type BrowserHostOptions } from "./features/browser-host/app.js";
 
-export function createPhoenixServerApp(): Hono {
+export function createPhoenixServerApp(options?: { browserHost?: BrowserHostOptions }): Hono {
   const app = new Hono();
+  const browserHost = options?.browserHost ? createBrowserHost(options.browserHost) : undefined;
+  if (browserHost) app.use("*", browserHost.guard);
+  const isAllowedOrigin = browserHost?.isAllowedOrigin ?? isAllowedPhoenixUiOrigin;
 
   app.use("/api/*", async (c, next) => {
     const origin = c.req.header("Origin") || "";
-    if (origin && !isAllowedPhoenixUiOrigin(origin)) {
+    if (origin && !isAllowedOrigin(origin)) {
       return c.json({ detail: "Origin is not allowed for the local Phoenix API" }, 403);
     }
     await next();
   });
   app.use("/api/*", cors({
-    origin: (origin) => isAllowedPhoenixUiOrigin(origin) ? origin : null,
+    origin: (origin) => isAllowedOrigin(origin) ? origin : null,
     allowHeaders: ["Content-Type"],
     allowMethods: ["GET", "HEAD", "PUT", "POST", "DELETE", "PATCH", "OPTIONS"],
     maxAge: 600,
@@ -30,11 +36,14 @@ export function createPhoenixServerApp(): Hono {
   app.route("/", createCaaApp());
   app.route("/api/caa/unit-tests", unitTestRoutes);
   app.route("/api/cad", cadRoutes);
+  app.route("/api/cad/drawing-batch", drawingBatchRoutes);
   app.route("/api/document-sync", documentSyncRoutes);
   app.route("/api/rename-tasks", renameTaskRoutes);
+  app.route("/api/batch-tasks", batchTaskRoutes);
   app.route("/api/drawing-research", drawingResearchRoutes);
   app.route("/api/workspace-recovery", workspaceRecoveryRoutes);
   app.route("/", shellRoutes);
+  browserHost?.mountRoutes(app);
 
   app.all("/api/*", (c) => c.json({
     error: "未找到 API 路由",

@@ -4,7 +4,7 @@
 export const TOOL_NAV_MODULE_IDS: readonly string[] = ["cad", "code"];
 
 /** 无工作空间领域限制的工具，不因 CAD/Code 模块开关而隐藏。 */
-export const SHARED_TOOL_PAGE_IDS: readonly string[] = ["audio_extract", "rename_tasks"];
+export const SHARED_TOOL_PAGE_IDS: readonly string[] = ["audio_extract", "rename_tasks", "batch_tasks"];
 
 export const NAV_MODULE_OPTIONS = [
   {

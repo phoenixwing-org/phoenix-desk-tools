@@ -1,9 +1,17 @@
 {
   "schemaVersion": 1,
   "currentDate": "2026-07-17",
-  "scanRoots": ["packages/catdlg-core/src", "server/src", "web-ui/src"],
+  "scanRoots": ["packages/catdlg-core/src", "shared", "server/src", "web-ui/src"],
   "exclude": ["\\.test\\.", "\\.spec\\.", "(?:^|/)dist/"],
   "pureEntrypoints": [
+    "shared/cad-companion/contracts.ts",
+    "shared/cad-companion/model.ts",
+    "shared/batch-tasks/contracts.ts",
+    "shared/batch-tasks/envelope.ts",
+    "shared/batch-tasks/next-protocol.ts",
+    "shared/cad-name-audit/model.ts",
+    "shared/cad-physical-properties/model.ts",
+    "server/src/features/batch-tasks/model.ts",
     "packages/catdlg-core/src/index.ts",
     "web-ui/src/models/assemblyTreeViewModel.ts",
     "web-ui/src/models/unitTestsViewModel.ts",

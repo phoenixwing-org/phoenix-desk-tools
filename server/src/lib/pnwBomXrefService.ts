@@ -14,7 +14,7 @@ import {
   type BomXrefIndexOptions,
 } from "./pnwBomXrefIndexEngine.js";
 import { patchFcstdReferenceLabels, type ObjectLabelPatch } from "./fcstdReferenceLabelService.js";
-import { buildHostObjectAssemblyTree, enrichAssemblyLabelPreview } from "./assemblyLabelPreview.js";
+import { buildHostObjectAssemblyTree, enrichAssemblyLabelPreview, type AssemblyLabelReadPorts } from "./assemblyLabelPreview.js";
 import { missingCadIndexFreshness, readCadIndexFreshness } from "./cadIndexFreshness.js";
 import { openCadSqliteReadDatabase } from "./cadSqliteReadLease.js";
 
@@ -273,7 +273,7 @@ export function loadAssemblyTreeFromXrefs(ws: string, hostRel: string, opts: { f
 }
 
 /** Share one read-only index snapshot across a batch of host previews. */
-export function createAssemblyTreeReader(ws: string, relativePath?: string) {
+export function createAssemblyTreeReader(ws: string, relativePath?: string, ports: AssemblyLabelReadPorts = {}) {
   let edges: any[] | null = null;
   let freshness = missingCadIndexFreshness();
   withReadDb(ws, db => {
@@ -286,9 +286,9 @@ export function createAssemblyTreeReader(ws: string, relativePath?: string) {
       return { host_repo_rel_path: hostKey, mode, node_count: 0, nodes: [], ...missingCadIndexFreshness() };
     }
     const tree = pnwBuildAssemblyTreeFromXrefs(edges, hostKey, Boolean(opts.full));
-    const objectTree = buildHostObjectAssemblyTree(ws, hostKey, tree.nodes);
+    const objectTree = buildHostObjectAssemblyTree(ws, hostKey, tree.nodes, ports);
     if (objectTree) return { host_repo_rel_path: hostKey, mode, ...objectTree, ...freshness };
-    enrichAssemblyLabelPreview(ws, hostKey, tree.nodes);
+    enrichAssemblyLabelPreview(ws, hostKey, tree.nodes, ports);
     return { host_repo_rel_path: hostKey, mode, ...tree, ...freshness };
   };
 }

@@ -1,3 +1,5 @@
+import {installPrivateNativeGateForTest} from "../../../test-support/native-gate.js";
+installPrivateNativeGateForTest();
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -6,9 +8,10 @@ import { spawn, type SpawnOptions } from "node:child_process";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { runtimeUserDataDir } from "../../lib/appRuntimePaths.js";
 import { resolveFreecadCommand } from "../../lib/freecadProcessSecurity.js";
+import { acquireDrawingExecution } from "../drawing-research/executionGate.js";
 import { GeometryConfigurationError, geometryConfigurationFailureMessage, geometryReadFailureMessage, geometryResultFailureMessage, readGeometryBatch, type GeometryInput } from "./geometryRunner.js";
 
-vi.mock("node:child_process", () => ({ spawn: vi.fn() }));
+vi.mock("node:child_process", () => {const mock=vi.fn();return {spawn:mock,default:{spawn:mock}};});
 vi.mock("../../lib/appRuntimePaths.js", () => ({ runtimeUserDataDir: vi.fn() }));
 vi.mock("../../lib/freecadProcessSecurity.js", async original => ({
   ...await original<typeof import("../../lib/freecadProcessSecurity.js")>(), resolveFreecadCommand: vi.fn(),
@@ -29,12 +32,12 @@ function progress(native: Native, row: unknown) { native.child.stdout.emit("data
 function nativeProcess(run: (native: Native) => void) {
   const launches: Native[] = [];
   vi.mocked(spawn).mockImplementation((...arguments_: unknown[]) => {
-    const child = Object.assign(new EventEmitter(), { stdout: new EventEmitter(), kill: vi.fn() });
+    const child = Object.assign(new EventEmitter(), { pid:43022, stdout: new EventEmitter(), kill: vi.fn() });
     child.kill.mockImplementation(() => { queueMicrotask(() => child.emit("close", null)); return true; });
     const options = arguments_[2] as SpawnOptions, args = arguments_[1] as string[];
     const job = JSON.parse(fs.readFileSync(path.join(options.cwd as string, "job.json"), "utf8"));
     const native = { child, command: arguments_[0] as string, args, options, script: fs.readFileSync(args.at(-1)!, "utf8"), job };
-    launches.push(native); queueMicrotask(() => run(native));
+    launches.push(native); queueMicrotask(() => {child.emit('spawn');run(native);});
     return child as unknown as ReturnType<typeof spawn>;
   });
   return launches;
@@ -68,6 +71,7 @@ it("gallery geometry runner reads one bounded batch in a single isolated command
   const native = launches[0], temporary = native.options.cwd as string;
   expect(native.command).toBe("synthetic-freecadcmd"); expect(native.args.slice(0, 4)).toEqual(["-u", path.join(temporary, "user.cfg"), "-s", path.join(temporary, "system.cfg")]);
   expect(native.options.env).toMatchObject({ QT_QPA_PLATFORM: "offscreen" });
+  expect(native.options.env).toMatchObject({ FREECAD_USER_HOME: path.join(temporary, "native-config"), FREECAD_USER_DATA: path.join(temporary, "native-data"), FREECAD_USER_TEMP: path.join(temporary, "native-temp") });
   expect(native.options.env).not.toHaveProperty("SYNTHETIC_API_TOKEN"); expect(native.options.env).not.toHaveProperty("NODE_OPTIONS");
   expect(native.script).toContain("doc.getObject(item['node'])"); expect(native.script).toContain("obj.Shape.BoundBox");
   for (const axis of ["XLength", "YLength", "ZLength"]) expect(native.script).toContain(`box.${axis}`);
@@ -75,6 +79,23 @@ it("gallery geometry runner reads one bounded batch in a single isolated command
   expect(native.script).not.toMatch(/recompute\s*\(|\.save(?:As)?\s*\(|ParamGet|saveParameter|FreeCADGui|Part\.getShape|Visibility|Diameter/);
   expect(fs.existsSync(temporary)).toBe(false); expect(native.child.kill).not.toHaveBeenCalled();
   for (let index = 0; index < items.length; index++) expect(fs.readFileSync(items[index].filename)).toEqual(original[index]);
+});
+
+it("replaces inherited FreeCAD user roots with owned existing private directories before spawn", async () => {
+  const item = input(workspace());
+  for (const key of ["FREECAD_USER_HOME", "FREECAD_USER_DATA", "FREECAD_USER_TEMP"]) vi.stubEnv(key, "/synthetic/never-read-user-profile");
+  nativeProcess(native => {
+    for (const key of ["FREECAD_USER_HOME", "FREECAD_USER_DATA", "FREECAD_USER_TEMP"]) {
+      const directory = native.options.env?.[key]!;
+      expect(path.dirname(directory)).toBe(native.options.cwd);
+      expect(fs.lstatSync(directory).isDirectory()).toBe(true);
+      expect(fs.lstatSync(directory).mode & 0o777).toBe(0o700);
+      expect(fs.readdirSync(directory)).toEqual([]);
+      expect(directory).not.toContain("never-read-user-profile");
+    }
+    const row = ready(item); report(native, [row]); progress(native, row); native.child.emit("close", 0);
+  });
+  const [row] = await readGeometryBatch([item]); expect(row.bounding_box).toEqual(ready(item).bounding_box);
 });
 
 it.each(["missing_node", "unsupported_node", "missing_shape", "empty_shape", "invalid_bounds", "read_failed"])("gallery geometry runner preserves explicit %s as null instead of guessing a different shape", async code => {
@@ -122,7 +143,7 @@ const invalidReports: Array<[string, Record<string, unknown>]> = [
 it.each(invalidReports)("gallery geometry runner rejects %s in streamed reports and terminates only its own child", async (_name, patch) => {
   const item = input(workspace()); const launches = nativeProcess(native => progress(native, { ...ready(item), ...patch }));
   await expect(readGeometryBatch([item])).rejects.toThrow(/边界盒/);
-  expect(launches[0].child.kill).toHaveBeenCalledWith("SIGKILL"); expect(fs.existsSync(launches[0].options.cwd as string)).toBe(false);
+  expect(launches[0].child.kill).toHaveBeenCalledWith("SIGTERM"); expect(fs.existsSync(launches[0].options.cwd as string)).toBe(false);
 });
 
 it("gallery geometry runner requires complete matching final JSON rather than trusting individual progress markers", async () => {
@@ -177,6 +198,79 @@ it("gallery geometry runner ends a stalled child at its overall deadline and lea
   const pending = expect(readGeometryBatch([item])).rejects.toThrow(/超过 2 分钟/);
   await vi.advanceTimersByTimeAsync(120_000); await pending;
   expect(launches[0].child.kill).toHaveBeenCalledTimes(1); expect(fs.existsSync(launches[0].options.cwd as string)).toBe(false); expect(vi.getTimerCount()).toBe(0);
+});
+
+it("does not launch or inspect installation preferences for a pre-cancelled read", async () => {
+  const signal = new AbortController(); signal.abort(); vi.mocked(runtimeUserDataDir).mockClear();
+  await expect(readGeometryBatch([], undefined, {signal:signal.signal})).rejects.toThrow(/未启动/);
+  expect(spawn).not.toHaveBeenCalled(); expect(runtimeUserDataDir).not.toHaveBeenCalled();
+});
+
+it("stops buffered progress after the first callback aborts, but retains ownership until actual close", async () => {
+  vi.useFakeTimers(); const root = workspace(), items = [input(root), input(root, 'parts/Second.FCStd')], controller = new AbortController();
+  const onItem = vi.fn(() => controller.abort());
+  const launches = nativeProcess(native => {
+    native.child.kill.mockReturnValue(false);
+    const rows = items.map(ready); report(native, rows);
+    native.child.stdout.emit('data', Buffer.from(rows.map(row => `${prefix}${JSON.stringify(row)}\n`).join('')));
+  });
+  let settled = false;
+  const running = readGeometryBatch(items, onItem, {signal:controller.signal}).finally(() => { settled = true; });
+  const rejected = expect(running).rejects.toThrow(/已等待自有进程关闭/);
+  await Promise.resolve(); await vi.advanceTimersByTimeAsync(2000);
+  const native = launches[0], folder = native.options.cwd as string;
+  expect(onItem).toHaveBeenCalledTimes(1); expect(onItem.mock.calls[0]).toEqual([expect.objectContaining({rel:items[0].rel})]);
+  expect(native.child.kill.mock.calls).toEqual([['SIGTERM'], ['SIGKILL']]);
+  expect(settled).toBe(false); expect(fs.existsSync(folder)).toBe(true);
+  expect(() => acquireDrawingExecution('buffered-progress-must-wait')).toThrow();
+  native.child.emit('exit', null, 'SIGKILL'); await Promise.resolve(); expect(settled).toBe(false);
+  native.child.emit('close', null, 'SIGKILL'); await rejected;
+  expect(onItem).toHaveBeenCalledTimes(1); expect(fs.existsSync(folder)).toBe(false); expect(vi.getTimerCount()).toBe(0);
+  const release = acquireDrawingExecution('after-buffered-progress-close'); release();
+});
+
+it("holds the CAD lease and temporary files after failed termination and even an exit event, until actual close", async () => {
+  vi.useFakeTimers(); const item = input(workspace()), signal = new AbortController();
+  const launches = nativeProcess(native => { native.child.kill.mockImplementation(() => { throw new Error('synthetic signal failure'); }); });
+  let settled = false;
+  const running = readGeometryBatch([item], undefined, {signal:signal.signal}).finally(() => { settled = true; });
+  const rejected = expect(running).rejects.toThrow(/已等待自有进程关闭/);
+  await Promise.resolve(); signal.abort(); await vi.advanceTimersByTimeAsync(5000);
+  const native = launches[0], folder = native.options.cwd as string;
+  expect(native.child.kill.mock.calls).toEqual([['SIGTERM'], ['SIGKILL']]);
+  expect(settled).toBe(false); expect(fs.existsSync(folder)).toBe(true);
+  expect(() => acquireDrawingExecution('another-typed-owner')).toThrow();
+  native.child.emit('exit', null, 'SIGTERM'); await Promise.resolve(); expect(settled).toBe(false);
+  native.child.emit('close', null, 'SIGTERM'); await rejected;
+  expect(fs.existsSync(folder)).toBe(false); expect(vi.getTimerCount()).toBe(0);
+  const release = acquireDrawingExecution('after-real-close'); release();
+});
+
+it("does not clean up on the deadline or kill grace if the owned child has not closed", async () => {
+  vi.useFakeTimers(); const item = input(workspace());
+  const launches = nativeProcess(native => { native.child.kill.mockReturnValue(false); });
+  let settled = false; const running = readGeometryBatch([item]).finally(() => { settled = true; });
+  const rejected = expect(running).rejects.toThrow(/超过 2 分钟/);
+  await vi.advanceTimersByTimeAsync(125000);
+  expect(settled).toBe(false); expect(fs.existsSync(launches[0].options.cwd as string)).toBe(true);
+  expect(() => acquireDrawingExecution('must-still-wait')).toThrow();
+  launches[0].child.emit('close', null, 'SIGKILL'); await rejected;
+  expect(fs.existsSync(launches[0].options.cwd as string)).toBe(false); expect(vi.getTimerCount()).toBe(0);
+});
+
+it("shares the existing same-process CAD execution gate without launching or stopping another owner", async () => {
+  const item = input(workspace()), release = acquireDrawingExecution('independent-drawing-owner');
+  try { await expect(readGeometryBatch([item])).rejects.toThrow(/已有原生 CAD 任务/); expect(spawn).not.toHaveBeenCalled(); }
+  finally { release(); }
+  nativeProcess(native => { const row = ready(item); report(native,[row]); progress(native,row); native.child.emit('close',0); });
+  await expect(readGeometryBatch([item])).resolves.toHaveLength(1);
+});
+
+it("also clears termination timers if a host emits close synchronously during the signal request", async () => {
+  vi.useFakeTimers(); const item = input(workspace()), signal = new AbortController();
+  nativeProcess(native => { native.child.kill.mockImplementation(() => { native.child.emit('close',null,'SIGTERM'); return true; }); });
+  const pending = expect(readGeometryBatch([item],undefined,{signal:signal.signal})).rejects.toThrow(/已等待自有进程关闭/);
+  await Promise.resolve(); signal.abort(); await pending; expect(vi.getTimerCount()).toBe(0);
 });
 
 it("gallery geometry runner reports missing or unsafe FreeCADCmd configuration without a native launch", async () => {

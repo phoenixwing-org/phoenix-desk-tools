@@ -1,0 +1,44 @@
+import type { ActionDescriptor, BatchRun, BatchTask, CurrentBatchPlan, LegacyBatchPlan, NativeBatchPlanV3 } from "../../../../shared/batch-tasks/contracts";
+import { compilePlanV2 } from "../../../../shared/batch-tasks/next-protocol";
+import { compileNativePreparedStepV3 } from "../../../../shared/batch-tasks/native-protocol";
+import { createNativeBatchPlanV3 } from "../../../../shared/batch-tasks/native-envelope";
+export const syntheticAction = (): ActionDescriptor => ({ key: "file.metadata", version: 1, title: "文件元数据", description: "只读文件", effects: ["read_file", "write_task_db"], phase: "collect", cancellable: true, scope: "file", source_read_only: true, cancellation: "cooperative", result_schema_version: 1, algorithm_version: "file-metadata-v1" });
+export const syntheticTask = (overrides: Partial<BatchTask> = {}): BatchTask => ({ id: "task-a", revision: 1, name: "独立合成任务", archived: false, created_at: "2035-01-01T00:00:00.000Z", updated_at: "2035-01-01T00:00:00.000Z", subjects: [{ kind: "file", rel: "samples/note.txt" }], actions: [{ instance_id: "action-a", key: "file.metadata", version: 1, params: {} }], ...overrides });
+export const syntheticLegacyPlan = (): LegacyBatchPlan => ({ id: "plan-a", task_id: "task-a", task_revision: 1, created_at: "2035-01-01T00:00:00.000Z", expires_at: "2099-01-01T00:00:00.000Z", status: "fresh", digest: "independent-digest", items: [{ id: "item-a", subject: { kind: "file", rel: "samples/note.txt" }, sha256: "a".repeat(64), bytes: 10 }], actions: syntheticTask().actions, steps: [{ id: "step-a", item_id: "item-a", action_instance_id: "action-a", applicable: true }], summary: { files: 1, actions: 1, executable: 1, excluded: 0 }, effects: ["read_file", "write_task_db"] });
+export function syntheticPlan(unavailable = false): CurrentBatchPlan {
+  const legacy = syntheticLegacyPlan(), descriptor = syntheticAction();
+  const source = unavailable ? { id: "source-a", kind: "file" as const, resource_id: "file-a", rel: "samples/note.txt", sha256: null, bytes: null, error: "未取得源文件指纹" } : { id: "source-a", kind: "file" as const, resource_id: "file-a", rel: "samples/note.txt", sha256: "a".repeat(64), bytes: 10 };
+  const prepared = compilePlanV2({ id: legacy.id, task_id: legacy.task_id, task_revision: legacy.task_revision, created_at: legacy.created_at, expires_at: legacy.expires_at,
+    items: [{ id: "item-a", subject: legacy.items[0].subject, source_id: "source-a", ...(unavailable ? { error: source.error } : {}) }], actions: legacy.actions,
+    descriptors: [{ key: descriptor.key, version: descriptor.version, scope: "file", effects: ['read_file','write_task_db'], source_read_only: true, cancellation: "cooperative", result_schema_version: 1, algorithm_version: descriptor.algorithm_version! }], sources: [source], resources: [{ id: "file-a", kind: "file", rel: "samples/note.txt", access: "read" }, { id: "ledger", kind: "task_db", key: "batch_tasks", access: "write" }],
+    steps: [{ id: "step-a", action_instance_id: "action-a", target: { scope: "file", item_id: "item-a" }, source_ids: ["source-a"], resource_ids: ["file-a", "ledger"], status: unavailable ? "blocked" : "ready", ...(unavailable ? { reason: "未取得源文件指纹" } : {}) }] });
+  return { ...legacy, protocol_version: 2, prepared, items: [{ ...legacy.items[0], source_id: "source-a", sha256: source.sha256, bytes: source.bytes, ...(unavailable ? { error: source.error } : {}) }], summary: { files: 1, actions: 1, executable: unavailable ? 0 : 1, excluded: unavailable ? 1 : 0 } };
+}
+export function syntheticMixedPlan(blocked = false): CurrentBatchPlan {
+  const single = syntheticPlan(), subjects = [{ kind: "cad_model" as const, rel: "samples/DEMO42.007P1-Bracket.FCStd" }, { kind: "cad_model" as const, rel: "samples/DEMO42.007P2-Bracket.FCStd" }];
+  const actions = [...single.actions, { instance_id: "compare", key: "synthetic.compare-cache", version: 2, params: {} }];
+  const cache = { id: "source-cache", kind: "cache" as const, resource_id: "cache", selector: "selected_geometry", schema_version: 1, algorithm_version: "cache-v1", ...(blocked ? { sha256: null, error: "缓存快照不可用" } : { sha256: "c".repeat(64) }) };
+  const prepared = compilePlanV2({ id: single.id, task_id: single.task_id, task_revision: single.task_revision, created_at: single.created_at, expires_at: single.expires_at,
+    items: subjects.map((subject, index) => ({ id: `item-${index}`, subject, source_id: `source-${index}` })), actions,
+    descriptors: [...single.prepared.descriptors, { key: "synthetic.compare-cache", version: 2, scope: "batch", effects: ["read_file", "read_cache", "write_task_db"], source_read_only: true, cancellation: "cooperative", result_schema_version: 3, algorithm_version: "frozen-compare-v2" }],
+    sources: [...subjects.map((subject, index) => ({ id: `source-${index}`, kind: "file" as const, resource_id: `file-${index}`, rel: subject.rel, bytes: 20, sha256: "a".repeat(64) })), cache],
+    resources: [...subjects.map((subject, index) => ({ id: `file-${index}`, kind: "file" as const, rel: subject.rel, access: "read" as const })), { id: "cache", kind: "cache", key: "workspace_cad_geometry", access: "read", lease: { mode: "host_read_only", temporary_coordination: true, ownership: "own_lock_only", reclaim: false } }, { id: "ledger", kind: "task_db", key: "batch_tasks", access: "write" }],
+    steps: [...subjects.map((_subject, index) => ({ id: `inspect-${index}`, action_instance_id: "action-a", target: { scope: "file" as const, item_id: `item-${index}` }, source_ids: [`source-${index}`], resource_ids: [`file-${index}`, "ledger"], status: "ready" as const })), { id: "compare-all", action_instance_id: "compare", target: { scope: "batch", item_ids: ["item-0", "item-1"] }, source_ids: ["source-0", "source-1", "source-cache"], resource_ids: ["file-0", "file-1", "cache", "ledger"], status: blocked ? "blocked" : "ready", ...(blocked ? { reason: "缓存快照不可用" } : {}) }] });
+  return { ...single, prepared, actions, effects: prepared.effects, items: prepared.items.map(item => ({ ...item, sha256: "a".repeat(64), bytes: 20 })), steps: [{ id: "inspect-0", scope: "file", item_id: "item-0", action_instance_id: "action-a", applicable: true }, { id: "inspect-1", scope: "file", item_id: "item-1", action_instance_id: "action-a", applicable: true }, { id: "compare-all", scope: "batch", item_ids: ["item-0", "item-1"], action_instance_id: "compare", applicable: !blocked, ...(blocked ? { reason: "缓存快照不可用" } : {}) }], summary: { files: 2, actions: 2, executable: blocked ? 2 : 3, excluded: blocked ? 1 : 0 } };
+}
+export const syntheticRun = (overrides: Partial<BatchRun> = {}): BatchRun => ({ id: "run-a", task_id: "task-a", task_revision: 1, task_name: "独立合成任务", plan_id: "plan-a", client_request_id: "request-a", status: "queued", created_at: "2035-01-01T00:00:00.000Z", cancel_requested: false, total: 1, completed: 0, failed: 0, ...overrides });
+
+/** Independent inert DTO claims only: no CAD/BRep geometry, engine file,
+ * cryptographic verification, Native result or execution authority is created. */
+export function syntheticNativePlan(): NativeBatchPlanV3 {
+  const claim = "a".repeat(64);
+  const step = compileNativePreparedStepV3({ step_id: "native-step", item_id: "native-item", subject: { kind: "file", rel: "samples/IndependentSaved.FCStd", node: "ExampleFeature" },
+    profile: { key: "freecad.saved-brep-snapshot", version: 1, measurement_profile: "saved_brep_snapshot", algorithm_version: "saved-brep-snapshot-native-bounds-v1", script_sha256: claim,
+      engine: { key: "freecadcmd", bytes: 100, sha256: claim, app_version: ["0", "0", "0"], occ_version: "synthetic" }, timeout_ms: 120000 }, profile_sha256: claim,
+    manifest: { schema_version: 1, algorithm_version: "single-feature-saved-manifest-v2", measurement_profile: "saved_brep_snapshot", source: { rel: "samples/IndependentSaved.FCStd", bytes: 100, sha256: claim }, document_xml: { bytes: 40, sha256: claim },
+      entity: { node: "ExampleFeature", type_id: "Part::Feature", shape_property: "Shape", shape_property_type: "Part::PropertyPartShape" },
+      shape: { basis: "serialized_shape_snapshot", member_path: "ExampleFeature.Shape.brp", bytes: 20, sha256: claim, crc32: "12345678", compression: "stored" },
+      dependencies: [], dependency_check: "strict_saved_shape_carrier_v1", dependency_scope: "saved_shape_carrier", engine_asset_dependencies: "not_attested",
+      material: { uuid_raw: "00000000-0000-0000-0000-000000000000", state: "nil", resolution_performed: false, density_kg_m3: null, mass_kg: null }, restored_document: { verified: false }, native_executed: false, manifest_sha256: claim } });
+  return createNativeBatchPlanV3({ protocol_version: 3, id: "native-plan", task_id: "task-a", task_revision: 1, created_at: "2035-01-01T00:00:00.000Z", expires_at: "2099-01-01T00:00:00.000Z", action_instance_id: "native-action", step }, claim);
+}

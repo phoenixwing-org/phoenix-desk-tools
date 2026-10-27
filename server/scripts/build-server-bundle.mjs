@@ -9,7 +9,9 @@ import {
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const serverRoot = path.resolve(scriptDir, "..");
 const repoRoot = path.resolve(serverRoot, "..");
-const outputDir = path.join(serverRoot, "dist-sidecar");
+if (process.argv.length > 3 || (process.argv[2] && process.argv[2] !== "--browser")) throw new Error("usage: build-server-bundle.mjs [--browser]");
+const browserProfile = process.argv[2] === "--browser";
+const outputDir = path.join(serverRoot, browserProfile ? "dist-browser" : "dist-sidecar");
 const outputFile = path.join(outputDir, "server.mjs");
 const wingContext = resolvePhoenixWingContext(repoRoot);
 
@@ -47,7 +49,7 @@ async function loadEsbuild() {
 fs.mkdirSync(outputDir, { recursive: true });
 const esbuild = await loadEsbuild();
 await esbuild.build({
-  entryPoints: [path.join(serverRoot, "src", "server.ts")],
+  entryPoints: [path.join(serverRoot, "src", browserProfile ? "browserServer.ts" : "server.ts")],
   outfile: outputFile,
   bundle: true,
   platform: "node",

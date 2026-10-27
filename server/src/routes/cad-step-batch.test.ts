@@ -1,7 +1,14 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { EventEmitter } from "node:events";
+import { spawn, type SpawnOptions } from "node:child_process";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("node:child_process", async original => {
+  const actual = await original<typeof import("node:child_process")>(); const spawn = vi.fn();
+  return { ...actual, spawn, default: { ...actual, spawn } };
+});
 
 const tempRoots: string[] = [];
 const originalHome = process.env.HOME;
@@ -33,17 +40,7 @@ function configurePrefs(home: string, workspace: string) {
 }
 
 function fakeRunner(root: string) {
-  return writeFile(
-    root,
-    "fake-route-runner.cjs",
-    [
-      'const fs = require("node:fs");',
-      'fs.mkdirSync(process.env.FCD_BATCH_OUT_DIR, { recursive: true });',
-      'process.stdout.write("EXAMPLE_API_KEY=unit-test-route-secret\\n");',
-      'process.stderr.write("Authorization: Bearer unit-test-route-bearer\\n");',
-      'process.stderr.write("[phoenix] OK=1 skip=0 fail=0 total=1\\n");',
-    ].join("\n"),
-  );
+  return writeFile(root, "fake-route-runner.py", "# inert fixture; no Native execution\n");
 }
 
 function restoreEnv(name: string, value: string | undefined) {
@@ -57,6 +54,7 @@ afterEach(() => {
   restoreEnv("PHOENIX_FREECAD_CMD", originalFreecadCmd);
   restoreEnv("PHOENIX_STEP_BATCH_RUNNER", originalRunner);
   vi.resetModules();
+  vi.mocked(spawn).mockReset();
   for (const root of tempRoots.splice(0)) {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -74,6 +72,28 @@ describe("cad STEP Batch routes", () => {
     process.env.PHOENIX_FREECAD_CMD = process.execPath;
     process.env.PHOENIX_STEP_BATCH_RUNNER = fakeRunner(workspace);
     vi.resetModules();
+    const gate = await import("../features/drawing-research/executionGate.js");
+    const scopeRoot = fs.realpathSync(makeTempRoot("cad-step-route-gate-"));
+    gate.configureDrawingExecutionBarrier(path.join(scopeRoot, "host-native"));
+    vi.mocked(spawn).mockImplementation((...args: unknown[]) => {
+      const parameters = args[1] as string[], options = args[2] as SpawnOptions;
+      expect(parameters.slice(0, 4).filter(value => value === "-u" || value === "-s")).toEqual(["-u", "-s"]);
+      const child = Object.assign(new EventEmitter(), { pid: 54091, stdout: new EventEmitter(), stderr: new EventEmitter(), kill: vi.fn() });
+      queueMicrotask(() => {
+        child.emit("spawn");
+        queueMicrotask(() => {
+          const folder = path.dirname(parameters.at(-1)!);
+          const owner = JSON.parse(fs.readFileSync(path.join(folder, "owner.json"), "utf8"));
+          expect(owner).toMatchObject({ pid: child.pid });
+          fs.writeFileSync(path.join(folder, "launch-result.json"), JSON.stringify({ version: 1, status: "completed", pid: child.pid, nonce: owner.nonce }));
+          fs.mkdirSync(options.env!.FCD_BATCH_OUT_DIR!, { recursive: true });
+          child.stdout.emit("data", Buffer.from("EXAMPLE_API_KEY=unit-test-route-secret\n"));
+          child.stderr.emit("data", Buffer.from("Authorization: Bearer unit-test-route-bearer\n[phoenix] OK=1 skip=0 fail=0 total=1\n"));
+          child.emit("close", 0, null);
+        });
+      });
+      return child as unknown as ReturnType<typeof spawn>;
+    });
     const { cadRoutes } = await import("./cad.js");
 
     const prefsRes = await cadRoutes.request("/step-batch/prefs");

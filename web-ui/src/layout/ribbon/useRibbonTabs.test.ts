@@ -23,7 +23,7 @@ function setup(page: string, enabled: string[] = ["cad", "code"], focus: ModuleS
 }
 
 describe("tools Ribbon presentation", () => {
-  it.each(["code_ignore", "caa_dialog_home", "caa_dialog", "audio_extract"])(
+  it.each(["code_ignore", "caa_dialog_home", "caa_dialog", "audio_extract", "batch_tasks"])(
     "selects tools for %s in a code-only workspace", (page) => {
       const ribbon = setup(page, ["code"]);
       expect(ribbon.visibleTabs.value.map((tab) => tab.id)).toEqual(["system", "cad"]);
@@ -49,7 +49,7 @@ describe("tools Ribbon presentation", () => {
     ribbon.currentPage.value = "audio_extract";
     await nextTick();
     expect(ribbon.activeTab.value).toBe("cad");
-    expect(ribbon.activeTabDef.value?.groups.flatMap((group) => group.items.map((item) => item.pageId))).toEqual(["rename_tasks", "audio_extract"]);
+    expect(ribbon.activeTabDef.value?.groups.flatMap((group) => group.items.map((item) => item.pageId))).toEqual(["batch_tasks", "rename_tasks", "audio_extract"]);
     expect(ribbon.enabledModules.value).toEqual([]);
     ribbon.currentPage.value = "git";
     await nextTick();

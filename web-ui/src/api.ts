@@ -92,6 +92,21 @@ export type BomPreview = {
   bom_readonly?: boolean;
   bom_source_rel?: string | null;
   bom_readonly_reason?: string | null;
+  /** Saved local AssemblyLink intent, not a single boolean for the ASSY file. */
+  assembly_links?: Array<{
+    object_name: string;
+    label: string;
+    target_object_name: string | null;
+    target_file: string | null;
+    rigid: boolean | null;
+  }>;
+  assembly_joint_issues?: Array<{
+    object_name: string;
+    label: string;
+    reference: "Reference1" | "Reference2";
+    reason: "empty_reference" | "missing_local_object";
+    target_object_name: string | null;
+  }>;
   /** 打开文件时附带：出向引用条数 + 直接入向宿主数及索引状态。 */
   xref_counts?: BomXrefCounts;
   /** 引用表尚未构建（不会在打开文件时自动全量重建） */

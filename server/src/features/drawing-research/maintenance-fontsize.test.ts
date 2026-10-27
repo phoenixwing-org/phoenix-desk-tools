@@ -1,0 +1,10 @@
+import {expect,it} from 'vitest';
+import {spawnSync} from 'node:child_process';
+import {maintenanceRunner,maintenanceVerificationRunner} from './maintenance-runner.js';
+
+const python=['python3','python'].find(command=>spawnSync(command,['-c','import ast'],{stdio:'ignore'}).status===0);
+it.skipIf(!python).each([maintenanceRunner,maintenanceVerificationRunner])('[%#] preserves native font height when only the font family was selected',source=>{
+ const script=`import ast,types,json\nsource=${JSON.stringify(source)}\ntree=ast.parse(source)\nfunctions=[node for node in tree.body if isinstance(node,ast.FunctionDef) and node.name in ('snapshot','metadata_snapshot','verify_exact_effects')]\nassert len(functions)==3\nns={'spec':{'patches':[{'kind':'view','object':'Dim','field':'Font','current':'Human font','proposed':'Approved font'}]}}\nexec(compile(ast.Module(body=functions,type_ignores=[]),'independent-font-height-contract','exec'),ns)\nfor names in [('Fontsize',),('FontSize',),('Fontsize','FontSize')]:\n vp=types.SimpleNamespace(PropertiesList=['Font',*names],Font='Human font',**{name:5.0 for name in names})\n obj=types.SimpleNamespace(Name='Dim',TypeId='TechDraw::DrawViewDimension',PropertiesList=['X'],X=12.0,Label='Human label',ViewObject=vp)\n doc=types.SimpleNamespace(Objects=[obj])\n before=ns['snapshot'](doc);meta=ns['metadata_snapshot'](doc)\n for name in names:\n  assert before[0]['view_'+name]=='5.0'\n  assert meta[0]['view_'+name]=='5.0'\n vp.Font='Approved font'\n ns['verify_exact_effects'](before,meta,doc)\n for name in names:\n  setattr(vp,name,6.0)\n  try:ns['verify_exact_effects'](before,meta,doc)\n  except RuntimeError:pass\n  else:raise AssertionError('Unselected font-height change accepted: '+name)\n  setattr(vp,name,5.0)\n ns['verify_exact_effects'](before,meta,doc)\nprint('native font-height preservation contracts passed')\n`;
+ const result=spawnSync(python!,['-c',script],{encoding:'utf8'});
+ expect(result.stderr).toBe('');expect(result.status).toBe(0);expect(result.stdout).toContain('native font-height preservation contracts passed');
+});

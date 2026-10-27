@@ -44,6 +44,15 @@ afterEach(() => {
 });
 
 describe("bomAttributeService", () => {
+  it("projects saved per-instance Rigid state without creating an index or changing the assembly", () => {
+    const root = makeTempRoot(), rel = "Independent.ASSY.FCStd", file = path.join(root, rel);
+    const xml = '<Document><Objects><Object name="Assembly" type="Assembly::AssemblyObject"/><Object name="Sub" type="Assembly::AssemblyLink"/></Objects><ObjectData><Object name="Assembly"><Properties><Property name="Group" type="App::PropertyLinkList"><LinkList count="1"><Link value="Sub"/></LinkList></Property></Properties></Object><Object name="Sub"><Properties><Property name="Label" type="App::PropertyString"><String value="Sub stage"/></Property><Property name="Rigid" type="App::PropertyBool"><Bool value="false"/></Property></Properties></Object></ObjectData></Document>';
+    fs.writeFileSync(file, zipSync({ "Document.xml": strToU8(xml) }));
+    const before = fs.readFileSync(file);
+    expect(loadBomPreview(root, rel).assembly_links).toEqual([{ object_name: "Sub", label: "Sub stage", rigid: false, target_file: null, target_object_name: null }]);
+    expect(fs.readFileSync(file)).toEqual(before);
+    expect(fs.existsSync(path.join(root, ".phoenix"))).toBe(false);
+  });
   it.each(["missing", "explicitly empty"])("uses the plain filename when the real root Label is %s, not stale index or internal name hints", labelState => {
     const root = makeTempRoot(); const rel = "测试盖板.FCStd"; const filename = path.join(root, rel);
     const label = labelState === "missing" ? "" : '<Property name="Label" type="App::PropertyString"><String value=""/></Property>';
