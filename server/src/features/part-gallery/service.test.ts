@@ -123,9 +123,11 @@ it("hides polluted catalog members and their host issues at read time, retaining
 });
 it("uses only visible cached catalog rows for dimensions and rejects excluded product scopes before native work", async () => {
   const r = root(); save(r, "Visible.FCStd", { number: "SYNTHETIC" }); await run(r, "Visible.FCStd");
+  const indexed = openGalleryDb(r)!;
+  indexed.exec("CREATE TABLE phoenix_cad_file_asset(repo_rel_path TEXT,asset_kind TEXT,file_status TEXT)");
+  indexed.run("INSERT INTO phoenix_cad_file_asset VALUES(?,?,?)", ["Visible.FCStd", "part", "present"]); indexed.close();
+  await run(r, "");
   const db = openGalleryDb(r)!, visible = cachedRow(db, "Visible.FCStd")!;
-  db.run("INSERT INTO desk_cad_gallery_scope(product,updated_at,issues_json) VALUES(?,?,?)", ["", "2026-01-01", "[]"]);
-  db.run("INSERT INTO desk_cad_gallery_member(product,rel) VALUES(?,?)", ["", visible.rel]);
   for (const rel of [".thumbnail-backups/Old.FCStd", "product/.history/Old.FCStd", "product/__pycache__/Old.FCStd"]) {
     saveRow(db, { ...visible, rel, status: "error", source_stamp: "" });
     db.run("INSERT INTO desk_cad_gallery_member(product,rel) VALUES(?,?)", ["", rel]);

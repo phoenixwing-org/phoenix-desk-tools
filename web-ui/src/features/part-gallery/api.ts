@@ -2,8 +2,8 @@ import { jsonFetch } from "../../api";
 import { apiUrl } from "../../utils/runtimeBridge";
 export type GalleryBoundingBox = { x_mm: number; y_mm: number; z_mm: number };
 export type GalleryRow = { rel: string; part_number: string; part_version: string; part_name: string; type_code: string; role: "part" | "assembly" | "drawing"; status: "ready" | "missing" | "error" | "stale"; width: number; height: number; image_hash: string; message: string; bounding_box?: GalleryBoundingBox | null; dimension_message?: string };
-export type GalleryResult = { product: string; updated_at: string; rows: GalleryRow[]; issues: Array<{ rel: string; message: string }> };
-export type GalleryJob = { id: string; product: string; state: "running" | "done" | "attention" | "failed"; completed: number; total: number; reused: number; current_rel: string; message: string };
+export type GalleryResult = { product: string; updated_at: string; rows: GalleryRow[]; issues: Array<{ rel: string; message: string }>; scope_pending?: boolean; removed_count?: number };
+export type GalleryJob = { id: string; product: string; state: "running" | "done" | "attention" | "failed" | "cancelled"; completed: number; total: number; reused: number; current_rel: string; message: string; removed_count?: number };
 const url = (workspace: string, action: string) => `/api/cad/part-gallery/${action}?workspace=${encodeURIComponent(workspace)}`;
 const post = <T>(workspace: string, action: string, body: unknown) => jsonFetch<T>(url(workspace, action), { method: "POST", body: JSON.stringify(body) });
 export const galleryOptions = (ws: string) => jsonFetch<{ products: string[]; indexed_files: number }>(url(ws, "options"));
@@ -11,6 +11,7 @@ export const loadGallery = (ws: string, product: string) => jsonFetch<GalleryRes
 export const startGalleryJob = (ws: string, product: string) => post<GalleryJob>(ws, "jobs", { product });
 export const startGeometryJob = (ws: string, product: string) => post<GalleryJob>(ws, "geometry-jobs", { product });
 export const galleryJob = (ws: string, id: string) => jsonFetch<GalleryJob>(url(ws, `jobs/${encodeURIComponent(id)}`));
+export const cancelGalleryJob = (ws: string, id: string) => post<GalleryJob>(ws, `jobs/${encodeURIComponent(id)}/cancel`, {});
 export const thumbnailUrl = (ws: string, row: GalleryRow) => apiUrl(`${url(ws, "thumbnail")}&rel=${encodeURIComponent(row.rel)}&v=${row.image_hash}`);
 export type GalleryDisplayOptions = { showCategory?: boolean; showDimensions?: boolean; showPartNumber?: boolean; showFilenames?: boolean };
 export const galleryDocument = (ws: string, product: string, rels: string[], options: GalleryDisplayOptions = {}) => post<{ html: string }>(ws, "document", { product, rels, show_category: options.showCategory !== false, show_dimensions: options.showDimensions !== false, show_part_number: options.showPartNumber !== false, show_filenames: options.showFilenames === true });

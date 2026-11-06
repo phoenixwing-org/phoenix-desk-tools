@@ -8,6 +8,7 @@ import { documentSyncRoutes } from "./features/document-sync/routes.js";
 import { drawingResearchRoutes } from "./features/drawing-research/routes.js";
 import { renameTaskRoutes } from "./features/batch-rename/routes.js";
 import { batchTaskRoutes } from "./features/batch-tasks/routes.js";
+import { freecadMcpRoutes } from "./features/freecad-mcp/routes.js";
 import { workspaceRecoveryRoutes } from "./features/workspace-recovery/routes.js";
 import { drawingBatchRoutes } from "./features/drawing-batch/routes.js";
 import { isAllowedPhoenixUiOrigin } from "./lib/localApiOrigin.js";
@@ -40,6 +41,7 @@ export function createPhoenixServerApp(options?: { browserHost?: BrowserHostOpti
   app.route("/api/document-sync", documentSyncRoutes);
   app.route("/api/rename-tasks", renameTaskRoutes);
   app.route("/api/batch-tasks", batchTaskRoutes);
+  app.route("/api/freecad-mcp", freecadMcpRoutes);
   app.route("/api/drawing-research", drawingResearchRoutes);
   app.route("/api/workspace-recovery", workspaceRecoveryRoutes);
   app.route("/", shellRoutes);

@@ -6,7 +6,8 @@ import { createAdaptorServer } from "@hono/node-server";
 import { createPhoenixServerApp } from "./serverApp.js";
 import { acquireDeskToolsInstanceLease, registerDeskToolsRuntime } from "./lib/deskToolsRegistration.js";
 import { setShellShutdownHandler } from "./routes/shell.js";
-import { closeBatchTaskServices } from "./features/batch-tasks/service.js";
+import { beginBatchTaskShutdown, closeBatchTaskServices } from "./features/batch-tasks/service.js";
+import { closeFreecadHostServices } from "./features/freecad-mcp/worker-host.js";
 
 const state = process.env.PHOENIX_DESK_BROWSER_STATE_DIR || "";
 const webRoot = process.env.PHOENIX_WEB_ROOT || "";
@@ -57,7 +58,9 @@ try {
 function shutdown() {
   if (stopping) return;
   stopping = true;
-  void closeBatchTaskServices().catch(() => undefined).finally(() => server.close(() => { dispose(); process.exitCode = 0; }));
+  beginBatchTaskShutdown();
+  void closeFreecadHostServices(closeBatchTaskServices).then(() => server.close(() => { dispose(); process.exitCode = 0; }))
+    .catch(() => console.error('[native] 自有执行资源尚未确认关闭；保留服务等待，不退出、不清理或切换持久门禁'));
 }
 process.once("SIGINT", shutdown);
 process.once("SIGTERM", shutdown);

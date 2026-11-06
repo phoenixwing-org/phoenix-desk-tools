@@ -1,4 +1,5 @@
 import type { Component } from "vue";
+import { FREECAD_MCP_MANAGE_ACTION } from "../../features/freecad-mcp/navigation";
 import {
   Box,
   Connection,
@@ -22,6 +23,7 @@ import {
 
 /** pageId → Element Plus 图标（Ribbon 工具按钮） */
 export const RIBBON_PAGE_ICONS: Record<string, Component> = {
+  [FREECAD_MCP_MANAGE_ACTION]: Connection,
   batch_tasks: Operation,
   home: HomeFilled,
   audio_extract: Headset,

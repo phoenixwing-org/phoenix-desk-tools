@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { jsonFetch } from "../../api";
-import { galleryDocument } from "./api";
+import { cancelGalleryJob, galleryDocument } from "./api";
 
 vi.mock("../../api", () => ({ jsonFetch: vi.fn() }));
 vi.mock("../../utils/runtimeBridge", () => ({ apiUrl: (value: string) => value }));
@@ -11,6 +11,13 @@ beforeEach(() => {
 });
 
 describe("gallery print display options", () => {
+  it("cancels only the exact workspace cache job with an empty body", async () => {
+    await cancelGalleryJob("synthetic workspace", "cache/job");
+    expect(jsonFetch).toHaveBeenCalledWith(
+      "/api/cad/part-gallery/jobs/cache%2Fjob/cancel?workspace=synthetic%20workspace",
+      { method: "POST", body: "{}" },
+    );
+  });
   it("defaults to category, dimensions and part number, but no filename", async () => {
     await galleryDocument("synthetic workspace", "Example.ASSY.FCStd", ["Example.FCStd"]);
     expect(jsonFetch).toHaveBeenCalledWith(

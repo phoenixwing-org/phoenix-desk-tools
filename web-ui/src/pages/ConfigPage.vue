@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onDeactivated, onMounted, onUnmounted, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 
 import { pnwPromptChoice } from "phoenix-wing";
@@ -20,6 +20,8 @@ import { useUiPrefsStore } from "../stores/uiPrefs";
 import { apiOrigin, apiUrl, isTauriRuntime, runtimeInfo } from "../utils/runtimeBridge";
 
 import SideDockPrefsPanel from "../components/SideDockPrefsPanel.vue";
+import FreecadMcpManagerDialog from "../features/freecad-mcp/FreecadMcpManagerDialog.vue";
+import { useFreecadMcpManager } from "../features/freecad-mcp/useFreecadMcpManager";
 import {
   EXPAND_ICON_SIZE_MAX,
   EXPAND_ICON_SIZE_MIN,
@@ -40,6 +42,19 @@ const shell = useAppShell();
 const { picking: pickingWorkspace, pickAndOpenWorkspace, workspaceSwitchBlocked } =
   useWorkspaceDirectoryPicker();
 const { startShellTour } = useShellTour(shell);
+const freecadMcp = useFreecadMcpManager();
+onDeactivated(() => freecadMcp.close());
+watch(freecadMcp.error, error => {
+  if (error) shell.appendLog(`[FreeCAD MCP] ${error}`, { source: "config", open: true });
+});
+watch(() => props.workbenchTabId ? shell.getTab(props.workbenchTabId)?.payload : undefined, () => {
+  if (!props.workbenchTabId) return;
+  const payload = shell.getTab(props.workbenchTabId)?.payload;
+  if (payload?.config?.manageFreecadMcp) {
+    shell.consumeTabPayload(props.workbenchTabId);
+    void freecadMcp.open();
+  }
+}, { immediate: true });
 
 const repoInput = ref("");
 const fcInput = ref("");
@@ -389,6 +404,7 @@ usePagePrimaryContribution("config", props.workbenchTabId, {
         { id: "runtime", kind: "readonly", label: "运行方式", value: desktopRuntime ? "桌面" : "Web" },
         { id: "server", kind: "readonly", label: "本地服务", value: computed(() => webRunning.value ? "在线" : "离线") },
         { id: "service-url", kind: "readonly", label: "服务地址", value: webUrl, mono: true },
+        { id: "freecad-mcp", kind: "readonly", label: "FreeCAD MCP", value: freecadMcp.summary },
       ],
       actions: [
         {
@@ -398,6 +414,7 @@ usePagePrimaryContribution("config", props.workbenchTabId, {
           run: fillDefaultFreecad,
         },
         { id: "refresh-server", label: "刷新服务状态", run: refreshWebStatus },
+        { id: "freecad-mcp-manage", label: "MCP 安装与连接…", run: freecadMcp.open },
         { id: "cad-index", label: "CAD 索引", run: showCadIndex },
         { id: "tour", label: "界面指引", run: startShellTour },
       ],
@@ -414,7 +431,9 @@ const navItems = () =>
 <template>
   <PageLayout title="配置" class="desk-page-layout" :body-inset="false">
     <template #header>
-      <PageHeader title="配置" />
+      <PageHeader title="配置">
+        <template #right><el-button @click="freecadMcp.open">FreeCAD MCP 管理…</el-button></template>
+      </PageHeader>
     </template>
     <PageMainBlock class="config-page">
       <section class="section" data-tour-page-config-workspace>
@@ -447,6 +466,11 @@ const navItems = () =>
           <el-button v-if="defaultFreecadDir" title="填入本机常用安装路径" @click="fillDefaultFreecad">
             默认位置
           </el-button>
+        </div>
+
+        <div class="freecad-mcp-summary">
+          <div><strong>MCP 安装与连接</strong><p class="hint">{{ freecadMcp.summary.value }}</p></div>
+          <el-button @click="freecadMcp.open">管理…</el-button>
         </div>
 
         <div class="btn-row">
@@ -580,6 +604,7 @@ const navItems = () =>
         {{ launcher?.launcher_config_path ?? appConfig?.launcher_config_path }}。
       </p>
     </PageMainBlock>
+    <FreecadMcpManagerDialog :manager="freecadMcp" />
   </PageLayout>
 </template>
 
@@ -599,6 +624,10 @@ const navItems = () =>
   margin: 0 0 8px;
   font-size: 1rem;
 }
+
+.freecad-mcp-summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; }
+.freecad-mcp-summary strong { font-size: 0.85rem; }
+.freecad-mcp-summary .hint { margin: 3px 0 0; }
 
 .field-label {
   display: block;

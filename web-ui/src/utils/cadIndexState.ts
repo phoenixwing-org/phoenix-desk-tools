@@ -30,7 +30,16 @@ export function cadIndexReadStateWarning(state?: CadIndexReadState | null): stri
     return "索引尚未完整建立或最近扫描未完成，请在「CAD 索引」检查并更新。显示的数量不能作为完整 BOM 结果。";
   }
   if (state.index_stale || state.bom_index_stale || state.index_state === "stale") {
+    if (state.index_reason === "partial_refresh") {
+      return "如刚修正过链接或调整过装配，请在「CAD 索引」更新索引后，再核对递归 BOM 数量。本页仍可继续查看引用关系。";
+    }
     return "文件或引用已变化，递归 BOM 快照待更新。下方为现有引用投影；请在「CAD 索引」完整更新后再核对 BOM 数量。";
   }
   return "";
+}
+
+/** A local refresh is not proof of a new file error. Keep BOM gating intact. */
+export function cadIndexReadStateNoticeTone(state?: CadIndexReadState | null): "info" | "warn" {
+  return state?.index_reason === "partial_refresh" && !state.index_pending && !state.bom_index_pending
+    && state.index_state !== "missing" && state.index_state !== "incomplete" ? "info" : "warn";
 }

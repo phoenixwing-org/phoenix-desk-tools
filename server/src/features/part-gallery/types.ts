@@ -7,5 +7,5 @@ export type GalleryRow = {
   dimension_message?: string;
 };
 export type GalleryIssue = { rel: string; message: string };
-export type GalleryResult = { product: string; updated_at: string; rows: GalleryRow[]; issues: GalleryIssue[] };
-export type GalleryJob = { id: string; product: string; state: "running" | "done" | "attention" | "failed"; completed: number; total: number; reused: number; current_rel: string; message: string };
+export type GalleryResult = { product: string; updated_at: string; rows: GalleryRow[]; issues: GalleryIssue[]; scope_pending?: boolean; removed_count?: number };
+export type GalleryJob = { id: string; product: string; state: "running" | "done" | "attention" | "failed" | "cancelled"; completed: number; total: number; reused: number; current_rel: string; message: string; removed_count?: number };

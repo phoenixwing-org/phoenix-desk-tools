@@ -206,7 +206,9 @@ export function createWorkbench(
     const tab = tabs.value[idx];
     const api = getPageSession(tabId);
     const dirty = api?.isDirty() ?? tab.dirty;
-    if (dirty) {
+    if (api?.requestClose) {
+      if (!await api.requestClose()) return false;
+    } else if (dirty) {
       const choice = await confirmDirtyTabClose(tab.title, Boolean(api?.flush));
       if (choice === "cancel") return false;
       if (choice === "flush" && api?.flush) {
@@ -215,9 +217,12 @@ export function createWorkbench(
         tab.dirty = false;
       }
     }
-    tabs.value.splice(idx, 1);
+    // A page-owned modal/save may outlive another close or a context change.
+    const closingIndex = tabs.value.indexOf(tab);
+    if (closingIndex < 0 || getPageSession(tabId) !== api || api?.isBusy?.()) return false;
+    tabs.value.splice(closingIndex, 1);
     if (activeTabId.value === tabId) {
-      const next = tabs.value[idx] ?? tabs.value[idx - 1] ?? tabs.value[0];
+      const next = tabs.value[closingIndex] ?? tabs.value[closingIndex - 1] ?? tabs.value[0];
       activeTabId.value = next?.id ?? "";
     }
     if (!tabs.value.length) {

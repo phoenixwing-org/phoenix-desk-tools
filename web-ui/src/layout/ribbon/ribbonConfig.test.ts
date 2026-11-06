@@ -41,6 +41,7 @@ describe("Ribbon navigation contract", () => {
       "git",
       "test_fixtures",
       "unit_tests",
+      "config.freecad-mcp.manage",
     ]);
     expect(pages.cad).toEqual([
       "batch_tasks",

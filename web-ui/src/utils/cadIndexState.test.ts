@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { cadIndexReadStateLabel, cadIndexReadStateWarning, xrefCountsFromPayload } from "./cadIndexState";
+import { cadIndexReadStateLabel, cadIndexReadStateNoticeTone, cadIndexReadStateWarning, xrefCountsFromPayload } from "./cadIndexState";
 
 it("does not describe absent or legacy status as verified freshness", () => {
   expect(cadIndexReadStateLabel()).toBe("未检查");
@@ -27,4 +27,14 @@ it("keeps pending and partial-refresh stale visibly separate from ready counts",
   expect(cadIndexReadStateWarning({ index_state: "ready", bom_index_pending: true })).toContain("完整 BOM");
   expect(cadIndexReadStateLabel({ index_state: "ready" })).toBe("已有索引");
   expect(cadIndexReadStateWarning({ index_state: "ready" })).toBe("");
+});
+
+it("uses a neutral conditional reminder for a partial refresh without declaring the BOM ready", () => {
+  const state = { index_state: "stale" as const, index_stale: true, index_reason: "partial_refresh", bom_index_state: "stale" as const, bom_index_stale: true };
+  expect(cadIndexReadStateNoticeTone(state)).toBe("info");
+  expect(cadIndexReadStateWarning(state)).toContain("如刚修正过链接或调整过装配");
+  expect(cadIndexReadStateWarning(state)).not.toContain("文件或引用已变化");
+  expect(cadIndexReadStateLabel(state)).toBe("递归 BOM 待更新");
+  expect(cadIndexReadStateNoticeTone({ ...state, index_pending: true, index_state: "incomplete" })).toBe("warn");
+  expect(cadIndexReadStateNoticeTone({ ...state, index_reason: "file_changed" })).toBe("warn");
 });

@@ -48,6 +48,10 @@ export function openGalleryDb(root: string, create = false): PnwDbAdapter | null
     CREATE TABLE IF NOT EXISTS desk_cad_thumbnail_archive (output_rel TEXT PRIMARY KEY, source_rel TEXT NOT NULL, image_hash TEXT NOT NULL, created_at TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS desk_cad_thumbnail_archive_source ON desk_cad_thumbnail_archive(source_rel,image_hash);
   `);
+  if (create && !db.all<{ name: string }>("PRAGMA table_info(desk_cad_gallery_scope)").some(column => column.name === "sources_json")) {
+    // Scope provenance must not borrow the mutable, globally shared thumbnail row.
+    db.exec("ALTER TABLE desk_cad_gallery_scope ADD COLUMN sources_json TEXT NOT NULL DEFAULT ''");
+  }
   return db;
 }
 export function decodeRow(row: any): GalleryRow {

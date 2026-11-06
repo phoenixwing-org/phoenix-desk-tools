@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
+import { pnwAnalyzeCadIndexDocumentXml } from "@phoenix-wing/cad-core";
 import { readFcstdDocumentXml } from "./fcstdDocumentXmlService.js";
 import { fcstdLinkInstances, fcstdXmlObjects, objectString, xmlAttribute } from "./fcstdLinkIdentity.js";
 
@@ -17,6 +18,7 @@ export type AssemblyLabelReadPorts = { readDocumentXml?: (filename: string) => s
 export function enrichAssemblyLabelPreview(workspace: string, currentHost: string, nodes: TreeNode[], ports: AssemblyLabelReadPorts = {}): void {
   const root = fs.realpathSync(workspace);
   const documents = new Map<string, ReturnType<typeof fcstdXmlObjects> | null>();
+  const validDocuments = new Map<string, boolean>();
   const xmls = new Map<string, string>();
   const inside = (filename: string): string | null => {
     try {
@@ -30,7 +32,11 @@ export function enrichAssemblyLabelPreview(workspace: string, currentHost: strin
     if (!documents.has(safe)) {
       const xml = (ports.readDocumentXml ?? readFcstdDocumentXml)(safe);
       documents.set(safe, xml ? fcstdXmlObjects(xml) : null);
-      if (xml) xmls.set(safe, xml);
+      if (xml) {
+        xmls.set(safe, xml);
+        try { pnwAnalyzeCadIndexDocumentXml(xml); validDocuments.set(safe, true); }
+        catch { validDocuments.set(safe, false); }
+      }
     }
     return documents.get(safe) ?? null;
   };
@@ -41,16 +47,20 @@ export function enrichAssemblyLabelPreview(workspace: string, currentHost: strin
     const identity = `${safe}\0${objectName}`;
     if (seen.has(identity)) return null;
     const objects = read(safe)?.filter(object => object.name === objectName);
-    if (objects?.length !== 1) return null;
+    if (objects?.length !== 1 || !validDocuments.get(safe)) return null;
     const object = objects[0];
     // Follow reference projections to the actual part node, not the enclosing
     // file's root label. This also identifies repeated instances of one part.
     const link = object.properties.get("LinkedObject");
-    const tag = link?.content.match(/<XLink\b[^>]*>/)?.[0];
-    if (tag) {
+    if (link) {
+      const tags = [...link.content.matchAll(/<XLink\b[^>]*>/g)];
+      if (link.type !== "App::PropertyXLink" || tags.length !== 1) return null;
+      const tag = tags[0][0];
       const file = xmlAttribute(tag, "file"), name = xmlAttribute(tag, "name");
-      if (name) return targetDisplay(file ? path.resolve(path.dirname(safe), file.replace(/\\/g, "/")) : safe, name, new Set(seen).add(identity));
+      if (!name) return null;
+      return targetDisplay(file ? path.resolve(path.dirname(safe), file.replace(/\\/g, "/")) : safe, name, new Set(seen).add(identity));
     }
+    if (/<XLink\b/.test(object.properties.get("")?.content ?? "")) return null;
     const label = objectString(object, "Label").trim();
     return label ? { label, identity } : null;
   }
@@ -58,6 +68,7 @@ export function enrichAssemblyLabelPreview(workspace: string, currentHost: strin
   const hostPlans = new Map<string, Array<ReturnType<typeof fcstdLinkInstances>[number] & {
     rule_label: string; rule_error: string; parent_object_name: string; ordinal: number; identity: string; document_hash: string;
   }>>();
+  const hostChecksComplete = new Map<string, boolean>();
   const planHost = (host: string) => {
     if (hostPlans.has(host)) return hostPlans.get(host)!;
     const hostPath = inside(fullPath(host));
@@ -91,6 +102,34 @@ export function enrichAssemblyLabelPreview(workspace: string, currentHost: strin
         instance.rule_label += `.${String(index + 1).padStart(3, "0")}`;
       });
     }
+    // A skipped/unreadable sibling may resolve to this same part and change its
+    // numbering. Such a host cannot prove a label mismatch, even if one of its
+    // other instances has a plausible rule. Never strip a numeric suffix.
+    const primaryLinkCount = (objects ?? []).reduce((count, object) => {
+      const linked = object.properties.get("LinkedObject"), bare = object.properties.get("");
+      return count + (linked ? Math.max(1, [...linked.content.matchAll(/<XLink\b[^>]*>/g)].length) : 0)
+        + (bare ? [...bare.content.matchAll(/<XLink\b[^>]*>/g)].length : 0);
+    }, 0);
+    const names = new Set((objects ?? []).map(object => object.name));
+    let structureComplete = [...parents].every(([name, owners]) => names.has(name) && owners.length === 1);
+    // Incomplete or cyclic Group ownership cannot prove sibling numbering.
+    const degrees = new Map([...names].map(name => [name, 0]));
+    const children = new Map<string, string[]>();
+    for (const [name, owners] of parents) for (const owner of owners) {
+      degrees.set(name, (degrees.get(name) ?? 0) + 1);
+      children.set(owner.parent, [...(children.get(owner.parent) ?? []), name]);
+    }
+    const queue = [...degrees].filter(([, degree]) => !degree).map(([name]) => name);
+    for (let i = 0; i < queue.length; i++) for (const child of children.get(queue[i]) ?? []) {
+      degrees.set(child, degrees.get(child)! - 1);
+      if (degrees.get(child) === 0) queue.push(child);
+    }
+    structureComplete &&= queue.length === names.size;
+    hostChecksComplete.set(host, Boolean(hostPath && validDocuments.get(hostPath) && objects
+      && names.size === objects.length && structureComplete
+      && primaryLinkCount === plan.length && plan.length > 0
+      && new Set(plan.map(instance => instance.host_object_name)).size === plan.length
+      && plan.every(instance => !instance.rule_error && instance.rule_label && instance.target_object_name)));
     hostPlans.set(host, plan);
     return plan;
   };
@@ -99,6 +138,7 @@ export function enrichAssemblyLabelPreview(workspace: string, currentHost: strin
       const attrs = new Set([node.xlink_file_attr, ...(node.xref_instances ?? []).map(instance => instance.xlink_file_attr)]);
       const instances = planHost(node.host_repo_rel).filter(instance => attrs.has(instance.xlink_file_attr)
         && (!node.host_object_name || node.host_object_name === instance.host_object_name));
+      node.label_check_complete = Boolean(hostChecksComplete.get(node.host_repo_rel) && instances.length);
       node.label_editable = fullPath(node.host_repo_rel) === fullPath(currentHost) && node.resolve_status === "resolved" && instances.length > 0
         && instances.every(instance => !instance.rule_error);
       node.label_edit_reason = node.label_editable ? "" : fullPath(node.host_repo_rel) !== fullPath(currentHost)

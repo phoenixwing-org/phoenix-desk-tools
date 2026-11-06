@@ -7,7 +7,7 @@ import {
 } from "@phoenix-wing/cad-core";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { reconcileFcstdPropertyCounts } from "./fcstdPropertyCounts.js";
-import { xmlAttribute } from "./fcstdLinkIdentity.js";
+import { isFcstdObjectName, xmlAttribute } from "./fcstdLinkIdentity.js";
 import { fcstdBomSelectionXml } from "./fcstdBomSelection.js";
 
 export type FcstdEmbeddedBomWriteResult = {
@@ -36,8 +36,7 @@ function objectBlock(xml: string, objectName: string): { start: number; text: st
   const objectPattern = /<Object\b([^>]*?)(?<!\/)>([\s\S]*?)<\/Object>/gi;
   for (const match of (data?.[1] ?? semantic).matchAll(objectPattern)) {
     if (match.index == null) continue;
-    const nameMatch = /\bname\s*=\s*(["'])([\s\S]*?)\1/i.exec(match[1]);
-    if (nameMatch?.[2] === objectName) {
+    if (xmlAttribute(match[1], "name") === objectName) {
       const start = offset + match.index;
       return { start, text: xml.slice(start, start + match[0].length) };
     }
@@ -214,7 +213,7 @@ export async function readFcstdEmbeddedBomFieldsAsync(
 export function patchFcstdEmbeddedBomDocumentXml(originalXml: string, fields: Partial<PnwCadEmbeddedBomFields>) {
   const selection = fcstdBomSelectionXml(originalXml);
   const target = pnwPatchEmbeddedBomFieldsInDocumentXml(selection.xml, {});
-  if (!target || !/^[A-Za-z_]\w*$/.test(target.objectName)) throw new Error("未找到可写的 BOM 根对象");
+  if (!target || !isFcstdObjectName(target.objectName)) throw new Error("未找到可写的 BOM 根对象");
   const originalBlock = objectBlock(originalXml, target.objectName);
   if (!originalBlock) throw new Error("根对象属性容器不可读，未改写文件");
   // Keep comments/CDATA byte-for-byte without letting example Property/Object
@@ -248,7 +247,7 @@ export function patchFcstdEmbeddedBomDocumentXml(originalXml: string, fields: Pa
  * arbitrary dependencies or general links; Wing still selects the write target. */
 function batchImportedBaseSources(xml: string, selectedName: string): Set<string> {
   const semanticXml = xml.replace(/<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>/g, "");
-  const attr = (tag: string, key: string) => new RegExp(`\\b${key}\\s*=\\s*(["'])(.*?)\\1`).exec(tag)?.[2] || "";
+  const attr = xmlAttribute;
   const types = new Map<string, string>();
   const declarations = /<Objects\b[^>]*>([\s\S]*?)<\/Objects>/i.exec(semanticXml)?.[1] || "";
   for (const [tag] of declarations.matchAll(/<Object\b[^>]*>/g)) types.set(attr(tag, "name"), attr(tag, "type"));
@@ -330,10 +329,10 @@ export function inspectFcstdBatchTarget(xml: string) {
   const root = pnwPatchEmbeddedBomFieldsInDocumentXml(selection.xml, {});
   const snapshot = extractFcstdEmbeddedBomSnapshot(xml);
   const current = snapshot.fields;
-  if (!root || !current || !/^[A-Za-z_][\w]*$/.test(root.objectName)) throw new Error("没有明确可写的根对象，请在文件详情检查");
+  if (!root || !current || !isFcstdObjectName(root.objectName)) throw new Error("没有明确可写的根对象，请在文件详情检查");
   const excluded = batchImportedBaseSources(xml, root.objectName); excluded.add(root.objectName);
   const withoutRootType = selectionXml.replace(/<Object\b[^>]*>/g, tag => {
-    const name = /\bname\s*=\s*(["'])(.*?)\1/.exec(tag)?.[2];
+    const name = xmlAttribute(tag, "name");
     // The document's unique native assembly is the explicit write target.
     // Sibling Bodies remain untouched; this is not an ownership inference.
     if (selection.nativeAssembly && /\btype\s*=\s*(["'])PartDesign::Body\1/.test(tag)) return tag.replace(/\btype\s*=\s*(["'])[\s\S]*?\1/, 'type="App::Feature"');

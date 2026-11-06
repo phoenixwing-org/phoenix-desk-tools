@@ -10,6 +10,8 @@ import FileOverviewPanel from "../components/file-detail/FileOverviewPanel.vue";
 import FileAttributesPanel from "../components/file-detail/FileAttributesPanel.vue";
 import FileXrefPanel from "../components/file-detail/FileXrefPanel.vue";
 import FileAssemblyPanel from "../components/file-detail/FileAssemblyPanel.vue";
+import AssemblyMaintenanceDialog from "../features/assembly-maintenance/AssemblyMaintenanceDialog.vue";
+import { normalizeAssemblyUpdateFilePath } from "../features/assembly-maintenance/updateController";
 import CadObjectInfoPanel from "../features/cad-object-info/CadObjectInfoPanel.vue";
 import { cadIndexReadStateLabel } from "../utils/cadIndexState";
 import { assemblyRigidPrimary, assemblyJointIssueText } from "../models/assemblyRigidPrimary";
@@ -68,6 +70,38 @@ const xrefCacheByRel = ref<Record<string, import("../api").FileDetailXrefsPayloa
 const assemblyCacheByKey = ref<Record<string, import("../api").AssemblyTreeNode[]>>({});
 const assemblyLabelEdits = ref(false);
 const detailOperations = ref<Record<string, boolean>>({});
+const showAssemblyMaintenanceDialog = ref(false);
+const hasAssemblyTools = computed(() => !!preview.value?.is_fcstd && !preview.value.bom_readonly
+  && !preview.value.document_kinds?.drawing
+  && (!!preview.value.document_kinds?.assembly || !!preview.value.assembly_links?.length));
+const assemblyToolsDisabled = computed(() => !hasAssemblyTools.value || loading.value
+  || showRenameDialog.value || hasUnsavedEdits() || Object.values(detailOperations.value).some(Boolean));
+function openAssemblyMaintenance() {
+  if (assemblyToolsDisabled.value) return;
+  if (props.workbenchTabId) shell.keepTab(props.workbenchTabId);
+  showAssemblyMaintenanceDialog.value = true;
+}
+function onAssemblyMaintenanceLog(event: { message: string; problem: boolean }) {
+  shell.appendLog(event.message, { source: "file_detail", open: event.problem });
+}
+async function onAssemblyPublished(event: { filePath: string; outputRel: string }) {
+  let normalizedSource: string, normalizedOutput: string;
+  try { normalizedSource = normalizeAssemblyUpdateFilePath(rel.value); normalizedOutput = normalizeAssemblyUpdateFilePath(event.outputRel);
+    if (normalizeAssemblyUpdateFilePath(event.filePath) !== normalizedSource) return;
+  } catch { return; }
+  if (disposed) return;
+  const workspace = shell.workspacePath.value, sourceRel = rel.value;
+  notifyXrefMutation(sourceRel);
+  if (event.outputRel !== sourceRel) notifyXrefMutation(event.outputRel);
+  shell.requestTreeRescan(event.outputRel);
+  await reloadFile(sourceRel);
+  if (disposed || workspace !== shell.workspacePath.value || sourceRel !== rel.value) return;
+  await refreshXrefCounts();
+  if (disposed || workspace !== shell.workspacePath.value || sourceRel !== rel.value) return;
+  shell.setStatus(normalizedOutput === normalizedSource ? "当前宿主更新已发布；详情与派生缓存已重新读取，完整 BOM 状态以索引提示为准。"
+    : `已生成验证副本 ${event.outputRel}；原宿主未改写，完整 BOM 状态以索引提示为准。`);
+}
+watch([rel, () => shell.workspacePath.value], () => { showAssemblyMaintenanceDialog.value = false; }, { flush: "sync" });
 function onOperationChange(source: string, busy: boolean) {
   detailOperations.value = { ...detailOperations.value, [source]: busy };
   if (busy && props.workbenchTabId) shell.keepTab(props.workbenchTabId);
@@ -185,6 +219,7 @@ function switchSubTab(tab: FileDetailSubTab) {
 async function reloadFile(targetRel?: string) {
   const path = (targetRel ?? rel.value).trim();
   if (!path) return;
+  showAssemblyMaintenanceDialog.value = false;
   const prevRel = rel.value.trim();
   const seq = ++reloadSeq;
   const workspace = shell.workspacePath.value;
@@ -447,6 +482,15 @@ usePagePrimaryContribution("file_detail", props.workbenchTabId, {
     ? `${originalFilename.value || rel.value} · 入向 ${incomingCount.value} · 出向 ${outgoingCount.value}`
     : "请从工作空间树选择文件"),
   sections: computed<PagePrimarySection[]>(() => [
+    ...(hasAssemblyTools.value ? [{
+      id: "assembly-tools", title: "装配工具", actionLayout: "grid" as const,
+      description: "子装配增删后父总成显示未更新，可先检查。\n检查只读已保存文件；不切换 Rigid、不删除或猜接 Joint。",
+      actions: [
+        { id: "assembly-maintenance", label: "检查 / 更新装配", tone: "primary" as const,
+          disabled: assemblyToolsDisabled, run: openAssemblyMaintenance },
+        { id: "assembly-references", label: "查看引用", disabled: loading, run: () => switchSubTab("xref") },
+      ],
+    }] : []),
     {
       id: "document",
       title: "当前文件",
@@ -508,7 +552,7 @@ onActivated(() => {
   if (bootstrapDone) applyOpenPayload();
   registerTreeHandler();
 });
-onDeactivated(() => { pageActive.value = false; });
+onDeactivated(() => { pageActive.value = false; showAssemblyMaintenanceDialog.value = false; });
 
 onUnmounted(() => {
   disposed = true;
@@ -545,6 +589,7 @@ onUnmounted(() => {
           </el-radio-group>
         </template>
         <template #right>
+          <el-button v-if="hasAssemblyTools" size="small" :disabled="assemblyToolsDisabled" @click="openAssemblyMaintenance">装配工具</el-button>
           <el-button v-if="rel" size="small" :disabled="loading || batchFileWorkspace !== shell.workspacePath.value" @click="addCurrentFileToBatch">加入批次</el-button>
           <el-button v-if="batchCollectionCount" size="small" @click="shell.goToPage('batch_tasks')">批量任务 · 待选 {{ batchCollectionCount }}</el-button>
           <el-button
@@ -595,6 +640,16 @@ onUnmounted(() => {
             :bom-readonly="preview?.bom_readonly"
             @close="showRenameDialog = false"
             @renamed="onRenameComplete"
+          />
+          <AssemblyMaintenanceDialog
+            v-if="showAssemblyMaintenanceDialog && pageActive"
+            :open="showAssemblyMaintenanceDialog"
+            :workspace-path="shell.workspacePath.value"
+            :file-path="rel"
+            @close="showAssemblyMaintenanceDialog = false"
+            @busy-change="onOperationChange('assembly-maintenance', $event)"
+            @log="onAssemblyMaintenanceLog"
+            @published="onAssemblyPublished"
           />
         </div>
         </div>

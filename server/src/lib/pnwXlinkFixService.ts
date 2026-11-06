@@ -285,6 +285,21 @@ function queryCandidatesByPart(db: PnwDbAdapter, partNumber: string, partVersion
   return rows.map(candidateFromRow);
 }
 
+/** Manual replacement lists every matching part; it never chooses a revision. */
+function queryCandidatesForSelection(db: PnwDbAdapter, partNumber: string, partVersion: string): XlinkFixCandidateFile[] {
+  const rows = db.all<any>(
+    `SELECT id, repo_rel_path, filename, part_number, part_version, file_status
+     FROM phoenix_cad_file_asset
+     WHERE COALESCE(file_status, ?) = ?
+       AND lower(filename) LIKE '%.fcstd'
+       AND part_number = ?
+       ${partVersion ? "AND part_version = ?" : ""}
+     ORDER BY filename, repo_rel_path`,
+    [PRESENT, PRESENT, partNumber, ...(partVersion ? [partVersion] : [])],
+  );
+  return rows.map(candidateFromRow);
+}
+
 function queryCandidatesByBasename(db: PnwDbAdapter, basename: string): XlinkFixCandidateFile[] {
   const name = basenamePosix(basename);
   if (!name) return [];
@@ -374,7 +389,9 @@ export function saveXlinkPrefs(workspaceRoot: string, patch: any = {}): XlinkFix
 export function listXlinkFixCandidates(workspaceRoot: string, opts: any = {}): any {
   const root = workspaceRootOrEmpty(workspaceRoot);
   const base = basenamePosix(typeof opts === "string" ? opts : opts?.basename);
-  const hints = mergeHints(base, opts?.part_number, opts?.part_version);
+  const partNumber = String(opts?.part_number || "").trim() || parsePartHintsFromBasename(base).part_number;
+  // An omitted/blank version means all revisions, even if the old path contains one.
+  const partVersion = String(opts?.part_version || "").trim();
   const out: XlinkFixCandidateFile[] = [];
   const seen = new Set<string>();
   const exclude = normRel(opts?.exclude_repo_rel || opts?.excludeRepoRel || "");
@@ -382,8 +399,10 @@ export function listXlinkFixCandidates(workspaceRoot: string, opts: any = {}): a
   if (db) {
     try {
       if (hasXlinkTables(db)) {
-        addUniqueCandidates(out, seen, queryCandidatesByPart(db, hints.part_number, hints.part_version), exclude);
-        addUniqueCandidates(out, seen, queryCandidatesByBasename(db, base), exclude);
+        const matches = partNumber
+          ? queryCandidatesForSelection(db, partNumber, partVersion)
+          : queryCandidatesByBasename(db, base).filter((file) => !partVersion || file.part_version === partVersion);
+        addUniqueCandidates(out, seen, matches, exclude);
       }
     } finally {
       db.close();
@@ -391,9 +410,9 @@ export function listXlinkFixCandidates(workspaceRoot: string, opts: any = {}): a
   }
   return {
     basename: base,
-    part_number: hints.part_number,
-    part_version: hints.part_version,
-    part_key: hints.part_key,
+    part_number: partNumber,
+    part_version: partVersion,
+    part_key: partKey(partNumber, partVersion),
     files: out,
     candidates: out,
     _native: "node",

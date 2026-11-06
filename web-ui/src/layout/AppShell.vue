@@ -39,6 +39,7 @@ import { usePdtWorkbenchBottomPanel } from "../composables/usePdtWorkbenchBottom
 import { useWorkbenchBottomPanelState } from "../composables/useWorkbenchBottomContribution";
 import { buildRibbonTabs } from "./ribbon/ribbonConfig";
 import { ribbonIconFor } from "./ribbon/ribbonIcons";
+import { FREECAD_MCP_MANAGE_ACTION } from "../features/freecad-mcp/navigation";
 import GiteeIcon from "../components/icons/GiteeIcon.vue";
 import { PROJECT_GITEE_HOME } from "../constants/projectLinks";
 import { pdtRevealWorkbenchBottom, pdtWithWorkbenchLayoutState } from "../workbench/PdtWorkbenchDisplayPreferences";
@@ -224,6 +225,10 @@ function pageComponent(pageId: string): Component {
 }
 
 function onPnwActivate(pageId: string) {
+  if (pageId === FREECAD_MCP_MANAGE_ACTION) {
+    shell.openTab({ pageId: "config", payload: { config: { manageFreecadMcp: true } } });
+    return;
+  }
   if (!navigation.value.some((item) => item.page === pageId)) return;
   shell.goToPage(pageId);
 }

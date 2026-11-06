@@ -24,6 +24,7 @@ const showArchived = ref(false), worksetId = ref(""), filterStatus = ref(""), fi
 const expanded = reactive({ definition: true, plan: true, history: true });
 const definitionAnchor = ref<HTMLElement | null>(null), previewAnchor = ref<HTMLElement | null>(null), historyAnchor = ref<HTMLElement | null>(null);
 const navigationTarget = ref("definition");
+const closePending = ref(false);
 const observedNow = ref(Date.now());
 watch([() => state.runs, () => state.plan], () => { observedNow.value = Date.now(); if (state.plan?.status === "fresh") expanded.plan = true; });
 const tasks = computed(() => state.tasks.filter(task => showArchived.value || !task.archived));
@@ -61,6 +62,33 @@ async function navigateTaskSection(id: string) {
 async function saveTask() { if (canSave.value) await controller.save(); }
 async function checkTask() { if (canCheck.value && await controller.preview()) await navigateTaskSection("preview"); }
 async function runTask() { if (canRun.value && await controller.admit()) await navigateTaskSection("history"); }
+const closeContext = () => JSON.stringify([state.workspace, state.editingId, state.editingRevision, state.draft, state.paths, state.creationId, state.creationUncertain, state.admission]);
+async function requestClose() {
+  if (controller.busy.value || closePending.value) return false;
+  if (!controller.dirty.value) return true;
+  const context = closeContext();
+  closePending.value = true;
+  try {
+    const uncertain = state.creationUncertain || !!state.admission;
+    const answer = await pnwPromptChoice({
+      title: "关闭批量任务详情",
+      message: "当前任务定义有未保存的修改。关闭显示不会取消后台运行。"
+        + (uncertain ? "\n\n存在结果未确认的请求，请返回核对；本次不能保存。放弃仅清除本地草稿，核对信息仍保留，不会撤销可能已保存的定义或运行。" : ""),
+      defaultChoiceId: "cancel",
+      choices: [
+        { id: "save", label: "保存任务定义并关闭", variant: "primary", disabled: !canSave.value || uncertain },
+        { id: "discard", label: "放弃草稿并关闭", variant: "danger" },
+        { id: "cancel", label: "返回" },
+      ],
+    });
+    if (context !== closeContext() || controller.busy.value) return false;
+    if (answer.choiceId === "discard") return controller.discardDraft();
+    if (answer.choiceId === "save" && canSave.value && !state.creationUncertain) {
+      return await controller.save() && !controller.dirty.value;
+    }
+    return false;
+  } finally { closePending.value = false; }
+}
 const actionTitle = (instanceId: string) => {
   const selected = state.plan?.actions.find(action => action.instance_id === instanceId);
   return selected ? `${state.actions.find(action => action.key === selected.key)?.title || selected.key} (${selected.key}@${selected.version})` : instanceId;
@@ -122,7 +150,8 @@ usePagePrimaryContribution("batch_tasks", props.workbenchTabId, {
 usePageSession(props.workbenchTabId, {
   serialize: () => ({ workspace: state.workspace, filterStatus: filterStatus.value, filterFile: filterFile.value }),
   hydrate: snapshot => { if (snapshot.workspace !== state.workspace) return false; filterStatus.value = typeof snapshot.filterStatus === "string" ? snapshot.filterStatus : ""; filterFile.value = typeof snapshot.filterFile === "string" ? snapshot.filterFile : ""; return true; },
-  isDirty: () => controller.dirty.value, isBusy: () => controller.busy.value, flush: () => controller.save(), refresh: controller.refresh,
+  isDirty: () => controller.dirty.value, isBusy: () => controller.busy.value || closePending.value,
+  flush: () => controller.save(), requestClose, refresh: controller.refresh,
 });
 </script>
 <template>
@@ -139,7 +168,9 @@ usePageSession(props.workbenchTabId, {
     <p v-if="!state.workspace" role="status">请先选择工作空间。</p>
     <p v-if="state.stale" class="notice" role="alert">暂未连接后台，以下为上次回执；不会自行把运行标记完成或取消。</p>
     <p v-if="state.error" class="error" role="alert">{{ state.error }}</p><p v-if="state.notice" role="status">{{ state.notice }}</p>
-    <p v-if="state.creationUncertain" class="notice" role="status">新建保存尚待核对：{{ state.creationId }}。请刷新已保存任务列表核对；同内容重试复用此标识，内容变化将被阻止，不会静默另建。</p>
+    <p v-if="state.creationUncertain" class="notice" role="status">新建保存尚待核对：{{ state.creationId }}。关闭或放弃草稿不会撤销可能已保存的定义。请核对已保存任务列表；同内容重试复用此标识，内容变化将被阻止，不会静默另建。
+      <button type="button" :disabled="controller.busy.value || state.loading" @click="controller.refresh()">核对已保存任务</button>
+    </p>
     <section v-if="state.admission" class="notice" aria-label="接纳结果未确认">
       <strong>存在结果未确认的接纳请求</strong><p>请求 {{ state.admission.client_request_id }}。先核对，不新建另一运行。</p>
       <p v-if="!controller.canRetryAdmission.value">旧版指针仅用于核对原运行，不会升级为 V2 权限；确认没有运行记录后必须重新预览。</p>

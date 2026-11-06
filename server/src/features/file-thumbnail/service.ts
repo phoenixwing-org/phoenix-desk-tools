@@ -28,14 +28,34 @@ export function thumbnailOptions(value: unknown): ThumbnailOptions {
   return { color: v.color!, axonometric: v.axonometric, fit: v.fit };
 }
 
+export class ThumbnailSourceError extends Error {
+  constructor(readonly code: "thumbnail_source_missing" | "thumbnail_dependency_missing", readonly rel: string) {
+    super(code === "thumbnail_source_missing"
+      ? `[${code}] 源模型不存在：${rel}。文件可能已移动或删除，请刷新 CAD 索引和图册后重试；未写入缩略图。`
+      : `[${code}] 引用文件不存在：${rel}。请先修复装配链接，再重新生成缩略图；未写入缩略图。`);
+    this.name = "ThumbnailSourceError";
+  }
+}
+/** Classify only an absent source/dependency, never permissions, aliases or bad archives. */
+function readThumbnailSource<T>(root: string, rel: string, dependency: boolean, read: (file: string) => T): T {
+  const key = relativeFile(rel);
+  if (!/\.fcstd$/i.test(key)) throw new Error("只支持 FCStd 模型");
+  try {
+    return read(safeFcstdPath(root, key));
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      throw new ThumbnailSourceError(dependency ? "thumbnail_dependency_missing" : "thumbnail_source_missing", key);
+    }
+    throw error;
+  }
+}
+
 /** Guard the source and linked FCStd files; no unrelated directory scan. */
 export function thumbnailSources(root: string, rel: string) {
   const snapshots = new Map<string, string>(), queue = [relativeFile(rel)];
   for (let i = 0; i < queue.length; i++) {
-    const file = safeFcstdPath(root, queue[i]);
+    const { file, archive } = readThumbnailSource(root, queue[i], i !== 0, file => ({ file, archive: readFcstdBatchArchive(file) }));
     if (snapshots.has(file)) continue;
-    if (!/\.fcstd$/i.test(file)) throw new Error("只支持 FCStd 模型");
-    const archive = readFcstdBatchArchive(file);
     if (i === 0 && isStandaloneDrawing(rel, archive.xml)) throw new Error("图纸请使用源模型生成缩略图");
     snapshots.set(file, fcstdFingerprint(archive.bytes));
     for (const dependency of fcstdNativeXlinkFiles(archive.xml)) {
@@ -167,12 +187,12 @@ export async function regenerateThumbnail(workspace: string, rel: string, value:
   rendering = true;
   let lease:DrawingExecutionLease|undefined;
   try {
-    const sources = thumbnailSources(root, key), source = safeFcstdPath(root, key);
+    const sources = thumbnailSources(root, key), source = readThumbnailSource(root, key, false, file => file);
     lease=acquireDrawingExecution("thumbnail:"+randomUUID());
     const png = render===renderThumbnail ? await renderThumbnailOwned(source,options,lease) : await render(source,options);
     for (const [file, hash] of sources) {
-      const current = safeFcstdPath(root, path.relative(root, file));
-      if (fcstdFingerprint(readFcstdBatchArchive(current).bytes) !== hash) throw new Error("模型或引用文件已变化，保留原缩略图，请重新生成");
+      const current = readThumbnailSource(root, path.relative(root, file), file !== source, readFcstdBatchArchive);
+      if (fcstdFingerprint(current.bytes) !== hash) throw new Error("模型或引用文件已变化，保留原缩略图，请重新生成");
     }
     const image = writeFcstdThumbnail(root, key, png, sources.get(source)!);
     try { cacheRenderedThumbnail(root, key, png, image.sourceHash, true); }
@@ -181,6 +201,7 @@ export async function regenerateThumbnail(workspace: string, rel: string, value:
     return { width: image.width, height: image.height, backup: image.backup,
       message: "缩略图已写入 FCStd 并更新缓存，原文件已备份；未修改用户 GUI 偏好" };
   } catch (error) {
+    if (error instanceof ThumbnailSourceError) throw error;
     throw new Error(redactSensitiveText(error instanceof Error ? error.message : String(error)).split(root).join("[工作空间]"));
   } finally {try{lease?.();}finally{rendering = false;}}
 }

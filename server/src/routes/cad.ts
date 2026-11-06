@@ -81,6 +81,7 @@ import { cadBomDeliveryRoutes } from "../features/cad-bom-delivery/routes.js";
 import { previewBatchAttributes, applyBatchAttributes } from "../lib/fcstdBatchAttributes.js";
 import { nameNormalizeRoutes } from "../features/cad-name-normalize/routes.js";
 import { assemblyLabelRoutes } from "../features/cad-assembly-labels/routes.js";
+import { assemblyMaintenanceRoutes } from "../features/assembly-maintenance/routes.js";
 import { partGalleryRoutes } from "../features/part-gallery/routes.js";
 import { readFileThumbnail } from "../lib/fcstdThumbnail.js";
 import { regenerateThumbnail } from "../features/file-thumbnail/service.js";
@@ -127,6 +128,7 @@ function flattenAssemblyTreeItems(nodes: any[], depth = 0, prefix = ""): any[] {
 export const cadRoutes = new Hono();
 cadRoutes.route("/index/search", cadIndexSearchRoutes);
 cadRoutes.route("/object-info", cadObjectInfoRoutes);
+cadRoutes.route("/assembly-maintenance", assemblyMaintenanceRoutes);
 cadRoutes.route("/light-info", cadLightInfoRoutes);
 cadRoutes.route("/bom-delivery", cadBomDeliveryRoutes);
 cadRoutes.route("/name-normalize", nameNormalizeRoutes);

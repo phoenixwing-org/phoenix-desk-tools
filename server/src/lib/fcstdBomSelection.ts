@@ -1,4 +1,4 @@
-import { fcstdXmlObjects, xmlAttribute } from "./fcstdLinkIdentity.js";
+import { fcstdXmlObjects, isFcstdObjectName, xmlAttribute } from "./fcstdLinkIdentity.js";
 
 /** Registry/local Wing currently prefer Body over a native assembly. This
  * bounded Host policy scopes Wing's existing field reader/writer to the actual
@@ -27,7 +27,7 @@ export function fcstdBomSelectionXml(xml: string): { xml: string; nativeAssembly
   }
   const invalid = (): never => { throw new Error("装配根对象结构不完整或不一致，请在 FreeCAD 中确认后重新读取；未改写文件"); };
   for (const name of nativeNames) {
-    if (!/^[A-Za-z_]\w*$/.test(name) || !byName.has(name)) invalid();
+    if (!isFcstdObjectName(name) || !byName.has(name)) invalid();
     const declared = tags.filter(tag => xmlAttribute(tag, "name") === name);
     const serialized = [...data.matchAll(/<Object\b[^>]*>/g)].filter(([tag]) => xmlAttribute(tag, "name") === name);
     if (declared.length > 1 || serialized.length !== 1 || declared.some(tag => xmlAttribute(tag, "type") !== "Assembly::AssemblyObject") || serialized.some(([tag]) => xmlAttribute(tag, "type") && xmlAttribute(tag, "type") !== "Assembly::AssemblyObject")) invalid();

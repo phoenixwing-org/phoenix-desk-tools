@@ -1,4 +1,5 @@
 import type { NavItem } from "../../types/config";
+import { FREECAD_MCP_MANAGE_ACTION } from "../../features/freecad-mcp/navigation";
 import { SHARED_TOOL_PAGE_IDS, TOOL_NAV_MODULE_IDS } from "../../constants/navModules";
 import {
   pnwCheckRibbonContributionCompatibility,
@@ -38,6 +39,9 @@ export function buildRibbonTabs(navigation: NavItem[]): RibbonTabDef[] {
     label: group.label,
     items: group.pages.map((page) => byPage.get(page)).filter(Boolean).map((nav) => ribbonItem(nav!)),
   })).filter((group) => group.items.length > 0);
+  if (byPage.has("config")) shellGroups.push({
+    id: "system-freecad", label: "FreeCAD", items: [{ pageId: FREECAD_MCP_MANAGE_ACTION, label: "MCP 管理" }],
+  });
 
   const moduleTabs = new Map<string, RibbonTabDef>();
   const moduleGroups = new Map<string, Map<string, RibbonGroupDef>>();

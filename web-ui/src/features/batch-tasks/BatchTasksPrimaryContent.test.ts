@@ -22,13 +22,20 @@ function props() {
 async function render(p: ReturnType<typeof props> & Record<string, unknown>) {
   return renderToString(createSSRApp(defineComponent({ setup: () => () => h(BatchTasksPrimaryContent, p) })));
 }
+function taskCardButtons(html: string) {
+  return [...html.matchAll(/<button\b([^>]*)>/g)]
+    .map(match => ({ attributes: match[1], classes: match[1].match(/\bclass="([^"]*)"/)?.[1].split(/\s+/) ?? [] }))
+    .filter(button => button.classes.includes("task-card"));
+}
 
 describe("batch task Primary — saved selection and navigation only", () => {
   it("renders saved task cards, current selection and two strip blocks without doing any work", async () => {
     const p = props(), html = await render(p);
     for (const text of ["已保存任务", "独立合成任务", "1 个文件", "1 个动作", "r1", "流程导航", "新建", "复制", "刷新", "备份", "仅导航，不保存或执行任务"]) expect(html).toContain(text);
     expect(html).not.toContain("Independent archived task");
-    expect(html).toMatch(/class="task-card selected"[^>]*aria-current="true"/);
+    const selected = taskCardButtons(html).filter(button => button.classes.includes("selected"));
+    expect(selected).toHaveLength(1);
+    expect(selected[0].attributes).toContain('aria-current="true"');
     expect(html.match(/pnw-sidebar-block--strip/g)).toHaveLength(2);
     for (const callback of [p.onNew, p.onDuplicate, p.onSelectTask, p.onNavigate, p.onRefresh, p.onBackup, p.onShowArchived]) expect(callback).not.toHaveBeenCalled();
   });
@@ -38,7 +45,7 @@ describe("batch task Primary — saved selection and navigation only", () => {
     const html = await render({ ...p, showArchived: true });
     expect(html).toContain("Independent archived task"); expect(html).toContain("已归档");
     expect(html).toMatch(/type="checkbox"[^>]*checked/);
-    expect(html.match(/class="task-card/g)).toHaveLength(2);
+    expect(taskCardButtons(html)).toHaveLength(2);
     expect(JSON.stringify(p.tasks)).toBe(before); expect(p.onShowArchived).not.toHaveBeenCalled();
   });
 
@@ -50,7 +57,9 @@ describe("batch task Primary — saved selection and navigation only", () => {
     expect(navigation[0][1]).toContain('aria-current="step"');
     expect(navigation[1][1]).toContain("step-pending");
     expect(navigation[1][2]).toContain("待准备");
-    expect(html).toMatch(/class="task-card selected"[^>]*disabled/);
+    const selected = taskCardButtons(html).filter(button => button.classes.includes("selected"));
+    expect(selected).toHaveLength(1);
+    expect(selected[0].attributes).toMatch(/\bdisabled(?:[\s=>]|$)/);
     expect(p.onNavigate).not.toHaveBeenCalled();
   });
 

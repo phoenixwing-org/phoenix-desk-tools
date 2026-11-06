@@ -1,8 +1,9 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { strToU8, zipSync } from "fflate";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { pnwCreateDb } from "@phoenix-wing/db-node";
 import {
   fileDetailXrefs,
@@ -138,9 +139,168 @@ function createBomXrefFixture(workspace: string) {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const root of tempRoots.splice(0)) {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+// Metadata-only independent scenes; object names, counts and labels are generic.
+const labelProperty = (value: string) => `<Property name="Label" type="App::PropertyString"><String value="${value}"/></Property>`;
+const namedObject = (name: string, value: string | null, properties = "") => `<Object name="${name}"><Properties>${value === null ? "" : labelProperty(value)}${properties}</Properties></Object>`;
+const namedLink = (file: string, name = "PartNode") => `<Property name="LinkedObject" type="App::PropertyXLink"><XLink file="${file}" name="${name}"/></Property>`;
+const namedGroup = (names: string[]) => `<Property name="Group" type="App::PropertyLinkList"><LinkList>${names.map(name => `<Link value="${name}"/>`).join("")}</LinkList></Property>`;
+const namedDocument = (...objects: string[]) => `<Document><ObjectData>${objects.join("")}</ObjectData></Document>`;
+function namedLabelFixture(labels = ["Generic part.001", "Generic part.002"], targetLabel = "Generic part") {
+  const workspace = makeTempRoot(); createBomXrefFixture(workspace);
+  const host = namedDocument(namedObject("Root", "Generic assembly", namedGroup(["First", "Second"])),
+    // Serialization order must not determine sibling instance numbering.
+    namedObject("Second", labels[1], namedLink("Sub.ASSY.FCStd")),
+    namedObject("First", labels[0], namedLink("Sub.ASSY.FCStd")));
+  writeFcstd(workspace, "asm/Root.ASSY.FCStd", host);
+  writeFcstd(workspace, "asm/Sub.ASSY.FCStd", namedDocument(namedObject("FileRoot", "Different file-level name"), namedObject("PartNode", targetLabel)));
+  const db = pnwCreateDb(path.join(workspace, ".phoenix", "phoenix-workspace.sqlite"));
+  db.run("DELETE FROM phoenix_cad_bom_xref WHERE xlink_file_attr='Missing.FCStd'"); db.close();
+  return { workspace, host };
+}
+const checkedOutgoing = (workspace: string, rel: string, opts: { limit?: number } = {}) =>
+  searchOutgoingRefs(workspace, rel, { ...opts, labelCheck: "saved_current_host" });
+
+describe("reference label checks share assembly object and sibling rules", () => {
+  it("does not warn for correct numbered instances on explicit checks, including a limited result list; incoming remains cached", () => {
+    const { workspace } = namedLabelFixture();
+    const files = ["asm/Root.ASSY.FCStd", "asm/Sub.ASSY.FCStd", "parts/Bolt.FCStd", ".phoenix/phoenix-workspace.sqlite"];
+    const before = files.map(rel => fs.readFileSync(path.join(workspace, rel)));
+    const outgoing = checkedOutgoing(workspace, "asm/Root.ASSY.FCStd");
+    expect(outgoing.label_mismatch_count).toBe(0);
+    expect(outgoing.refs.find((ref: any) => ref.target_basename === "Sub.ASSY.FCStd")).toMatchObject({
+      link_label: "Generic part.002", rule_label: "Generic part.002", label_check_status: "matched", label_mismatch: false,
+    });
+    const limited = checkedOutgoing(workspace, "asm/Root.ASSY.FCStd", { limit: 1 });
+    expect(limited.label_mismatch_count).toBe(0);
+    expect(limited.refs[0]).toMatchObject({ label_check_status: "matched", rule_label: "Generic part.002" });
+    const detail = fileDetailXrefs(workspace, "asm/Root.ASSY.FCStd", { labelCheck: "saved_current_host" });
+    expect(detail.outgoing.refs[0]).toMatchObject({ label_check_status: "matched", label_mismatch: false });
+    const incoming = searchIncomingRefs(workspace, { rel: "asm/Sub.ASSY.FCStd", transitive: false });
+    expect(incoming.refs[0]).toMatchObject({ label_check_status: "unknown", label_mismatch: false });
+    files.forEach((rel, index) => expect(fs.readFileSync(path.join(workspace, rel))).toEqual(before[index]));
+  });
+
+  it.each([["Wrong body.001", "Generic part.002"], ["Generic part.002", "Generic part.002"]])("still warns for a proven incorrect label/body or ordinal [case %#]", (first, second) => {
+    const labels = [first, second];
+    const { workspace } = namedLabelFixture(labels);
+    const result = checkedOutgoing(workspace, "asm/Root.ASSY.FCStd");
+    expect(result.label_mismatch_count).toBe(1);
+    expect(result.refs.find((ref: any) => ref.target_basename === "Sub.ASSY.FCStd")).toMatchObject({
+      link_label: labels[0], rule_label: "Generic part.001", label_check_status: "mismatch", label_mismatch: true,
+    });
+  });
+
+  it("does not strip a suffix that is part of the target's own label", () => {
+    const { workspace } = namedLabelFixture(["Generic part.001.001", "Generic part.001.002"], "Generic part.001");
+    expect(checkedOutgoing(workspace, "asm/Root.ASSY.FCStd").label_mismatch_count).toBe(0);
+    writeFcstd(workspace, "asm/Sub.ASSY.FCStd", namedDocument(namedObject("PartNode", "Generic part.002")));
+    expect(checkedOutgoing(workspace, "asm/Root.ASSY.FCStd").label_mismatch_count).toBe(1);
+  });
+
+  it("uses independent numbering per Group instead of numbering every reference to the same file together", () => {
+    const { workspace } = namedLabelFixture();
+    writeFcstd(workspace, "asm/Root.ASSY.FCStd", namedDocument(
+      namedObject("Root", "Generic assembly", namedGroup(["Left", "Right"])),
+      namedObject("Left", "Left", namedGroup(["First"])), namedObject("Right", "Right", namedGroup(["Second"])),
+      namedObject("First", "Generic part", namedLink("Sub.ASSY.FCStd")), namedObject("Second", "Generic part", namedLink("Sub.ASSY.FCStd"))));
+    expect(checkedOutgoing(workspace, "asm/Root.ASSY.FCStd").refs.find((ref: any) => ref.target_basename === "Sub.ASSY.FCStd"))
+      .toMatchObject({ label_check_status: "matched", label_mismatch: false });
+  });
+
+  it.each(["missing target", "missing object", "missing object name", "missing label", "unreadable sibling", "local sibling", "cyclic Group", "missing Group member", "cyclic projection", "nameless projection", "multiple projection targets", "indexed target changed"])("leaves %s neutral instead of falling back to the file rule", mode => {
+    const { workspace, host } = namedLabelFixture();
+    if (mode === "missing target") fs.unlinkSync(path.join(workspace, "asm/Sub.ASSY.FCStd"));
+    if (mode === "missing object") writeFcstd(workspace, "asm/Sub.ASSY.FCStd", namedDocument(namedObject("OtherNode", "Generic part")));
+    if (mode === "missing object name") writeFcstd(workspace, "asm/Root.ASSY.FCStd", host.replaceAll('name="PartNode"', 'name=""'));
+    if (mode === "missing label") writeFcstd(workspace, "asm/Root.ASSY.FCStd", host.replace(namedObject("First", "Generic part.001", namedLink("Sub.ASSY.FCStd")), namedObject("First", null, namedLink("Sub.ASSY.FCStd"))));
+    if (mode === "unreadable sibling") writeFcstd(workspace, "asm/Root.ASSY.FCStd", host.replace(namedObject("Second", "Generic part.002", namedLink("Sub.ASSY.FCStd")), namedObject("Second", "Generic part.002", namedLink("missing-projection.FCStd"))));
+    if (mode === "local sibling") writeFcstd(workspace, "asm/Root.ASSY.FCStd", host.replace(namedObject("Second", "Generic part.002", namedLink("Sub.ASSY.FCStd")), namedObject("Second", "Generic part.002", namedLink("", "First"))));
+    if (mode === "cyclic Group") writeFcstd(workspace, "asm/Root.ASSY.FCStd", host.replace(namedGroup(["First", "Second"]), namedGroup(["First", "Second", "Root"])));
+    if (mode === "missing Group member") writeFcstd(workspace, "asm/Root.ASSY.FCStd", host.replace(namedGroup(["First", "Second"]), namedGroup(["First", "Second", "Absent"])));
+    if (["cyclic projection", "nameless projection", "multiple projection targets"].includes(mode)) {
+      const property = mode === "cyclic projection" ? namedLink("Sub.ASSY.FCStd")
+        : mode === "nameless projection" ? namedLink("Sub.ASSY.FCStd", "")
+        : '<Property name="LinkedObject" type="App::PropertyXLink"><XLink file="Sub.ASSY.FCStd" name="A"/><XLink file="Sub.ASSY.FCStd" name="B"/></Property>';
+      writeFcstd(workspace, "asm/Sub.ASSY.FCStd", namedDocument(namedObject("PartNode", "Misleading projection label", property)));
+    }
+    if (mode === "indexed target changed") {
+      const db = pnwCreateDb(path.join(workspace, ".phoenix", "phoenix-workspace.sqlite"));
+      db.run("UPDATE phoenix_cad_bom_xref SET target_repo_rel_path='./parts/Bolt.FCStd' WHERE xlink_file_attr='Sub.ASSY.FCStd'"); db.close();
+    }
+    const result = checkedOutgoing(workspace, "asm/Root.ASSY.FCStd");
+    expect(result.label_mismatch_count).toBe(0);
+    expect(result.refs.find((ref: any) => ref.target_basename === "Sub.ASSY.FCStd"))
+      .toMatchObject({ label_check_status: "unknown", label_mismatch: false });
+  });
+
+  it("never opens CAD for default outgoing, incoming or detail projections, even with fully named label mismatches", () => {
+    const { workspace } = namedLabelFixture(["Wrong.001", "Wrong.002"]), attempted: string[] = [];
+    const forbid = (filename: unknown) => {
+      if (/\.fcstd$/i.test(String(filename))) { attempted.push(String(filename)); throw new Error("Cached projection attempted a CAD content read"); }
+    };
+    const sync = fs.readFileSync, asyncRead = fs.promises.readFile, stream = fs.createReadStream, open = fs.openSync;
+    vi.spyOn(fs, "readFileSync").mockImplementation(((file: any, ...args: any[]) => { forbid(file); return (sync as any)(file, ...args); }) as typeof fs.readFileSync);
+    vi.spyOn(fs.promises, "readFile").mockImplementation(((file: any, ...args: any[]) => { forbid(file); return (asyncRead as any)(file, ...args); }) as typeof fs.promises.readFile);
+    vi.spyOn(fs, "createReadStream").mockImplementation(((file: any, ...args: any[]) => { forbid(file); return (stream as any)(file, ...args); }) as typeof fs.createReadStream);
+    vi.spyOn(fs, "openSync").mockImplementation(((file: any, ...args: any[]) => { forbid(file); return (open as any)(file, ...args); }) as typeof fs.openSync);
+    const outgoing = searchOutgoingRefs(workspace, "asm/Root.ASSY.FCStd");
+    const incoming = searchIncomingRefs(workspace, { rel: "asm/Sub.ASSY.FCStd" });
+    const detail = fileDetailXrefs(workspace, "asm/Root.ASSY.FCStd");
+    for (const refs of [outgoing.refs, incoming.refs, detail.outgoing.refs]) {
+      expect(refs.length).toBeGreaterThan(0);
+      expect(refs.every((ref: any) => ref.label_check_status === "unknown" && ref.label_mismatch === false)).toBe(true);
+    }
+    expect(outgoing.label_mismatch_count).toBe(0); expect(detail.outgoing.label_mismatch_count).toBe(0);
+    expect(attempted).toEqual([]);
+  });
+
+  it("does explicit saved-label reads only after the actual native DB close and lease release", () => {
+    const { workspace } = namedLabelFixture(), close = DatabaseSync.prototype.close, read = fs.readFileSync;
+    let nativeClosed = false;
+    vi.spyOn(DatabaseSync.prototype, "close").mockImplementation(function (this: DatabaseSync) { close.call(this); nativeClosed = true; });
+    const observations: Array<{ nativeClosed: boolean; locked: boolean }> = [];
+    vi.spyOn(fs, "readFileSync").mockImplementation(((file: any, ...args: any[]) => {
+      if (/\.fcstd$/i.test(String(file))) observations.push({ nativeClosed, locked: fs.existsSync(path.join(workspace, ".phoenix/phoenix-workspace.sqlite.lock")) });
+      return (read as any)(file, ...args);
+    }) as typeof fs.readFileSync);
+    expect(checkedOutgoing(workspace, "asm/Root.ASSY.FCStd").refs[0].label_check_status).toBe("matched");
+    nativeClosed = false;
+    expect(fileDetailXrefs(workspace, "asm/Root.ASSY.FCStd", { labelCheck: "saved_current_host" }).outgoing.refs[0].label_check_status).toBe("matched");
+    expect(observations.length).toBeGreaterThanOrEqual(4);
+    expect(observations.every(row => row.nativeClosed && !row.locked)).toBe(true);
+  });
+
+  it("does not read saved labels when DB close fails, nor hide the close error", () => {
+    const { workspace } = namedLabelFixture(), close = DatabaseSync.prototype.close, read = fs.readFileSync, attempted: string[] = [];
+    vi.spyOn(DatabaseSync.prototype, "close").mockImplementationOnce(function (this: DatabaseSync) { close.call(this); throw new Error("synthetic native close failed"); });
+    vi.spyOn(fs, "readFileSync").mockImplementation(((file: any, ...args: any[]) => {
+      if (/\.fcstd$/i.test(String(file))) attempted.push(String(file));
+      return (read as any)(file, ...args);
+    }) as typeof fs.readFileSync);
+    expect(() => checkedOutgoing(workspace, "asm/Root.ASSY.FCStd")).toThrow("synthetic native close failed");
+    expect(attempted).toEqual([]);
+  });
+
+  it("never expands an explicit current-host detail check into incoming parent CAD reads", () => {
+    const { workspace } = namedLabelFixture(), read = fs.readFileSync, cadReads: string[] = [];
+    const canonical = fs.realpathSync(workspace);
+    vi.spyOn(fs, "readFileSync").mockImplementation(((file: any, ...args: any[]) => {
+      if (/\.fcstd$/i.test(String(file))) cadReads.push(path.relative(canonical, fs.realpathSync(String(file))));
+      return (read as any)(file, ...args);
+    }) as typeof fs.readFileSync);
+    const detail = fileDetailXrefs(workspace, "asm/Sub.ASSY.FCStd", { labelCheck: "saved_current_host" });
+    expect(detail.incoming.hosts).toEqual(expect.arrayContaining([expect.objectContaining({ host_repo_rel_path: "./asm/Root.ASSY.FCStd" })]));
+    expect(cadReads).toEqual(["asm/Sub.ASSY.FCStd"]);
+    cadReads.length = 0;
+    fileDetailXrefs(workspace, "asm/Sub.ASSY.FCStd", { scope: "incoming", labelCheck: "saved_current_host" });
+    expect(cadReads).toEqual([]);
+  });
 });
 
 describe("pnwBomXrefService", () => {
@@ -156,7 +316,9 @@ describe("pnwBomXrefService", () => {
 
     const outgoing = searchOutgoingRefs(workspace, "asm/Root.ASSY.FCStd");
     expect(outgoing.count).toBe(2);
-    expect(outgoing.label_mismatch_count).toBe(1);
+    // Legacy file-only links do not identify a target object: remain neutral.
+    expect(outgoing.label_mismatch_count).toBe(0);
+    expect(outgoing.refs.every((ref: any) => ref.label_check_status === "unknown")).toBe(true);
     expect(outgoing.refs[0]).toMatchObject({
       host_repo_rel_path: "./asm/Root.ASSY.FCStd",
       target_basename: "Missing.FCStd",

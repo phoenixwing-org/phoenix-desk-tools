@@ -17,7 +17,7 @@ import {
 } from "../../utils/bomFieldLabels";
 import { basenameFromRel, normalizeRepoRelForApi, repoDirFromRel } from "../../utils/workspaceFileQuery";
 import { logReferenceLabelApply } from "../../utils/referenceLabelLog";
-import { cadIndexReadStateWarning, xrefCountsFromPayload } from "../../utils/cadIndexState";
+import { cadIndexReadStateNoticeTone, cadIndexReadStateWarning, xrefCountsFromPayload } from "../../utils/cadIndexState";
 import XlinkReplaceDialog from "../XlinkReplaceDialog.vue";
 
 const emit = defineEmits<{ "busy-change": [busy: boolean] }>();
@@ -39,6 +39,7 @@ const directCount = ref(0);
 const indexPending = ref(false);
 const indexReadState = ref<import("../../api").CadIndexReadState | null>(null);
 const indexWarning = computed(() => cadIndexReadStateWarning(indexReadState.value));
+const indexNoticeTone = computed(() => cadIndexReadStateNoticeTone(indexReadState.value));
 /** 避免 onMounted 与 watch 并发时较早的空结果覆盖较新数据 */
 let loadSeq = 0;
 const incomingCount = computed(() => ctx.incomingCount.value);
@@ -245,6 +246,12 @@ watch(
   },
 );
 
+// Publication already refreshed the server projection. Consume the parent's
+// invalidated cache without starting another disk/index mutation.
+watch(() => ctx.xrefMutationSeq.value, () => {
+  if (ctx.activeSubTab.value === "xref" && ctx.rel.value.trim()) void loadTables(false, false);
+});
+
 onMounted(() => {
   if (ctx.activeSubTab.value === "xref" && ctx.rel.value.trim()) {
     void loadTables();
@@ -398,7 +405,7 @@ async function onSyncIncomingLabels() {
     <p v-else-if="indexPending" class="banner warn">
       引用表尚未构建。请先在「CAD 索引」更新工作空间索引，再回到本页局部刷新当前文件。
     </p>
-    <p v-if="!indexPending && indexWarning" class="banner warn" role="status">{{ indexWarning }}</p>
+    <p v-if="!indexPending && indexWarning" class="banner" :class="indexNoticeTone" role="status">{{ indexWarning }}</p>
     <p v-if="indexSummary" class="index-summary">{{ indexSummary }}</p>
 
     <section class="block">
@@ -493,7 +500,7 @@ async function onSyncIncomingLabels() {
       <p v-if="outgoingRefs.length" class="section-hint muted">
         <strong>链接标签（子件名）</strong> = 装配树里该引用的显示名（Link.Label）。
         <template v-if="outgoingLabelMismatchCount">
-          当前有 <strong>{{ outgoingLabelMismatchCount }}</strong> 处与目标标准名不一致（黄行）。
+          已确认 <strong>{{ outgoingLabelMismatchCount }}</strong> 组引用标签与装配规则不一致（黄行，包含实例编号核对）。
         </template>
         批量对齐请前往
         <el-button link size="small" @click="goToAssemblyTab">装配结构</el-button>
@@ -733,6 +740,15 @@ async function onSyncIncomingLabels() {
   color: var(--phoenix-warning-text);
   font-size: 0.85rem;
   margin-bottom: 10px;
+}
+
+.banner.info {
+  background: var(--phoenix-bg-muted);
+  border: 1px solid var(--phoenix-border);
+  color: var(--phoenix-text-secondary);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
 }
 .muted {
   color: var(--muted);

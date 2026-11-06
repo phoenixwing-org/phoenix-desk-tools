@@ -208,5 +208,8 @@ export class BatchTaskService {
  async close(){this.stopped=true;if(this.retryTimer)clearTimeout(this.retryTimer);this.retryTimer=undefined;this.active?.controller.abort();for(const value of this.admissions.values())value.controller.abort();await this.pump;await Promise.allSettled([...this.admissions.values()].map(value=>value.promise));this.repository.close();}
 }
 const services=new Map<string,BatchTaskService>();
-export function batchTaskService(workspace:string){const root=fcstdWorkspace(workspace);let service=services.get(root);if(!service){if(services.size>=16)throw new Error('本地批量任务工作空间超过16个，请重启服务释放空闲宿主');service=new BatchTaskService(root);services.set(root,service);}return service;}
+let hostShuttingDown=false;
+/** Host exit only; ordinary test/service cleanup must not close admission. */
+export function beginBatchTaskShutdown(){hostShuttingDown=true;}
+export function batchTaskService(workspace:string){if(hostShuttingDown)throw new Error('宿主正在关闭，不再接收批量任务服务请求');const root=fcstdWorkspace(workspace);let service=services.get(root);if(!service){if(services.size>=16)throw new Error('本地批量任务工作空间超过16个，请重启服务释放空闲宿主');service=new BatchTaskService(root);services.set(root,service);}return service;}
 export async function closeBatchTaskServices(){await Promise.all([...services.values()].map(s=>s.close()));services.clear();}

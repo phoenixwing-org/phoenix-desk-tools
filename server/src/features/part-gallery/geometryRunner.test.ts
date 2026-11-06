@@ -4,14 +4,17 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { EventEmitter } from "node:events";
-import { spawn, type SpawnOptions } from "node:child_process";
+import { spawn, spawnSync, type SpawnOptions } from "node:child_process";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { runtimeUserDataDir } from "../../lib/appRuntimePaths.js";
 import { resolveFreecadCommand } from "../../lib/freecadProcessSecurity.js";
 import { acquireDrawingExecution } from "../drawing-research/executionGate.js";
-import { GeometryConfigurationError, geometryConfigurationFailureMessage, geometryReadFailureMessage, geometryResultFailureMessage, readGeometryBatch, type GeometryInput } from "./geometryRunner.js";
+import { GeometryConfigurationError, geometryConfigurationFailureMessage, geometryReadFailureMessage, geometryResultFailureMessage, geometryResultSuccessMessage, readGeometryBatch, type GeometryInput } from "./geometryRunner.js";
 
-vi.mock("node:child_process", () => {const mock=vi.fn();return {spawn:mock,default:{spawn:mock}};});
+vi.mock("node:child_process", async original => {
+  const actual = await original<typeof import("node:child_process")>(), mock = vi.fn();
+  return { ...actual, spawn: mock, default: { ...actual, spawn: mock } };
+});
 vi.mock("../../lib/appRuntimePaths.js", () => ({ runtimeUserDataDir: vi.fn() }));
 vi.mock("../../lib/freecadProcessSecurity.js", async original => ({
   ...await original<typeof import("../../lib/freecadProcessSecurity.js")>(), resolveFreecadCommand: vi.fn(),
@@ -76,9 +79,255 @@ it("gallery geometry runner reads one bounded batch in a single isolated command
   expect(native.script).toContain("doc.getObject(item['node'])"); expect(native.script).toContain("obj.Shape.BoundBox");
   for (const axis of ["XLength", "YLength", "ZLength"]) expect(native.script).toContain(`box.${axis}`);
   for (const text of ["Assembly::", "App::Part", "App::LinkGroup", "callable(valid)"]) expect(native.script).toContain(text);
-  expect(native.script).not.toMatch(/recompute\s*\(|\.save(?:As)?\s*\(|ParamGet|saveParameter|FreeCADGui|Part\.getShape|Visibility|Diameter/);
+  expect(native.script).not.toMatch(/recompute\s*\(|\.save(?:As)?\s*\(|ParamGet|saveParameter|FreeCADGui|Diameter/);
   expect(fs.existsSync(temporary)).toBe(false); expect(native.child.kill).not.toHaveBeenCalled();
   for (let index = 0; index < items.length; index++) expect(fs.readFileSync(items[index].filename)).toEqual(original[index]);
+});
+
+it.each(["ready_assembly_optimal", "ready_assembly_standard"])("accepts the fixed %s success only for an explicit assembly request", async code => {
+  const item = { ...input(workspace(), "Example.ASSY.FCStd", "总成根"), kind: "assembly" as const };
+  const onItem = vi.fn();
+  const launches = nativeProcess(native => {
+    const row = { ...ready(item), code }; report(native, [row]); progress(native, row); native.child.emit("close", 0);
+  });
+  const [row] = await readGeometryBatch([item], onItem);
+  expect(row.bounding_box).toEqual(ready(item).bounding_box);
+  expect(row.message).toContain(code.endsWith("optimal") ? "优化包围盒" : "标准包围盒");
+  expect(geometryResultSuccessMessage(row, "assembly")).toBe(row.message);
+  expect(geometryResultSuccessMessage(row, "part")).toBeNull(); expect(geometryResultFailureMessage(row)).toBeNull();
+  expect(onItem).toHaveBeenCalledWith(row);
+  expect(launches[0].job.items).toEqual([{ ...item, filename: fs.realpathSync(item.filename) }]);
+});
+
+it.each([
+  [undefined, "ready_assembly_optimal"], ["part", "ready_assembly_standard"], ["assembly", "ready"],
+] as const)("rejects successful mode confusion: kind=%s code=%s", async (kind, code) => {
+  const item = { ...input(workspace()), ...(kind ? { kind } : {}) };
+  const onItem = vi.fn(); const launches = nativeProcess(native => progress(native, { ...ready(item), code }));
+  await expect(readGeometryBatch([item], onItem)).rejects.toThrow("报告与请求不一致");
+  expect(onItem).not.toHaveBeenCalled(); expect(launches[0].child.kill).toHaveBeenCalledWith("SIGTERM");
+});
+
+it("keeps legacy part messages and mixed batch wire identities compatible", async () => {
+  const directory = workspace(), items: GeometryInput[] = [input(directory), { ...input(directory, "Example.ASSY.FCStd", "装配_根"), kind: "assembly" }];
+  nativeProcess(native => {
+    const rows = items.map((item, index) => ({ ...ready(item, index), code: index === 0 ? "ready" : "ready_assembly_optimal" }));
+    report(native, rows); rows.forEach(row => progress(native, row)); native.child.emit("close", 0);
+  });
+  const rows = await readGeometryBatch(items);
+  expect(rows[0].message).toBe("保存主实体在文档 XYZ 轴的边界盒（mm）");
+  expect(geometryResultSuccessMessage(rows[0], "part")).toBe(rows[0].message);
+  expect(geometryResultSuccessMessage(rows[1], "assembly")).toBe(rows[1].message);
+});
+
+it.each(["unsupported_assembly_root", "incomplete_assembly", "empty_assembly_shape", "assembly_bounds_failed", "assembly_limit"])("keeps assembly %s safely null with a fixed public reason", async code => {
+  const item = { ...input(workspace()), kind: "assembly" as const };
+  nativeProcess(native => { const row = { index: 0, rel: item.rel, bounding_box: null, code }; report(native, [row]); progress(native, row); native.child.emit("close", 0); });
+  const [row] = await readGeometryBatch([item]);
+  expect(row.bounding_box).toBeNull(); expect(geometryResultFailureMessage(row)).toBe(row.message); expect(geometryResultSuccessMessage(row)).toBeNull();
+});
+
+it.each([null, "unknown", 1])("rejects invalid kind %s before launching", async kind => {
+  await expect(readGeometryBatch([{ ...input(workspace()), kind: kind as GeometryInput["kind"] }])).rejects.toThrow("输入");
+  expect(spawn).not.toHaveBeenCalled();
+});
+
+it.each(["总成根", "Élément_Ⅰ", "_零件1"])("accepts the serialized Unicode internal object identity %s", async node => {
+  const item = input(workspace(), "Example.FCStd", node);
+  nativeProcess(native => { const row = ready(item); report(native, [row]); progress(native, row); native.child.emit("close", 0); });
+  expect(await readGeometryBatch([item])).toHaveLength(1);
+});
+
+it.each(["9Body", "Body.Part", "Body/Part", "Body\nPart", " Body", "A".repeat(257)])("rejects a non-serialized object name %s", async node => {
+  await expect(readGeometryBatch([input(workspace(), "Example.FCStd", node)])).rejects.toThrow("输入");
+  expect(spawn).not.toHaveBeenCalled();
+});
+
+it("only exposes fixed success messages, optionally narrowed to the requested kind", () => {
+  const part = "保存主实体在文档 XYZ 轴的边界盒（mm）";
+  const assembly = "已保存总成几何在文档 XYZ 轴的外包络（mm，优化包围盒；非加工尺寸）";
+  expect(geometryResultSuccessMessage(part)).toBe(part); expect(geometryResultSuccessMessage({ message: assembly }, "assembly")).toBe(assembly);
+  expect(geometryResultSuccessMessage(part, "assembly")).toBeNull(); expect(geometryResultSuccessMessage(assembly, "part")).toBeNull();
+  for (const value of [null, undefined, 1, "ready", "/synthetic/private-like-error", { message: "主零件节点的 Shape 为空" }, { message: "ready_assembly_optimal" }])
+    expect(geometryResultSuccessMessage(value)).toBeNull();
+  expect(geometryResultSuccessMessage({ get message() { throw new Error("not public"); } })).toBeNull();
+});
+
+it.each([
+  { code: "ready_assembly_optimal", bounding_box: null },
+  { code: "ready_assembly_standard", bounding_box: { x_mm: -1, y_mm: 2, z_mm: 3 } },
+  { code: "ready_assembly_optimal", bounding_box: { x_mm: 0, y_mm: 0, z_mm: 0 } },
+  { code: "incomplete_assembly", bounding_box: { x_mm: 1, y_mm: 2, z_mm: 3 } },
+])("rejects invalid assembly success/failure bounds %#", async patch => {
+  const item = { ...input(workspace()), kind: "assembly" as const };
+  nativeProcess(native => progress(native, { ...ready(item), ...patch }));
+  await expect(readGeometryBatch([item])).rejects.toThrow("边界盒");
+});
+
+it("does not replace an optimal assembly progress receipt with a different final measurement method", async () => {
+  const item = { ...input(workspace()), kind: "assembly" as const };
+  nativeProcess(native => {
+    progress(native, { ...ready(item), code: "ready_assembly_optimal" });
+    report(native, [{ ...ready(item), code: "ready_assembly_standard" }]); native.child.emit("close", 0);
+  });
+  await expect(readGeometryBatch([item])).rejects.toThrow("与进度不一致");
+});
+
+it("keeps the assembly Native plan rooted in verified saved instances without solving, source writes or double placement", async () => {
+  const item = { ...input(workspace(), "Example.ASSY.FCStd", "总成根"), kind: "assembly" as const };
+  const launches = nativeProcess(native => {
+    const row = { ...ready(item), code: "ready_assembly_optimal" }; report(native, [row]); progress(native, row); native.child.emit("close", 0);
+  });
+  await readGeometryBatch([item]); const script = launches[0].script;
+  expect(script).toContain("Part.getShape(root, subname, needSubElement=False, transform=True, retType=1)");
+  expect(script).toContain("owner is expected_owner"); expect(script).toContain("Part.makeCompound(shapes)");
+  expect(script).toContain("optimal(False, False)"); expect(script).toContain("except (TypeError, AttributeError, NotImplementedError)");
+  expect(script).toContain("len(leaves) < 2000"); expect(script).toContain("depth <= 64");
+  expect(script).toContain("sorted(child.Name for child in actual) == sorted(expected)");
+  expect(script).toContain("target.Name == expected_name"); expect(script).toContain("('Placement', 'LinkPlacement')");
+  expect(script).toContain("result == source_signature"); expect(script).toContain("Counter({identity: 1})");
+  expect(script).not.toContain("shape.isValid()");
+  expect(script).not.toMatch(/recompute\s*\(|\.save(?:As)?\s*\(|\.Rigid\s*=|\.Visibility\s*=|\.transformShape\s*\(|\.transformGeometry\s*\(|\.fuse\s*\(|FreeCADGui|UtilsAssembly/);
+});
+
+// Execute only the fixed Python control flow with in-memory fake App/Part/ZIP
+// modules, like nativeCamera.test. This is not FreeCAD, geometry evidence or a
+// substitute for the independently gated synthetic Native acceptance.
+const ASSEMBLY_PYTHON_MOCK = String.raw`
+import sys, types, io, json, os, zipfile, xml.etree.ElementTree as mock_et
+from pathlib import Path
+mock_spec = json.loads(Path(MOCK_JOB).read_text(encoding='utf-8'))
+host_name = mock_spec['items'][0]['filename']
+source_name = str(Path(host_name).parent / 'Definitions.FCStd')
+class Box:
+    XMin, XMax, YMin, YMax, ZMin, ZMax = 0., 24., 0., 13., 0., 9.
+    XLength, YLength, ZLength = 24., 13., 9.
+    def isValid(self): return True
+class Shape:
+    BoundBox = Box()
+    def __init__(self, null=False): self.null = null
+    def isNull(self): return self.null
+    def isValid(self): raise AssertionError('topology validation is not required for an envelope')
+class Compound(Shape):
+    def optimalBoundingBox(self, triangulation, tolerance):
+        assert triangulation is False and tolerance is False
+        if CASE == 'unsupported_optimal': raise NotImplementedError()
+        if CASE == 'broken_optimal': raise RuntimeError('/synthetic/private-like-error')
+        if CASE == 'invalid_bounds':
+            value = Box(); value.XLength = -1; return value
+        return Box()
+class Doc:
+    def __init__(self, filename): self.FileName=filename; self.Name=Path(filename).stem; self.objects={}
+    def getObject(self, name): return self.objects.get(name)
+class Obj:
+    def __init__(self, doc, name, kind):
+        self.Document=doc; self.Name=name; self.TypeId=kind; self.Group=[]; self.State=[]
+        self.Placement=types.SimpleNamespace(Base=types.SimpleNamespace(x=0.,y=0.,z=0.),Rotation=types.SimpleNamespace(Q=(0.,0.,0.,1.)))
+        self.saved_target=None; self.LinkedObject=None; self.ElementCount=0; self.Visibility=True
+        self.Shape=Shape(); doc.objects[name]=self
+    def isDerivedFrom(self, kind):
+        return kind == 'Part::Feature' and self.TypeId in ('Part::Feature','Part::FeaturePython','Sketcher::SketchObject')
+host=Doc(host_name); source=Doc(source_name)
+root=Obj(host,mock_spec['items'][0]['node'],'Assembly::AssemblyObject')
+normal=Obj(host,'IndependentFeature','Part::Feature')
+definition=Obj(source,'SubDefinition','Assembly::AssemblyObject')
+a=Obj(source,'DefinitionA','Part::Feature'); b=Obj(source,'DefinitionB','Part::Feature')
+definition.Group=[a,b]
+instance=Obj(host,'Instance','Assembly::AssemblyLink'); instance.LinkedObject=definition; instance.saved_target=definition
+copy_a=Obj(host,'CopyA','App::Link'); copy_a.LinkedObject=a; copy_a.saved_target=a
+copy_b=Obj(host,'CopyB','App::Link'); copy_b.LinkedObject=b; copy_b.saved_target=b
+instance.Group=[copy_a,copy_b]; root.Group=[normal,instance]
+owners={'IndependentFeature.':normal,'Instance.CopyA.':copy_a,'Instance.CopyB.':copy_b}
+expected_count=3
+if CASE == 'empty_instance': instance.Group=[]
+if CASE == 'short_instance': instance.Group=[copy_a]
+if CASE == 'extra_instance':
+    extra=Obj(host,'ExtraCopyA','App::Link'); extra.LinkedObject=a; extra.saved_target=a; instance.Group.append(extra)
+if CASE == 'missing_link': copy_b.LinkedObject=None
+if CASE == 'unknown_component': normal.TypeId='Mesh::Feature'
+if CASE == 'invalid_state': normal.State=['Invalid']
+if CASE == 'pose_drift': normal.Placement.Base.x=2.
+if CASE == 'group_drift': instance.saved_group=[copy_a,copy_b]; instance.Group=[copy_a]
+if CASE == 'cycle': root.Group=[root]
+if CASE == 'too_many': root.Group=[Obj(host,'Feature'+str(i),'Part::Feature') for i in range(2001)]
+if CASE == 'hidden_and_auxiliary':
+    definition.Visibility=False; instance.Visibility=False; normal.Visibility=False
+    origin=Obj(host,'FarOrigin','App::Origin'); sketch=Obj(host,'FarSketch','Sketcher::SketchObject')
+    root.Group.extend([origin,sketch])
+if CASE == 'repeated_definition':
+    # Two different saved occurrences of one definition are not one instance.
+    second_source=Obj(source,'SourceAInstance','App::Link'); second_source.LinkedObject=a; second_source.saved_target=a
+    definition.Group=[a,second_source]; copy_b.LinkedObject=second_source; copy_b.saved_target=second_source
+if CASE == 'lost_repeated_definition':
+    second_source=Obj(source,'SourceAInstance','App::Link'); second_source.LinkedObject=a; second_source.saved_target=a
+    definition.Group=[a,second_source]; instance.Group=[copy_a]
+if CASE == 'array_not_attested': copy_a.ElementCount=3
+if CASE == 'wrong_root': root.TypeId='Part::Feature'
+if CASE == 'empty_root': root.Group=[]
+
+payloads={}
+for doc in (host,source):
+    document=mock_et.Element('Document'); declarations=mock_et.SubElement(document,'Objects'); objects=mock_et.SubElement(document,'ObjectData')
+    for obj in doc.objects.values():
+        mock_et.SubElement(declarations,'Object',name=obj.Name,type=obj.TypeId)
+        item=mock_et.SubElement(objects,'Object',name=obj.Name); props=mock_et.SubElement(item,'Properties')
+        prop=mock_et.SubElement(props,'Property',name='Placement',type='App::PropertyPlacement')
+        mock_et.SubElement(prop,'PropertyPlacement',Px='0',Py='0',Pz='0',Q0='0',Q1='0',Q2='0',Q3='1')
+        if obj.TypeId in ('Assembly::AssemblyObject','Assembly::AssemblyLink','App::Part','App::LinkGroup','App::DocumentObjectGroup'):
+            prop=mock_et.SubElement(props,'Property',name='Group',type='App::PropertyLinkList'); group=mock_et.SubElement(prop,'LinkList')
+            for child in getattr(obj,'saved_group',obj.Group): mock_et.SubElement(group,'Link',value=child.Name)
+        if obj.saved_target is not None:
+            target=obj.saved_target; prop=mock_et.SubElement(props,'Property',name='LinkedObject',type='App::PropertyXLink')
+            mock_et.SubElement(prop,'XLink',name=target.Name,file='' if target.Document is doc else os.path.relpath(target.Document.FileName,Path(doc.FileName).parent))
+    payloads[str(Path(doc.FileName).resolve())]=mock_et.tostring(document,encoding='utf-8')
+class Archive:
+    def __init__(self,filename): self.data=payloads[str(Path(filename).resolve())]
+    def __enter__(self): return self
+    def __exit__(self,*unused): pass
+    def infolist(self): return [types.SimpleNamespace(filename='Document.xml',file_size=len(self.data))]
+    def open(self,entry): return io.BytesIO(self.data)
+zipfile.ZipFile=Archive
+calls=[]
+def get_shape(actual_root,subname,**kwargs):
+    assert actual_root is root and kwargs==dict(needSubElement=False,transform=True,retType=1)
+    assert subname in owners
+    calls.append(subname)
+    return Shape(CASE=='null_leaf' and subname=='Instance.CopyB.'),object(),root if CASE=='wrong_owner' else owners[subname]
+def compound(shapes):
+    assert len(shapes)==expected_count and calls==list(owners)
+    if CASE=='no_optimal': return Shape()
+    return Compound()
+sys.modules['Part']=types.SimpleNamespace(getShape=get_shape,makeCompound=compound)
+sys.modules['FreeCAD']=types.SimpleNamespace(openDocument=lambda filename:host,listDocuments=lambda:{'Host':host,'Source':source},closeDocument=lambda name:None)
+`;
+
+const PYTHON_ASSEMBLY_CASES = [
+  ["normal", "ready_assembly_optimal"], ["repeated_definition", "ready_assembly_optimal"],
+  ["hidden_and_auxiliary", "ready_assembly_optimal"], ["unsupported_optimal", "ready_assembly_standard"], ["no_optimal", "ready_assembly_standard"],
+  ["empty_instance", "incomplete_assembly"], ["short_instance", "incomplete_assembly"], ["extra_instance", "incomplete_assembly"],
+  ["lost_repeated_definition", "incomplete_assembly"], ["missing_link", "incomplete_assembly"], ["group_drift", "incomplete_assembly"],
+  ["unknown_component", "incomplete_assembly"], ["invalid_state", "incomplete_assembly"], ["pose_drift", "incomplete_assembly"],
+  ["cycle", "incomplete_assembly"], ["array_not_attested", "incomplete_assembly"], ["wrong_owner", "incomplete_assembly"], ["null_leaf", "incomplete_assembly"],
+  ["too_many", "assembly_limit"], ["wrong_root", "unsupported_assembly_root"], ["empty_root", "empty_assembly_shape"],
+  ["broken_optimal", "assembly_bounds_failed"], ["invalid_bounds", "assembly_bounds_failed"],
+] as const;
+it.each(PYTHON_ASSEMBLY_CASES)("runs fixed Python with fake App/Part/ZIP for %s, never a FreeCAD process", async (scenario, expected) => {
+  const item = { ...input(workspace(), "Example.ASSY.FCStd", "总成根"), kind: "assembly" as const };
+  let actualCode: string | undefined, pythonError: string | undefined;
+  nativeProcess(native => {
+    const prelude = `MOCK_JOB=${JSON.stringify(path.join(native.options.cwd as string, "job.json"))}\nCASE=${JSON.stringify(scenario)}\n`;
+    const executed = spawnSync("python3", ["-c", prelude + ASSEMBLY_PYTHON_MOCK + "\n" + native.script], {
+      cwd: native.options.cwd, encoding: "utf8", timeout: 5000, maxBuffer: 2 * 1024 * 1024,
+      env: { PATH: process.env.PATH || "/usr/bin:/bin", PYTHONDONTWRITEBYTECODE: "1" },
+    });
+    if (executed.status !== 0) { pythonError = executed.stderr || "synthetic Python process failed"; native.child.emit("close", 1); return; }
+    const output = JSON.parse(fs.readFileSync(native.job.report, "utf8")); actualCode = output.rows[0].code;
+    native.child.stdout.emit("data", Buffer.from(executed.stdout)); native.child.emit("close", 0);
+  });
+  const [row] = await readGeometryBatch([item]).catch(error => { if (pythonError) throw new Error(pythonError); throw error; }); expect(actualCode).toBe(expected);
+  if (expected.startsWith("ready_")) expect(row.bounding_box).toEqual({ x_mm: 24, y_mm: 13, z_mm: 9 });
+  else { expect(row.bounding_box).toBeNull(); expect(geometryResultSuccessMessage(row, "assembly")).toBeNull(); }
+  expect(row.message).not.toContain("private-like-error");
 });
 
 it("replaces inherited FreeCAD user roots with owned existing private directories before spawn", async () => {

@@ -967,9 +967,10 @@ export type BomXrefEdge = {
   detail?: unknown;
   /** 装配树中该引用的 Label（Link.Label / 链接标签） */
   link_label?: string;
-  /** 目标文件的规则显示名（同步后的期望名；多件同目标时可能带 .001 序号） */
+  /** 对象级核对成功时与装配结构相同；无法核对时仅为索引中的显示信息。 */
   rule_label?: string;
   label_mismatch?: boolean;
+  label_check_status?: "matched" | "mismatch" | "unknown";
 };
 
 export type BomXrefHost = {

@@ -5,6 +5,25 @@
   "appliesTo": "0.5.x",
   "rules": [
     {
+      "match": "^docs/cad/装配检查与安全更新\\.md$",
+      "status": "draft",
+      "lastVerified": "2026-11-06",
+      "sourceOfTruth": "docs/TODO.md",
+      "reason": "保存态检查及受控副本更新已接入；原件写回成功路径与人工界面仍待验收"
+    },
+    {
+      "match": "^docs/cad/失效链接一键修复-交互与安全规划\\.md$",
+      "status": "draft",
+      "lastVerified": "2026-11-03",
+      "sourceOfTruth": "docs/TODO.md",
+      "reason": "当前总成链接修复简化方案；安全计划、统一入口与Tools内存执行尚待实施验收"
+    },
+    {
+      "match": "^docs/platform/FreeCAD-MCP安装与连接\\.md$",
+      "status": "current",
+      "lastVerified": "2026-10-31"
+    },
+    {
       "match": "^docs/(TODO|drawing-maintenance|文档索引|platform/Desk-API单实例与多宿主发现)\\.md$",
       "status": "current",
       "lastVerified": "2026-10-26"

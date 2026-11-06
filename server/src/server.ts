@@ -2,7 +2,8 @@ import { createAdaptorServer, type ServerType } from "@hono/node-server";
 import { refreshRuntimeCatalog } from "./routes/unit-tests.js";
 import { setShellShutdownHandler } from "./routes/shell.js";
 import { createPhoenixServerApp } from "./serverApp.js";
-import { closeBatchTaskServices } from "./features/batch-tasks/service.js";
+import { beginBatchTaskShutdown, closeBatchTaskServices } from "./features/batch-tasks/service.js";
+import { closeFreecadHostServices } from "./features/freecad-mcp/worker-host.js";
 import { migrateLegacyRuntimeUserData } from "./lib/appRuntimePaths.js";
 import path from "node:path";
 import { configureDrawingExecutionBarrier } from "./features/drawing-research/executionGate.js";
@@ -109,8 +110,12 @@ process.once("exit", disposeRegistration);
 let stopping = false;
 function shutdown(exit: boolean) {
   if (stopping) return;
-  stopping = true; disposeRegistration();
-  void closeBatchTaskServices().catch(error => console.error('[batch-tasks] shutdown:', error instanceof Error ? error.message : String(error))).finally(() => server.close(() => { if (exit) process.exit(0); }));
+  stopping = true;
+  beginBatchTaskShutdown();
+  void closeFreecadHostServices(closeBatchTaskServices).then(() => {
+    disposeRegistration();
+    server.close(() => { if (exit) process.exit(0); });
+  }).catch(() => console.error('[native] 自有执行资源尚未确认关闭；保留服务等待，不退出、不清理或切换持久门禁'));
 }
 process.once("SIGINT", () => shutdown(true));
 process.once("SIGTERM", () => shutdown(true));

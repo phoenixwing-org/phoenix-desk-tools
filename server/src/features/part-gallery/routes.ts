@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { archiveGallery, printGallery } from "./archive.js";
-import { galleryJob, galleryOptions, loadGallery, startGalleryJob, thumbnailBytes } from "./service.js";
+import { cancelGalleryJob, galleryJob, galleryOptions, loadGallery, startGalleryJob, thumbnailBytes } from "./service.js";
 import { geometryJob, startGeometryJob } from "./geometryService.js";
 
 export const partGalleryRoutes = new Hono();
@@ -27,5 +27,6 @@ partGalleryRoutes.get("/jobs/:id", c => {
   const workspace = c.req.query("workspace") || "", id = c.req.param("id");
   return c.json(geometryJob(workspace, id) || galleryJob(workspace, id));
 });
+partGalleryRoutes.post("/jobs/:id/cancel", c => c.json(cancelGalleryJob(c.req.query("workspace") || "", c.req.param("id"))));
 partGalleryRoutes.post("/document", async c => c.json(printGallery(c.req.query("workspace") || "", await c.req.json())));
 partGalleryRoutes.post("/archive", async c => c.json(archiveGallery(c.req.query("workspace") || "", await c.req.json())));

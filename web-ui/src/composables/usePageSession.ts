@@ -6,6 +6,8 @@ export type PageSessionApi = {
   isDirty(): boolean;
   /** 关闭 Tab 前尝试落盘（如属性回写 → saveBom） */
   flush?(): Promise<boolean>;
+  /** Optional page-owned close flow; true means its editor is safe to close. */
+  requestClose?(): boolean | Promise<boolean>;
   /** Guard navigation commands while a page owns an operation. */
   isBusy?(): boolean;
   /** Read-only refresh/reset, never an implicit scan or write. */

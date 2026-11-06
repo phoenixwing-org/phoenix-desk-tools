@@ -107,7 +107,9 @@ function rowToEdge(row: any): any {
     detail: parseDetail(row.detail_json),
     link_label: linkLabel,
     rule_label: ruleLabel,
-    label_mismatch: Boolean(linkLabel && ruleLabel && linkLabel !== ruleLabel),
+    // File-level index labels cannot prove an object/instance-label mismatch.
+    label_mismatch: false,
+    label_check_status: "unknown",
     target_part_number: String(row.target_part_number || ""),
     target_part_version: String(row.target_part_version || ""),
     target_type_code: String(row.target_type_code || ""),
@@ -115,6 +117,38 @@ function rowToEdge(row: any): any {
     target_part_name: String(row.target_part_name || ""),
     target_asset_label: String(row.target_asset_label || ""),
   };
+}
+
+/** Reuse the assembly view's complete, live object-level numbering. Failed or
+ * unsupported label checks remain neutral; DB read failures still propagate. */
+function enrichReferenceLabelChecks(ws: string, hostRel: string, refs: any[]): void {
+  const selectedHost = normKey(hostRel);
+  const byHost = new Map<string, any[]>();
+  for (const ref of refs) {
+    if (ref.resolve_status !== "resolved" || !ref.target_repo_rel_path) continue;
+    const host = normKey(ref.host_repo_rel_path);
+    if (!host || host !== selectedHost) continue;
+    const entries = byHost.get(host) ?? [];
+    entries.push(ref); byHost.set(host, entries);
+  }
+  for (const [host, entries] of byHost) {
+    const nodes = entries.map(ref => ({ host_repo_rel: host, repo_rel_path: ref.target_repo_rel_path,
+      resolve_status: ref.resolve_status, xlink_file_attr: ref.xlink_file_attr } as any));
+    try { enrichAssemblyLabelPreview(ws, host, nodes); }
+    catch { continue; }
+    nodes.forEach((node, index) => {
+      const ref = entries[index], instances = node.xref_instances ?? [];
+      if (!node.label_check_complete || !instances.length || instances.some((instance: any) => instance.rule_error
+        || !instance.rule_label || !instance.target_object_name || !instance.host_object_name
+        || normKey(instance.direct_target_repo_rel) !== normKey(ref.target_repo_rel_path))) return;
+      const mismatch = instances.find((instance: any) => instance.link_label !== instance.rule_label);
+      const shown = mismatch ?? instances[0];
+      ref.link_label = shown.link_label;
+      ref.rule_label = shown.rule_label;
+      ref.label_mismatch = Boolean(mismatch);
+      ref.label_check_status = ref.label_mismatch ? "mismatch" : "matched";
+    });
+  }
 }
 
 function allEdges(db: PnwDbAdapter): any[] {
@@ -177,8 +211,15 @@ function withReadDb<T>(ws: string, read: (db: PnwDbAdapter | null) => T): T {
   }
 }
 
-export function searchOutgoingRefs(ws: string, rel: string, opts: { limit?: number } = {}): any {
-  return withReadDb(ws, db => readOutgoingRefs(db, ws, rel, opts));
+/** Default reads are cached projections. A host-authored, explicit saved-label
+ * check may read this host and its label targets only after the DB lease closes. */
+export function searchOutgoingRefs(ws: string, rel: string, opts: { limit?: number; labelCheck?: "saved_current_host" } = {}): any {
+  const result = withReadDb(ws, db => readOutgoingRefs(db, ws, rel, opts));
+  if (opts.labelCheck === "saved_current_host") {
+    enrichReferenceLabelChecks(ws, rel, result.refs);
+    result.label_mismatch_count = result.refs.filter((ref: any) => ref.label_mismatch).length;
+  }
+  return result;
 }
 
 function readOutgoingRefs(db: PnwDbAdapter | null, ws: string, rel: string, opts: { limit?: number } = {}): any {
@@ -242,7 +283,6 @@ function readIncomingRefs(
      LIMIT ?`,
     [...params, limit],
   ).map(rowToEdge);
-
   const edges = allEdges(db);
   const targets = new Set<string>();
   if (relKey) targets.add(relKey);
@@ -313,9 +353,9 @@ export function refreshBomXrefsForHosts(ws: string, rels: string[]): any {
 export function fileDetailXrefs(
   ws: string,
   rel: string,
-  opts: { limit?: number; transitive?: boolean; scope?: "both" | "outgoing" | "incoming" } = {},
+  opts: { limit?: number; transitive?: boolean; scope?: "both" | "outgoing" | "incoming"; labelCheck?: "saved_current_host" } = {},
 ): any {
-  return withReadDb(ws, db => {
+  const result = withReadDb(ws, db => {
     const scope = opts.scope || "both";
     const payload: any = {
       rel,
@@ -345,6 +385,14 @@ export function fileDetailXrefs(
     }
     return payload;
   });
+  // Never diagnose incoming parents implicitly. Only an explicit refresh of
+  // the current host grants this extra saved-content observation, not a cache
+  // read or a publication's subsequent projection notification.
+  if (opts.labelCheck === "saved_current_host") {
+    enrichReferenceLabelChecks(ws, rel, result.outgoing.refs);
+    result.outgoing.label_mismatch_count = result.outgoing.refs.filter((ref: any) => ref.label_mismatch).length;
+  }
+  return result;
 }
 
 export function patchBomLinkLabels(ws: string, patches: Array<{ host_repo_rel?: string; xlink_file_attr?: string; link_label?: string } & Partial<ObjectLabelPatch>>, options: { refreshIndex?: boolean } = {}): any {

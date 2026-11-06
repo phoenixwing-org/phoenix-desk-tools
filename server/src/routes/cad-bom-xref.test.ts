@@ -151,6 +151,7 @@ async function importRoutes(home: string, workspace: string) {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   process.env.HOME = originalHome;
   process.env.USERPROFILE = originalUserProfile;
   vi.resetModules();
@@ -160,6 +161,48 @@ afterEach(() => {
 });
 
 describe("cad BOM xref routes", () => {
+  it("keeps ordinary xref HTTP reads cached and checks only the explicitly disk-refreshed host", async () => {
+    const home = makeTempRoot("cad-label-boundary-home-"), workspace = makeTempRoot("cad-label-boundary-ws-");
+    createBomXrefFixture(workspace);
+    writeFcstd(workspace, "asm/Sub.ASSY.FCStd", `<Document><Objects><Object name="Assembly" type="App::Part"/><Object name="BoltLink" type="App::Link"/></Objects><ObjectData>
+      <Object name="Assembly"><Properties><Property name="Group" type="App::PropertyLinkList"><LinkList count="1"><Link value="BoltLink"/></LinkList></Property></Properties></Object>
+      <Object name="BoltLink"><Properties><Property name="Label" type="App::PropertyString"><String value="Independent part"/></Property><Property name="LinkedObject" type="App::PropertyXLink"><XLink file="../parts/Bolt.FCStd" name="Body"/></Property></Properties></Object>
+      </ObjectData></Document>`);
+    writeFcstd(workspace, "parts/Bolt.FCStd", `<Document><Objects><Object name="Body" type="Part::Feature"/></Objects><ObjectData><Object name="Body"><Properties><Property name="Label" type="App::PropertyString"><String value="Independent part"/></Property></Properties></Object></ObjectData></Document>`);
+    const { cadRoutes, shellRoutes } = await importRoutes(home, workspace);
+    const read = fs.readFileSync, open = fs.openSync, cadReads: string[] = [];
+    const canonical = fs.realpathSync(workspace);
+    let forbid = true;
+    const observe = (filename: unknown) => {
+      if (!/\.fcstd$/i.test(String(filename))) return;
+      cadReads.push(path.relative(canonical, fs.realpathSync(String(filename))));
+      if (forbid) throw new Error("Cached HTTP projection attempted a CAD read");
+    };
+    vi.spyOn(fs, "readFileSync").mockImplementation(((file: any, ...args: any[]) => { observe(file); return (read as any)(file, ...args); }) as typeof fs.readFileSync);
+    vi.spyOn(fs, "openSync").mockImplementation(((file: any, ...args: any[]) => { observe(file); return (open as any)(file, ...args); }) as typeof fs.openSync);
+    for (const url of ["/bom/xref/outgoing?rel=asm%2FSub.ASSY.FCStd&labelCheck=saved_current_host", "/bom/xref/incoming?rel=parts%2FBolt.FCStd"]) {
+      const response = await cadRoutes.request(url), data = await response.json();
+      expect(response.status).toBe(200); expect(data.refs.length).toBeGreaterThan(0);
+      expect(data.refs.every((ref: any) => ref.label_check_status === "unknown" && !ref.label_mismatch)).toBe(true);
+    }
+    for (const suffix of ["", "&refresh_disk=false&labelCheck=saved_current_host"]) {
+      const response = await shellRoutes.request(`/api/file-detail/xrefs?rel=asm%2FSub.ASSY.FCStd${suffix}`), data = await response.json();
+      expect(response.status).toBe(200); expect(data.outgoing.refs[0]).toMatchObject({ label_check_status: "unknown", label_mismatch: false });
+    }
+    expect(cadReads).toEqual([]);
+    forbid = false;
+    const refreshed = await shellRoutes.request("/api/file-detail/xrefs?rel=asm%2FSub.ASSY.FCStd&refresh_disk=true"), live = await refreshed.json();
+    expect(refreshed.status).toBe(200);
+    expect(live.outgoing.refs[0]).toMatchObject({ label_check_status: "matched", label_mismatch: false, rule_label: "Independent part" });
+    expect(live.incoming.hosts).toEqual(expect.arrayContaining([expect.objectContaining({ host_repo_rel_path: "./asm/Root.ASSY.FCStd" })]));
+    expect(cadReads).toContain("asm/Sub.ASSY.FCStd"); expect(cadReads).toContain("parts/Bolt.FCStd");
+    expect(cadReads).not.toContain("asm/Root.ASSY.FCStd");
+    cadReads.length = 0; forbid = true;
+    const cachedAgain = await shellRoutes.request("/api/file-detail/xrefs?rel=asm%2FSub.ASSY.FCStd&refresh_disk=false");
+    expect((await cachedAgain.json()).outgoing.refs[0]).toMatchObject({ label_check_status: "unknown", label_mismatch: false });
+    expect(cadReads).toEqual([]);
+  });
+
   it("serves retained file-detail XRef reads and local host refreshes", async () => {
     const home = makeTempRoot("cad-bom-xref-home-");
     const workspace = makeTempRoot("cad-bom-xref-ws-");
@@ -177,7 +220,8 @@ describe("cad BOM xref routes", () => {
     const outgoingRes = await cadRoutes.request(`/bom/xref/outgoing?rel=${encodeURIComponent("asm/Root.ASSY.FCStd")}`);
     expect(outgoingRes.status).toBe(200);
     const outgoing = await outgoingRes.json();
-    expect(outgoing).toMatchObject({ count: 2, label_mismatch_count: 1 });
+    expect(outgoing).toMatchObject({ count: 2, label_mismatch_count: 0 });
+    expect(outgoing.refs.every((ref: any) => ref.label_check_status === "unknown")).toBe(true);
 
     const countsRes = await cadRoutes.request(`/bom/xref/counts?rel=${encodeURIComponent("asm/Sub.ASSY.FCStd")}`);
     expect(countsRes.status).toBe(200);

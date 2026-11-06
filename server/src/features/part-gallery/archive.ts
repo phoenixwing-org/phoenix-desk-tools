@@ -11,6 +11,7 @@ import type { GalleryRow } from "./types.js";
 export function selectedGallery(workspace: string, body: { product?: string; rels?: string[] }) {
   const result = loadGallery(workspace, body.product || "");
   if (!result.updated_at) throw new Error("请先更新图册");
+  if (result.scope_pending) throw new Error("产品或零件引用范围已变化，请先更新图册；旧成员不能用于输出");
   if (result.rows.some(row => row.status === "stale")) throw new Error("产品或零件已变化，请先更新图册");
   if (!Array.isArray(body.rels) || !body.rels.length || body.rels.length > 5000 || new Set(body.rels).size !== body.rels.length) throw new Error("请选择需要输出的卡片");
   const byRel = new Map(result.rows.map(row => [row.rel, row]));

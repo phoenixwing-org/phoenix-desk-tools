@@ -8,7 +8,7 @@ import type { BomPreview } from "../api";
 import type { FileDetailContext } from "../composables/useFileDetailContext";
 import type { PagePrimaryContribution } from "../composables/usePagePrimaryContribution";
 
-const state = vi.hoisted(() => ({ shell: {} as Record<string, unknown>, context: undefined as FileDetailContext | undefined, primary: undefined as PagePrimaryContribution | undefined, bom: vi.fn(), full: vi.fn(), light: vi.fn(), xrefCounts: vi.fn() }));
+const state = vi.hoisted(() => ({ shell: {} as Record<string, unknown>, context: undefined as FileDetailContext | undefined, primary: undefined as PagePrimaryContribution | undefined, bom: vi.fn(), full: vi.fn(), light: vi.fn(), xrefCounts: vi.fn(), publishedEvent: null as { filePath: string; outputRel: string } | null }));
 vi.mock("vue", async original => ({ ...await original<typeof import("vue")>(), useSSRContext: () => ({ modules: new Set<string>() }) }));
 vi.mock("../api", async original => ({ ...await original<typeof import("../api")>(), fetchBom: state.bom, fetchBomXrefCounts: state.xrefCounts }));
 vi.mock("../features/cad-object-info/api", () => ({ fetchCadObjectInfo: state.full }));
@@ -36,6 +36,10 @@ vi.mock("../components/file-detail/FileXrefPanel.vue", async () => ({ default: a
 vi.mock("../components/file-detail/FileAssemblyPanel.vue", async () => ({ default: await heavyPanel("assembly") }));
 vi.mock("../components/file-detail/DrawingBomReadonlyBanner.vue", async () => ({ default: await heavyPanel("drawing-banner") }));
 vi.mock("../components/RenameDialog.vue", async () => ({ default: await heavyPanel("rename-dialog") }));
+vi.mock("../features/assembly-maintenance/AssemblyMaintenanceDialog.vue", async () => {
+  const { defineComponent, h } = await import("vue");
+  return { default: defineComponent({ emits: ["published"], setup: (_props, { emit }) => () => h("div", { "data-heavy-panel": "assembly-tools-dialog", onClick: () => { if (state.publishedEvent) emit("published", state.publishedEvent); } }) }) };
+});
 async function heavyPanel(name: string) {
   const { defineComponent, h } = await import("vue"); return defineComponent({ setup: () => () => h("div", { "data-heavy-panel": name }) });
 }
@@ -98,9 +102,10 @@ function elements(el: HostNode, accept: (value: HostNode) => boolean): HostNode[
 async function settle() { await Promise.resolve(); await nextTick(); await Promise.resolve(); await nextTick(); }
 beforeEach(() => {
   vi.resetAllMocks(); workspace.value = "/synthetic-workspace"; state.context = undefined; state.primary = undefined;
+  state.publishedEvent = null;
   state.bom.mockResolvedValue(preview()); state.light.mockResolvedValue(syntheticLightInfo()); state.xrefCounts.mockResolvedValue({ outgoing_count: 0, direct_incoming_count: 0 });
   state.shell = { workspacePath: workspace, consumeTabPayload: vi.fn().mockReturnValueOnce({ fileDetail: { rel: "components/model.FCStd" } }), consumeTabPageState: vi.fn(), getTab: vi.fn().mockReturnValue({ pageId: "file_detail", contextKey: "components/model.FCStd", subtitle: "components/model.FCStd" }),
-    updateTab: vi.fn(), rerouteFileDetailTab: vi.fn(), scheduleWorkbenchSave: vi.fn(), setStatus: vi.fn(), setTabDirty: vi.fn(), registerPageMessages: vi.fn(), appendLog: vi.fn(), keepTab: vi.fn(), openFileDetailForRel: vi.fn() };
+    updateTab: vi.fn(), rerouteFileDetailTab: vi.fn(), scheduleWorkbenchSave: vi.fn(), setStatus: vi.fn(), setTabDirty: vi.fn(), registerPageMessages: vi.fn(), appendLog: vi.fn(), keepTab: vi.fn(), openFileDetailForRel: vi.fn(), requestTreeRescan: vi.fn() };
 });
 afterEach(() => { for (const app of mounted.splice(0)) app.unmount(); });
 
@@ -111,8 +116,52 @@ it("contributes saved Rigid instances to ASSY Primary and clears them when openi
   const page = mountPage(); await settle();
   const sections = () => Vue.toValue(state.primary?.sections) || [];
   expect(sections().find(section => section.id === "assembly-rigid")?.controls).toEqual([expect.objectContaining({ label: "Sub stage（Sub）", value: "否 · 柔性", kind: "readonly" })]);
+  const tools = sections().find(section => section.id === "assembly-tools");
+  expect(tools?.actions?.map(action => action.label)).toEqual(["检查 / 更新装配", "查看引用"]);
+  expect(elements(page.root, item => item.props["data-heavy-panel"] === "assembly-tools-dialog")).toHaveLength(0);
+  await tools!.actions![0].run(); await settle();
+  expect(elements(page.root, item => item.props["data-heavy-panel"] === "assembly-tools-dialog")).toHaveLength(1);
   await page.context.reloadFile("components/model.FCStd"); await settle();
   expect(sections().some(section => section.id === "assembly-rigid")).toBe(false);
+  expect(sections().some(section => section.id === "assembly-tools")).toBe(false);
+  expect(elements(page.root, item => item.props["data-heavy-panel"] === "assembly-tools-dialog")).toHaveLength(0);
+});
+it.each(["drawing", "bom_readonly"])("does not offer assembly updates for %s", async kind => {
+  const assy = preview("components/fixture.ASSY.FCStd"); assy.document_kinds!.assembly = true;
+  if (kind === "drawing") assy.document_kinds!.drawing = true; else assy.bom_readonly = true;
+  state.bom.mockResolvedValue(assy); mountPage(); await settle();
+  expect((Vue.toValue(state.primary?.sections) || []).some(section => section.id === "assembly-tools")).toBe(false);
+});
+it.each(["copy", "replace", "replace_prefixed"] as const)("refreshes published %s through detail, xref caches/counts and tree without claiming the copy source was written", async mode => {
+  const source = "components/fixture.ASSY.FCStd", output = mode === "copy" ? "components/fixture.verified.ASSY.FCStd" : source;
+  const selected = mode === "replace_prefixed" ? `././${source}` : source;
+  const assy = preview(source); assy.document_kinds!.assembly = true; state.bom.mockResolvedValue(assy);
+  (state.shell.consumeTabPayload as ReturnType<typeof vi.fn>).mockReset().mockReturnValueOnce({ fileDetail: { rel: selected } });
+  const page = mountPage(); await settle();
+  const tools = (Vue.toValue(state.primary?.sections) || []).find(section => section.id === "assembly-tools")!;
+  await tools.actions![0].run(); await settle();
+  state.publishedEvent = { filePath: source, outputRel: output };
+  const before = page.context.xrefMutationSeq.value;
+  const dialog = elements(page.root, item => item.props["data-heavy-panel"] === "assembly-tools-dialog")[0];
+  (dialog.props.onClick as () => void)(); await settle(); await settle();
+  expect(state.bom).toHaveBeenCalledTimes(2); expect(state.bom.mock.calls[1]).toEqual([selected, "/synthetic-workspace"]);
+  expect(state.xrefCounts).toHaveBeenCalledWith(selected); expect(state.shell.requestTreeRescan).toHaveBeenCalledExactlyOnceWith(output);
+  expect(page.context.xrefMutationSeq.value).toBeGreaterThan(before);
+  const status = state.shell.setStatus as ReturnType<typeof vi.fn>;
+  expect(status.mock.calls.at(-1)?.[0]).toContain(mode === "copy" ? "原宿主未改写" : "当前宿主更新已发布");
+});
+it("does not accept a stale publication event for another file or overwrite existing attribute drafts", async () => {
+  const source = "components/fixture.ASSY.FCStd", assy = preview(source); assy.document_kinds!.assembly = true; state.bom.mockResolvedValue(assy);
+  (state.shell.consumeTabPayload as ReturnType<typeof vi.fn>).mockReset().mockReturnValueOnce({ fileDetail: { rel: source } });
+  const page = mountPage(); await settle();
+  const tools = () => (Vue.toValue(state.primary?.sections) || []).find(section => section.id === "assembly-tools")!;
+  page.context.form.value = { ...page.context.form.value, PartName: "Unsaved independent draft" }; await settle();
+  expect(Vue.toValue(tools().actions![0].disabled)).toBe(true);
+  await tools().actions![0].run(); await settle(); expect(elements(page.root, item => item.props["data-heavy-panel"] === "assembly-tools-dialog")).toHaveLength(0);
+  page.context.form.value = { ...page.context.baseline.value }; await settle(); await tools().actions![0].run(); await settle();
+  state.publishedEvent = { filePath: "components/Other.FCStd", outputRel: "components/Other.verified.FCStd" };
+  const dialog = elements(page.root, item => item.props["data-heavy-panel"] === "assembly-tools-dialog")[0]; (dialog.props.onClick as () => void)(); await settle();
+  expect(state.bom).toHaveBeenCalledTimes(1); expect(state.shell.requestTreeRescan).not.toHaveBeenCalled();
 });
 it("opens Bottom with the exact disconnected joint end, without attempting a repair", async () => {
   const assy = preview("components/fixture.ASSY.FCStd"); assy.document_kinds!.assembly = true;

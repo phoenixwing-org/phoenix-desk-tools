@@ -68,6 +68,38 @@ function archive(xml: string) {
 afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
 
 describe("existing native Assembly is the shared read/write BOM target", () => {
+  it.each(["示例总成", "组合_Δ2", "E\u0301lement"])("preserves Unicode internal identity %s through index, batch and property writes", async name => {
+    const source = scene();
+    const xml = document(source.objects).replaceAll("AssemblyRoot", name), file = archive(xml);
+    const before = fs.readFileSync(file.filename);
+    expect(extractFcstdEmbeddedBomSnapshot(xml)).toMatchObject({ objectName: name, typeId: "Assembly::AssemblyObject", fields: ASSEMBLY_FIELDS });
+    expect(readFcstdEmbeddedBomFields(file.filename)).toEqual(ASSEMBLY_FIELDS);
+    expect(await readFcstdEmbeddedBomFieldsAsync(file.filename)).toEqual(ASSEMBLY_FIELDS);
+    expect(inspectFcstdBatchTarget(xml)).toMatchObject({ objectName: name, current: ASSEMBLY_FIELDS });
+    expect(analyzeCadIndexDocumentXmlWithInstances(xml).embeddedFields).toEqual(ASSEMBLY_FIELDS);
+    expect(fs.readFileSync(file.filename)).toEqual(before);
+
+    const proposal = { PartName: "Updated generic assembly" };
+    const patched = patchFcstdEmbeddedBomDocumentXml(xml, proposal);
+    expect(patched).toMatchObject({ objectName: name, changed: true });
+    assertOnlyTargetChanged(xml, patched.xml, name);
+    expect(writeFcstdEmbeddedBomFields(file.filename, proposal)).toEqual({ objectName: name, changed: true });
+    const written = unzipSync(fs.readFileSync(file.filename));
+    assertOnlyTargetChanged(xml, strFromU8(written["Document.xml"]), name);
+    expect(written["GuiDocument.xml"]).toEqual(file.entries["GuiDocument.xml"]);
+    expect(written["opaque.payload"]).toEqual(file.entries["opaque.payload"]);
+  });
+
+  it("matches entity-encoded Unicode object names without changing the saved spelling or links", () => {
+    const name = "示例总成", encoded = [...name].map(char => `&#x${char.codePointAt(0)!.toString(16)};`).join("");
+    const xml = document(scene().objects).replaceAll("AssemblyRoot", encoded);
+    expect(extractFcstdEmbeddedBomSnapshot(xml)).toMatchObject({ objectName: name, typeId: "Assembly::AssemblyObject", fields: ASSEMBLY_FIELDS });
+    expect(inspectFcstdBatchTarget(xml)).toMatchObject({ objectName: name, current: ASSEMBLY_FIELDS });
+    const patched = patchFcstdEmbeddedBomDocumentXml(xml, { PartName: "Updated generic assembly" });
+    expect(patched.objectName).toBe(name);
+    assertOnlyTargetChanged(xml, patched.xml, encoded);
+  });
+
   it.each([false, true])("reads Assembly metadata rather than the already-attributed Body in both type schemas [case %#]", async inlineTypes => {
     const xml = document(scene().objects, inlineTypes), file = archive(xml);
     expect(readFcstdEmbeddedBomFields(file.filename)).toEqual(ASSEMBLY_FIELDS);
@@ -234,6 +266,7 @@ describe("native Assembly ambiguity and malformed identity fail closed", () => {
     ["conflicting declaration types", () => { const source = scene(); return document(source.objects).replace("</Objects>", '<Object name="AssemblyRoot" type="App::Part"/></Objects>').replace('<Objects Count="4">', '<Objects Count="5">'); }],
     ["duplicate native ObjectData", () => { const source = scene(); return document(source.objects).replace("</ObjectData>", `${source.assembly.data}</ObjectData>`).replace('<ObjectData Count="4">', '<ObjectData Count="5">'); }],
     ["self Group cycle", () => document(scene(["Origin", "Joints", "AssemblyRoot"]).objects)],
+    ["Unicode self Group cycle", () => document(scene(["Origin", "Joints", "AssemblyRoot"]).objects).replaceAll("AssemblyRoot", "示例总成")],
     ["two-native Group cycle", () => {
       const source = scene(["Origin", "Joints", "NestedAssembly"]);
       return document([...source.objects, object("NestedAssembly", "Assembly::AssemblyObject", ASSEMBLY_FIELDS, ["AssemblyRoot"])]);

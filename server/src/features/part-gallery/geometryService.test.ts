@@ -22,6 +22,12 @@ function save(root: string, rel: string, refs: string[] = [], extra = "") {
   fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
   fs.writeFileSync(path.join(root, rel), zipSync({ "Document.xml": strToU8(xml), "thumbnails/Thumbnail.png": png }));
 }
+function saveAssembly(root: string, rel: string, refs: string[] = [], node = "Assembly") {
+  const links = refs.map((file, index) => ({ name: `Instance${index}`, file }));
+  const xml = `<Document><Objects><Object name="${node}" type="Assembly::AssemblyObject"/><Object name="Joints" type="Assembly::JointGroup"/>${links.map(link => `<Object name="${link.name}" type="Assembly::AssemblyLink"/>`).join("")}</Objects><ObjectData><Object name="${node}"><Properties Count="2"><Property name="Label" type="App::PropertyString"><String value="独立测试总成"/></Property><Property name="Group" type="App::PropertyLinkList"><LinkList count="${links.length + 1}"><Link value="Joints"/>${links.map(link => `<Link value="${link.name}"/>`).join("")}</LinkList></Property></Properties></Object><Object name="Joints"><Properties Count="0"/></Object>${links.map(link => `<Object name="${link.name}"><Properties Count="1"><Property name="LinkedObject" type="App::PropertyXLink"><XLink file="${link.file}" name="Body"/></Property></Properties></Object>`).join("")}</ObjectData></Document>`;
+  fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+  fs.writeFileSync(path.join(root, rel), zipSync({ "Document.xml": strToU8(xml), "thumbnails/Thumbnail.png": png }));
+}
 async function wait<T extends { state: string }>(get: () => T | null) {
   for (let index = 0; index < 300; index++) {
     await new Promise(resolve => setTimeout(resolve, 5));
@@ -32,6 +38,7 @@ async function wait<T extends { state: string }>(get: () => T | null) {
 async function catalog(root: string, product: string) { const value = startGalleryJob(root, product); return wait(() => galleryJob(root, value.id)); }
 async function dimensions(root: string, product: string, read: typeof validRead = validRead) { const value = startGeometryJob(root, product, read); return wait(() => geometryJob(root, value.id)); }
 const box = { x_mm: 10, y_mm: 20, z_mm: 30 };
+const assemblyReady = "已保存总成几何在文档 XYZ 轴的外包络（mm，优化包围盒；非加工尺寸）";
 async function validRead(inputs: GeometryInput[], onItem?: (item: GeometryResult) => void): Promise<GeometryResult[]> {
   return inputs.map(input => { const item = { rel: input.rel, bounding_box: box, message: "ready" }; onItem?.(item); return item; });
 }
@@ -60,7 +67,7 @@ it("stores real millimetres separately, reuses unchanged geometry, and preserves
   expect(thumbnailBytes(r, "Unit.FCStd")).toEqual(png);
   expect(fcstdFingerprint(fs.readFileSync(path.join(r, "Unit.FCStd")))).toBe(before);
 });
-it("skips drawing and assembly geometry, and continues past individual missing shapes", async () => {
+it("skips drawing and invalid assembly roots, and continues past individual missing shapes", async () => {
   const r = root(); save(r, "Top.ASSY.FCStd", ["Unit.FCStd", "Blank.FCStd", "Page.Drawing.FCStd"]);
   save(r, "Unit.FCStd"); save(r, "Blank.FCStd"); save(r, "Page.Drawing.FCStd"); await catalog(r, "Top.ASSY.FCStd");
   const read = vi.fn(async (inputs: GeometryInput[]) => inputs.map(input => ({ rel: input.rel, bounding_box: input.rel === "Blank.FCStd" ? null : box, message: "ignored raw text" })));
@@ -72,6 +79,39 @@ it("skips drawing and assembly geometry, and continues past individual missing s
   expect(rows.filter(row => row.rel !== "Unit.FCStd").every(row => row.bounding_box === null)).toBe(true);
   expect(rows.every(row => row.status === "ready")).toBe(true);
   expect(rows.some(row => row.dimension_message?.includes("ignored raw text"))).toBe(false);
+});
+it("measures unique assembly roots with all dependency fingerprints and independently reuses their versioned cache", async () => {
+  const r = root(); saveAssembly(r, "Top.ASSY.FCStd", ["Unit.FCStd", "Unit.FCStd", "Page.Drawing.FCStd"], "装配根");
+  save(r, "Unit.FCStd"); save(r, "Page.Drawing.FCStd"); await catalog(r, "Top.ASSY.FCStd");
+  const before = ["Top.ASSY.FCStd", "Unit.FCStd"].map(rel => fcstdFingerprint(fs.readFileSync(path.join(r, rel))));
+  const read = vi.fn(async (inputs: GeometryInput[]) => inputs.map(input => ({ rel: input.rel, bounding_box: box, message: input.kind === "assembly" ? assemblyReady : "ready" })));
+  const first = await dimensions(r, "Top.ASSY.FCStd", read);
+  expect(first).toMatchObject({ state: "attention", completed: 3, reused: 0 });
+  expect(read.mock.calls[0][0]).toEqual(expect.arrayContaining([expect.objectContaining({ rel: "Top.ASSY.FCStd", node: "装配根", kind: "assembly" })]));
+  expect(read.mock.calls[0][0].some(input => input.rel.includes("Drawing"))).toBe(false);
+  const prepared = geometrySnapshot(r, "Top.ASSY.FCStd", "assembly");
+  expect(prepared.sources).toHaveLength(3); // Source files dedupe; native instances must not.
+  expect(loadGallery(r, "Top.ASSY.FCStd").rows.find(row => row.rel === "Top.ASSY.FCStd")).toMatchObject({ bounding_box: box, dimension_message: assemblyReady });
+  const db = openGalleryDb(r)!;
+  expect(db.get<{ algorithm_version: number }>("SELECT algorithm_version FROM desk_cad_geometry WHERE rel=?", ["Top.ASSY.FCStd"])?.algorithm_version).toBe(2); db.close();
+  const again = await dimensions(r, "Top.ASSY.FCStd", read); expect(again.reused).toBe(2); expect(read).toHaveBeenCalledOnce();
+  expect(["Top.ASSY.FCStd", "Unit.FCStd"].map(rel => fcstdFingerprint(fs.readFileSync(path.join(r, rel))))).toEqual(before);
+  save(r, "Unit.FCStd");
+  expect(loadGallery(r, "Top.ASSY.FCStd").rows.find(row => row.rel === "Top.ASSY.FCStd")?.bounding_box).toBeNull();
+});
+it("does not present a legacy part box or unrecognized native success as assembly dimensions", async () => {
+  const r = root(); saveAssembly(r, "Top.ASSY.FCStd", ["Unit.FCStd"]); save(r, "Unit.FCStd"); await catalog(r, "Top.ASSY.FCStd");
+  const prepared = geometrySnapshot(r, "Top.ASSY.FCStd", "assembly"), db = openGalleryDb(r)!; createGeometryTable(db);
+  saveGeometry(db, { rel: "Top.ASSY.FCStd", sources: prepared.sources, box, message: "old part-only algorithm" }); db.close();
+  expect(loadGallery(r, "Top.ASSY.FCStd").rows.find(row => row.rel === "Top.ASSY.FCStd")?.bounding_box).toBeNull();
+  const read = vi.fn(async (inputs: GeometryInput[]) => inputs.map(input => ({ rel: input.rel, bounding_box: box, message: "untrusted raw success" })));
+  await dimensions(r, "Top.ASSY.FCStd", read); expect(read).toHaveBeenCalledOnce();
+  expect(loadGallery(r, "Top.ASSY.FCStd").rows.find(row => row.rel === "Top.ASSY.FCStd")).toMatchObject({ bounding_box: null, dimension_message: "模型没有可安全确认的有效边界盒" });
+});
+it("never launches native measurement for ambiguous or missing assembly sources", async () => {
+  const r = root(); saveAssembly(r, "Top.ASSY.FCStd", ["Missing.FCStd"]); await catalog(r, "Top.ASSY.FCStd");
+  const read = vi.fn(validRead); await dimensions(r, "Top.ASSY.FCStd", read); expect(read).not.toHaveBeenCalled();
+  expect(loadGallery(r, "Top.ASSY.FCStd").rows[0]?.bounding_box).toBeNull();
 });
 it("does not publish streamed geometry if final native validation fails", async () => {
   const r = root(); save(r, "Unit.FCStd"); await catalog(r, "Unit.FCStd");
@@ -119,7 +159,8 @@ it("does not launch native readers for external or symlink dependencies or ambig
   const r = root(), outside = root(); save(outside, "Foreign.FCStd"); save(r, "Root.FCStd", ["Escape.FCStd"]);
   fs.symlinkSync(path.join(outside, "Foreign.FCStd"), path.join(r, "Escape.FCStd"));
   expect(() => geometrySnapshot(r, "Root.FCStd")).toThrow(); await catalog(r, "Root.FCStd");
-  const read = vi.fn(validRead); await dimensions(r, "Root.FCStd", read); expect(read).not.toHaveBeenCalled();
+  const read = vi.fn(validRead);
+  expect(() => startGeometryJob(r, "Root.FCStd", read)).toThrow("引用范围待核对"); expect(read).not.toHaveBeenCalled();
   save(r, "Ambiguous.FCStd", [], '<Object name="OtherBody" type="PartDesign::Body"/>'); await catalog(r, "Ambiguous.FCStd");
   await dimensions(r, "Ambiguous.FCStd", read); expect(read).not.toHaveBeenCalled();
   expect(loadGallery(r, "Ambiguous.FCStd").rows[0].dimension_message).toMatch(/无法安全确定/);

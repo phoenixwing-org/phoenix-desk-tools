@@ -1,5 +1,12 @@
 /** Serialized object identity, shared by assembly preview and label writes.
  * Offsets always refer to the original XML; only Label values may be patched. */
+/** FreeCAD's Base::Tools::getIdentifier accepts Unicode letters, not just
+ * ASCII. Match its first/subsequent character categories without normalizing
+ * the saved identity or accepting XML syntax, whitespace or path separators. */
+export function isFcstdObjectName(value: string): boolean {
+  return /^[_\p{L}\p{Nl}][_\p{L}\p{Nl}\p{Nd}\p{Mn}\p{Mc}\p{Pc}]*$/u.test(value);
+}
+
 export function xmlAttribute(tag: string, key: string): string {
   const raw = new RegExp(`(?:^|\\s)${key}\\s*=\\s*(["'])(.*?)\\1`, "s").exec(tag)?.[2] ?? "";
   return raw.replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))

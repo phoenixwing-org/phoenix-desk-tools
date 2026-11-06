@@ -8,6 +8,7 @@ import { readFileThumbnail } from "../../lib/fcstdThumbnail.js";
 import { thumbnailBytes } from "../part-gallery/service.js";
 import { ensureSaveThumbnail } from "./preferences.js";
 import * as gallery from "../part-gallery/service.js";
+import * as executionGate from "../drawing-research/executionGate.js";
 vi.mock("./preferences.js", () => ({ ensureSaveThumbnail: vi.fn(async () => {}) }));
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6mcAAAAASUVORK5CYII=", "base64");
 const options = { color: "original", axonometric: true, fit: true };
@@ -76,6 +77,55 @@ it("rejects stale source or linked geometry before publishing", async () => {
   save(root, "", "Child.FCStd");
   await expect(regenerateThumbnail(root, "Demo.FCStd", options, async () => { save(root, "<!--changed-->", "Child.FCStd"); return png; })).rejects.toThrow("已变化");
   expect(fs.existsSync(path.join(root, ".phoenix"))).toBe(false);
+});
+it("reports a missing source with a relative recovery hint before acquiring the Native gate", async () => {
+  const root = fixture(), render = vi.fn(async () => png), gate = vi.spyOn(executionGate, "acquireDrawingExecution");
+  const error = await regenerateThumbnail(root, "models/Absent.FCStd", options, render).catch(cause => cause);
+  expect(error).toMatchObject({ code: "thumbnail_source_missing", rel: "models/Absent.FCStd" });
+  expect(error.message).toContain("刷新 CAD 索引和图册");
+  expect(error.message).not.toContain(root); expect(error.message).not.toContain(fs.realpathSync(root));
+  expect(error.message).not.toContain("ENOENT"); expect(render).not.toHaveBeenCalled(); expect(gate).not.toHaveBeenCalled();
+  expect(fs.existsSync(path.join(root, ".phoenix"))).toBe(false);
+});
+it("reports a missing dependency separately without guessing another file or acquiring the Native gate", async () => {
+  const root = fixture(); save(root, xlink('file="models/Absent.FCStd" name="Body"')); save(root, "", "other/Absent.FCStd");
+  const before = fs.readFileSync(path.join(root, "Demo.FCStd")), render = vi.fn(async () => png), gate = vi.spyOn(executionGate, "acquireDrawingExecution");
+  const error = await regenerateThumbnail(root, "Demo.FCStd", options, render).catch(cause => cause);
+  expect(error).toMatchObject({ code: "thumbnail_dependency_missing", rel: "models/Absent.FCStd" });
+  expect(error.message).toContain("先修复装配链接"); expect(error.message).not.toContain(root);
+  expect(error.message).not.toContain(fs.realpathSync(root)); expect(error.message).not.toContain("ENOENT");
+  expect(render).not.toHaveBeenCalled(); expect(gate).not.toHaveBeenCalled();
+  expect(fs.readFileSync(path.join(root, "Demo.FCStd"))).toEqual(before); expect(fs.existsSync(path.join(root, ".phoenix"))).toBe(false);
+});
+it.each(["source", "dependency"] as const)("rejects a %s deleted during rendering without publishing or recreating files", async kind => {
+  const root = fixture(); save(root, xlink('file="Child.FCStd" name="Body"')); save(root, "", "Child.FCStd");
+  const before = fs.readFileSync(path.join(root, "Demo.FCStd")), rel = kind === "source" ? "Demo.FCStd" : "Child.FCStd";
+  const publish = vi.spyOn(gallery, "cacheRenderedThumbnail"), render = vi.fn(async () => { fs.unlinkSync(path.join(root, rel)); return png; });
+  const error = await regenerateThumbnail(root, "Demo.FCStd", options, render).catch(cause => cause);
+  expect(error).toMatchObject({ code: kind === "source" ? "thumbnail_source_missing" : "thumbnail_dependency_missing", rel });
+  expect(error.message).not.toContain(root); expect(error.message).not.toContain(fs.realpathSync(root));
+  expect(render).toHaveBeenCalledOnce(); expect(publish).not.toHaveBeenCalled(); expect(fs.existsSync(path.join(root, rel))).toBe(false);
+  if (kind === "dependency") expect(fs.readFileSync(path.join(root, "Demo.FCStd"))).toEqual(before);
+  expect(fs.existsSync(path.join(root, ".phoenix"))).toBe(false);
+});
+it("does not relabel permission failures, symlinks or invalid archives as missing files", async () => {
+  const root = fixture(), canonical = fs.realpathSync(root), file = path.join(canonical, "Demo.FCStd"), lstat = fs.lstatSync;
+  const render = vi.fn(async () => png);
+  const denied = Object.assign(new Error("synthetic permission denied"), { code: "EACCES" });
+  const read = vi.spyOn(fs, "lstatSync").mockImplementation(((name: fs.PathLike, ...args: unknown[]) => {
+    if (String(name) === file) throw denied;
+    return Reflect.apply(lstat, fs, [name, ...args]);
+  }) as typeof fs.lstatSync);
+  const permission = await regenerateThumbnail(root, "Demo.FCStd", options, render).catch(cause => cause);
+  expect(permission.message).toBe("synthetic permission denied"); expect(permission).not.toHaveProperty("code", "thumbnail_source_missing");
+  read.mockRestore();
+  fs.symlinkSync(path.join(root, "NotPresent.FCStd"), path.join(root, "Alias.FCStd"));
+  const alias = await regenerateThumbnail(root, "Alias.FCStd", options, render).catch(cause => cause);
+  expect(alias.message).toContain("符号链接"); expect(alias).not.toHaveProperty("code", "thumbnail_source_missing");
+  fs.writeFileSync(path.join(root, "Bad.FCStd"), "not an archive");
+  const invalid = await regenerateThumbnail(root, "Bad.FCStd", options, render).catch(cause => cause);
+  expect(invalid).not.toHaveProperty("code", "thumbnail_source_missing"); expect(invalid.message).not.toContain("thumbnail_dependency_missing");
+  expect(render).not.toHaveBeenCalled(); expect(fs.existsSync(path.join(root, ".phoenix"))).toBe(false);
 });
 it("rejects unsafe paths, missing dependencies, drawings and invalid options before rendering", async () => {
   const root = fixture(), render = vi.fn(async () => png);

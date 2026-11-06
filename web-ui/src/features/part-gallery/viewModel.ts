@@ -1,6 +1,6 @@
 import type { GalleryRow } from "./api";
 export const category = (type: string) => type === "H" ? "一般件" : type === "S" ? "标准件" : type === "R" ? "虚拟件" : "其他 / 未分类";
-export const boundingBoxDescription = "按模型 X / Y / Z 轴的边界盒尺寸（mm），不是加工公差尺寸。";
+export const boundingBoxDescription = "按文档 X / Y / Z 轴的几何外包络（mm），不是加工公差尺寸；总成按已保存/恢复的实例状态读取，不代表已重新求解。";
 export function boundingBoxText(row: Pick<GalleryRow, "bounding_box">): string {
   const box = row.bounding_box;
   if (!box) return "尺寸未获取";

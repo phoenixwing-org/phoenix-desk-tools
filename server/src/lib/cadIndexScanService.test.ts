@@ -24,6 +24,18 @@ function readRows(root: string) {
   finally { db.close(); }
 }
 describe("explicit shared CAD index service", () => {
+  it("indexes a Unicode native assembly identity without rewriting the source archive", async () => {
+    const { root } = fixture();
+    const filename = "GenericAssembly.FCStd", file = path.join(root, filename);
+    const xml = '<Document><Objects><Object name="示例总成" type="Assembly::AssemblyObject"/></Objects><ObjectData><Object name="示例总成"><Properties><Property name="PartName" type="App::PropertyString"><String value="Generic assembly"/></Property></Properties></Object></ObjectData></Document>';
+    fs.writeFileSync(file, zipSync({ "Document.xml": strToU8(xml) }));
+    const before = fs.readFileSync(file);
+    const result = await scanCadWorkspaceIndex(root);
+    expect(result).toMatchObject({ files: 2, parsedFiles: 2 });
+    expect(readRows(root)[1]).toEqual(expect.arrayContaining([expect.objectContaining({ filename, part_name: "Generic assembly", file_status: "present" })]));
+    expect(fs.readFileSync(file)).toEqual(before);
+  });
+
   it("stores distinct AssemblyLink Rigid states in bom_json and refreshes them without saving CAD", async () => {
     const { root } = fixture(); const rel = "Synthetic.ASSY.FCStd"; const file = path.join(root, rel);
     const model = (value: string) => `<Document><Objects><Object name="Assembly" type="Assembly::AssemblyObject"/><Object name="Stage" type="Assembly::AssemblyLink"/></Objects><ObjectData>

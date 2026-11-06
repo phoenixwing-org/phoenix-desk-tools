@@ -925,13 +925,15 @@ shellRoutes.get("/api/file-detail/xrefs", async (c) => {
       incoming: { count: 0, direct_count: 0, hosts: [] },
       outgoing: { count: 0, label_mismatch_count: 0, refs: [] },
     });
-    if (c.req.query("refresh_disk") === "true") {
+    const refreshDisk = c.req.query("refresh_disk") === "true";
+    if (refreshDisk) {
       refreshBomXrefForHost(ws, rel, { recursive: false });
     }
     return c.json(fileDetailXrefs(ws, rel, {
       limit: Number(c.req.query("limit") || 500),
       transitive: c.req.query("transitive") === "true",
       scope: (c.req.query("scope") as any) || "both",
+      labelCheck: refreshDisk ? "saved_current_host" : undefined,
     }));
   } catch (e: any) {
     return c.json({

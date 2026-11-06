@@ -5,21 +5,30 @@ import { randomUUID } from "node:crypto";
 import { runtimeUserDataDir } from "../../lib/appRuntimePaths.js";
 import { buildFreecadChildEnvironment, resolveFreecadCommand } from "../../lib/freecadProcessSecurity.js";
 import { acquireDrawingExecution, type DrawingExecutionLease } from "../drawing-research/executionGate.js";
+import { isFcstdObjectName } from "../../lib/fcstdLinkIdentity.js";
 
-export type GeometryInput = { rel: string; filename: string; node: string };
+export type GeometryInput = { rel: string; filename: string; node: string; kind?: "part" | "assembly" };
 export type GeometryResult = { rel: string; bounding_box: { x_mm: number; y_mm: number; z_mm: number } | null; message: string };
 const PREFIX = "DESK_GALLERY_GEOMETRY_ITEM ";
 const MAX_ITEMS = 100, MAX_SOURCE_BYTES = 64 * 1024 * 1024, MAX_REPORT_BYTES = 1024 * 1024;
 const TIMEOUT_MS = 120_000, KILL_GRACE_MS = 1000;
 const MESSAGES: Record<string, string> = {
   ready: "保存主实体在文档 XYZ 轴的边界盒（mm）",
+  ready_assembly_optimal: "已保存总成几何在文档 XYZ 轴的外包络（mm，优化包围盒；非加工尺寸）",
+  ready_assembly_standard: "已保存总成几何在文档 XYZ 轴的外包络（mm，标准包围盒；非加工尺寸）",
   missing_node: "未找到指定主零件节点",
   unsupported_node: "所选节点是装配或链接容器，不读取零件边界盒",
   missing_shape: "主零件节点没有可读取的 Shape",
   empty_shape: "主零件节点的 Shape 为空",
   invalid_bounds: "主零件节点的边界盒无效",
   read_failed: "无法读取已保存的模型几何",
+  unsupported_assembly_root: "所选节点不是受支持的总成根对象",
+  incomplete_assembly: "总成结构或链接暂无法完整确认，未提供整体尺寸",
+  empty_assembly_shape: "总成没有可读取的非空几何",
+  assembly_bounds_failed: "无法确认总成几何的有效包围盒",
+  assembly_limit: "总成范围超过安全读取上限，未提供整体尺寸",
 };
+const SUCCESS_CODES = new Set(["ready", "ready_assembly_optimal", "ready_assembly_standard"]);
 type WireRow = { index: number; rel: string; bounding_box: GeometryResult["bounding_box"]; code: string };
 class GeometryFailure extends Error {}
 const READ_FAILURE_MESSAGES = new Set([
@@ -51,7 +60,8 @@ const READ_FAILURE_MESSAGES = new Set([
   "边界盒读取已取消，已等待自有进程关闭",
   "已有原生 CAD 任务运行中，请等待完成后重试",
 ]);
-const RESULT_FAILURE_MESSAGES = new Set(Object.entries(MESSAGES).filter(([code]) => code !== "ready").map(([, message]) => message));
+const RESULT_FAILURE_MESSAGES = new Set(Object.entries(MESSAGES).filter(([code]) => !SUCCESS_CODES.has(code)).map(([, message]) => message));
+const RESULT_SUCCESS_MESSAGES = new Set([...SUCCESS_CODES].map(code => MESSAGES[code]));
 const CONFIGURATION_MESSAGES = {
   freecad_not_found: "未找到 FreeCADCmd，请先配置 FreeCAD 安装目录",
   freecad_configuration_invalid: "FreeCADCmd 配置不可用，请确认安装目录而非图形启动器",
@@ -80,12 +90,203 @@ export function geometryResultFailureMessage(value: unknown): string | null {
   catch { return null; }
   return typeof message === "string" && RESULT_FAILURE_MESSAGES.has(message) ? message : null;
 }
+/** Only fixed success wording is persisted; arbitrary Native output is never a label. */
+export function geometryResultSuccessMessage(value: unknown, kind?: "part" | "assembly"): string | null {
+  let message: unknown;
+  try { message = typeof value === "string" ? value : (value as { message?: unknown } | null)?.message; }
+  catch { return null; }
+  if (typeof message !== "string" || !RESULT_SUCCESS_MESSAGES.has(message)) return null;
+  if (kind !== undefined && kind !== "part" && kind !== "assembly") return null;
+  if (kind === "part" && message !== MESSAGES.ready) return null;
+  if (kind === "assembly" && message !== MESSAGES.ready_assembly_optimal && message !== MESSAGES.ready_assembly_standard) return null;
+  return message;
+}
 
 /** Disk-only native geometry read in a disposable FreeCADCmd process. */
 const PYTHON = String.raw`
-import json, math
+import json, math, zipfile
+from collections import Counter
 from pathlib import Path
+import xml.etree.ElementTree as ET
 import FreeCAD as App
+import Part
+
+class IncompleteAssembly(Exception):
+    pass
+class AssemblyLimit(IncompleteAssembly):
+    pass
+
+ASSEMBLY_ROOTS = ('Assembly::AssemblyObject', 'App::Part', 'App::LinkGroup')
+CONTAINERS = (*ASSEMBLY_ROOTS, 'Assembly::AssemblyLink', 'App::DocumentObjectGroup')
+AUXILIARY = ('Assembly::JointGroup', 'Assembly::Joint', 'Assembly::BomGroup',
+             'Assembly::ViewGroup', 'Assembly::SimulationGroup', 'App::Origin',
+             'App::Plane', 'App::Line', 'App::Point', 'App::LocalCoordinateSystem',
+             'PartDesign::Plane', 'PartDesign::Line', 'PartDesign::Point', 'Sketcher::SketchObject')
+
+def assembly_shape(root):
+    # The fixed scope is saved physical structure, independent of GUI hiding.
+    # A Body is one physical leaf: its sketch/origin/feature history is not a
+    # second component. Never use all document Shapes or source-file dedup.
+    manifests, document_bytes, leaves, visited, signatures = {}, 0, [], 0, {}
+
+    def require(value):
+        if not value:
+            raise IncompleteAssembly()
+    def limit(value):
+        if not value:
+            raise AssemblyLimit()
+
+    def manifest(doc):
+        nonlocal document_bytes
+        filename = str(Path(doc.FileName).resolve())
+        if filename in manifests:
+            return manifests[filename]
+        require(bool(doc.FileName))
+        limit(len(manifests) < 500)
+        with zipfile.ZipFile(filename) as archive:
+            entries = [info for info in archive.infolist() if info.filename.lower() == 'document.xml']
+            require(len(entries) == 1 and entries[0].filename == 'Document.xml')
+            limit(entries[0].file_size <= 16 * 1024 * 1024)
+            with archive.open(entries[0]) as source:
+                data = source.read(16 * 1024 * 1024 + 1)
+        document_bytes += len(data)
+        limit(len(data) <= 16 * 1024 * 1024 and document_bytes <= 64 * 1024 * 1024)
+        require(b'<!doctype' not in data.lower() and b'<!entity' not in data.lower())
+        document = ET.fromstring(data)
+        require(document.tag == 'Document')
+        declarations, objects = {}, {}
+        for entry in document.findall('./Objects/Object'):
+            name, type_id = entry.get('name'), entry.get('type')
+            require(bool(name) and bool(type_id) and name not in declarations)
+            declarations[name] = type_id
+        for entry in document.findall('./ObjectData/Object'):
+            name = entry.get('name')
+            require(name in declarations and name not in objects)
+            properties = {}
+            for prop in entry.findall('./Properties/Property'):
+                key = prop.get('name')
+                require(bool(key) and key not in properties)
+                properties[key] = prop
+            objects[name] = (declarations[name], properties)
+        require(set(objects) == set(declarations))
+        manifests[filename] = objects
+        return objects
+
+    def saved(obj):
+        entry = manifest(obj.Document).get(obj.Name)
+        require(entry is not None and entry[0] == obj.TypeId)
+        # openDocument may restore built-in objects, but it must not silently
+        # change a saved component pose before we call this a saved envelope.
+        for key in ('Placement', 'LinkPlacement'):
+            prop = entry[1].get(key)
+            if prop is None:
+                continue
+            values = list(prop)
+            require(prop.get('type') == 'App::PropertyPlacement' and len(values) == 1 and values[0].tag == 'PropertyPlacement')
+            expected = [float(values[0].get(name)) for name in ('Px', 'Py', 'Pz', 'Q0', 'Q1', 'Q2', 'Q3')]
+            require(all(math.isfinite(value) for value in expected))
+            actual = getattr(obj, key)
+            require(max(abs(a-b) for a,b in zip(expected[:3], (actual.Base.x, actual.Base.y, actual.Base.z))) <= 1e-7)
+            norm = math.sqrt(sum(value * value for value in expected[3:]))
+            require(norm > 0)
+            quaternion = [value / norm for value in expected[3:]]
+            native = list(actual.Rotation.Q)
+            require(min(max(abs(a-b) for a,b in zip(quaternion,native)), max(abs(a+b) for a,b in zip(quaternion,native))) <= 1e-9)
+        return entry[1]
+
+    def linked_target(obj, properties):
+        prop = properties.get('LinkedObject')
+        require(prop is not None and prop.get('type') in ('App::PropertyLink', 'App::PropertyXLink'))
+        links = [element for element in prop.iter() if element.tag in ('Link', 'XLink')]
+        require(len(links) == 1)
+        expected_name = links[0].get('value') if links[0].tag == 'Link' else links[0].get('name')
+        require(bool(expected_name))
+        target = obj.LinkedObject
+        require(target is not None and not isinstance(target, (tuple,list)) and target is not obj)
+        expected_file = links[0].get('file', '')
+        expected_path = Path(obj.Document.FileName).parent / expected_file if expected_file else Path(obj.Document.FileName)
+        require(str(Path(target.Document.FileName).resolve()) == str(expected_path.resolve()) and target.Name == expected_name)
+        require(target.Name in manifest(target.Document))
+        return target
+
+    def group_children(obj, properties):
+        prop = properties.get('Group')
+        require(prop is None or prop.get('type') == 'App::PropertyLinkList')
+        expected = [] if prop is None else [entry.get('value') or entry.get('name') for entry in prop.findall('./LinkList/Link')]
+        require(all(expected) and len(expected) == len(set(expected)))
+        actual = list(getattr(obj, 'Group', []))
+        require(all(child is not None for child in actual) and sorted(child.Name for child in actual) == sorted(expected))
+        return actual
+
+    def collect(obj, subname, owner, active, depth, measure=True):
+        nonlocal visited
+        visited += 1
+        require(obj is not None)
+        limit(visited <= 10000 and depth <= 64 and len(subname) <= 16384)
+        identity = (str(Path(obj.Document.FileName).resolve()), obj.Name)
+        require(identity not in active)
+        if obj.TypeId in AUXILIARY or obj.isDerivedFrom('App::DatumElement'):
+            return Counter()
+        properties = saved(obj)
+        require(not any(state in ('Invalid', 'Error') for state in getattr(obj, 'State', [])))
+        # Definition signatures do not depend on occurrence placement. Reuse
+        # only completed, read-only signatures; the active/cap checks stay above.
+        if not measure and identity in signatures:
+            return signatures[identity].copy()
+        next_active = active | {identity}
+        if obj.TypeId in ('App::Link', 'App::LinkElement'):
+            # Link arrays/custom element visibility require a separate proven
+            # occurrence contract. Ordinary repeated Links remain distinct.
+            require(int(getattr(obj, 'ElementCount', 0)) == 0)
+            result = collect(linked_target(obj, properties), subname, owner, next_active, depth + 1, measure)
+            if not measure:
+                signatures[identity] = result.copy()
+            return result
+        target = linked_target(obj, properties) if obj.TypeId == 'Assembly::AssemblyLink' else None
+        if obj.TypeId not in CONTAINERS and (obj.TypeId == 'PartDesign::Body' or obj.isDerivedFrom('Part::Feature')):
+            if measure:
+                limit(len(leaves) < 2000)
+                leaves.append((subname, owner))
+            return Counter({identity: 1})
+        require(obj.TypeId in CONTAINERS)
+        result, count = Counter(), 0
+        for child in group_children(obj, properties):
+            require(bool(child.Name) and '.' not in child.Name and '/' not in child.Name and '\\' not in child.Name)
+            child_signature = collect(child, subname + child.Name + '.', child, next_active, depth + 1, measure)
+            count += sum(child_signature.values())
+            limit(count <= 2000)
+            result.update(child_signature)
+        if target is not None:
+            # A stale AssemblyLink can have a self-consistent but empty/short
+            # local Group while its source has more components. Definition
+            # multisets prove physical membership, retaining repeated instances.
+            # Do not compare source/instance poses or refresh/solve the model.
+            source_signature = collect(target, '', target, next_active, depth + 1, False)
+            require(result == source_signature)
+        if not measure:
+            signatures[identity] = result.copy()
+        return result
+
+    collect(root, '', root, set(), 0)
+    if not leaves:
+        return None
+    shapes = []
+    for subname, expected_owner in leaves:
+        # The official API accumulates ancestors, links and instance placement.
+        # retType=1 proves the subname resolved to this exact occurrence; its
+        # returned matrix is intentionally NOT applied a second time.
+        shape, unused_matrix, owner = Part.getShape(root, subname, needSubElement=False, transform=True, retType=1)
+        require(owner is expected_owner and not shape.isNull())
+        shapes.append(shape)
+    # Compound, not fuse: each actual transformed physical instance occurs once.
+    return Part.makeCompound(shapes)
+
+def valid_assembly_bounds(box):
+    valid = getattr(box, 'isValid', None)
+    if callable(valid) and not valid():
+        return False
+    values = [float(getattr(box, axis)) for axis in ('XMin','XMax','YMin','YMax','ZMin','ZMax','XLength','YLength','ZLength')]
+    return all(math.isfinite(value) for value in values) and all(values[i] <= values[i+1] for i in (0,2,4)) and all(value >= 0 for value in values[6:]) and any(value > 0 for value in values[6:])
 
 spec = json.loads(Path(JOB_PATH).read_text(encoding='utf-8'))
 rows = []
@@ -96,6 +297,36 @@ for index, item in enumerate(spec['items']):
         obj = doc.getObject(item['node'])
         if obj is None:
             row['code'] = 'missing_node'
+        elif item.get('kind', 'part') == 'assembly':
+            if obj.TypeId not in ASSEMBLY_ROOTS:
+                row['code'] = 'unsupported_assembly_root'
+            else:
+                try:
+                    shape = assembly_shape(obj)
+                    if shape is None or shape.isNull():
+                        row['code'] = 'empty_assembly_shape'
+                    else:
+                        optimal = getattr(shape, 'optimalBoundingBox', None)
+                        code = 'ready_assembly_standard'
+                        if callable(optimal):
+                            try:
+                                box = optimal(False, False)
+                                code = 'ready_assembly_optimal'
+                            except (TypeError, AttributeError, NotImplementedError):
+                                box = shape.BoundBox
+                        else:
+                            box = shape.BoundBox
+                        if not valid_assembly_bounds(box):
+                            row['code'] = 'assembly_bounds_failed'
+                        else:
+                            row['bounding_box'] = dict(zip(['x_mm','y_mm','z_mm'], [float(box.XLength),float(box.YLength),float(box.ZLength)]))
+                            row['code'] = code
+                except AssemblyLimit:
+                    row['code'] = 'assembly_limit'
+                except IncompleteAssembly:
+                    row['code'] = 'incomplete_assembly'
+                except Exception:
+                    row['code'] = 'assembly_bounds_failed'
         elif str(obj.TypeId).startswith('Assembly::') or obj.TypeId in ('App::Part', 'App::LinkGroup'):
             row['code'] = 'unsupported_node'
         elif not hasattr(obj, 'Shape'):
@@ -142,7 +373,8 @@ function validateInputs(inputs: GeometryInput[]) {
     if (!input || typeof input.rel !== "string" || !input.rel || input.rel.length > 4096 || /[\\\x00-\x1f]/.test(input.rel)
       || path.isAbsolute(input.rel) || /^[A-Za-z]:/.test(input.rel) || input.rel.split("/").some(piece => !piece || piece === "." || piece === ".." || piece.toLowerCase() === ".git")
       || rels.has(input.rel) || typeof input.filename !== "string" || !path.isAbsolute(input.filename) || !/\.fcstd$/i.test(input.filename)
-      || typeof input.node !== "string" || !/^[A-Za-z_]\w{0,255}$/.test(input.node)) throw new GeometryFailure("边界盒输入必须包含唯一相对路径、已验证的绝对 FCStd 路径及主节点名");
+      || typeof input.node !== "string" || input.node.length > 256 || !isFcstdObjectName(input.node)
+      || (input.kind !== undefined && input.kind !== "part" && input.kind !== "assembly")) throw new GeometryFailure("边界盒输入必须包含唯一相对路径、已验证的绝对 FCStd 路径及主节点名");
     rels.add(input.rel);
     try {
       sourceStamp(input.filename);
@@ -156,7 +388,8 @@ function wireRow(value: unknown, inputs: GeometryInput[], expected: number): Wir
   if (!row || typeof row !== "object" || Array.isArray(row) || row.index !== expected || row.rel !== inputs[expected]?.rel
     || typeof row.code !== "string" || !Object.hasOwn(MESSAGES, row.code)
     || Object.keys(row).sort().join(",") !== "bounding_box,code,index,rel") throw new GeometryFailure("边界盒报告与请求不一致");
-  if (row.code === "ready") {
+  if (SUCCESS_CODES.has(row.code)) {
+    if ((inputs[expected].kind === "assembly") !== row.code.startsWith("ready_assembly_")) throw new GeometryFailure("边界盒报告与请求不一致");
     const box = row.bounding_box;
     if (!box || typeof box !== "object" || Array.isArray(box) || Object.keys(box).sort().join(",") !== "x_mm,y_mm,z_mm"
       || [box.x_mm, box.y_mm, box.z_mm].some(value => typeof value !== "number" || !Number.isFinite(value) || value < 0)

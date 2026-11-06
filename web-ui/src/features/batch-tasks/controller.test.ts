@@ -17,6 +17,21 @@ function setup() {
 const flush = async () => { for (let index = 0; index < 20; index++) await Promise.resolve(); };
 afterEach(() => vi.useRealTimers());
 describe("application batch task controller", () => {
+  it("keeps untouched empty, newly created and archived-only editors clean across workspaces", async () => {
+    const { api, controller } = setup(); expect(controller.dirty.value).toBe(false);
+    vi.mocked(api.tasks).mockResolvedValue({ tasks: [] }); controller.setWorkspace("/empty-synthetic-workspace");
+    expect(controller.dirty.value).toBe(false); await flush(); expect(controller.dirty.value).toBe(false);
+    controller.newTask(); expect(controller.dirty.value).toBe(false);
+    controller.editPaths("samples/edited.txt"); expect(controller.dirty.value).toBe(true);
+    expect(controller.discardDraft()).toBe(true); await controller.refresh();
+    expect(controller.state.paths).toBe(""); expect(controller.dirty.value).toBe(false);
+    vi.mocked(api.tasks).mockResolvedValue({ tasks: [syntheticTask({ archived: true })] });
+    controller.setWorkspace("/archived-only-synthetic-workspace"); await flush();
+    expect(controller.state.editingId).toBe(""); expect(controller.dirty.value).toBe(false);
+    controller.setWorkspace(""); expect(controller.dirty.value).toBe(false);
+    expect(api.save).not.toHaveBeenCalled(); expect(api.admit).not.toHaveBeenCalled(); expect(api.cancel).not.toHaveBeenCalled();
+  });
+
   it("includes actual file/action failure causes in the error sent to Bottom without hiding successful items", async () => {
     const { api, controller } = setup();
     vi.mocked(api.runs).mockResolvedValue({ runs: [syntheticRun({ status: "running" })] });

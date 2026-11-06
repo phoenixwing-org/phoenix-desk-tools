@@ -7,6 +7,7 @@ type StoragePort = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 const RECOVERY_KEY = "phoenix-desk.batch-admission.v1:";
 const CREATION_KEY = "phoenix-desk.batch-creation.v1:";
 const emptyDraft = (): TaskDraft => ({ name: "新批量任务", subjects: [], actions: [] });
+const snapshotDraft = (draft: TaskDraft, paths: string) => JSON.stringify({ name: draft.name, actions: draft.actions, paths });
 const copy = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 const httpStatus = (error: unknown) => error !== null && typeof error === "object" && "status" in error && typeof error.status === "number" ? error.status : undefined;
@@ -16,7 +17,7 @@ const requestId = () => globalThis.crypto?.randomUUID?.() ?? `batch-${Date.now()
 export function createBatchTasksController(api: BatchTasksApi = batchTasksApi, storage?: StoragePort) {
   const state = reactive({
     workspace: "", actions: [] as ActionDescriptor[], tasks: [] as BatchTask[], runs: [] as BatchRun[],
-    editingId: "", editingRevision: 0, draft: emptyDraft(), paths: "", baseline: "", plan: null as BatchPlan | null,
+    editingId: "", editingRevision: 0, draft: emptyDraft(), paths: "", baseline: snapshotDraft(emptyDraft(), ""), plan: null as BatchPlan | null,
     selectedRunId: "", detail: null as RunDetail | null, loading: false, pending: "", error: "", notice: "", stale: false,
     admission: null as AdmissionRecovery | null,
     creationId: "", creationFingerprint: "", creationUncertain: false,
@@ -25,7 +26,7 @@ export function createBatchTasksController(api: BatchTasksApi = batchTasksApi, s
   let generation = 0, projectionRevision = 0, refreshing = false, editorInitialized = false, timer: ReturnType<typeof setInterval> | undefined;
   const activeRuns = computed(() => state.runs.filter(run => isActiveRun(run.status)));
   const currentRun = computed(() => state.runs.find(run => run.id === state.selectedRunId) ?? activeRuns.value[0] ?? state.runs[0]);
-  const draftSnapshot = () => JSON.stringify({ name: state.draft.name, actions: state.draft.actions, paths: state.paths });
+  const draftSnapshot = () => snapshotDraft(state.draft, state.paths);
   const dirty = computed(() => draftSnapshot() !== state.baseline);
   const busy = computed(() => !!state.pending);
   const currentTask = computed(() => state.tasks.find(task => task.id === state.editingId));
@@ -54,8 +55,23 @@ export function createBatchTasksController(api: BatchTasksApi = batchTasksApi, s
     if (duplicate) draft.name += "（副本）";
     else if (state.actions[0]) draft.actions = [{ instance_id: requestId(), key: state.actions[0].key, version: state.actions[0].version, params: {} }];
     state.editingId = ""; state.editingRevision = 0; state.draft = draft; if (!duplicate) state.paths = "";
-    state.baseline = ""; state.plan = null; state.error = "";
+    state.baseline = duplicate ? "" : draftSnapshot(); state.plan = null; state.error = "";
     state.creationId = requestId(); state.creationFingerprint = "";
+  }
+  /** Discard only this editor; never resolve recovery pointers or cancel runs. */
+  function discardDraft() {
+    if (busy.value) return false;
+    editorInitialized = true;
+    const saved = currentTask.value;
+    state.editingId = saved?.id || ""; state.editingRevision = saved?.revision || 0;
+    state.draft = saved ? copy({ name: saved.name, subjects: saved.subjects, actions: saved.actions }) : emptyDraft();
+    state.paths = saved ? saved.subjects.map(subject => subject.rel).join("\n") : "";
+    state.baseline = draftSnapshot(); state.plan = null; state.error = "";
+    if (!state.creationUncertain) { state.creationId = ""; state.creationFingerprint = ""; }
+    state.notice = state.creationUncertain || state.admission
+      ? "已放弃本地草稿修改；未确认请求的核对信息仍保留，不会撤销可能已保存的定义或取消运行。"
+      : "已放弃草稿修改；已保存定义与后台运行不受影响。";
+    return true;
   }
   function editName(value: string) { state.draft.name = value; state.plan = null; }
   function editPaths(value: string) { state.paths = value; state.plan = null; }
@@ -107,7 +123,7 @@ export function createBatchTasksController(api: BatchTasksApi = batchTasksApi, s
   }
   function setWorkspace(workspace: string) {
     if (workspace === state.workspace) return;
-    generation++; refreshing = false; editorInitialized = false; Object.assign(state, { workspace, actions: [], tasks: [], runs: [], editingId: "", editingRevision: 0, draft: emptyDraft(), paths: "", baseline: "", plan: null, selectedRunId: "", detail: null, loading: false, pending: "", error: "", notice: "", stale: false, admission: null, creationId: "", creationFingerprint: "", creationUncertain: false, retryRunId: "", retryGroups: [] });
+    generation++; refreshing = false; editorInitialized = false; Object.assign(state, { workspace, actions: [], tasks: [], runs: [], editingId: "", editingRevision: 0, draft: emptyDraft(), paths: "", baseline: snapshotDraft(emptyDraft(), ""), plan: null, selectedRunId: "", detail: null, loading: false, pending: "", error: "", notice: "", stale: false, admission: null, creationId: "", creationFingerprint: "", creationUncertain: false, retryRunId: "", retryGroups: [] });
     try { const saved = JSON.parse(storage?.getItem(RECOVERY_KEY + workspace) ?? "null") as AdmissionRecovery | null;
       if (saved?.confirmed === true && typeof saved.client_request_id === "string" && typeof saved.plan_id === "string" && typeof saved.digest === "string" && [undefined, 1, 2].includes(saved.protocol_version)) {
         state.admission = { plan_id: saved.plan_id, digest: saved.digest, client_request_id: saved.client_request_id, confirmed: true, ...(saved.protocol_version === undefined ? {} : { protocol_version: saved.protocol_version }) };
@@ -248,6 +264,6 @@ export function createBatchTasksController(api: BatchTasksApi = batchTasksApi, s
   }
   function startPolling() { if (!timer) timer = setInterval(() => { void refresh(); }, 2000); }
   function stopPolling() { if (timer) clearInterval(timer); timer = undefined; }
-  return { state, activeRuns, currentRun, currentTask, canRetryAdmission, dirty, busy, setWorkspace, refresh, selectTask, newTask, editName, editPaths, toggleAction, moveAction, save, archive, preview, admit, submitAdmission, recoverAdmission, selectRun, loadRetryGroups, startRetryGroup, cancel, backup, startPolling, stopPolling };
+  return { state, activeRuns, currentRun, currentTask, canRetryAdmission, dirty, busy, setWorkspace, refresh, selectTask, newTask, discardDraft, editName, editPaths, toggleAction, moveAction, save, archive, preview, admit, submitAdmission, recoverAdmission, selectRun, loadRetryGroups, startRetryGroup, cancel, backup, startPolling, stopPolling };
 }
 export type BatchTasksController = ReturnType<typeof createBatchTasksController>;

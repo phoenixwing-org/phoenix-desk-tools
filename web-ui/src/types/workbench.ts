@@ -2,6 +2,7 @@ import type { BomFields } from "../api";
 import type { FileDetailSubTab } from "./fileDetail";
 
 export type WorkbenchTabPayload = {
+  config?: { manageFreecadMcp: true };
   renameImport?: import("../features/batch-rename/handoff").RenameHandoff;
   partGallery?: { rel: string };
   bomRel?: string;

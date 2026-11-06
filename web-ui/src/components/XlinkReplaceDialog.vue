@@ -3,7 +3,6 @@ import { computed, ref, watch } from "vue";
 import type { BomXrefEdge, XlinkFixCandidateFile } from "../api";
 import { applyXlinkFixOverride, fetchXlinkFixCandidates } from "../api";
 import { useAppShell } from "../composables/useAppShell";
-import { parsePartKeyText } from "../utils/partNaming";
 
 const props = defineProps<{
   open: boolean;
@@ -55,15 +54,8 @@ function resetForm() {
   candidates.value = [];
   selectedTargetRel.value = "";
   errorText.value = "";
-  const base = searchBasename.value;
-  const parsed = parsePartKeyText(base);
-  if (parsed) {
-    partNumber.value = parsed.part_number;
-    partVersion.value = parsed.part_version;
-  } else {
-    partNumber.value = "";
-    partVersion.value = "";
-  }
+  partNumber.value = "";
+  partVersion.value = "";
 }
 
 async function loadCandidates() {
@@ -74,6 +66,8 @@ async function loadCandidates() {
   }
   loadingCandidates.value = true;
   errorText.value = "";
+  candidates.value = [];
+  selectedTargetRel.value = "";
   try {
     const data = await fetchXlinkFixCandidates({
       basename: base,
@@ -82,13 +76,7 @@ async function loadCandidates() {
       exclude_repo_rel: resolveHostRepoRel() || undefined,
     });
     if (data.part_number && !partNumber.value.trim()) partNumber.value = data.part_number;
-    if (data.part_version && !partVersion.value.trim()) partVersion.value = data.part_version;
     candidates.value = data.files ?? [];
-    if (candidates.value.length === 1) {
-      selectedTargetRel.value = candidates.value[0].repo_rel_path;
-    } else {
-      selectedTargetRel.value = "";
-    }
   } catch (e) {
     errorText.value = String(e);
     candidates.value = [];
@@ -101,7 +89,7 @@ async function onApply() {
   const host = resolveHostRepoRel();
   const old = oldPath.value;
   const target = selectedTargetRel.value.trim();
-  if (!host || !old || !target) {
+  if (!host || !old || !target || loadingCandidates.value || !candidates.value.some((file) => file.repo_rel_path === target)) {
     errorText.value = "请选择目标 FCStd";
     return;
   }
@@ -167,7 +155,7 @@ watch(
         </header>
 
         <p class="dialog-lead muted">
-          写回<strong>当前文件</strong>内该条引用的 <code>file</code> 属性；零件标识可改后重新搜索候选。
+          写回<strong>当前文件</strong>内该条引用的 <code>file</code> 属性；默认列出相同零件号的全部版本，请核对后选择目标。
         </p>
 
         <dl class="summary-dl mono">
@@ -183,8 +171,8 @@ watch(
             <input v-model="partNumber" class="mono" spellcheck="false" @keydown.enter.prevent="loadCandidates" />
           </label>
           <label class="field">
-            <span>版本</span>
-            <input v-model="partVersion" class="mono" spellcheck="false" @keydown.enter.prevent="loadCandidates" />
+            <span>版本（可选）</span>
+            <input v-model="partVersion" class="mono" placeholder="全部版本" spellcheck="false" @keydown.enter.prevent="loadCandidates" />
           </label>
           <button type="button" class="btn" :disabled="loadingCandidates" @click="loadCandidates">
             {{ loadingCandidates ? "…" : "搜索候选" }}
@@ -215,7 +203,7 @@ watch(
           <button
             type="button"
             class="btn primary"
-            :disabled="applying || !selectedTargetRel"
+            :disabled="applying || loadingCandidates || !selectedTargetRel"
             @click="onApply"
           >
             {{ applying ? "写回中…" : "写回所选链接" }}

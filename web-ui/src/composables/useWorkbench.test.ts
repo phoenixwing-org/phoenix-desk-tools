@@ -1,8 +1,9 @@
 import { ref } from "vue";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import type { AppConfig } from "../types/config";
 import { createWorkbench } from "./useWorkbench";
+import { registerPageSession, unregisterPageSession } from "./usePageSession";
 
 const appConfig = ref<AppConfig | null>({
   title: "Desk",
@@ -11,6 +12,55 @@ const appConfig = ref<AppConfig | null>({
   workspace_dotfile: ".phoenix-workspace",
   launcher_config_path: "",
   workbench: { pages: { part_catalog: { max_tabs: 1 } } },
+});
+
+describe("page-owned close flow compatibility", () => {
+  const sessions: string[] = [];
+  afterEach(() => { sessions.splice(0).forEach(unregisterPageSession); vi.unstubAllGlobals(); });
+
+  it("uses the page close handler without invoking a second generic prompt or flush", async () => {
+    const workbench = createWorkbench(appConfig), id = workbench.openTab({ pageId: "batch_tasks" });
+    const confirm = vi.fn(), flush = vi.fn(async () => true), requestClose = vi.fn(async () => false);
+    sessions.push(id); vi.stubGlobal("window", { confirm });
+    registerPageSession(id, { isDirty: () => true, serialize: () => ({}), hydrate: () => true, flush, requestClose });
+    expect(await workbench.closeTab(id)).toBe(false); expect(workbench.getTab(id)).toBeDefined();
+    requestClose.mockResolvedValueOnce(true);
+    expect(await workbench.closeTab(id)).toBe(true);
+    expect(confirm).not.toHaveBeenCalled(); expect(flush).not.toHaveBeenCalled();
+  });
+
+  it.each([true, false])("preserves legacy editor save-before-close semantics when flush returns %s", async saved => {
+    const workbench = createWorkbench(appConfig), id = workbench.openTab({ pageId: "file_detail" });
+    const confirm = vi.fn(() => true), flush = vi.fn(async () => saved);
+    sessions.push(id); vi.stubGlobal("window", { confirm });
+    registerPageSession(id, { isDirty: () => true, serialize: () => ({}), hydrate: () => true, flush });
+    expect(await workbench.closeTab(id)).toBe(saved);
+    expect(flush).toHaveBeenCalledOnce(); expect(confirm).toHaveBeenCalledOnce();
+    expect(Boolean(workbench.getTab(id))).toBe(!saved);
+  });
+
+  it("rechecks the requested tab identity after another tab closes during its modal", async () => {
+    const workbench = createWorkbench(appConfig);
+    const first = workbench.openTab({ pageId: "first" }), target = workbench.openTab({ pageId: "batch_tasks" }), last = workbench.openTab({ pageId: "last" });
+    let resolve!: (close: boolean) => void;
+    sessions.push(target);
+    registerPageSession(target, { isDirty: () => true, serialize: () => ({}), hydrate: () => true,
+      requestClose: () => new Promise<boolean>(done => { resolve = done; }) });
+    const closing = workbench.closeTab(target);
+    expect(await workbench.closeTab(first)).toBe(true); resolve(true);
+    expect(await closing).toBe(true); expect(workbench.tabs.value.map(tab => tab.id)).toEqual([last]);
+  });
+
+  it("does not close a different editor registered while a close prompt was pending", async () => {
+    const workbench = createWorkbench(appConfig), id = workbench.openTab({ pageId: "batch_tasks" });
+    let resolve!: (close: boolean) => void;
+    sessions.push(id);
+    registerPageSession(id, { isDirty: () => true, serialize: () => ({}), hydrate: () => true,
+      requestClose: () => new Promise<boolean>(done => { resolve = done; }) });
+    const closing = workbench.closeTab(id);
+    registerPageSession(id, { isDirty: () => true, serialize: () => ({}), hydrate: () => true });
+    resolve(true); expect(await closing).toBe(false); expect(workbench.getTab(id)).toBeDefined();
+  });
 });
 
 describe("file detail view capacity", () => {
